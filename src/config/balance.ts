@@ -1,0 +1,30 @@
+export const BALANCE = {
+  // match simulation
+  HOME_ADVANTAGE: 0.08,
+  BASE_GOAL_RATE: 1.3,
+  CUP_RANDOMNESS: 0.25,
+  LEAGUE_RANDOMNESS: 0.12,
+  MORALE_WEIGHT: 0.15,
+  FATIGUE_WEIGHT: 0.20,
+  MOMENTUM_WEIGHT: 0.05,
+  COACH_BUFF_WEIGHT: 1.0,
+
+  // post-match effects
+  WIN_MORALE_BOOST: 5,
+  LOSS_MORALE_DROP: 8,
+  DRAW_MORALE: 1,
+  MATCH_FATIGUE: 8,
+  FATIGUE_RECOVERY: 5, // per window without match
+  BIG_WIN_MOMENTUM: 2,
+  BIG_LOSS_MOMENTUM: -3,
+
+  // coach pressure
+  LOSS_PRESSURE_INCREASE: 8,
+  WIN_PRESSURE_DECREASE: 3,
+  DRAW_PRESSURE_INCREASE: 2,
+  FIRING_THRESHOLD: 75,
+  ELITE_TEAM_PRESSURE_MULT: 1.3, // top teams fire faster
+
+  // world cup cycle
+  WORLD_CUP_INTERVAL: 4,
+} as const;
