@@ -11,6 +11,7 @@ import CoachDetail from '../pages/CoachDetail';
 import History from '../pages/History';
 import Teams from '../pages/Teams';
 import Players from '../pages/Players';
+import Settings from '../pages/Settings';
 import Welcome from '../pages/Welcome';
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/team/:id" element={<TeamDetail />} />
         <Route path="/coach/:id" element={<CoachDetail />} />
         <Route path="/history" element={<History />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

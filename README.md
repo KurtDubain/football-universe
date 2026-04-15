@@ -127,6 +127,23 @@ src/
 
 ## Changelog
 
+### v0.8.0
+- **Streak news**: 3+连胜/连败/5+不败自动推送新闻
+- **Special event news**: 帽子戏法、补时绝杀自动推送
+- **Team growth/decline**: 赛季结束后球队属性微调
+  - 冠军/前列球队 overall +0~2
+  - 末尾/降级球队 overall -0~2
+  - 升级球队 depth/overall +1
+- **League trend chart**: 联赛页新增"走势"tab
+  - SVG 折线图展示前6名积分累计变化
+  - 球队颜色对应折线，带图例
+- **Settings page** (`/settings`):
+  - 游戏信息（赛季/种子/球队数/存档大小）
+  - 导出存档为 JSON 文件
+  - 导入存档从 JSON 文件恢复
+  - 重置游戏（二次确认）
+- **Richer match events**: 新增5种进球描述、2种扑救描述、2种犯规描述
+
 ### v0.7.0
 - **Season Review** component: shows full season summary after each season ends
   - Champions grid (all competitions)

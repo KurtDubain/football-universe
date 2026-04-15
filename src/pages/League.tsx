@@ -18,7 +18,7 @@ export default function League() {
   const { level } = useParams<{ level: string }>();
   const world = useGameStore((s) => s.world);
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
-  const [tab, setTab] = useState<'standings' | 'schedule'>('standings');
+  const [tab, setTab] = useState<'standings' | 'schedule' | 'trend'>('standings');
 
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
@@ -197,6 +197,14 @@ export default function League() {
             }`}
           >
             赛程表
+          </button>
+          <button
+            onClick={() => setTab('trend')}
+            className={`px-4 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
+              tab === 'trend' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            走势
           </button>
         </div>
       </div>
@@ -604,6 +612,11 @@ export default function League() {
         </div>
       )}
 
+      {/* ═══════ TAB: 走势 ═══════ */}
+      {tab === 'trend' && (
+        <TrendChart rounds={rounds} standings={standings} world={world} leagueLevel={leagueLevel} />
+      )}
+
       {/* ═══════ Match Detail Modal ═══════ */}
       <MatchDetailModal
         isOpen={selectedFixture !== null}
@@ -612,6 +625,131 @@ export default function League() {
         result={selectedResult ?? undefined}
         world={world}
       />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Trend chart — points accumulation per round (pure CSS)
+// ══════════════════════════════════════════════════════════════
+
+function TrendChart({ rounds, standings, world, leagueLevel }: {
+  rounds: any[];
+  standings: StandingEntry[];
+  world: GameWorld;
+  leagueLevel: number;
+}) {
+  // Build cumulative points per team per round
+  const completedRounds = rounds.filter(r => r.completed && r.results.length > 0);
+  if (completedRounds.length === 0) {
+    return <p className="text-sm text-slate-500 text-center py-8">暂无数据，至少完成一轮联赛后显示走势图</p>;
+  }
+
+  const teamIds = standings.map(s => s.teamId);
+  // Only show top 6 teams for readability
+  const showTeams = teamIds.slice(0, Math.min(6, teamIds.length));
+
+  // Accumulate points round by round
+  const cumPoints: Record<string, number[]> = {};
+  for (const tid of showTeams) cumPoints[tid] = [];
+
+  const runningPoints: Record<string, number> = {};
+  for (const tid of showTeams) runningPoints[tid] = 0;
+
+  for (const round of completedRounds) {
+    for (const r of round.results) {
+      if (!showTeams.includes(r.homeTeamId) && !showTeams.includes(r.awayTeamId)) continue;
+      const hw = r.homeGoals > r.awayGoals;
+      const aw = r.awayGoals > r.homeGoals;
+      if (showTeams.includes(r.homeTeamId)) {
+        runningPoints[r.homeTeamId] += hw ? 3 : (!hw && !aw) ? 1 : 0;
+      }
+      if (showTeams.includes(r.awayTeamId)) {
+        runningPoints[r.awayTeamId] += aw ? 3 : (!hw && !aw) ? 1 : 0;
+      }
+    }
+    for (const tid of showTeams) {
+      cumPoints[tid].push(runningPoints[tid]);
+    }
+  }
+
+  const maxPts = Math.max(...showTeams.map(tid => cumPoints[tid][cumPoints[tid].length - 1] ?? 0), 1);
+  const chartH = 200;
+  const roundCount = completedRounds.length;
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        积分走势 (前{showTeams.length}名)
+      </h3>
+
+      {/* Chart area */}
+      <div className="relative overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${Math.max(roundCount * 30 + 20, 300)} ${chartH + 30}`}
+          className="w-full min-w-[300px]"
+          style={{ height: `${chartH + 30}px` }}
+        >
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+            const y = chartH - ratio * chartH + 10;
+            const pts = Math.round(ratio * maxPts);
+            return (
+              <g key={ratio}>
+                <line x1="30" y1={y} x2={roundCount * 30 + 20} y2={y} stroke="#334155" strokeWidth="0.5" />
+                <text x="0" y={y + 3} fill="#64748b" fontSize="9">{pts}</text>
+              </g>
+            );
+          })}
+
+          {/* Team lines */}
+          {showTeams.map((tid, ti) => {
+            const pts = cumPoints[tid];
+            const color = (world.teamBases[tid] as any)?.color ?? '#888';
+            const points = pts.map((p, i) => {
+              const x = 30 + i * ((roundCount > 1 ? (roundCount * 30 - 30) / (roundCount - 1) : 0));
+              const y = chartH - (p / maxPts) * chartH + 10;
+              return `${x},${y}`;
+            }).join(' ');
+
+            return (
+              <g key={tid}>
+                <polyline fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" points={points} opacity="0.85" />
+                {/* End dot */}
+                {pts.length > 0 && (
+                  <circle
+                    cx={30 + (pts.length - 1) * ((roundCount > 1 ? (roundCount * 30 - 30) / (roundCount - 1) : 0))}
+                    cy={chartH - (pts[pts.length - 1] / maxPts) * chartH + 10}
+                    r="3" fill={color}
+                  />
+                )}
+              </g>
+            );
+          })}
+
+          {/* Round labels */}
+          {completedRounds.map((_, i) => {
+            if (roundCount > 15 && i % 3 !== 0) return null;
+            const x = 30 + i * ((roundCount > 1 ? (roundCount * 30 - 30) / (roundCount - 1) : 0));
+            return <text key={i} x={x} y={chartH + 25} fill="#64748b" fontSize="8" textAnchor="middle">{i + 1}</text>;
+          })}
+        </svg>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-3">
+        {showTeams.map(tid => {
+          const team = world.teamBases[tid];
+          const pts = cumPoints[tid][cumPoints[tid].length - 1] ?? 0;
+          return (
+            <div key={tid} className="flex items-center gap-1.5 text-xs">
+              <span className="w-3 h-1 rounded-full shrink-0" style={{ backgroundColor: (team as any)?.color ?? '#888' }} />
+              <Link to={`/team/${tid}`} className="text-slate-300 hover:text-blue-400">{getTeamName(tid, world.teamBases)}</Link>
+              <span className="text-slate-500">{pts}分</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

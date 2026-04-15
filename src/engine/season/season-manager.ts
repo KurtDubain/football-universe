@@ -124,6 +124,24 @@ function isUpset(homeTeam: TeamBase, awayTeam: TeamBase, result: MatchResult): b
   return homeGoalsTotal > awayGoalsTotal;
 }
 
+function countTrailingResult(form: ('W'|'D'|'L')[], target: 'W'|'D'|'L'): number {
+  let count = 0;
+  for (let i = form.length - 1; i >= 0; i--) {
+    if (form[i] === target) count++;
+    else break;
+  }
+  return count;
+}
+
+function countTrailingNotResult(form: ('W'|'D'|'L')[], exclude: 'W'|'D'|'L'): number {
+  let count = 0;
+  for (let i = form.length - 1; i >= 0; i--) {
+    if (form[i] !== exclude) count++;
+    else break;
+  }
+  return count;
+}
+
 // Count completed super cup group windows so far
 function countCompletedSuperCupGroupWindows(calendar: CalendarWindow[]): number {
   return calendar.filter((w) => w.type === 'super_cup_group' && w.completed).length;
@@ -1054,6 +1072,93 @@ export function executeCurrentWindow(world: GameWorld): {
     }
   }
 
+  // ── Streak news (win/loss streaks) ──────────────────────────────
+  for (const teamId of teamsPlayed) {
+    const state = teamStates[teamId];
+    const form = state.recentForm;
+    if (form.length < 3) continue;
+    const teamName = world.teamBases[teamId]?.name ?? teamId;
+
+    // Check win streak (3+)
+    const winStreak = countTrailingResult(form, 'W');
+    if (winStreak >= 3) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `streak-w-${teamId}`),
+        seasonNumber, windowIndex, type: 'streak',
+        title: `${teamName} ${winStreak}连胜！`,
+        description: `${teamName}近期状态火热，已经取得${winStreak}连胜。`,
+      });
+    }
+
+    // Check loss streak (3+)
+    const lossStreak = countTrailingResult(form, 'L');
+    if (lossStreak >= 3) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `streak-l-${teamId}`),
+        seasonNumber, windowIndex, type: 'streak',
+        title: `${teamName} 遭遇${lossStreak}连败`,
+        description: `${teamName}深陷低谷，已经连续${lossStreak}场不胜。`,
+      });
+    }
+
+    // Check unbeaten streak (5+)
+    const unbeaten = countTrailingNotResult(form, 'L');
+    if (unbeaten >= 5) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `streak-u-${teamId}`),
+        seasonNumber, windowIndex, type: 'streak',
+        title: `${teamName} ${unbeaten}场不败`,
+        description: `${teamName}保持了${unbeaten}场不败的优异战绩。`,
+      });
+    }
+  }
+
+  // ── Special match event news ────────────────────────────────
+  for (const result of results) {
+    const goalEvents = result.events.filter(e => e.type === 'goal' || e.type === 'penalty_goal');
+
+    // Hat trick detection (3+ goals by same player number)
+    const playerGoals = new Map<string, number>();
+    for (const e of goalEvents) {
+      if (e.playerId) {
+        playerGoals.set(e.playerId, (playerGoals.get(e.playerId) ?? 0) + 1);
+      }
+    }
+    for (const [playerId, count] of playerGoals) {
+      if (count >= 3) {
+        const parts = playerId.split('-');
+        const num = parts[parts.length - 1];
+        const teamId = parts.slice(0, -1).join('-');
+        const teamName = world.teamBases[teamId]?.name ?? teamId;
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `hattrick-${playerId}`),
+          seasonNumber, windowIndex, type: 'match_result',
+          title: `帽子戏法! ${teamName} ${num}号独进${count}球`,
+          description: `${teamName}的${num}号球员上演帽子戏法，独中${count}元。`,
+        });
+      }
+    }
+
+    // Late drama (goal at 85+ min that changed the result)
+    const lateGoals = goalEvents.filter(e => e.minute >= 85 && e.minute <= 90);
+    if (lateGoals.length > 0) {
+      const totalHome = result.homeGoals;
+      const totalAway = result.awayGoals;
+      const diff = Math.abs(totalHome - totalAway);
+      if (diff <= 1) {
+        const scorer = lateGoals[lateGoals.length - 1];
+        const teamName = world.teamBases[scorer.teamId]?.name ?? scorer.teamId;
+        const numStr = scorer.playerNumber ? `${scorer.playerNumber}号` : '';
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `latedrama-${result.fixtureId}`),
+          seasonNumber, windowIndex, type: 'match_result',
+          title: `绝杀! ${teamName} ${numStr}补时建功`,
+          description: `${teamName}在第${scorer.minute}分钟打入关键进球，上演绝杀好戏！`,
+        });
+      }
+    }
+  }
+
   // ── Update player stats ──────────────────────────────────────
   const updatedPlayerStats = results.length > 0
     ? updatePlayerStatsFromResults(world.playerStats, results, world.squads)
@@ -1325,6 +1430,51 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     teamStates[teamId] = applySeasonEndReset(state, position, standings.length);
   }
 
+  // ── Team growth/decline based on season performance ─────────
+  const teamBases = { ...world.teamBases };
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const base = { ...teamBases[teamId] };
+    const state = teamStates[teamId];
+    const standings = allStandings[state.leagueLevel] ?? [];
+    const entry = standings.find((s) => s.teamId === teamId);
+    const position = entry ? standings.indexOf(entry) + 1 : standings.length;
+    const total = standings.length;
+    const ratio = position / total; // 0=champion, 1=last
+
+    // Champions and top finishers grow slightly
+    if (ratio <= 0.15) {
+      base.overall = Math.min(99, base.overall + rng.nextInt(0, 2));
+      base.attack = Math.min(99, base.attack + rng.nextInt(0, 1));
+      base.defense = Math.min(99, base.defense + rng.nextInt(0, 1));
+    } else if (ratio <= 0.35) {
+      base.overall = Math.min(99, base.overall + rng.nextInt(0, 1));
+    }
+    // Bottom finishers decline slightly
+    else if (ratio >= 0.85) {
+      base.overall = Math.max(30, base.overall - rng.nextInt(0, 2));
+      base.attack = Math.max(30, base.attack - rng.nextInt(0, 1));
+      base.defense = Math.max(30, base.defense - rng.nextInt(0, 1));
+    } else if (ratio >= 0.7) {
+      base.overall = Math.max(30, base.overall - rng.nextInt(0, 1));
+    }
+
+    // Promoted teams get a small boost
+    if (state.leagueLevel < base.initialLeagueLevel) {
+      base.overall = Math.min(99, base.overall + 1);
+      base.depth = Math.min(99, base.depth + 1);
+    }
+    // Relegated teams decline
+    if (state.leagueLevel > base.initialLeagueLevel) {
+      base.overall = Math.max(30, base.overall - 1);
+      base.depth = Math.max(30, base.depth - 1);
+    }
+
+    // Clamp midfield/stability based on overall shift
+    base.midfield = Math.max(30, Math.min(99, base.midfield + (base.overall - teamBases[teamId].overall)));
+
+    teamBases[teamId] = base;
+  }
+
   // Update season state awards
   const seasonState: SeasonState = {
     ...world.seasonState,
@@ -1344,6 +1494,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const updatedWorld: GameWorld = {
     ...world,
     seasonState,
+    teamBases,
     teamStates,
     teamTrophies,
     coachTrophies,

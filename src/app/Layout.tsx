@@ -37,6 +37,7 @@ const navSections = [
       { to: '/teams', label: '球队中心' },
       { to: '/coaches', label: '教练中心' },
       { to: '/players', label: '球员中心' },
+      { to: '/settings', label: '设置' },
     ],
   },
 ];
