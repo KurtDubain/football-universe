@@ -11,6 +11,7 @@ import {
   getWindowTypeColor,
   formatForm,
   getCoachName,
+  getTierLabel,
 } from '../utils/format';
 
 type TabKey = 'matchday' | 'results' | 'overview';
@@ -210,18 +211,170 @@ function MatchdayTab({
     );
   }
 
+  // Group fixtures by competition
+  const groups: { label: string; color: string; fixtures: MatchFixture[] }[] = [];
+  const groupMap = new Map<string, MatchFixture[]>();
+
+  for (const f of currentWindow.fixtures) {
+    const key = f.competitionName || f.competitionType;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(f);
+  }
+
+  // Ordered: 顶级 → 甲级 → 乙级 → others
+  const order = ['顶级联赛', '甲级联赛', '乙级联赛'];
+  const sorted = [...groupMap.entries()].sort((a, b) => {
+    const ia = order.indexOf(a[0]);
+    const ib = order.indexOf(b[0]);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  const groupColors: Record<string, string> = {
+    '顶级联赛': 'border-amber-500',
+    '甲级联赛': 'border-blue-500',
+    '乙级联赛': 'border-emerald-500',
+  };
+
+  // Generate context tips for the whole window
+  const windowTips = generateWindowTips(world, currentWindow.fixtures);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {currentWindow.fixtures.map((fixture) => (
-        <FixtureCard
-          key={fixture.id}
-          fixture={fixture}
-          world={world}
-          onClick={() => onFixtureClick(fixture)}
-        />
+    <div className="space-y-5">
+      {/* Context tips banner */}
+      {windowTips.length > 0 && (
+        <div className="space-y-1.5">
+          {windowTips.map((tip, i) => (
+            <div key={i} className={`px-3 py-2 rounded-lg text-xs border ${tip.style}`}>
+              <span className="font-medium">{tip.tag}</span>
+              <span className="mx-1.5 text-slate-600">|</span>
+              <span>{tip.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Grouped fixtures */}
+      {sorted.map(([groupName, fixtures]) => (
+        <div key={groupName}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`w-1 h-5 rounded-full ${groupColors[groupName] ? groupColors[groupName].replace('border-', 'bg-') : 'bg-purple-500'}`} />
+            <h3 className="text-sm font-semibold text-slate-200">{groupName}</h3>
+            <span className="text-[10px] text-slate-500">{fixtures.length}场</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {fixtures.map((fixture) => (
+              <FixtureCard
+                key={fixture.id}
+                fixture={fixture}
+                world={world}
+                onClick={() => onFixtureClick(fixture)}
+              />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );
+}
+
+// Generate contextual tips based on the match context
+function generateWindowTips(
+  world: GameWorld,
+  fixtures: MatchFixture[],
+): { tag: string; text: string; style: string }[] {
+  const tips: { tag: string; text: string; style: string }[] = [];
+  const seen = new Set<string>();
+
+  for (const f of fixtures) {
+    const ht = world.teamBases[f.homeTeamId];
+    const at = world.teamBases[f.awayTeamId];
+    if (!ht || !at) continue;
+
+    const hs = world.teamStates[f.homeTeamId];
+    const as_ = world.teamStates[f.awayTeamId];
+
+    // Title clash: both teams are elite/strong
+    if ((ht.tier === 'elite' || ht.tier === 'strong') && (at.tier === 'elite' || at.tier === 'strong')) {
+      const key = `clash-${f.id}`;
+      if (!seen.has(key)) {
+        tips.push({
+          tag: '强强对话',
+          text: `${ht.name} vs ${at.name} — ${getTierLabel(ht.tier)}对决${getTierLabel(at.tier)}`,
+          style: 'bg-amber-900/20 border-amber-700/40 text-amber-300',
+        });
+        seen.add(key);
+      }
+    }
+
+    // Upset potential: big overall gap
+    const gap = Math.abs(ht.overall - at.overall);
+    if (gap >= 15) {
+      const strong = ht.overall > at.overall ? ht : at;
+      const weak = ht.overall > at.overall ? at : ht;
+      const key = `upset-${f.id}`;
+      if (!seen.has(key)) {
+        tips.push({
+          tag: '爆冷预警',
+          text: `${weak.name}(${getTierLabel(weak.tier)}) 挑战 ${strong.name}(${getTierLabel(strong.tier)})，实力差距${gap}`,
+          style: 'bg-purple-900/20 border-purple-700/40 text-purple-300',
+        });
+        seen.add(key);
+      }
+    }
+
+    // Relegation battle: both teams in bottom 3 of their league
+    if (hs && as_ && f.competitionType === 'league') {
+      const standings = hs.leagueLevel === 1 ? world.league1Standings :
+                        hs.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
+      const homePos = standings.findIndex(s => s.teamId === f.homeTeamId) + 1;
+      const awayPos = standings.findIndex(s => s.teamId === f.awayTeamId) + 1;
+      const total = standings.length;
+
+      if (homePos > 0 && awayPos > 0) {
+        if (homePos >= total - 2 && awayPos >= total - 2 && total > 4) {
+          const key = `releg-${f.id}`;
+          if (!seen.has(key)) {
+            tips.push({
+              tag: '保级生死战',
+              text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 败者形势危急`,
+              style: 'bg-red-900/20 border-red-700/40 text-red-300',
+            });
+            seen.add(key);
+          }
+        }
+
+        // Title race: both top 3
+        if (homePos <= 3 && awayPos <= 3 && standings[0]?.played > 5) {
+          const key = `title-${f.id}`;
+          if (!seen.has(key)) {
+            tips.push({
+              tag: '争冠焦点',
+              text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 冠军争夺直接对话`,
+              style: 'bg-amber-900/20 border-amber-700/40 text-amber-200',
+            });
+            seen.add(key);
+          }
+        }
+      }
+    }
+
+    // Coach under pressure
+    if (hs && hs.coachPressure > 55) {
+      const coach = hs.currentCoachId ? world.coachBases[hs.currentCoachId] : null;
+      const key = `pressure-${f.homeTeamId}`;
+      if (!seen.has(key) && coach) {
+        tips.push({
+          tag: '下课危机',
+          text: `${ht.name}主帅${coach.name}压力值${hs.coachPressure}，再输恐被解雇`,
+          style: 'bg-red-900/15 border-red-700/30 text-red-400',
+        });
+        seen.add(key);
+      }
+    }
+  }
+
+  // Limit to top 4 most important tips
+  return tips.slice(0, 4);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -249,17 +402,35 @@ function ResultsTab({
 
   return (
     <div className="space-y-4">
-      {/* Result cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {lastResults.map((r) => (
-          <ResultCard
-            key={r.fixtureId}
-            result={r}
-            world={world}
-            onClick={() => onResultClick(r)}
-          />
-        ))}
-      </div>
+      {/* Group results by competition */}
+      {(() => {
+        const resultGroups = new Map<string, MatchResult[]>();
+        for (const r of lastResults) {
+          const key = r.competitionName || r.competitionType;
+          if (!resultGroups.has(key)) resultGroups.set(key, []);
+          resultGroups.get(key)!.push(r);
+        }
+        const order = ['顶级联赛', '甲级联赛', '乙级联赛'];
+        const sorted = [...resultGroups.entries()].sort((a, b) => {
+          const ia = order.indexOf(a[0]);
+          const ib = order.indexOf(b[0]);
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+
+        return sorted.map(([groupName, results]) => (
+          <div key={groupName}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-slate-400">{groupName}</span>
+              <span className="text-[10px] text-slate-600">{results.length}场</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {results.map((r) => (
+                <ResultCard key={r.fixtureId} result={r} world={world} onClick={() => onResultClick(r)} />
+              ))}
+            </div>
+          </div>
+        ));
+      })()}
 
       {/* News feed */}
       {(lastNews.length > 0 || world.newsLog.length > 0) && (

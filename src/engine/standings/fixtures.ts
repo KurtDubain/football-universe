@@ -60,7 +60,8 @@ export function generateLeagueFixtures(
   const halfRounds = total - 1;
   const matchesPerRound = total / 2;
 
-  const competitionName = `League ${leagueLevel}`;
+  const leagueNames: Record<number, string> = { 1: '顶级联赛', 2: '甲级联赛', 3: '乙级联赛' };
+  const competitionName = leagueNames[leagueLevel] ?? `${leagueLevel}级联赛`;
   const allRounds: MatchFixture[][] = [];
 
   // --- First half: N-1 rounds using circle method ---

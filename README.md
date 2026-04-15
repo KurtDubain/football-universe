@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.5.1-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,18 @@ src/
 ```
 
 ## Changelog
+
+### v0.5.1
+- Match day fixtures grouped by league level (顶级联赛/甲级联赛/乙级联赛/杯赛)
+- Contextual tips for key matches:
+  - 强强对话: elite/strong teams facing each other
+  - 爆冷预警: big overall gap between teams
+  - 保级生死战: both teams in relegation zone
+  - 争冠焦点: both teams in top 3
+  - 下课危机: coach pressure > 55
+- Results tab also grouped by competition
+- League fixture competitionName changed to Chinese (顶级联赛/甲级联赛/乙级联赛)
+- All news text fully Chinese (promotions, relegations, firings, upsets, trophies)
 
 ### v0.5.0
 - Full Chinese localization: W/D/L → 胜/平/负, all labels in Chinese

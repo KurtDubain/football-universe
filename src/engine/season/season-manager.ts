@@ -403,9 +403,9 @@ export function executeCurrentWindow(world: GameWorld): {
       }
 
       // Update standings by league level
-      const l1Results = results.filter((r) => r.competitionName === 'League 1');
-      const l2Results = results.filter((r) => r.competitionName === 'League 2');
-      const l3Results = results.filter((r) => r.competitionName === 'League 3');
+      const l1Results = results.filter((r) => r.competitionName === '顶级联赛');
+      const l2Results = results.filter((r) => r.competitionName === '甲级联赛');
+      const l3Results = results.filter((r) => r.competitionName === '乙级联赛');
 
       if (l1Results.length > 0) league1Standings = updateStandings(league1Standings, l1Results);
       if (l2Results.length > 0) league2Standings = updateStandings(league2Standings, l2Results);
@@ -682,7 +682,7 @@ export function executeCurrentWindow(world: GameWorld): {
           windowIndex,
           type: 'promotion',
           title: `${world.teamBases[p.teamId].name} promoted!`,
-          description: `${world.teamBases[p.teamId].name} promoted from League ${p.from} to League ${p.to}.`,
+          description: `${world.teamBases[p.teamId].name} 从${p.from}级联赛升入${p.to}级联赛。`,
         });
       }
       for (const r of finalProRel.relegated) {
@@ -696,7 +696,7 @@ export function executeCurrentWindow(world: GameWorld): {
           windowIndex,
           type: 'relegation',
           title: `${world.teamBases[r.teamId].name} relegated`,
-          description: `${world.teamBases[r.teamId].name} relegated from League ${r.from} to League ${r.to}.`,
+          description: `${world.teamBases[r.teamId].name} 从${r.from}级联赛降入${r.to}级联赛。`,
         });
       }
 
@@ -1007,16 +1007,16 @@ export function executeCurrentWindow(world: GameWorld): {
         seasonNumber,
         windowIndex,
         type: 'coach_fired',
-        title: `${firedCoachName} fired by ${teamBase.name}`,
-        description: `${firedCoachName} has been sacked. Reason: ${pressureUpdate.fireReason}`,
+        title: `${firedCoachName} 被解雇 — ${teamBase.name}`,
+        description: `${firedCoachName} 已被解雇。原因: ${pressureUpdate.fireReason}`,
       });
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `hire-${teamId}`),
         seasonNumber,
         windowIndex,
         type: 'coach_hired',
-        title: `${teamBase.name} appoint ${newCoachName}`,
-        description: `${newCoachName} takes charge at ${teamBase.name}.`,
+        title: `${teamBase.name} 聘用新帅 ${newCoachName}`,
+        description: `${newCoachName} 正式执教 ${teamBase.name}.`,
       });
     }
   }
@@ -1034,8 +1034,8 @@ export function executeCurrentWindow(world: GameWorld): {
         seasonNumber,
         windowIndex,
         type: 'upset',
-        title: `Upset! ${winner.name} defeats ${loser.name}`,
-        description: `${winner.name} (overall ${winner.overall}) pulled off a shock win against ${loser.name} (overall ${loser.overall}).`,
+        title: `爆冷! ${winner.name} 击败 ${loser.name}`,
+        description: `${winner.name} (综合实力 ${winner.overall}) 爆冷击败了 ${loser.name} (综合实力 ${loser.overall}).`,
       });
     }
   }
@@ -1165,8 +1165,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       seasonNumber,
       windowIndex,
       type: 'trophy',
-      title: `${world.teamBases[league1Champion]?.name} win League 1!`,
-      description: `${world.teamBases[league1Champion]?.name} are crowned champions of the top league.`,
+      title: `${world.teamBases[league1Champion]?.name} 夺得顶级联赛冠军!`,
+      description: `${world.teamBases[league1Champion]?.name} 加冕顶级联赛冠军。`,
     });
   }
   if (leagueCupWinner) {
@@ -1175,8 +1175,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       seasonNumber,
       windowIndex,
       type: 'trophy',
-      title: `${world.teamBases[leagueCupWinner]?.name} win the League Cup!`,
-      description: `${world.teamBases[leagueCupWinner]?.name} triumph in the cup final.`,
+      title: `${world.teamBases[leagueCupWinner]?.name} 夺得联赛杯冠军!`,
+      description: `${world.teamBases[leagueCupWinner]?.name} 捧得联赛杯冠军奖杯。`,
     });
   }
   if (superCupWinner) {
@@ -1185,8 +1185,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       seasonNumber,
       windowIndex,
       type: 'trophy',
-      title: `${world.teamBases[superCupWinner]?.name} win the Super Cup!`,
-      description: `${world.teamBases[superCupWinner]?.name} are Super Cup champions.`,
+      title: `${world.teamBases[superCupWinner]?.name} 夺得超级杯冠军!`,
+      description: `${world.teamBases[superCupWinner]?.name} 赢得超级杯冠军荣耀。`,
     });
   }
 
