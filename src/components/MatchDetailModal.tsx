@@ -141,7 +141,7 @@ function PreMatchView({
               {homeTeam.shortName}
             </Link>
             <span className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
-              OVR {homeTeam.overall}
+              综合 {homeTeam.overall}
             </span>
             <span className="ml-1.5 text-xs text-green-400">(主)</span>
           </div>
@@ -158,7 +158,7 @@ function PreMatchView({
           <div className="flex-1 min-w-0 text-right">
             <span className="mr-1.5 text-xs text-slate-500">(客)</span>
             <span className="mr-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
-              OVR {awayTeam.overall}
+              综合 {awayTeam.overall}
             </span>
             <Link
               to={`/team/${fixture.awayTeamId}`}
@@ -313,11 +313,11 @@ function PreMatchView({
           实力对比
         </h4>
         <div className="space-y-1.5">
-          <DualBar label="ATK" homeVal={homeTeam.attack} awayVal={awayTeam.attack} homeColor={homeTeam.color} awayColor={awayTeam.color} />
-          <DualBar label="MID" homeVal={homeTeam.midfield} awayVal={awayTeam.midfield} homeColor={homeTeam.color} awayColor={awayTeam.color} />
-          <DualBar label="DEF" homeVal={homeTeam.defense} awayVal={awayTeam.defense} homeColor={homeTeam.color} awayColor={awayTeam.color} />
-          <DualBar label="STA" homeVal={homeTeam.stability} awayVal={awayTeam.stability} homeColor={homeTeam.color} awayColor={awayTeam.color} />
-          <DualBar label="DEP" homeVal={homeTeam.depth} awayVal={awayTeam.depth} homeColor={homeTeam.color} awayColor={awayTeam.color} />
+          <DualBar label="进攻" homeVal={homeTeam.attack} awayVal={awayTeam.attack} homeColor={homeTeam.color} awayColor={awayTeam.color} />
+          <DualBar label="中场" homeVal={homeTeam.midfield} awayVal={awayTeam.midfield} homeColor={homeTeam.color} awayColor={awayTeam.color} />
+          <DualBar label="防守" homeVal={homeTeam.defense} awayVal={awayTeam.defense} homeColor={homeTeam.color} awayColor={awayTeam.color} />
+          <DualBar label="稳定" homeVal={homeTeam.stability} awayVal={awayTeam.stability} homeColor={homeTeam.color} awayColor={awayTeam.color} />
+          <DualBar label="深度" homeVal={homeTeam.depth} awayVal={awayTeam.depth} homeColor={homeTeam.color} awayColor={awayTeam.color} />
         </div>
       </div>
 
@@ -461,7 +461,7 @@ function PostMatchView({
                         <div className="flex-1 text-right pr-3">
                           <span className="text-slate-300">{event.description}</span>
                           {event.type === 'own_goal' && (
-                            <span className="text-red-400 text-xs ml-1">(OG)</span>
+                            <span className="text-red-400 text-xs ml-1">(乌龙球)</span>
                           )}
                           {event.type === 'penalty_goal' && (
                             <span className="text-amber-400 text-xs ml-1">(P)</span>
@@ -481,7 +481,7 @@ function PostMatchView({
                         <div className="flex-1 text-left pl-3">
                           <span className="text-slate-300">{event.description}</span>
                           {event.type === 'own_goal' && (
-                            <span className="text-red-400 text-xs ml-1">(OG)</span>
+                            <span className="text-red-400 text-xs ml-1">(乌龙球)</span>
                           )}
                           {event.type === 'penalty_goal' && (
                             <span className="text-amber-400 text-xs ml-1">(P)</span>

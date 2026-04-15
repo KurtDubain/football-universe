@@ -689,7 +689,7 @@ function ResultCard({
             <span className="text-[10px] text-amber-400 ml-0.5">
               {result.penalties
                 ? `P${result.penaltyHome}-${result.penaltyAway}`
-                : 'AET'}
+                : '加时'}
             </span>
           )}
         </div>

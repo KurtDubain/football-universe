@@ -461,7 +461,7 @@ export default function League() {
                                   <span className="text-xs text-amber-400 ml-1">
                                     {r.penalties
                                       ? `(P ${r.penaltyHome}-${r.penaltyAway})`
-                                      : '(AET)'}
+                                      : '(加时)'}
                                   </span>
                                 )}
                               </div>

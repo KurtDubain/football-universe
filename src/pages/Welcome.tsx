@@ -73,7 +73,7 @@ export default function Welcome() {
         </div>
 
         <p className="text-xs text-slate-700">
-          v0.6.0 · by KurtDubain
+          v0.6.1 · by KurtDubain
         </p>
       </div>
     </div>

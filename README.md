@@ -127,6 +127,20 @@ src/
 
 ## Changelog
 
+### v0.6.1
+- Cup page rewritten with **horizontal bracket/tree** for knockout rounds
+  - Each match displayed as a card: team color dots + names + score
+  - Winner highlighted in green, loser dimmed
+  - Later rounds spaced wider to align with earlier match outcomes
+  - Horizontal scroll on mobile for full bracket view
+  - Placeholder cells for future rounds (待定)
+- Round names fully Chinese: 第一轮/第二轮/八强/四强/决赛
+- Two-legged knockout labels: 八强首回合/八强次回合/四强首回合/四强次回合
+- Group tables: 4-team standings with expandable fixture list
+- Winner celebration badge with team color accent
+- Fixed remaining English: AET→加时, ET→加时, P→点球, OG→乌龙球
+- Modal stat labels: ATK→进攻, MID→中场, DEF→防守, STA→稳定, DEP→深度, OVR→综合
+
 ### v0.6.0
 - **Player system**: each team has 22 permanent players (3 GK, 7 DF, 7 MF, 5 FW)
 - Players identified by shirt number (1-99), permanently bound to clubs

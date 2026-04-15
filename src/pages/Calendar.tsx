@@ -151,7 +151,7 @@ export default function Calendar() {
                                 {r.awayGoals}
                               </span>
                               {r.extraTime && (
-                                <span className="text-[10px] text-amber-400">{r.penalties ? 'P' : 'ET'}</span>
+                                <span className="text-[10px] text-amber-400">{r.penalties ? '点球' : '加时'}</span>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
