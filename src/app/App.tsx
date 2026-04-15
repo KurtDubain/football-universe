@@ -9,6 +9,7 @@ import Coaches from '../pages/Coaches';
 import TeamDetail from '../pages/TeamDetail';
 import CoachDetail from '../pages/CoachDetail';
 import History from '../pages/History';
+import Teams from '../pages/Teams';
 import Welcome from '../pages/Welcome';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/league/:level" element={<League />} />
         <Route path="/cup/:type" element={<Cup />} />
+        <Route path="/teams" element={<Teams />} />
         <Route path="/coaches" element={<Coaches />} />
         <Route path="/team/:id" element={<TeamDetail />} />
         <Route path="/coach/:id" element={<CoachDetail />} />

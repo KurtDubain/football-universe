@@ -1,18 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { predictMatch, MatchPrediction } from '../engine/match/prediction';
+import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
 import {
   getTeamName,
-  getTeamShortName,
   getWindowTypeLabel,
   getWindowTypeColor,
   formatForm,
   getCoachName,
 } from '../utils/format';
+
+type TabKey = 'matchday' | 'results' | 'overview';
 
 export default function Dashboard() {
   const world = useGameStore((s) => s.world);
@@ -22,9 +23,20 @@ export default function Dashboard() {
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
 
+  const [activeTab, setActiveTab] = useState<TabKey>('matchday');
+  const prevResultsLen = useRef(0);
+
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
+
+  // Auto-switch to results tab after advancing
+  useEffect(() => {
+    if (lastResults.length > 0 && prevResultsLen.current === 0) {
+      setActiveTab('results');
+    }
+    prevResultsLen.current = lastResults.length;
+  }, [lastResults.length]);
 
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -33,15 +45,13 @@ export default function Dashboard() {
   const currentWindow = getCurrentWindow();
   const calendarLen = world.seasonState.calendar.length;
   const completedWindows = world.seasonState.calendar.filter((w) => w.completed).length;
-  const isWorldCupYear = world.seasonState.isWorldCupYear;
 
   // Find the matching fixture for a result
-  const findFixtureForResult = (result: MatchResult): MatchFixture | undefined => {
+  const findFixtureForResult = (result: MatchResult): MatchFixture => {
     for (const win of world.seasonState.calendar) {
       const f = win.fixtures.find((fx) => fx.id === result.fixtureId);
       if (f) return f;
     }
-    // Fallback: construct one from the result
     return {
       id: result.fixtureId,
       homeTeamId: result.homeTeamId,
@@ -59,10 +69,8 @@ export default function Dashboard() {
 
   const handleResultClick = (result: MatchResult) => {
     const fixture = findFixtureForResult(result);
-    if (fixture) {
-      setSelectedFixture(fixture);
-      setSelectedResult(result);
-    }
+    setSelectedFixture(fixture);
+    setSelectedResult(result);
   };
 
   const closeModal = () => {
@@ -70,239 +78,94 @@ export default function Dashboard() {
     setSelectedResult(null);
   };
 
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'matchday', label: '比赛日' },
+    { key: 'results', label: '战报' },
+    { key: 'overview', label: '总览' },
+  ];
+
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* ═══════ Season Banner ═══════ */}
-      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-950 via-slate-900 to-slate-800 p-4 sm:p-6 border border-slate-700/50">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight">
-              第 {world.seasonState.seasonNumber} 赛季
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              进度 {completedWindows} / {calendarLen} 阶段
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {isWorldCupYear && (
-              <span className="px-3 py-1 bg-sky-900/60 border border-sky-700/50 text-sky-300 text-xs font-semibold rounded-full">
-                环球冠军杯年
-              </span>
-            )}
-          </div>
+    <div className="max-w-6xl flex flex-col h-full">
+      {/* ═══════ Compact Top Bar ═══════ */}
+      <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-700/50 flex-wrap">
+        {/* Left: season + progress */}
+        <div className="flex items-center gap-2 text-sm min-w-0">
+          <span className="font-semibold text-slate-200">
+            第{world.seasonState.seasonNumber}赛季
+          </span>
+          <span className="text-slate-500">·</span>
+          <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
         </div>
-        {/* Progress bar */}
-        <div className="mt-4 relative z-10">
-          <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full transition-all"
-              style={{ width: `${calendarLen > 0 ? (completedWindows / calendarLen) * 100 : 0}%` }}
-            />
+
+        {/* Center: current window badge */}
+        {currentWindow && (
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}
+            >
+              {getWindowTypeLabel(currentWindow.type)}
+            </span>
+            <span className="text-xs text-slate-400 truncate">{currentWindow.label}</span>
           </div>
-        </div>
-        {/* Decorative background elements */}
-        <div className="hidden sm:block absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="hidden sm:block absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        )}
+
+        {/* Right: advance button */}
+        <button
+          onClick={advanceWindow}
+          disabled={isAdvancing || !currentWindow}
+          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
+        >
+          {isAdvancing
+            ? '模拟中...'
+            : currentWindow
+              ? `开始模拟 (${currentWindow.fixtures.length}场)`
+              : '赛季已结束'}
+        </button>
       </div>
 
-      {/* ═══════ Current Match Day Panel ═══════ */}
-      {currentWindow ? (
-        <div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              <span
-                className={`inline-block px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-semibold text-white ${getWindowTypeColor(
-                  currentWindow.type
-                )}`}
-              >
-                {getWindowTypeLabel(currentWindow.type)}
-              </span>
-              <h2 className="text-base sm:text-lg font-bold text-slate-100">
-                比赛日 -- {currentWindow.label}
-              </h2>
-              <span className="text-xs sm:text-sm text-slate-500">
-                ({currentWindow.id + 1}/{calendarLen})
-              </span>
-            </div>
-            <button
-              onClick={advanceWindow}
-              disabled={isAdvancing}
-              className="w-full sm:w-auto px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors cursor-pointer text-sm shadow-lg shadow-blue-900/30"
-            >
-              {isAdvancing
-                ? '模拟中...'
-                : `开始模拟 (${currentWindow.fixtures.length} 场)`}
-            </button>
-          </div>
-          {currentWindow.description && (
-            <p className="text-sm text-slate-400 mb-4">{currentWindow.description}</p>
-          )}
+      {/* ═══════ Tab Bar ═══════ */}
+      <div className="flex gap-4 border-b border-slate-700/50 mt-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`pb-2 text-sm font-medium transition-colors cursor-pointer relative ${
+              activeTab === tab.key
+                ? 'text-blue-400'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {tab.label}
+            {tab.key === 'results' && lastResults.length > 0 && (
+              <span className="ml-1 text-[10px] text-slate-500">({lastResults.length})</span>
+            )}
+            {activeTab === tab.key && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
 
-          {/* Fixture cards grid */}
-          {currentWindow.fixtures.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {currentWindow.fixtures.map((fixture) => (
-                <FixtureCard
-                  key={fixture.id}
-                  fixture={fixture}
-                  world={world}
-                  onClick={() => handleFixtureClick(fixture)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="bg-gradient-to-r from-amber-900/30 to-slate-800 rounded-2xl p-6 border border-amber-700/50">
-          <h2 className="text-lg font-bold text-amber-300">赛季已结束</h2>
-          <p className="text-sm text-slate-400 mt-1">
-            所有赛事已完成，请在历史荣誉页面查看本赛季总结
-          </p>
-        </div>
-      )}
+      {/* ═══════ Tab Content ═══════ */}
+      <div className="flex-1 overflow-auto pt-4 pb-2">
+        {activeTab === 'matchday' && (
+          <MatchdayTab
+            world={world}
+            currentWindow={currentWindow}
+            onFixtureClick={handleFixtureClick}
+          />
+        )}
 
-      {/* ═══════ Latest Results ═══════ */}
-      {lastResults.length > 0 && (
-        <div>
-          <h3 className="text-md font-semibold text-slate-200 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-green-500 rounded-full inline-block" />
-            最新战报
-          </h3>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {lastResults.map((r) => (
-              <ResultCard
-                key={r.fixtureId}
-                result={r}
-                world={world}
-                onClick={() => handleResultClick(r)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        {activeTab === 'results' && (
+          <ResultsTab
+            world={world}
+            lastResults={lastResults}
+            lastNews={lastNews}
+            onResultClick={handleResultClick}
+          />
+        )}
 
-      {/* ═══════ Two-column: News + Quick Standings ═══════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ──── News feed ──── */}
-        <div>
-          <h3 className="text-md font-semibold text-slate-200 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-amber-500 rounded-full inline-block" />
-            新闻动态
-          </h3>
-          {lastNews.length === 0 && world.newsLog.length === 0 ? (
-            <p className="text-sm text-slate-500">暂无新闻</p>
-          ) : (
-            <div className="space-y-2">
-              {(lastNews.length > 0 ? lastNews : world.newsLog.slice(-10).reverse()).map(
-                (news) => (
-                  <div
-                    key={news.id}
-                    className="bg-slate-800 rounded-lg p-3 border border-slate-700 flex items-start gap-2"
-                    style={{ borderLeftWidth: '3px', borderLeftColor: getNewsBorderColor(news.type) }}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-200">{news.title}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{news.description}</p>
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ──── Quick standings ──── */}
-        <div>
-          <h3 className="text-md font-semibold text-slate-200 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-5 bg-emerald-500 rounded-full inline-block" />
-            积分榜快览
-          </h3>
-          <div className="space-y-3">
-            {(
-              [
-                { standings: world.league1Standings, name: '顶级联赛', level: 1 },
-                { standings: world.league2Standings, name: '甲级联赛', level: 2 },
-                { standings: world.league3Standings, name: '乙级联赛', level: 3 },
-              ] as const
-            ).map(({ standings, name, level }) => (
-              <div
-                key={level}
-                className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden"
-              >
-                <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-                  <Link
-                    to={`/league/${level}`}
-                    className="text-sm font-semibold text-slate-200 hover:text-blue-400"
-                  >
-                    {name}
-                  </Link>
-                  <Link
-                    to={`/league/${level}`}
-                    className="text-xs text-slate-500 hover:text-blue-400"
-                  >
-                    查看全部 &rarr;
-                  </Link>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-slate-500">
-                      <th className="text-left px-3 py-1 w-6">#</th>
-                      <th className="text-left px-1 py-1">球队</th>
-                      <th className="text-center px-1 py-1 w-8">赛</th>
-                      <th className="text-center px-1 py-1 w-8">积分</th>
-                      <th className="text-center px-1 py-1 w-20">近况</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {standings.slice(0, 5).map((entry, i) => {
-                      const teamBase = world.teamBases[entry.teamId];
-                      return (
-                        <tr
-                          key={entry.teamId}
-                          className="border-t border-slate-700/50 hover:bg-slate-700/30"
-                        >
-                          <td className="px-3 py-1.5 text-slate-400">{i + 1}</td>
-                          <td className="px-1 py-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="w-2 h-2 rounded-full shrink-0"
-                                style={{ backgroundColor: teamBase?.color ?? '#64748b' }}
-                              />
-                              <Link
-                                to={`/team/${entry.teamId}`}
-                                className="text-slate-200 hover:text-blue-400"
-                              >
-                                {getTeamName(entry.teamId, world.teamBases)}
-                              </Link>
-                            </div>
-                          </td>
-                          <td className="text-center px-1 py-1.5 text-slate-400">
-                            {entry.played}
-                          </td>
-                          <td className="text-center px-1 py-1.5 font-semibold text-slate-200">
-                            {entry.points}
-                          </td>
-                          <td className="text-center px-1 py-1.5">
-                            <div className="flex gap-0.5 justify-center">
-                              {formatForm(entry.form.slice(-3)).map((f, fi) => (
-                                <span
-                                  key={fi}
-                                  className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] font-bold text-white ${f.color}`}
-                                >
-                                  {f.label}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        </div>
+        {activeTab === 'overview' && <OverviewTab world={world} />}
       </div>
 
       {/* ═══════ Match Detail Modal ═══════ */}
@@ -318,10 +181,210 @@ export default function Dashboard() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  Tab: 比赛日
+// ══════════════════════════════════════════════════════════════════════
+
+function MatchdayTab({
+  world,
+  currentWindow,
+  onFixtureClick,
+}: {
+  world: GameWorld;
+  currentWindow: ReturnType<ReturnType<typeof useGameStore.getState>['getCurrentWindow']>;
+  onFixtureClick: (f: MatchFixture) => void;
+}) {
+  if (!currentWindow) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-lg font-semibold text-slate-300">赛季已结束</p>
+        <p className="text-sm text-slate-500 mt-1">所有赛事已完成，请查看总览或历史荣誉页面</p>
+      </div>
+    );
+  }
+
+  if (currentWindow.fixtures.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-sm text-slate-500">本阶段无比赛安排</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {currentWindow.fixtures.map((fixture) => (
+        <FixtureCard
+          key={fixture.id}
+          fixture={fixture}
+          world={world}
+          onClick={() => onFixtureClick(fixture)}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Tab: 战报
+// ══════════════════════════════════════════════════════════════════════
+
+function ResultsTab({
+  world,
+  lastResults,
+  lastNews,
+  onResultClick,
+}: {
+  world: GameWorld;
+  lastResults: MatchResult[];
+  lastNews: { id: string; type: string; title: string; description: string }[];
+  onResultClick: (r: MatchResult) => void;
+}) {
+  if (lastResults.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-sm text-slate-500">暂无比赛结果，请先推进模拟</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Result cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {lastResults.map((r) => (
+          <ResultCard
+            key={r.fixtureId}
+            result={r}
+            world={world}
+            onClick={() => onResultClick(r)}
+          />
+        ))}
+      </div>
+
+      {/* News feed */}
+      {(lastNews.length > 0 || world.newsLog.length > 0) && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+            <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" />
+            新闻动态
+          </h3>
+          <div className="space-y-1.5">
+            {(lastNews.length > 0 ? lastNews : world.newsLog.slice(-8).reverse()).map(
+              (news) => (
+                <div
+                  key={news.id}
+                  className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700"
+                  style={{
+                    borderLeftWidth: '3px',
+                    borderLeftColor: getNewsBorderColor(news.type),
+                  }}
+                >
+                  <p className="text-sm text-slate-200">{news.title}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{news.description}</p>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Tab: 总览
+// ══════════════════════════════════════════════════════════════════════
+
+function OverviewTab({ world }: { world: GameWorld }) {
+  const leagues = [
+    { standings: world.league1Standings, name: '顶级联赛', level: 1 },
+    { standings: world.league2Standings, name: '甲级联赛', level: 2 },
+    { standings: world.league3Standings, name: '乙级联赛', level: 3 },
+  ] as const;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {leagues.map(({ standings, name, level }) => (
+        <div
+          key={level}
+          className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden"
+        >
+          <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
+            <Link
+              to={`/league/${level}`}
+              className="text-sm font-semibold text-slate-200 hover:text-blue-400 transition-colors"
+            >
+              {name}
+            </Link>
+            <Link
+              to={`/league/${level}`}
+              className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors"
+            >
+              全部 &rarr;
+            </Link>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-slate-500">
+                <th className="text-left px-2 py-1 w-5">#</th>
+                <th className="text-left px-1 py-1">球队</th>
+                <th className="text-center px-1 py-1 w-7">分</th>
+                <th className="text-center px-1 py-1 w-16">近况</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.slice(0, 5).map((entry, i) => {
+                const teamBase = world.teamBases[entry.teamId];
+                return (
+                  <tr
+                    key={entry.teamId}
+                    className="border-t border-slate-700/50 hover:bg-slate-700/30"
+                  >
+                    <td className="px-2 py-1.5 text-slate-500">{i + 1}</td>
+                    <td className="px-1 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: teamBase?.color ?? '#64748b' }}
+                        />
+                        <Link
+                          to={`/team/${entry.teamId}`}
+                          className="text-slate-200 hover:text-blue-400 truncate transition-colors"
+                        >
+                          {getTeamName(entry.teamId, world.teamBases)}
+                        </Link>
+                      </div>
+                    </td>
+                    <td className="text-center px-1 py-1.5 font-semibold text-slate-200">
+                      {entry.points}
+                    </td>
+                    <td className="text-center px-1 py-1.5">
+                      <div className="flex gap-0.5 justify-center">
+                        {formatForm(entry.form.slice(-3)).map((f, fi) => (
+                          <span
+                            key={fi}
+                            className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[9px] font-bold text-white ${f.color}`}
+                          >
+                            {f.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
 //  Sub-components
 // ══════════════════════════════════════════════════════════════════════
 
-/** Fixture card (pre-match) with mini probability bar */
 function FixtureCard({
   fixture,
   world,
@@ -350,65 +413,55 @@ function FixtureCard({
   return (
     <div
       onClick={onClick}
-      className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
+      className="bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         {/* Home */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
+              className="w-2 h-2 rounded-full shrink-0"
               style={{ backgroundColor: homeTeam.color }}
             />
-            <span className="text-sm font-bold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
+            <span className="text-sm font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
               {homeTeam.name}
             </span>
+            <span className="text-[10px] text-slate-500 font-mono">{homeTeam.overall}</span>
           </div>
-          <span className="text-xs text-slate-500 ml-4">
-            OVR{' '}
-            <span className="text-slate-400 font-semibold">{homeTeam.overall}</span>
-          </span>
         </div>
 
-        {/* VS */}
-        <div className="text-center px-3 shrink-0">
-          <div className="text-base font-black text-slate-500 group-hover:text-slate-400">VS</div>
-        </div>
+        <span className="text-xs font-bold text-slate-600 px-2 shrink-0">VS</span>
 
         {/* Away */}
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center gap-1.5 justify-end">
-            <span className="text-sm font-bold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
+            <span className="text-[10px] text-slate-500 font-mono">{awayTeam.overall}</span>
+            <span className="text-sm font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
               {awayTeam.name}
             </span>
             <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
+              className="w-2 h-2 rounded-full shrink-0"
               style={{ backgroundColor: awayTeam.color }}
             />
           </div>
-          <span className="text-xs text-slate-500 mr-4">
-            OVR{' '}
-            <span className="text-slate-400 font-semibold">{awayTeam.overall}</span>
-          </span>
         </div>
       </div>
 
       {/* Mini probability bar */}
-      <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-700">
-        <div className="bg-green-500 transition-all" style={{ width: `${pred.homeWinPct}%` }} />
-        <div className="bg-slate-400 transition-all" style={{ width: `${pred.drawPct}%` }} />
-        <div className="bg-red-500 transition-all" style={{ width: `${pred.awayWinPct}%` }} />
+      <div className="flex h-1 rounded-full overflow-hidden bg-slate-700">
+        <div className="bg-green-500" style={{ width: `${pred.homeWinPct}%` }} />
+        <div className="bg-slate-400" style={{ width: `${pred.drawPct}%` }} />
+        <div className="bg-red-500" style={{ width: `${pred.awayWinPct}%` }} />
       </div>
-      <div className="flex justify-between text-[10px] mt-1 text-slate-500">
-        <span className="text-green-400">胜 {pred.homeWinPct}%</span>
+      <div className="flex justify-between text-[10px] mt-0.5 text-slate-500">
+        <span className="text-green-400">{pred.homeWinPct}%</span>
         <span>{pred.verdict}</span>
-        <span className="text-red-400">负 {pred.awayWinPct}%</span>
+        <span className="text-red-400">{pred.awayWinPct}%</span>
       </div>
     </div>
   );
 }
 
-/** Result card (post-match) with score and key events */
 function ResultCard({
   result,
   world,
@@ -426,17 +479,17 @@ function ResultCard({
   return (
     <div
       onClick={onClick}
-      className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
+      className="bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
     >
       <div className="flex items-center justify-between">
         {/* Home */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
+            className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: homeTeam?.color ?? '#64748b' }}
           />
           <span
-            className={`text-sm font-medium truncate group-hover:text-blue-400 transition-colors ${
+            className={`text-sm truncate group-hover:text-blue-400 transition-colors ${
               homeWon ? 'text-green-400 font-bold' : 'text-slate-200'
             }`}
           >
@@ -445,76 +498,55 @@ function ResultCard({
         </div>
 
         {/* Score */}
-        <div className="flex items-center gap-1.5 px-3 shrink-0">
+        <div className="flex items-center gap-1 px-2 shrink-0">
           <span
-            className={`text-xl font-bold ${
+            className={`text-lg font-bold ${
               homeWon ? 'text-green-400' : awayWon ? 'text-red-400' : 'text-slate-300'
             }`}
           >
             {result.homeGoals}
           </span>
-          <span className="text-slate-500 text-sm">:</span>
+          <span className="text-slate-600 text-xs">:</span>
           <span
-            className={`text-xl font-bold ${
+            className={`text-lg font-bold ${
               awayWon ? 'text-green-400' : homeWon ? 'text-red-400' : 'text-slate-300'
             }`}
           >
             {result.awayGoals}
           </span>
           {result.extraTime && (
-            <span className="text-xs text-amber-400 ml-1">
+            <span className="text-[10px] text-amber-400 ml-0.5">
               {result.penalties
-                ? `(P ${result.penaltyHome}-${result.penaltyAway})`
-                : '(AET)'}
+                ? `P${result.penaltyHome}-${result.penaltyAway}`
+                : 'AET'}
             </span>
           )}
         </div>
 
         {/* Away */}
-        <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
           <span
-            className={`text-sm font-medium truncate text-right group-hover:text-blue-400 transition-colors ${
+            className={`text-sm truncate text-right group-hover:text-blue-400 transition-colors ${
               awayWon ? 'text-green-400 font-bold' : 'text-slate-200'
             }`}
           >
             {getTeamName(result.awayTeamId, world.teamBases)}
           </span>
           <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
+            className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: awayTeam?.color ?? '#64748b' }}
           />
         </div>
       </div>
 
-      {/* Competition + round */}
-      <div className="text-xs text-slate-500 mt-2 text-center">
-        {result.competitionName} - {result.roundLabel}
+      {/* Competition label */}
+      <div className="text-[10px] text-slate-500 mt-1.5 text-center">
+        {result.competitionName} · {result.roundLabel}
       </div>
-
-      {/* Key goal events */}
-      {result.events.filter(
-        (e) => e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
-      ).length > 0 && (
-        <div className="text-xs text-slate-500 mt-1 text-center space-x-2">
-          {result.events
-            .filter(
-              (e) =>
-                e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
-            )
-            .map((e, i) => (
-              <span key={i} className="text-slate-400">
-                {e.minute}'{' '}
-                {e.type === 'own_goal' ? '(OG)' : ''}
-                {e.teamId === result.homeTeamId ? '\u2B05' : '\u27A1'}
-              </span>
-            ))}
-        </div>
-      )}
     </div>
   );
 }
 
-/** Get border color for news type */
 function getNewsBorderColor(type: string): string {
   const colors: Record<string, string> = {
     match_result: '#059669',

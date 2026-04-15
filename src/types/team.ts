@@ -1,8 +1,11 @@
+export type TeamTier = 'elite' | 'strong' | 'mid' | 'lower' | 'underdog';
+
 export interface TeamBase {
   id: string;
   name: string;
   shortName: string;
-  color: string; // hex color for UI accent
+  color: string;
+  tier: TeamTier;
   // base attributes 0-100
   overall: number;
   attack: number;

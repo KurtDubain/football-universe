@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.1-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,20 @@ src/
 ```
 
 ## Changelog
+
+### v0.5.0
+- Full Chinese localization: W/D/L → 胜/平/负, all labels in Chinese
+- New **Teams Hub** page (`/teams`) with tier classification system
+  - 5 tiers: 豪门 / 劲旅 / 中游 / 平民 / 草根
+  - Toggle view: "按档次" (by tier) or "按联赛" (by league level)
+  - Team cards with color badge, OVR, coach, morale indicator, form
+- Added `tier` field to TeamBase type for all 32 teams
+- **Dashboard completely redesigned** with tabbed layout:
+  - "比赛日" tab: fixture cards with predictions
+  - "战报" tab: results + news (auto-switches after advancing)
+  - "总览" tab: quick standings for all leagues
+  - Compact single-row header, no excessive scrolling
+- Sidebar: added "球队中心" nav link under 管理 section
 
 ### v0.4.1
 - Full mobile responsive overhaul

@@ -34,6 +34,7 @@ const navSections = [
   {
     title: '管理',
     items: [
+      { to: '/teams', label: '球队中心' },
       { to: '/coaches', label: '教练中心' },
     ],
   },
