@@ -127,6 +127,22 @@ src/
 
 ## Changelog
 
+### v0.7.0
+- **Season Review** component: shows full season summary after each season ends
+  - Champions grid (all competitions)
+  - Season stats: best attack, best defense, most wins, coach changes
+  - Top 5 scorers with team colors
+  - Promotions & relegations with color-coded cards
+- Dashboard: new "S{N}回顾" tab appears after completing a season
+- History page rewritten: expandable season cards with full SeasonReview inside
+- **Season-end news push** — much richer end-of-season news:
+  - League champions with points total
+  - Season top scorer (射手王)
+  - Best defense team
+  - Best attack team
+  - All promoted/relegated teams
+  - Coach changes summary
+
 ### v0.6.1
 - Cup page rewritten with **horizontal bracket/tree** for knockout rounds
   - Each match displayed as a card: team color dots + names + score

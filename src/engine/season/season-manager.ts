@@ -1175,26 +1175,30 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
   }
 
-  // Generate trophy news
+  // Generate trophy news + season summary news
   const news: NewsItem[] = [];
   const windowIndex = world.seasonState.currentWindowIndex;
 
   if (league1Champion) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-l1'),
-      seasonNumber,
-      windowIndex,
-      type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy',
       title: `${world.teamBases[league1Champion]?.name} 夺得顶级联赛冠军!`,
-      description: `${world.teamBases[league1Champion]?.name} 加冕顶级联赛冠军。`,
+      description: `${world.teamBases[league1Champion]?.name} 加冕顶级联赛冠军，以${world.league1Standings[0]?.points}分的成绩登顶。`,
+    });
+  }
+  if (league2Champion) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'trophy-l2'),
+      seasonNumber, windowIndex, type: 'trophy',
+      title: `${world.teamBases[league2Champion]?.name} 夺得甲级联赛冠军!`,
+      description: `${world.teamBases[league2Champion]?.name} 以${world.league2Standings[0]?.points}分荣膺甲级联赛冠军。`,
     });
   }
   if (leagueCupWinner) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-lc'),
-      seasonNumber,
-      windowIndex,
-      type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy',
       title: `${world.teamBases[leagueCupWinner]?.name} 夺得联赛杯冠军!`,
       description: `${world.teamBases[leagueCupWinner]?.name} 捧得联赛杯冠军奖杯。`,
     });
@@ -1202,11 +1206,78 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   if (superCupWinner) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-sc'),
-      seasonNumber,
-      windowIndex,
-      type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy',
       title: `${world.teamBases[superCupWinner]?.name} 夺得超级杯冠军!`,
       description: `${world.teamBases[superCupWinner]?.name} 赢得超级杯冠军荣耀。`,
+    });
+  }
+
+  // ── Season summary news ──
+
+  // Top scorer
+  const allPlayerStats = Object.values(world.playerStats);
+  const topScorer = allPlayerStats.reduce((best, s) => s.goals > (best?.goals ?? 0) ? s : best, null as any);
+  if (topScorer && topScorer.goals > 0) {
+    const parts = topScorer.playerId.split('-');
+    const num = parts[parts.length - 1];
+    const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'scorer'),
+      seasonNumber, windowIndex, type: 'trophy',
+      title: `赛季射手王: ${teamName} ${num}号 (${topScorer.goals}球)`,
+      description: `${teamName}的${num}号球员以${topScorer.goals}粒进球荣获本赛季射手王。`,
+    });
+  }
+
+  // Best defense (least goals conceded in top league)
+  const bestDefense = [...world.league1Standings].sort((a, b) => a.goalsAgainst - b.goalsAgainst)[0];
+  if (bestDefense && bestDefense.played > 0) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'defense'),
+      seasonNumber, windowIndex, type: 'streak',
+      title: `最佳防守: ${world.teamBases[bestDefense.teamId]?.name} (仅失${bestDefense.goalsAgainst}球)`,
+      description: `${world.teamBases[bestDefense.teamId]?.name}以全赛季仅丢${bestDefense.goalsAgainst}球成为顶级联赛最佳防线。`,
+    });
+  }
+
+  // Most goals scored in top league
+  const bestAttack = [...world.league1Standings].sort((a, b) => b.goalsFor - a.goalsFor)[0];
+  if (bestAttack && bestAttack.played > 0 && bestAttack.teamId !== league1Champion) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'attack'),
+      seasonNumber, windowIndex, type: 'streak',
+      title: `火力最猛: ${world.teamBases[bestAttack.teamId]?.name} (${bestAttack.goalsFor}球)`,
+      description: `${world.teamBases[bestAttack.teamId]?.name}以${bestAttack.goalsFor}粒进球成为顶级联赛最强火力。`,
+    });
+  }
+
+  // Promoted teams
+  for (const p of proRelResult.promoted) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `promo-${p.teamId}`),
+      seasonNumber, windowIndex, type: 'promotion',
+      title: `${world.teamBases[p.teamId]?.name} 升级成功!`,
+      description: `${world.teamBases[p.teamId]?.name} 从${p.from}级联赛升入${p.to}级联赛。`,
+    });
+  }
+
+  // Relegated teams
+  for (const r of proRelResult.relegated) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `releg-${r.teamId}`),
+      seasonNumber, windowIndex, type: 'relegation',
+      title: `${world.teamBases[r.teamId]?.name} 不幸降级`,
+      description: `${world.teamBases[r.teamId]?.name} 从${r.from}级联赛降入${r.to}级联赛。`,
+    });
+  }
+
+  // Coach changes summary
+  if (world.coachChangesThisSeason.length > 0) {
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'coach-summary'),
+      seasonNumber, windowIndex, type: 'coach_fired',
+      title: `本赛季共有 ${world.coachChangesThisSeason.length} 次换帅`,
+      description: world.coachChangesThisSeason.map(c => `${world.teamBases[c.teamId]?.name}`).join('、') + ' 更换了教练。',
     });
   }
 

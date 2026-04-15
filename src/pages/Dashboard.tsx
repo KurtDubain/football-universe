@@ -5,6 +5,7 @@ import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
+import SeasonReview from '../components/SeasonReview';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -14,7 +15,7 @@ import {
   getTierLabel,
 } from '../utils/format';
 
-type TabKey = 'matchday' | 'results' | 'overview';
+type TabKey = 'matchday' | 'results' | 'overview' | 'review';
 
 export default function Dashboard() {
   const world = useGameStore((s) => s.world);
@@ -79,10 +80,17 @@ export default function Dashboard() {
     setSelectedResult(null);
   };
 
+  // Check if we have a completed season to review
+  const lastCompletedSeason = world.honorHistory.length > 0
+    ? world.honorHistory[world.honorHistory.length - 1].seasonNumber
+    : null;
+  const hasSeasonReview = lastCompletedSeason !== null;
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'matchday', label: '比赛日' },
     { key: 'results', label: '战报' },
     { key: 'overview', label: '总览' },
+    ...(hasSeasonReview ? [{ key: 'review' as TabKey, label: `S${lastCompletedSeason}回顾` }] : []),
   ];
 
   return (
@@ -167,6 +175,10 @@ export default function Dashboard() {
         )}
 
         {activeTab === 'overview' && <OverviewTab world={world} />}
+
+        {activeTab === 'review' && lastCompletedSeason && (
+          <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
+        )}
       </div>
 
       {/* ═══════ Match Detail Modal ═══════ */}
