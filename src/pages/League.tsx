@@ -175,8 +175,8 @@ export default function League() {
   return (
     <div className="max-w-5xl space-y-6">
       {/* ═══════ Header ═══════ */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-100">{getLeagueName(leagueLevel)}</h2>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h2 className="text-lg sm:text-xl font-bold text-slate-100">{getLeagueName(leagueLevel)}</h2>
         <div className="flex bg-slate-800 rounded-lg border border-slate-700 p-0.5">
           <button
             onClick={() => setTab('standings')}
@@ -257,17 +257,17 @@ export default function League() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-slate-400 border-b border-slate-700">
-                    <th className="text-center px-2 py-2.5 w-10">#</th>
-                    <th className="text-left px-2 py-2.5">球队</th>
-                    <th className="text-center px-2 py-2.5">赛</th>
-                    <th className="text-center px-2 py-2.5">胜</th>
-                    <th className="text-center px-2 py-2.5">平</th>
-                    <th className="text-center px-2 py-2.5">负</th>
-                    <th className="text-center px-2 py-2.5">进球</th>
-                    <th className="text-center px-2 py-2.5">失球</th>
-                    <th className="text-center px-2 py-2.5">净胜球</th>
-                    <th className="text-center px-2 py-2.5 font-semibold">积分</th>
-                    <th className="text-center px-2 py-2.5">近况</th>
+                    <th className="text-center px-1.5 sm:px-2 py-2 w-8 sm:w-10">#</th>
+                    <th className="text-left px-1.5 sm:px-2 py-2">球队</th>
+                    <th className="text-center px-1 sm:px-2 py-2">赛</th>
+                    <th className="hidden sm:table-cell text-center px-2 py-2">胜</th>
+                    <th className="hidden sm:table-cell text-center px-2 py-2">平</th>
+                    <th className="hidden sm:table-cell text-center px-2 py-2">负</th>
+                    <th className="hidden md:table-cell text-center px-2 py-2">进</th>
+                    <th className="hidden md:table-cell text-center px-2 py-2">失</th>
+                    <th className="text-center px-1 sm:px-2 py-2">净胜</th>
+                    <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
+                    <th className="text-center px-1 sm:px-2 py-2">近况</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -290,64 +290,33 @@ export default function League() {
                             : ''
                         } ${getRowBgClass(zone)}`}
                       >
-                        <td className="text-center px-2 py-2.5">
-                          <span
-                            className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold ${getPosBadgeClass(
-                              zone
-                            )}`}
-                          >
+                        <td className="text-center px-1.5 sm:px-2 py-2">
+                          <span className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-md text-[10px] sm:text-xs font-bold ${getPosBadgeClass(zone)}`}>
                             {pos}
                           </span>
                         </td>
-                        <td className="px-2 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{
-                                backgroundColor: teamBase?.color ?? '#64748b',
-                              }}
-                            />
-                            <Link
-                              to={`/team/${entry.teamId}`}
-                              className="text-slate-200 hover:text-blue-400 transition-colors"
-                            >
+                        <td className="px-1.5 sm:px-2 py-2">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0" style={{ backgroundColor: teamBase?.color ?? '#64748b' }} />
+                            <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 transition-colors truncate text-xs sm:text-sm">
                               {getTeamName(entry.teamId, world.teamBases)}
                             </Link>
                           </div>
                         </td>
-                        <td className="text-center px-2 py-2.5 text-slate-400">
-                          {entry.played}
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>
+                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.won}</td>
+                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.drawn}</td>
+                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.lost}</td>
+                        <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsFor}</td>
+                        <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
+                          {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
                         </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.won}
-                        </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.drawn}
-                        </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.lost}
-                        </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.goalsFor}
-                        </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.goalsAgainst}
-                        </td>
-                        <td className="text-center px-2 py-2.5 text-slate-300">
-                          {entry.goalDifference > 0
-                            ? `+${entry.goalDifference}`
-                            : entry.goalDifference}
-                        </td>
-                        <td className="text-center px-2 py-2.5 font-bold text-lg text-slate-100">
-                          {entry.points}
-                        </td>
-                        <td className="text-center px-2 py-2.5">
+                        <td className="text-center px-1.5 sm:px-2 py-2 font-bold text-sm sm:text-lg text-slate-100">{entry.points}</td>
+                        <td className="text-center px-1 sm:px-2 py-2">
                           <div className="flex gap-0.5 justify-center">
                             {formatForm(entry.form.slice(-5)).map((f, fi) => (
-                              <span
-                                key={fi}
-                                className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white ${f.color}`}
-                              >
+                              <span key={fi} className={`inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded text-[9px] sm:text-[10px] font-bold text-white ${f.color}`}>
                                 {f.label}
                               </span>
                             ))}

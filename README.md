@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.4.1-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,18 @@ src/
 ```
 
 ## Changelog
+
+### v0.4.1
+- Full mobile responsive overhaul
+- Collapsible hamburger menu for mobile (sidebar hidden, overlay nav drawer)
+- League standings: hide W/D/L/GF/GA columns on mobile, show #/Team/Played/GD/Pts/Form
+- Cup group tables: hide secondary columns on mobile
+- Dashboard: stacked match day header, responsive banner, hidden decorative elements
+- Modal slides up from bottom on mobile (sheet-style)
+- Team detail: color badge header with OVR and star rating
+- Coaches page: responsive card padding and sizing
+- All touch targets >= 44px
+- Responsive font sizes and padding throughout
 
 ### v0.4.0
 - New **Coaches Hub** page (`/coaches`) with full coach roster

@@ -219,10 +219,10 @@ function GroupView({ group, teamBases, onFixtureClick }: {
           <tr className="text-xs text-slate-400 border-b border-slate-700">
             <th className="text-center px-2 py-1 w-8">#</th>
             <th className="text-left px-2 py-1">球队</th>
-            <th className="text-center px-1 py-1">赛</th>
-            <th className="text-center px-1 py-1">胜</th>
-            <th className="text-center px-1 py-1">平</th>
-            <th className="text-center px-1 py-1">负</th>
+            <th className="hidden sm:table-cell text-center px-1 py-1">赛</th>
+            <th className="hidden sm:table-cell text-center px-1 py-1">胜</th>
+            <th className="hidden sm:table-cell text-center px-1 py-1">平</th>
+            <th className="hidden sm:table-cell text-center px-1 py-1">负</th>
             <th className="text-center px-1 py-1">净胜</th>
             <th className="text-center px-1 py-1 font-semibold">分</th>
           </tr>
@@ -239,10 +239,10 @@ function GroupView({ group, teamBases, onFixtureClick }: {
                   </Link>
                 </div>
               </td>
-              <td className="text-center px-1 py-1.5 text-slate-400 text-xs">{entry.played}</td>
-              <td className="text-center px-1 py-1.5 text-slate-300 text-xs">{entry.won}</td>
-              <td className="text-center px-1 py-1.5 text-slate-300 text-xs">{entry.drawn}</td>
-              <td className="text-center px-1 py-1.5 text-slate-300 text-xs">{entry.lost}</td>
+              <td className="hidden sm:table-cell text-center px-1 py-1.5 text-slate-400 text-xs">{entry.played}</td>
+              <td className="hidden sm:table-cell text-center px-1 py-1.5 text-slate-300 text-xs">{entry.won}</td>
+              <td className="hidden sm:table-cell text-center px-1 py-1.5 text-slate-300 text-xs">{entry.drawn}</td>
+              <td className="hidden sm:table-cell text-center px-1 py-1.5 text-slate-300 text-xs">{entry.lost}</td>
               <td className="text-center px-1 py-1.5 text-slate-300 text-xs">
                 {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
               </td>

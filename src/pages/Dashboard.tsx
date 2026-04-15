@@ -73,13 +73,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 max-w-6xl">
       {/* ═══════ Season Banner ═══════ */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-950 via-slate-900 to-slate-800 p-6 border border-slate-700/50">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-4">
+      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-950 via-slate-900 to-slate-800 p-4 sm:p-6 border border-slate-700/50">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-black text-slate-100 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight">
               第 {world.seasonState.seasonNumber} 赛季
             </h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
               进度 {completedWindows} / {calendarLen} 阶段
             </p>
           </div>
@@ -101,33 +101,33 @@ export default function Dashboard() {
           </div>
         </div>
         {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="hidden sm:block absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="hidden sm:block absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/5 rounded-full translate-y-1/2 -translate-x-1/4" />
       </div>
 
       {/* ═══════ Current Match Day Panel ═══════ */}
       {currentWindow ? (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <span
-                className={`inline-block px-2.5 py-1 rounded-lg text-xs font-semibold text-white ${getWindowTypeColor(
+                className={`inline-block px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-semibold text-white ${getWindowTypeColor(
                   currentWindow.type
                 )}`}
               >
                 {getWindowTypeLabel(currentWindow.type)}
               </span>
-              <h2 className="text-lg font-bold text-slate-100">
+              <h2 className="text-base sm:text-lg font-bold text-slate-100">
                 比赛日 -- {currentWindow.label}
               </h2>
-              <span className="text-sm text-slate-500">
+              <span className="text-xs sm:text-sm text-slate-500">
                 ({currentWindow.id + 1}/{calendarLen})
               </span>
             </div>
             <button
               onClick={advanceWindow}
               disabled={isAdvancing}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors cursor-pointer text-sm shadow-lg shadow-blue-900/30"
+              className="w-full sm:w-auto px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors cursor-pointer text-sm shadow-lg shadow-blue-900/30"
             >
               {isAdvancing
                 ? '模拟中...'

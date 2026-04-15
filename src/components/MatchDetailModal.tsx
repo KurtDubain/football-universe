@@ -47,18 +47,18 @@ export default function MatchDetailModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        className="bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-2xl w-full sm:mx-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-xl leading-none cursor-pointer z-10"
-          style={{ position: 'sticky', float: 'right', marginTop: '12px', marginRight: '12px' }}
+          className="text-slate-400 hover:text-slate-200 text-xl leading-none cursor-pointer z-10 p-3"
+          style={{ position: 'sticky', float: 'right', marginTop: '4px', marginRight: '4px' }}
         >
           &#x2715;
         </button>

@@ -110,10 +110,10 @@ export default function Coaches() {
               to={`/coach/${base.id}`}
               className="block bg-slate-800 rounded-xl border border-slate-700/60 hover:border-slate-600 transition-colors"
             >
-              <div className="p-4 flex items-center gap-4">
+              <div className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
                 {/* Rating badge */}
-                <div className={`w-11 h-11 ${ratingTier} rounded-xl flex items-center justify-center shrink-0`}>
-                  <span className="text-white font-bold text-sm">{base.rating}</span>
+                <div className={`w-10 h-10 sm:w-11 sm:h-11 ${ratingTier} rounded-xl flex items-center justify-center shrink-0`}>
+                  <span className="text-white font-bold text-xs sm:text-sm">{base.rating}</span>
                 </div>
 
                 {/* Info */}

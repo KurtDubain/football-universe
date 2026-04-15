@@ -27,24 +27,27 @@ export default function TeamDetail() {
   const coachId = state.currentCoachId;
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-5">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-100">{base.name}</h2>
-        <div className="flex items-center gap-3 mt-1">
-          <span className="text-sm text-slate-400">
-            {base.shortName}
-          </span>
-          <span className="text-sm text-slate-400">
-            {getLeagueName(state.leagueLevel)}
-          </span>
-          <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
-            期望值: {'*'.repeat(base.expectation)}
-          </span>
+      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: base.color }}>
+            <span className="text-white font-black text-sm sm:text-lg">{base.shortName}</span>
+          </div>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100">{base.name}</h2>
+            <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
+              <span className="text-xs text-slate-400">{getLeagueName(state.leagueLevel)}</span>
+              <span className="text-xs text-slate-500">OVR {base.overall}</span>
+              <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">
+                {'★'.repeat(base.expectation)}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {/* Base Attributes */}
         <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
           <h3 className="text-sm font-semibold text-slate-200 mb-3">
