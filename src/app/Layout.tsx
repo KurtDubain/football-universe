@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor } from '../utils/format';
+import Logo from '../components/Logo';
 
 interface LayoutProps {
   children: ReactNode;
@@ -52,8 +53,8 @@ export default function Layout({ children }: LayoutProps) {
       <aside className="w-56 bg-slate-800/80 backdrop-blur border-r border-slate-700/60 flex flex-col shrink-0">
         {/* Logo */}
         <div className="p-4 border-b border-slate-700/60">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">&#9917;</span>
+          <div className="flex items-center gap-2.5">
+            <Logo size={36} />
             <div>
               <h1 className="text-sm font-bold text-slate-100 leading-none">足球联赛宇宙</h1>
               <p className="text-[10px] text-slate-500 mt-0.5">电子斗蛐蛐模拟器</p>
@@ -143,13 +144,14 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-slate-700/60 space-y-1">
+        <div className="p-3 border-t border-slate-700/60 space-y-2">
           <button
             onClick={resetGame}
             className="w-full px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
           >
             重置游戏
           </button>
+          <p className="text-[9px] text-slate-600 text-center">by KurtDubain</p>
         </div>
       </aside>
 

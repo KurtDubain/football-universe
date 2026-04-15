@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
+import Logo from '../components/Logo';
 
 export default function Welcome() {
   const newGame = useGameStore((s) => s.newGame);
@@ -21,7 +22,9 @@ export default function Welcome() {
 
       <div className="relative z-10 text-center space-y-10 p-8 max-w-lg">
         <div className="space-y-3">
-          <div className="text-6xl mb-4">&#9917;</div>
+          <div className="flex justify-center mb-4">
+            <Logo size={80} />
+          </div>
           <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-slate-100 to-emerald-400 tracking-tight leading-tight">
             足球联赛宇宙
           </h1>
@@ -70,7 +73,7 @@ export default function Welcome() {
         </div>
 
         <p className="text-xs text-slate-700">
-          v0.2.0 · 五大联赛 + 中超 · 升降级 · 教练系统 · 赛季推进
+          v0.3.0 · by KurtDubain
         </p>
       </div>
     </div>
