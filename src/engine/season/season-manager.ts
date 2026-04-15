@@ -5,6 +5,7 @@ import { StandingEntry } from '../../types/league';
 import { CupState, SuperCupState, WorldCupState } from '../../types/cup';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
+import { Player, PlayerSeasonStats } from '../../types/player';
 import { SeededRNG } from '../match/rng';
 import { simulateMatch, SimulationContext } from '../match/simulator';
 import { generateLeagueFixtures } from '../standings/fixtures';
@@ -17,6 +18,8 @@ import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { applyMatchStateChanges, applyRestRecovery, applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
+import { generateAllSquads } from '../players/generator';
+import { createInitialPlayerStats, updatePlayerStatsFromResults } from '../players/stats';
 import { buildSeasonCalendar, appendWorldCupWindows, CalendarBuildInput } from './calendar-builder';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
@@ -52,6 +55,8 @@ export interface GameWorld {
   coachTrophies: Record<string, Trophy[]>;
   teamSeasonRecords: Record<string, SeasonRecord[]>;
   coachChangesThisSeason: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];
+  squads: Record<string, Player[]>;
+  playerStats: Record<string, PlayerSeasonStats>;
   newsLog: NewsItem[];
   seed: number;
   rngState: number;
@@ -98,6 +103,8 @@ function buildSimulationContext(
     competitionType: fixture.competitionType,
     isKnockout,
     rng,
+    homeSquad: world.squads[fixture.homeTeamId],
+    awaySquad: world.squads[fixture.awayTeamId],
   };
 }
 
@@ -178,6 +185,10 @@ export function initializeGameWorld(seed: number): GameWorld {
   // 7. Create RNG
   const rng = new SeededRNG(seed);
 
+  // 8. Generate squads (permanent, once)
+  const squads = generateAllSquads(defaultTeams, seed + 7777);
+  const playerStats = createInitialPlayerStats(squads);
+
   // Build an initial world (partial) so initializeNewSeason can fill it out
   const world: GameWorld = {
     seasonState: undefined!,
@@ -197,6 +208,8 @@ export function initializeGameWorld(seed: number): GameWorld {
     coachTrophies: {},
     teamSeasonRecords: {},
     coachChangesThisSeason: [],
+    squads,
+    playerStats,
     newsLog: [],
     seed,
     rngState: rng.getState(),
@@ -316,6 +329,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     superCup,
     worldCup: null,
     coachChangesThisSeason: [],
+    playerStats: createInitialPlayerStats(world.squads),
     rngState,
   };
 }
@@ -1040,6 +1054,11 @@ export function executeCurrentWindow(world: GameWorld): {
     }
   }
 
+  // ── Update player stats ──────────────────────────────────────
+  const updatedPlayerStats = results.length > 0
+    ? updatePlayerStatsFromResults(world.playerStats, results, world.squads)
+    : world.playerStats;
+
   // ── Mark window completed, advance index ─────────────────────
   const updatedCalendar = [...seasonState.calendar];
   updatedCalendar[windowIndex] = {
@@ -1072,6 +1091,7 @@ export function executeCurrentWindow(world: GameWorld): {
       coachStates,
       coachCareers,
       coachChangesThisSeason: coachChanges,
+      playerStats: updatedPlayerStats,
       newsLog: [...world.newsLog, ...news],
       rngState: rng.getState(),
     },

@@ -6,6 +6,7 @@ import {
 } from '../../types';
 import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
+import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
@@ -21,8 +22,10 @@ export interface SimulationContext {
   homeCoach: CoachBase | null;
   awayCoach: CoachBase | null;
   competitionType: CompetitionType;
-  isKnockout: boolean; // needs a winner (ET + pens)
+  isKnockout: boolean;
   rng: SeededRNG;
+  homeSquad?: Player[];
+  awaySquad?: Player[];
 }
 
 export interface SimulationResult {
@@ -299,6 +302,8 @@ export function simulateMatch(
     extraTime,
     penaltyHome,
     penaltyAway,
+    ctx.homeSquad,
+    ctx.awaySquad,
   );
 
   // 7. Generate match stats

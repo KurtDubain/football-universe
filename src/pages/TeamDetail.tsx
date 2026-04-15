@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import {
@@ -6,6 +7,7 @@ import {
   getTrophyLabel,
   formatForm,
 } from '../utils/format';
+import type { Player, PlayerPosition } from '../types/player';
 
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
@@ -241,6 +243,9 @@ export default function TeamDetail() {
           </div>
         </div>
       )}
+
+      {/* ═══ 阵容名单 ═══ */}
+      <SquadRoster teamId={id} />
     </div>
   );
 }
@@ -299,6 +304,168 @@ function StateBar({
       <span className="text-xs text-slate-300 w-7 text-right font-mono">
         {value}
       </span>
+    </div>
+  );
+}
+
+// ── Squad Roster ─────────────────────────────────────────
+
+const posLabel: Record<PlayerPosition, string> = {
+  GK: '门将',
+  DF: '后卫',
+  MF: '中场',
+  FW: '前锋',
+};
+
+const posBgColor: Record<PlayerPosition, string> = {
+  GK: 'bg-amber-900/40 text-amber-300',
+  DF: 'bg-blue-900/40 text-blue-300',
+  MF: 'bg-green-900/40 text-green-300',
+  FW: 'bg-red-900/40 text-red-300',
+};
+
+const posBarColor: Record<PlayerPosition, string> = {
+  GK: 'bg-amber-500',
+  DF: 'bg-blue-500',
+  MF: 'bg-green-500',
+  FW: 'bg-red-500',
+};
+
+const positionOrder: PlayerPosition[] = ['GK', 'DF', 'MF', 'FW'];
+
+function SquadRoster({ teamId }: { teamId: string }) {
+  const world = useGameStore((s) => s.world);
+
+  const { grouped, starIds } = useMemo(() => {
+    if (!world) return { grouped: {} as Record<PlayerPosition, Player[]>, starIds: new Set<string>() };
+
+    const squad = world.squads[teamId] ?? [];
+
+    // Group by position
+    const g: Record<PlayerPosition, Player[]> = { GK: [], DF: [], MF: [], FW: [] };
+    for (const p of squad) {
+      g[p.position].push(p);
+    }
+    // Sort within groups by rating desc
+    for (const pos of positionOrder) {
+      g[pos].sort((a, b) => b.rating - a.rating);
+    }
+
+    // Top 3 rated in squad get star
+    const sorted = [...squad].sort((a, b) => b.rating - a.rating);
+    const stars = new Set(sorted.slice(0, 3).map((p) => p.id));
+
+    return { grouped: g, starIds: stars };
+  }, [world, teamId]);
+
+  if (!world) return null;
+
+  const squad = world.squads[teamId] ?? [];
+  if (squad.length === 0) return null;
+
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-slate-700">
+        <h3 className="text-sm font-semibold text-slate-200">
+          阵容名单 ({squad.length}人)
+        </h3>
+      </div>
+
+      <div className="divide-y divide-slate-700/40">
+        {positionOrder.map((pos) => {
+          const players = grouped[pos];
+          if (!players || players.length === 0) return null;
+
+          return (
+            <div key={pos}>
+              {/* Position group header */}
+              <div className="px-4 py-1.5 bg-slate-750 border-b border-slate-700/30">
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${posBgColor[pos]}`}>
+                  {posLabel[pos]}
+                </span>
+              </div>
+
+              {/* Player rows */}
+              {players.map((player) => {
+                const stats = world.playerStats[player.id];
+                const isStar = starIds.has(player.id);
+
+                return (
+                  <div
+                    key={player.id}
+                    className="flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors"
+                  >
+                    {/* Number badge */}
+                    <div className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-slate-200">
+                        {player.number}
+                      </span>
+                    </div>
+
+                    {/* Position + star */}
+                    <div className="flex items-center gap-1 w-10 shrink-0">
+                      <span className={`text-[10px] font-medium ${posBgColor[player.position]} px-1 py-0.5 rounded`}>
+                        {posLabel[player.position]}
+                      </span>
+                    </div>
+
+                    {/* Rating bar */}
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${posBarColor[player.position]}`}
+                          style={{ width: `${player.rating}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-300 font-mono w-6 text-right shrink-0">
+                        {player.rating}
+                      </span>
+                      {isStar && (
+                        <span className="text-amber-400 text-xs shrink-0" title="球队核心">
+                          ★
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Season stats */}
+                    <div className="flex items-center gap-2 sm:gap-3 text-[11px] shrink-0">
+                      {stats && stats.appearances > 0 ? (
+                        <>
+                          <span className="text-slate-400 hidden sm:inline">
+                            {stats.appearances}场
+                          </span>
+                          {stats.goals > 0 && (
+                            <span className="text-slate-200 font-medium">
+                              {stats.goals}球
+                            </span>
+                          )}
+                          {stats.assists > 0 && (
+                            <span className="text-slate-300">
+                              {stats.assists}助
+                            </span>
+                          )}
+                          {stats.yellowCards > 0 && (
+                            <span className="text-yellow-400">
+                              {stats.yellowCards}黄
+                            </span>
+                          )}
+                          {stats.redCards > 0 && (
+                            <span className="text-red-400">
+                              {stats.redCards}红
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-600 text-[10px]">--</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

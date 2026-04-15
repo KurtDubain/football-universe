@@ -6,3 +6,4 @@ export * from './cup';
 export * from './season';
 export * from './honor';
 export * from './save';
+export * from './player';

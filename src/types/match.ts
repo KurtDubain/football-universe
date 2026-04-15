@@ -15,6 +15,8 @@ export interface MatchEvent {
   minute: number;
   type: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'save' | 'miss' | 'penalty_goal' | 'penalty_miss' | 'own_goal';
   teamId: string;
+  playerId?: string;   // e.g. "real_madrid-7"
+  playerNumber?: number;
   description: string;
 }
 

@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.1-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,19 @@ src/
 ```
 
 ## Changelog
+
+### v0.6.0
+- **Player system**: each team has 22 permanent players (3 GK, 7 DF, 7 MF, 5 FW)
+- Players identified by shirt number (1-99), permanently bound to clubs
+- 2-3 star players per squad with boosted ratings and iconic numbers (#1, #7, #9, #10, #11)
+- Match events now bind to player numbers: "7号 反击中冷静推射得手"
+- All match event descriptions rewritten in Chinese
+- Player stats tracked per season: goals, assists, yellow/red cards, appearances
+- New **Players Hub** page (`/players`) with tabs: 射手榜 / 助攻榜 / 纪律
+- Top scorers/assisters with gold/silver/bronze badges
+- **Team detail page** now shows full squad roster grouped by position
+- Squad roster: number badge, position tag, rating bar, season stats, star indicator
+- Sidebar: added "球员中心" nav link
 
 ### v0.5.1
 - Match day fixtures grouped by league level (顶级联赛/甲级联赛/乙级联赛/杯赛)

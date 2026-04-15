@@ -1,88 +1,181 @@
 import { MatchEvent, CompetitionType } from '../../types';
+import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
 
-// ── Goal description pools ─────────────────────────────────────────
+// ── Goal description pools (Chinese) ──────────────────────────────
 
 const OPEN_PLAY_GOALS = [
-  'Low drive into the bottom corner',
-  'Curling shot from the edge of the box',
-  'Header from a pinpoint cross',
-  'Tap-in from close range after a great team move',
-  'Powerful strike from 25 yards',
-  'Neat finish on the counter-attack',
-  'One-on-one with the keeper, slotted home coolly',
-  'Volley smashed into the roof of the net',
-  'Clinical finish after a defensive mistake',
-  'Driven shot through a crowded box',
-  'Deflected effort that wrong-footed the keeper',
-  'Chip over the advancing goalkeeper',
-  'Drilled low finish from a tight angle',
-  'Scramble in the six-yard box, poked home',
-  'Brilliant individual run finished off in style',
+  '底线附近低射破门',
+  '禁区外弧线球破门',
+  '精准传中头球攻门得手',
+  '精妙配合后近距离推射入网',
+  '25码外大力抽射破门',
+  '反击中冷静推射得手',
+  '单刀面对门将轻巧挑射',
+  '凌空抽射直挂球门死角',
+  '防守失误后果断射门得分',
+  '人丛中劲射穿透防线',
+  '折射球令门将措手不及',
+  '挑射越过出击的门将',
+  '小角度低射钻入远角',
+  '门前混战中捅射入网',
+  '精彩个人突破后射门得分',
 ];
 
 const SET_PIECE_GOALS = [
-  'Free kick curled over the wall and into the net',
-  'Header from a corner kick',
-  'Shot from the edge of the area after a short corner',
-  'Powerful header from a set-piece delivery',
-  'Bundled in after a goalmouth scramble from a corner',
+  '任意球绕过人墙直入球门',
+  '角球头球攻门得手',
+  '战术角球后远射破门',
+  '定位球头球力压防守球员破门',
+  '角球引发混战后补射入网',
 ];
 
 const PENALTY_GOALS = [
-  'Penalty kick converted, sent the keeper the wrong way',
-  'Penalty struck hard down the middle',
-  'Penalty placed into the bottom-left corner',
-  'Penalty tucked away into the bottom-right corner',
+  '点球命中，骗过门将方向',
+  '点球大力轰向球门中路',
+  '点球推射左下角入网',
+  '点球推射右下角入网',
 ];
 
 const SAVE_DESCRIPTIONS = [
-  'Brilliant diving save to tip the shot wide',
-  'Reflexive stop from close range',
-  'Strong hand to push the shot over the bar',
-  'Outstanding one-on-one save',
-  'Full-stretch fingertip save to deny the striker',
+  '门将飞身扑救将球托出',
+  '近距离条件反射式扑救',
+  '强有力的掌挡将球击出横梁',
+  '精彩的一对一扑救',
+  '极限指尖扑救力拒射门',
 ];
 
 const MISS_DESCRIPTIONS = [
-  'Shot blazed over the crossbar from a good position',
-  'Effort from the edge of the box goes just wide',
-  'One-on-one missed, dragged wide of the far post',
-  'Header goes narrowly over the bar',
-  'Free header at the back post put wide',
-  'Powerful strike rattles the crossbar',
+  '好位置射门打飞了',
+  '禁区外射门偏出立柱',
+  '单刀射门拉偏远角',
+  '头球顶高了横梁',
+  '后点包抄射门偏出',
+  '大力射门击中横梁弹出',
 ];
 
 const YELLOW_CARD_DESCRIPTIONS = [
-  'Booked for a late challenge',
-  'Yellow card for a reckless foul',
-  'Cautioned for persistent fouling',
-  'Booked for a cynical trip to stop the counter',
-  'Yellow card for dissent',
-  'Cautioned for time-wasting',
-  'Booked for pulling back an attacker',
+  '飞铲犯规被黄牌警告',
+  '鲁莽犯规领到黄牌',
+  '累计犯规被出示黄牌',
+  '战术犯规阻止反击吃牌',
+  '向裁判抗议被黄牌警告',
+  '拖延时间被黄牌警告',
+  '拉拽进攻球员被出牌',
 ];
 
 const RED_CARD_DESCRIPTIONS = [
-  'Sent off for a dangerous tackle',
-  'Red card! Second yellow for repeated fouling',
-  'Straight red for violent conduct',
-  'Dismissed for denying a clear goal-scoring opportunity',
+  '恶意犯规被直接红牌罚下',
+  '两黄变一红被罚下场',
+  '暴力行为被直接红牌',
+  '阻止明显得分机会被红牌罚下',
 ];
 
 const PENALTY_SHOOTOUT_GOAL = [
-  'Calmly slots the penalty into the bottom corner',
-  'Smashes the penalty into the top corner, no chance for the keeper',
-  'Sends the keeper the wrong way with a composed finish',
-  'Steps up and buries the penalty down the middle',
+  '冷静推射命中球门角落',
+  '大力抽射命中上角，门将毫无办法',
+  '骗过门将方向从容罚进',
+  '果断推射正中球门中路得手',
 ];
 
 const PENALTY_SHOOTOUT_MISS = [
-  'Penalty saved! The keeper guesses correctly',
-  'Blazes the penalty over the crossbar',
-  'Penalty strikes the post and goes wide',
-  'Weak penalty easily saved by the goalkeeper',
+  '点球被门将扑出！',
+  '点球打飞了横梁！',
+  '点球击中立柱弹出！',
+  '点球力量不足被门将轻松扑住',
 ];
+
+// ── Player picking helpers ────────────────────────────────────────
+
+/**
+ * Pick a player from the squad weighted by position relevance and goalScoring stat.
+ * positionWeights maps position to a base weight multiplier.
+ * The goalScoring stat is then used as additional weighting for scoring events.
+ */
+function pickPlayer(
+  squad: Player[],
+  positionWeights: Record<string, number>,
+  rng: SeededRNG,
+  useGoalScoring: boolean = false,
+): Player {
+  const weights = squad.map((p) => {
+    const posWeight = positionWeights[p.position] ?? 1;
+    const scoringWeight = useGoalScoring ? Math.max(1, p.goalScoring) : 10;
+    return posWeight * scoringWeight;
+  });
+
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = rng.next() * total;
+
+  for (let i = 0; i < squad.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return squad[i];
+  }
+
+  return squad[squad.length - 1];
+}
+
+/**
+ * Pick a goal scorer: heavily weighted toward FW, then MF, rarely DF.
+ */
+function pickGoalScorer(squad: Player[], rng: SeededRNG): Player {
+  return pickPlayer(
+    squad,
+    { FW: 10, MF: 4, DF: 1, GK: 0.05 },
+    rng,
+    true,
+  );
+}
+
+/**
+ * Pick a player for yellow/red cards: mostly DF and MF.
+ */
+function pickCardPlayer(squad: Player[], rng: SeededRNG): Player {
+  return pickPlayer(
+    squad,
+    { DF: 10, MF: 6, FW: 3, GK: 1 },
+    rng,
+    false,
+  );
+}
+
+/**
+ * Pick a GK from the squad (prefer #1 or lowest-numbered GK).
+ */
+function pickGoalkeeper(squad: Player[]): Player {
+  const gks = squad.filter((p) => p.position === 'GK');
+  if (gks.length === 0) return squad[0]; // fallback
+  // Prefer #1 if available, otherwise lowest numbered GK
+  const gk1 = gks.find((p) => p.number === 1);
+  if (gk1) return gk1;
+  gks.sort((a, b) => a.number - b.number);
+  return gks[0];
+}
+
+/**
+ * Pick a player for misses: FW and MF mostly.
+ */
+function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
+  return pickPlayer(
+    squad,
+    { FW: 8, MF: 5, DF: 1, GK: 0.1 },
+    rng,
+    true,
+  );
+}
+
+/**
+ * Format a description with optional player number prefix.
+ */
+function formatDescription(
+  description: string,
+  playerNumber?: number,
+): string {
+  if (playerNumber !== undefined) {
+    return `${playerNumber}号 ${description}`;
+  }
+  return description;
+}
 
 // ── Minute weighting ───────────────────────────────────────────────
 
@@ -98,14 +191,14 @@ function weightedGoalMinute(maxMinute: number, rng: SeededRNG): number {
 
   if (maxMinute <= 90) {
     // Normal time distribution
-    if (r < 0.08) return rng.nextInt(1, 10);       // early
-    if (r < 0.20) return rng.nextInt(11, 25);       // mid first half
-    if (r < 0.35) return rng.nextInt(26, 39);       // late first half
-    if (r < 0.50) return rng.nextInt(40, 45);       // just before HT (clustered)
-    if (r < 0.58) return rng.nextInt(46, 55);       // early second half
-    if (r < 0.75) return rng.nextInt(56, 69);       // mid second half
-    if (r < 0.90) return rng.nextInt(70, 84);       // after 70' (clustered)
-    return rng.nextInt(85, 90);                      // late drama
+    if (r < 0.08) return rng.nextInt(1, 10); // early
+    if (r < 0.2) return rng.nextInt(11, 25); // mid first half
+    if (r < 0.35) return rng.nextInt(26, 39); // late first half
+    if (r < 0.5) return rng.nextInt(40, 45); // just before HT (clustered)
+    if (r < 0.58) return rng.nextInt(46, 55); // early second half
+    if (r < 0.75) return rng.nextInt(56, 69); // mid second half
+    if (r < 0.9) return rng.nextInt(70, 84); // after 70' (clustered)
+    return rng.nextInt(85, 90); // late drama
   }
 
   // Extra time distribution (goals in 91-120)
@@ -116,7 +209,11 @@ function weightedGoalMinute(maxMinute: number, rng: SeededRNG): number {
   return rng.nextInt(106, 120);
 }
 
-function randomMinuteInRange(min: number, max: number, rng: SeededRNG): number {
+function randomMinuteInRange(
+  min: number,
+  max: number,
+  rng: SeededRNG,
+): number {
   return rng.nextInt(min, max);
 }
 
@@ -132,10 +229,19 @@ export function generateMatchEvents(
   extraTime: boolean,
   penaltyHome?: number,
   penaltyAway?: number,
+  homeSquad?: Player[],
+  awaySquad?: Player[],
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const maxNormalMinute = 90;
   const maxMinute = extraTime ? 120 : 90;
+
+  // Helper to get squad for a team (may be undefined for backward compat)
+  function getSquad(teamId: string): Player[] | undefined {
+    if (teamId === homeTeamId) return homeSquad;
+    if (teamId === awayTeamId) return awaySquad;
+    return undefined;
+  }
 
   // ── Generate goals ───────────────────────────────────────────────
 
@@ -144,6 +250,8 @@ export function generateMatchEvents(
     teamId: string,
     isET: boolean,
   ): void => {
+    const squad = getSquad(teamId);
+
     for (let i = 0; i < goals; i++) {
       const minute = isET
         ? weightedGoalMinute(120, rng)
@@ -160,7 +268,23 @@ export function generateMatchEvents(
         description = rng.pick(OPEN_PLAY_GOALS);
       }
 
-      events.push({ minute, type: 'goal', teamId, description });
+      // Pick a scorer if squad is available
+      let playerId: string | undefined;
+      let playerNumber: number | undefined;
+      if (squad) {
+        const scorer = pickGoalScorer(squad, rng);
+        playerId = scorer.id;
+        playerNumber = scorer.number;
+      }
+
+      events.push({
+        minute,
+        type: 'goal',
+        teamId,
+        playerId,
+        playerNumber,
+        description: formatDescription(description, playerNumber),
+      });
     }
   };
 
@@ -168,24 +292,30 @@ export function generateMatchEvents(
   generateGoalEvents(homeGoals, homeTeamId, false);
   generateGoalEvents(awayGoals, awayTeamId, false);
 
-  // If extra time was played but there are extra-time goals encoded
-  // in the totals, we already handle them via the ET flag in the
-  // caller. The homeGoals/awayGoals passed here represent the
-  // regulation-time score; ET goals would come separately.
-  // However, to keep the API simple, when extraTime is true and
-  // the caller passes combined totals, goals may land in 91-120.
-
   // ── Yellow cards (2-6 per match) ─────────────────────────────────
 
   const totalYellows = rng.nextInt(2, 6);
   for (let i = 0; i < totalYellows; i++) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
+    const description = rng.pick(YELLOW_CARD_DESCRIPTIONS);
+    const squad = getSquad(teamId);
+
+    let playerId: string | undefined;
+    let playerNumber: number | undefined;
+    if (squad) {
+      const player = pickCardPlayer(squad, rng);
+      playerId = player.id;
+      playerNumber = player.number;
+    }
+
     events.push({
       minute,
       type: 'yellow_card',
       teamId,
-      description: rng.pick(YELLOW_CARD_DESCRIPTIONS),
+      playerId,
+      playerNumber,
+      description: formatDescription(description, playerNumber),
     });
   }
 
@@ -194,11 +324,24 @@ export function generateMatchEvents(
   if (rng.next() < 0.06) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(20, maxMinute, rng);
+    const description = rng.pick(RED_CARD_DESCRIPTIONS);
+    const squad = getSquad(teamId);
+
+    let playerId: string | undefined;
+    let playerNumber: number | undefined;
+    if (squad) {
+      const player = pickCardPlayer(squad, rng);
+      playerId = player.id;
+      playerNumber = player.number;
+    }
+
     events.push({
       minute,
       type: 'red_card',
       teamId,
-      description: rng.pick(RED_CARD_DESCRIPTIONS),
+      playerId,
+      playerNumber,
+      description: formatDescription(description, playerNumber),
     });
   }
 
@@ -206,15 +349,27 @@ export function generateMatchEvents(
 
   const totalSaves = rng.nextInt(1, 4);
   for (let i = 0; i < totalSaves; i++) {
-    // Saves are attributed to the defending team (conceding the shot)
-    // but in our model we attribute the save to the keeper's team
+    // Saves are attributed to the keeper's team
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
+    const description = rng.pick(SAVE_DESCRIPTIONS);
+    const squad = getSquad(teamId);
+
+    let playerId: string | undefined;
+    let playerNumber: number | undefined;
+    if (squad) {
+      const gk = pickGoalkeeper(squad);
+      playerId = gk.id;
+      playerNumber = gk.number;
+    }
+
     events.push({
       minute,
       type: 'save',
       teamId,
-      description: rng.pick(SAVE_DESCRIPTIONS),
+      playerId,
+      playerNumber,
+      description: formatDescription(description, playerNumber),
     });
   }
 
@@ -224,11 +379,24 @@ export function generateMatchEvents(
   for (let i = 0; i < totalMisses; i++) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
+    const description = rng.pick(MISS_DESCRIPTIONS);
+    const squad = getSquad(teamId);
+
+    let playerId: string | undefined;
+    let playerNumber: number | undefined;
+    if (squad) {
+      const player = pickMissPlayer(squad, rng);
+      playerId = player.id;
+      playerNumber = player.number;
+    }
+
     events.push({
       minute,
       type: 'miss',
       teamId,
-      description: rng.pick(MISS_DESCRIPTIONS),
+      playerId,
+      playerNumber,
+      description: formatDescription(description, playerNumber),
     });
   }
 
@@ -248,39 +416,78 @@ export function generateMatchEvents(
 
     for (let round = 0; round < maxRounds; round++) {
       // Home takes
+      const homeShooterSquad = homeSquad;
+      let homeShooterPlayerId: string | undefined;
+      let homeShooterNumber: number | undefined;
+      if (homeShooterSquad) {
+        // Pick from outfield players for shootout
+        const outfield = homeShooterSquad.filter((p) => p.position !== 'GK');
+        const shooter =
+          outfield.length > 0
+            ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
+            : homeShooterSquad[0];
+        homeShooterPlayerId = shooter.id;
+        homeShooterNumber = shooter.number;
+      }
+
       if (homeRemaining > 0) {
+        const desc = rng.pick(PENALTY_SHOOTOUT_GOAL);
         events.push({
           minute: penMinute,
           type: 'penalty_goal',
           teamId: homeTeamId,
-          description: rng.pick(PENALTY_SHOOTOUT_GOAL),
+          playerId: homeShooterPlayerId,
+          playerNumber: homeShooterNumber,
+          description: formatDescription(desc, homeShooterNumber),
         });
         homeRemaining--;
       } else {
+        const desc = rng.pick(PENALTY_SHOOTOUT_MISS);
         events.push({
           minute: penMinute,
           type: 'penalty_miss',
           teamId: homeTeamId,
-          description: rng.pick(PENALTY_SHOOTOUT_MISS),
+          playerId: homeShooterPlayerId,
+          playerNumber: homeShooterNumber,
+          description: formatDescription(desc, homeShooterNumber),
         });
       }
       penMinute++;
 
       // Away takes
+      const awayShooterSquad = awaySquad;
+      let awayShooterPlayerId: string | undefined;
+      let awayShooterNumber: number | undefined;
+      if (awayShooterSquad) {
+        const outfield = awayShooterSquad.filter((p) => p.position !== 'GK');
+        const shooter =
+          outfield.length > 0
+            ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
+            : awayShooterSquad[0];
+        awayShooterPlayerId = shooter.id;
+        awayShooterNumber = shooter.number;
+      }
+
       if (awayRemaining > 0) {
+        const desc = rng.pick(PENALTY_SHOOTOUT_GOAL);
         events.push({
           minute: penMinute,
           type: 'penalty_goal',
           teamId: awayTeamId,
-          description: rng.pick(PENALTY_SHOOTOUT_GOAL),
+          playerId: awayShooterPlayerId,
+          playerNumber: awayShooterNumber,
+          description: formatDescription(desc, awayShooterNumber),
         });
         awayRemaining--;
       } else {
+        const desc = rng.pick(PENALTY_SHOOTOUT_MISS);
         events.push({
           minute: penMinute,
           type: 'penalty_miss',
           teamId: awayTeamId,
-          description: rng.pick(PENALTY_SHOOTOUT_MISS),
+          playerId: awayShooterPlayerId,
+          playerNumber: awayShooterNumber,
+          description: formatDescription(desc, awayShooterNumber),
         });
       }
       penMinute++;
