@@ -37,30 +37,25 @@ export function updateCoachPressure(
 
   // Base change by result
   if (goalDiff > 0) {
-    // Win
     pressureChange = -BALANCE.WIN_PRESSURE_DECREASE;
   } else if (goalDiff < 0) {
-    // Loss
     pressureChange = BALANCE.LOSS_PRESSURE_INCREASE;
-
-    // Big loss bonus (3+ goal difference)
     if (goalDiff <= -3) {
-      pressureChange += 5;
+      pressureChange += 3;
     }
   } else {
-    // Draw
     pressureChange = BALANCE.DRAW_PRESSURE_INCREASE;
   }
 
   // Cup elimination adds extra pressure
   if (isCupElimination) {
-    pressureChange += 6;
+    pressureChange += 4;
   }
 
-  // Consecutive losses compound pressure
+  // Consecutive losses compound pressure (only after 4+)
   const consecutiveLosses = countConsecutiveLosses(recentForm);
-  if (consecutiveLosses >= 3) {
-    pressureChange += (consecutiveLosses - 2) * 3;
+  if (consecutiveLosses >= 4) {
+    pressureChange += (consecutiveLosses - 3) * 2;
   }
 
   // Elite teams (expectation >= 4) multiply pressure increases

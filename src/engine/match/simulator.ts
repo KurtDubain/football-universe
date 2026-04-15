@@ -66,17 +66,17 @@ function calculateAdjustedStrengths(
     team.attack
       + coachAttackBuff
       + homeBonus
-      + state.momentum * 2
-      - state.fatigue * 0.3
-      + (state.morale - 50) * 0.15,
+      + state.momentum * 1.5
+      - state.fatigue * 0.15
+      + (state.morale - 60) * 0.12,
   );
 
   const midfield = Math.max(
     20,
     team.midfield
       + homeSmallBonus
-      + state.momentum * 1.5
-      - state.fatigue * 0.15,
+      + state.momentum * 1
+      - state.fatigue * 0.08,
   );
 
   const defense = Math.max(
@@ -84,7 +84,7 @@ function calculateAdjustedStrengths(
     team.defense
       + coachDefenseBuff
       + homeSmallBonus
-      - state.fatigue * 0.2
+      - state.fatigue * 0.10
       + team.stability * 0.1,
   );
 

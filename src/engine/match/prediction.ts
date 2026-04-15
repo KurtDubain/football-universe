@@ -73,17 +73,17 @@ export function predictMatch(
     hotTip = `${homeTeam.name} 近期势头正猛 (势头+${homeState.momentum})`;
   } else if (awayState.momentum >= 5) {
     hotTip = `${awayTeam.name} 近期势头正猛 (势头+${awayState.momentum})`;
-  } else if (homeState.fatigue > 65) {
+  } else if (homeState.fatigue > 55) {
     hotTip = `${homeTeam.name} 体能堪忧 (疲劳${homeState.fatigue})，可能爆冷`;
-  } else if (awayState.fatigue > 65) {
+  } else if (awayState.fatigue > 55) {
     hotTip = `${awayTeam.name} 体能堪忧 (疲劳${awayState.fatigue})，可能爆冷`;
   } else if (overallDiff >= 15 && homeTeam.overall < awayTeam.overall) {
     hotTip = `以弱敌强！${homeTeam.name} 需要奇迹`;
-  } else if (homeState.morale < 35) {
+  } else if (homeState.morale < 45) {
     hotTip = `${homeTeam.name} 士气低迷 (${homeState.morale})`;
-  } else if (awayState.morale < 35) {
+  } else if (awayState.morale < 45) {
     hotTip = `${awayTeam.name} 士气低迷 (${awayState.morale})`;
-  } else if (homeState.coachPressure > 60) {
+  } else if (homeState.coachPressure > 55) {
     hotTip = `${homeTeam.name} 教练压力巨大 (${homeState.coachPressure})，这是一场生死战`;
   }
 
@@ -113,17 +113,17 @@ function calcAdjustedStrength(
   // Home advantage
   if (isHome) strength += 4;
 
-  // Morale effect (-5 to +5)
-  strength += (state.morale - 50) * 0.1;
+  // Morale effect
+  strength += (state.morale - 60) * 0.08;
 
-  // Fatigue penalty
-  strength -= state.fatigue * 0.08;
+  // Fatigue penalty (reduced weight)
+  strength -= state.fatigue * 0.04;
 
   // Momentum
-  strength += state.momentum * 0.5;
+  strength += state.momentum * 0.4;
 
   // Squad health
-  strength += (state.squadHealth - 70) * 0.05;
+  strength += (state.squadHealth - 80) * 0.03;
 
   // Coach effect
   if (coach) {

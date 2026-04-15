@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,17 @@ src/
 ```
 
 ## Changelog
+
+### v0.3.1
+- Balance overhaul: fatigue, morale, squad health, coach pressure all retuned
+- Fatigue per match: 8 → 4, recovery per rest: 5 → 6
+- Morale: win +6/loss -4 (was +5/-8), natural drift toward 65
+- Squad health: lighter wear (-1/match), injury risk only above 70 fatigue
+- Coach pressure: loss +5 (was +8), win -4 (was -3), firing threshold raised to 80
+- Fatigue penalty on match strength halved
+- Initial states: morale 70, squad health 92, fatigue 5, pressure 5
+- Season reset carries only 30% of pressure
+- Momentum decays naturally toward 0
 
 ### v0.3.0
 - Custom logo icon (favicon + in-app)

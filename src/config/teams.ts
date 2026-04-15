@@ -503,11 +503,11 @@ export function createInitialTeamStates(teams: TeamBase[]): Record<string, TeamS
     states[team.id] = {
       id: team.id,
       leagueLevel: team.initialLeagueLevel,
-      morale: 60,
-      fatigue: 10,
+      morale: 70,
+      fatigue: 5,
       momentum: 0,
-      squadHealth: 85,
-      coachPressure: 10,
+      squadHealth: 92,
+      coachPressure: 5,
       currentCoachId: null,
       recentForm: [],
     };
