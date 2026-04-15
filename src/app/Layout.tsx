@@ -31,6 +31,12 @@ const navSections = [
       { to: '/cup/super_cup', label: '超级杯' },
     ],
   },
+  {
+    title: '管理',
+    items: [
+      { to: '/coaches', label: '教练中心' },
+    ],
+  },
 ];
 
 export default function Layout({ children }: LayoutProps) {

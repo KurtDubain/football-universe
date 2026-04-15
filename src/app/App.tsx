@@ -5,6 +5,7 @@ import Dashboard from '../pages/Dashboard';
 import Calendar from '../pages/Calendar';
 import League from '../pages/League';
 import Cup from '../pages/Cup';
+import Coaches from '../pages/Coaches';
 import TeamDetail from '../pages/TeamDetail';
 import CoachDetail from '../pages/CoachDetail';
 import History from '../pages/History';
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/league/:level" element={<League />} />
         <Route path="/cup/:type" element={<Cup />} />
+        <Route path="/coaches" element={<Coaches />} />
         <Route path="/team/:id" element={<TeamDetail />} />
         <Route path="/coach/:id" element={<CoachDetail />} />
         <Route path="/history" element={<History />} />

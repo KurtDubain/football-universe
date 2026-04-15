@@ -7,7 +7,7 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
@@ -126,6 +126,14 @@ src/
 ```
 
 ## Changelog
+
+### v0.4.0
+- New **Coaches Hub** page (`/coaches`) with full coach roster
+- Filter tabs: all / employed / unemployed
+- Sort by: rating, trophies, pressure, name
+- Each coach card shows: rating badge, style label, team color dot, buffs, pressure gauge
+- Redesigned coach detail page with gradient header, buff grid, trait bars, career timeline
+- Added "教练中心" nav link in sidebar under new "管理" section
 
 ### v0.3.1
 - Balance overhaul: fatigue, morale, squad health, coach pressure all retuned
