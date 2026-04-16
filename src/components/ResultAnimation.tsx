@@ -4,6 +4,7 @@ import type { MatchResult } from '../types/match';
 import type { TeamBase } from '../types/team';
 import { getTeamName } from '../utils/format';
 import { isDerby, getDerbyName } from '../config/derbies';
+import { EnergyWave } from './CanvasEffects';
 
 interface ResultAnimationProps {
   results: MatchResult[];
@@ -126,10 +127,12 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick }
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-lg border p-2 text-left cursor-pointer transition-all hover-lift ${baseClass} ${
+      className={`w-full rounded-lg border p-2 text-left cursor-pointer transition-all hover-lift relative overflow-hidden ${baseClass} ${
         isNew ? 'animate-scale-in' : ''
       }`}
     >
+      {/* Energy wave on key match reveal */}
+      {isKeyMatch && isNew && <EnergyWave color={ht?.color ?? '#f59e0b'} />}
       {/* Tags row — compact */}
       {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
         <div className="flex gap-1 mb-1 flex-wrap">

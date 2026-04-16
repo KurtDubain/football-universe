@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
+import { AmbientGlow } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 
 interface LayoutProps {
@@ -176,7 +177,8 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-slate-900 flex">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 bg-slate-800/80 backdrop-blur border-r border-slate-700/60 flex-col shrink-0">
+      <aside className="hidden md:flex w-52 bg-slate-800/80 backdrop-blur border-r border-slate-700/60 flex-col shrink-0 relative">
+        <AmbientGlow height={600} />
         <div className="p-3 border-b border-slate-700/60">
           <div className="flex items-center gap-2">
             <Logo size={30} />

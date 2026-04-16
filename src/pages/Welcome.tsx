@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
 import Logo from '../components/Logo';
+import { ParticleBackground } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 import { defaultTeams } from '../config/teams';
 
@@ -20,6 +21,9 @@ export default function Welcome() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex items-center justify-center relative overflow-hidden">
+      {/* Canvas particle background */}
+      <ParticleBackground />
+
       {/* Decorative elements */}
       <div className="absolute top-20 left-20 w-96 h-96 bg-blue-600/5 rounded-full blur-3xl" />
       <div className="absolute bottom-20 right-20 w-80 h-80 bg-emerald-600/5 rounded-full blur-3xl" />
