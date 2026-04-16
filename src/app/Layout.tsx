@@ -264,13 +264,13 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </header>
 
+        {/* News ticker at top */}
+        <NewsTicker news={world?.newsLog.slice(-20) ?? []} />
+
         {/* Content */}
         <main className="flex-1 overflow-auto p-3 sm:p-5" key={location.pathname}>
           {children}
         </main>
-
-        {/* News ticker at bottom */}
-        <NewsTicker news={world?.newsLog.slice(-20) ?? []} />
       </div>
     </div>
   );
