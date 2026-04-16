@@ -8,6 +8,7 @@ import {
   formatForm,
 } from '../utils/format';
 import type { Player, PlayerPosition } from '../types/player';
+import TeamBadge from '../components/TeamBadge';
 
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
@@ -33,9 +34,7 @@ export default function TeamDetail() {
       {/* Header */}
       <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 sm:p-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: base.color }}>
-            <span className="text-white font-black text-sm sm:text-lg">{base.shortName}</span>
-          </div>
+          <TeamBadge shortName={base.shortName} color={base.color} size={48} />
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-100">{base.name}</h2>
             <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">

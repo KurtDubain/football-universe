@@ -263,6 +263,10 @@ export function simulateMatch(
   let homeGoals = poissonSample(homeExpGoals, rng);
   let awayGoals = poissonSample(awayExpGoals, rng);
 
+  // These track regulation-time goals for the MatchResult
+  const regHomeGoals = homeGoals;
+  const regAwayGoals = awayGoals;
+
   let extraTime = false;
   let etHomeGoals: number | undefined;
   let etAwayGoals: number | undefined;
@@ -281,6 +285,7 @@ export function simulateMatch(
     etHomeGoals = poissonSample(etHomeExp, rng);
     etAwayGoals = poissonSample(etAwayExp, rng);
 
+    // Combined total for event generation and penalty check
     homeGoals += etHomeGoals;
     awayGoals += etAwayGoals;
 
@@ -331,8 +336,8 @@ export function simulateMatch(
     fixtureId: fixture.id,
     homeTeamId: homeTeam.id,
     awayTeamId: awayTeam.id,
-    homeGoals,
-    awayGoals,
+    homeGoals: regHomeGoals,
+    awayGoals: regAwayGoals,
     extraTime,
     ...(etHomeGoals !== undefined && { etHomeGoals }),
     ...(etAwayGoals !== undefined && { etAwayGoals }),

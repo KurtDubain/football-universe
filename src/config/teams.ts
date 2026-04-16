@@ -7,7 +7,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'real_madrid',
     name: '皇家马德里',
-    shortName: 'RMA',
+    shortName: '皇马',
     color: '#FEBE10',
     tier: 'elite',
     overall: 92,
@@ -23,7 +23,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'man_city',
     name: '曼彻斯特城',
-    shortName: 'MCI',
+    shortName: '曼城',
     color: '#6CABDD',
     tier: 'elite',
     overall: 90,
@@ -39,7 +39,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'bayern',
     name: '拜仁慕尼黑',
-    shortName: 'BAY',
+    shortName: '拜仁',
     color: '#DC052D',
     tier: 'elite',
     overall: 89,
@@ -55,7 +55,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'liverpool',
     name: '利物浦',
-    shortName: 'LIV',
+    shortName: '利物',
     color: '#C8102E',
     tier: 'elite',
     overall: 87,
@@ -71,7 +71,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'barcelona',
     name: '巴塞罗那',
-    shortName: 'BAR',
+    shortName: '巴萨',
     color: '#A50044',
     tier: 'elite',
     overall: 86,
@@ -87,7 +87,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'arsenal',
     name: '阿森纳',
-    shortName: 'ARS',
+    shortName: '阿森',
     color: '#EF0107',
     tier: 'elite',
     overall: 85,
@@ -103,7 +103,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'inter',
     name: '国际米兰',
-    shortName: 'INT',
+    shortName: '国米',
     color: '#0068A8',
     tier: 'strong',
     overall: 84,
@@ -119,7 +119,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'psg',
     name: '巴黎圣日耳曼',
-    shortName: 'PSG',
+    shortName: '巴黎',
     color: '#004170',
     tier: 'strong',
     overall: 83,
@@ -135,7 +135,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'juventus',
     name: '尤文图斯',
-    shortName: 'JUV',
+    shortName: '尤文',
     color: '#000000',
     tier: 'strong',
     overall: 80,
@@ -151,7 +151,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'atletico',
     name: '马德里竞技',
-    shortName: 'ATM',
+    shortName: '马竞',
     color: '#CB3524',
     tier: 'strong',
     overall: 79,
@@ -167,7 +167,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'dortmund',
     name: '多特蒙德',
-    shortName: 'BVB',
+    shortName: '多特',
     color: '#FDE100',
     tier: 'strong',
     overall: 78,
@@ -183,7 +183,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'ac_milan',
     name: 'AC米兰',
-    shortName: 'ACM',
+    shortName: '米兰',
     color: '#FB090B',
     tier: 'strong',
     overall: 77,
@@ -199,7 +199,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'chelsea',
     name: '切尔西',
-    shortName: 'CHE',
+    shortName: '切尔',
     color: '#034694',
     tier: 'mid',
     overall: 76,
@@ -215,7 +215,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'napoli',
     name: '那不勒斯',
-    shortName: 'NAP',
+    shortName: '那不',
     color: '#12A0D7',
     tier: 'mid',
     overall: 75,
@@ -231,7 +231,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'shanghai_port',
     name: '上海海港',
-    shortName: 'SHP',
+    shortName: '海港',
     color: '#E4002B',
     tier: 'mid',
     overall: 73,
@@ -247,7 +247,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'tottenham',
     name: '热刺',
-    shortName: 'TOT',
+    shortName: '热刺',
     color: '#132257',
     tier: 'mid',
     overall: 72,
@@ -267,7 +267,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'leverkusen',
     name: '勒沃库森',
-    shortName: 'LEV',
+    shortName: '勒沃',
     color: '#E32221',
     tier: 'mid',
     overall: 68,
@@ -283,7 +283,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'aston_villa',
     name: '阿斯顿维拉',
-    shortName: 'AVL',
+    shortName: '维拉',
     color: '#670E36',
     tier: 'mid',
     overall: 66,
@@ -299,7 +299,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'roma',
     name: '罗马',
-    shortName: 'ROM',
+    shortName: '罗马',
     color: '#8E1F2F',
     tier: 'lower',
     overall: 64,
@@ -315,7 +315,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'marseille',
     name: '马赛',
-    shortName: 'MAR',
+    shortName: '马赛',
     color: '#2FAEE0',
     tier: 'lower',
     overall: 62,
@@ -331,7 +331,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'shandong',
     name: '山东泰山',
-    shortName: 'SDT',
+    shortName: '泰山',
     color: '#FF6B00',
     tier: 'lower',
     overall: 60,
@@ -347,7 +347,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'beijing_guoan',
     name: '北京国安',
-    shortName: 'BGA',
+    shortName: '国安',
     color: '#00A651',
     tier: 'lower',
     overall: 58,
@@ -363,7 +363,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'sevilla',
     name: '塞维利亚',
-    shortName: 'SEV',
+    shortName: '塞维',
     color: '#D4002A',
     tier: 'lower',
     overall: 56,
@@ -379,7 +379,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'lyon',
     name: '里昂',
-    shortName: 'LYO',
+    shortName: '里昂',
     color: '#1A5DAD',
     tier: 'lower',
     overall: 55,
@@ -399,7 +399,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'chengdu',
     name: '成都蓉城',
-    shortName: 'CDR',
+    shortName: '蓉城',
     color: '#FF4500',
     tier: 'underdog',
     overall: 53,
@@ -415,7 +415,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'wuhan',
     name: '武汉三镇',
-    shortName: 'WHS',
+    shortName: '三镇',
     color: '#1E90FF',
     tier: 'underdog',
     overall: 51,
@@ -431,7 +431,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'zhejiang',
     name: '浙江队',
-    shortName: 'ZHE',
+    shortName: '浙江',
     color: '#228B22',
     tier: 'underdog',
     overall: 49,
@@ -447,7 +447,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'southampton',
     name: '南安普顿',
-    shortName: 'SOU',
+    shortName: '南安',
     color: '#D71920',
     tier: 'underdog',
     overall: 47,
@@ -463,7 +463,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'burnley',
     name: '伯恩利',
-    shortName: 'BUR',
+    shortName: '伯恩',
     color: '#6C1D45',
     tier: 'underdog',
     overall: 45,
@@ -479,7 +479,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'henan',
     name: '河南队',
-    shortName: 'HEN',
+    shortName: '河南',
     color: '#DAA520',
     tier: 'underdog',
     overall: 43,
@@ -495,7 +495,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'tianjin',
     name: '天津津门虎',
-    shortName: 'TJJ',
+    shortName: '津虎',
     color: '#FF8C00',
     tier: 'underdog',
     overall: 41,
@@ -511,7 +511,7 @@ export const defaultTeams: TeamBase[] = [
   {
     id: 'changchun',
     name: '长春亚泰',
-    shortName: 'CCY',
+    shortName: '亚泰',
     color: '#006400',
     tier: 'underdog',
     overall: 40,

@@ -493,6 +493,24 @@ export function executeCurrentWindow(world: GameWorld): {
 
       // Update the window's fixtures for display
       window.fixtures = matchFixtures;
+
+      // Populate NEXT league cup window with the new round's fixtures
+      if (!leagueCup.completed) {
+        const nextLCWindow = seasonState.calendar.find(
+          (w) => w.type === 'league_cup' && !w.completed && w.id !== window.id,
+        );
+        if (nextLCWindow && nextLCWindow.fixtures.length === 0) {
+          const nextCupFixtures = getLeagueCupCurrentFixtures(leagueCup);
+          nextLCWindow.fixtures = nextCupFixtures.map((cf) => ({
+            id: cf.id,
+            homeTeamId: cf.homeTeamId,
+            awayTeamId: cf.awayTeamId,
+            competitionType: 'league_cup' as const,
+            competitionName: '联赛杯',
+            roundLabel: cf.roundName,
+          }));
+        }
+      }
       break;
     }
 

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
+import TeamBadge from '../components/TeamBadge';
 import {
   getTierLabel,
   getTierColor,
@@ -233,13 +234,8 @@ function TeamCard({
       to={`/team/${base.id}`}
       className="flex items-center gap-3 bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all group"
     >
-      {/* Color badge circle with shortName */}
-      <div
-        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 text-white text-xs sm:text-sm font-bold"
-        style={{ backgroundColor: base.color }}
-      >
-        {base.shortName.slice(0, 2)}
-      </div>
+      {/* Team badge */}
+      <TeamBadge shortName={base.shortName} color={base.color} size={36} />
 
       {/* Center: name + tier + OVR */}
       <div className="flex-1 min-w-0">

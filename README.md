@@ -127,6 +127,16 @@ src/
 
 ## Changelog
 
+### v0.9.0
+- **Bug fix: ET goal double-counting** — MatchResult now stores regulation goals
+  separately from ET goals; homeGoals = regulation only, etHomeGoals = extra time only
+- **Bug fix: league cup matchday empty** — league cup windows beyond R1 now get
+  pre-populated with fixtures after each round completes
+- **Chinese shortNames** — all 32 teams use 2-char Chinese abbreviations
+  (皇马/曼城/拜仁/利物/巴萨/国米/热刺/蓉城/亚泰 etc.)
+- **Team badges** — new TeamBadge SVG component (shield shape + team color + initials)
+  used in team detail header and teams hub
+
 ### v0.8.3
 - **Bug fix**: promoted/relegated teams no longer show 0s in season records
   - Season records now search ALL league standings to find the team's actual data
