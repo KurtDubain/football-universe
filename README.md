@@ -127,6 +127,11 @@ src/
 
 ## Changelog
 
+### v0.9.1
+- **Bug fix: relegation playoff matchday empty** — playoff fixtures now written to
+  calendar window before simulation, so Dashboard shows the matchups
+- Fixed remaining English news: "promoted!"→"附加赛升级成功!", "relegated"→"附加赛降级"
+
 ### v0.9.0
 - **Bug fix: ET goal double-counting** — MatchResult now stores regulation goals
   separately from ET goals; homeGoals = regulation only, etHomeGoals = extra time only

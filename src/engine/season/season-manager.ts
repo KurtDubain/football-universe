@@ -695,6 +695,10 @@ export function executeCurrentWindow(world: GameWorld): {
       );
 
       const playoffFixtures = proRelResult.playoffFixtures;
+
+      // Populate the window's fixtures for Dashboard display
+      window.fixtures = playoffFixtures;
+
       for (const fixture of playoffFixtures) {
         const ctx = buildSimulationContext(fixture, { ...world, teamStates }, rng);
         ctx.isKnockout = true;
@@ -731,8 +735,8 @@ export function executeCurrentWindow(world: GameWorld): {
           seasonNumber,
           windowIndex,
           type: 'promotion',
-          title: `${world.teamBases[p.teamId].name} promoted!`,
-          description: `${world.teamBases[p.teamId].name} 从${p.from}级联赛升入${p.to}级联赛。`,
+          title: `${world.teamBases[p.teamId].name} 附加赛升级成功!`,
+          description: `${world.teamBases[p.teamId].name} 在升降级附加赛中获胜，从${p.from}级联赛升入${p.to}级联赛。`,
         });
       }
       for (const r of finalProRel.relegated) {
@@ -745,8 +749,8 @@ export function executeCurrentWindow(world: GameWorld): {
           seasonNumber,
           windowIndex,
           type: 'relegation',
-          title: `${world.teamBases[r.teamId].name} relegated`,
-          description: `${world.teamBases[r.teamId].name} 从${r.from}级联赛降入${r.to}级联赛。`,
+          title: `${world.teamBases[r.teamId].name} 附加赛降级`,
+          description: `${world.teamBases[r.teamId].name} 在升降级附加赛中失利，从${r.from}级联赛降入${r.to}级联赛。`,
         });
       }
 
