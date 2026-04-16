@@ -353,9 +353,11 @@ function PostMatchView({
   homeTeam: any;
   awayTeam: any;
 }) {
-  const homeWon = result.homeGoals > result.awayGoals;
-  const awayWon = result.awayGoals > result.homeGoals;
-  const isDraw = result.homeGoals === result.awayGoals;
+  const totalHome = result.homeGoals + (result.etHomeGoals ?? 0);
+  const totalAway = result.awayGoals + (result.etAwayGoals ?? 0);
+  const homeWon = totalHome > totalAway;
+  const awayWon = totalAway > totalHome;
+  const isDraw = totalHome === totalAway;
 
   // For penalties, determine winner
   const penaltyHomeWon = result.penalties && (result.penaltyHome ?? 0) > (result.penaltyAway ?? 0);
@@ -415,12 +417,10 @@ function PostMatchView({
             {/* ET / Penalty indicator */}
             <div className="text-xs text-slate-500 mt-1 space-x-2">
               <span>{result.competitionName} - {result.roundLabel}</span>
-              {result.extraTime && !result.penalties && (
-                <span className="text-amber-400">(加时)</span>
-              )}
-              {result.penalties && (
+              {result.extraTime && (
                 <span className="text-amber-400">
-                  (点球 {result.penaltyHome}-{result.penaltyAway})
+                  加时 {result.etHomeGoals ?? 0}-{result.etAwayGoals ?? 0}
+                  {result.penalties && ` · 点球 ${result.penaltyHome}-${result.penaltyAway}`}
                 </span>
               )}
             </div>

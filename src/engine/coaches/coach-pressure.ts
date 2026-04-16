@@ -18,8 +18,12 @@ export function updateCoachPressure(
   isCupElimination: boolean,
 ): PressureUpdate {
   const isHome = result.homeTeamId === teamId;
-  const goalsFor = isHome ? result.homeGoals : result.awayGoals;
-  const goalsAgainst = isHome ? result.awayGoals : result.homeGoals;
+  const goalsFor = isHome
+    ? result.homeGoals + (result.etHomeGoals ?? 0)
+    : result.awayGoals + (result.etAwayGoals ?? 0);
+  const goalsAgainst = isHome
+    ? result.awayGoals + (result.etAwayGoals ?? 0)
+    : result.homeGoals + (result.etHomeGoals ?? 0);
   const goalDiff = goalsFor - goalsAgainst;
 
   let pressureChange = 0;

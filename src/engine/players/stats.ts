@@ -36,26 +36,23 @@ export function updatePlayerStatsFromResults(
   const stats = { ...currentStats };
 
   for (const result of results) {
-    // Mark appearances for all players in both squads
+    // Mark appearances for matchday squad (top 14 by rating = 11 starters + 3 subs)
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
-    if (homeSquad) {
-      for (const p of homeSquad) {
-        if (!stats[p.id]) continue;
-        stats[p.id] = {
-          ...stats[p.id],
-          appearances: stats[p.id].appearances + 1,
-        };
-      }
+    const matchdaySize = 14;
+
+    const pickMatchday = (squad: Player[] | undefined) => {
+      if (!squad) return [];
+      return [...squad].sort((a, b) => b.rating - a.rating).slice(0, matchdaySize);
+    };
+
+    for (const p of pickMatchday(homeSquad)) {
+      if (!stats[p.id]) continue;
+      stats[p.id] = { ...stats[p.id], appearances: stats[p.id].appearances + 1 };
     }
-    if (awaySquad) {
-      for (const p of awaySquad) {
-        if (!stats[p.id]) continue;
-        stats[p.id] = {
-          ...stats[p.id],
-          appearances: stats[p.id].appearances + 1,
-        };
-      }
+    for (const p of pickMatchday(awaySquad)) {
+      if (!stats[p.id]) continue;
+      stats[p.id] = { ...stats[p.id], appearances: stats[p.id].appearances + 1 };
     }
 
     // Process events

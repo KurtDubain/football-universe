@@ -127,6 +127,15 @@ src/
 
 ## Changelog
 
+### v1.2.1
+- **Bug fix: ET goals not counted** in coach pressure and team state calculations
+  - coach-pressure.ts: goal diff now uses regulation + ET goals
+  - state-updater.ts: morale/momentum now based on total score including ET
+  - MatchDetailModal: win/loss detection uses total, ET score shown clearly
+- **Bug fix: player appearances inflated** — was counting all 22 squad members
+  per match, now only top 14 by rating (11 starters + 3 subs)
+- **Clean up**: removed unused `useMemo` imports in Dashboard and League pages
+
 ### v1.2.0
 - **Coach firing rebalanced** — much less frequent coaching changes:
   - Grace period extended: first 20% of season (was 10%)

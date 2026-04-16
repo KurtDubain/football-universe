@@ -12,8 +12,12 @@ export function applyMatchStateChanges(
   result: MatchResult,
   isHome: boolean,
 ): TeamState {
-  const goalsFor = isHome ? result.homeGoals : result.awayGoals;
-  const goalsAgainst = isHome ? result.awayGoals : result.homeGoals;
+  const goalsFor = isHome
+    ? result.homeGoals + (result.etHomeGoals ?? 0)
+    : result.awayGoals + (result.etAwayGoals ?? 0);
+  const goalsAgainst = isHome
+    ? result.awayGoals + (result.etAwayGoals ?? 0)
+    : result.homeGoals + (result.etHomeGoals ?? 0);
   const goalDiff = goalsFor - goalsAgainst;
 
   const isWin = goalDiff > 0;
