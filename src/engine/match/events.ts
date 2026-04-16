@@ -507,5 +507,36 @@ export function generateMatchEvents(
 
   events.sort((a, b) => a.minute - b.minute);
 
+  // ── Add contextual labels to goals (扳平/反超/锁定胜局) ──────────
+
+  let runHome = 0;
+  let runAway = 0;
+  for (const ev of events) {
+    if (ev.type !== 'goal' && ev.type !== 'penalty_goal' && ev.type !== 'own_goal') continue;
+    const isHomeGoal = ev.teamId === homeTeamId;
+    if (isHomeGoal) runHome++; else runAway++;
+
+    // Determine context
+    let ctx = '';
+    if (runHome === runAway) {
+      ctx = '扳平比分！';
+    } else if (isHomeGoal && runHome === runAway + 1 && runAway > 0) {
+      ctx = '反超比分！';
+    } else if (!isHomeGoal && runAway === runHome + 1 && runHome > 0) {
+      ctx = '反超比分！';
+    } else if (ev.minute >= 85) {
+      const lead = isHomeGoal ? runHome - runAway : runAway - runHome;
+      if (lead === 1) ctx = '绝杀！';
+      else if (lead >= 2) ctx = '锁定胜局';
+    } else if ((runHome >= 3 && isHomeGoal) || (runAway >= 3 && !isHomeGoal)) {
+      const count = isHomeGoal ? runHome : runAway;
+      if (count === 3) ctx = '帽子戏法！';
+    }
+
+    if (ctx) {
+      ev.description = `${ev.description} [${ctx}]`;
+    }
+  }
+
   return events;
 }

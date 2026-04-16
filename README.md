@@ -127,6 +127,15 @@ src/
 
 ## Changelog
 
+### v1.3.0
+- **Fast forward**: dropdown menu on advance button — "快进5步"/"快进10步"/"快进到杯赛"/"快进到赛季末"
+- **Favorite team**: select at game start, shown in sidebar with morale/momentum, team color dot
+- **News ticker**: fixed bottom bar with auto-rotating top 5 news, priority-sorted, 4s interval
+- **Richer match events**: goal context labels — [扳平比分！]/[反超比分！]/[绝杀！]/[锁定胜局]/[帽子戏法！]
+- **Season preview**: "赛季前瞻" card in overview tab (first 10% of season) showing title favorites, promoted/relegated teams, world cup year flag
+- **World Cup in season review**: dedicated section with champion display
+- **localStorage optimization**: auto-trim newsLog >300, trim old event details, called on season end
+
 ### v1.2.1
 - **Bug fix: ET goals not counted** in coach pressure and team state calculations
   - coach-pressure.ts: goal diff now uses regulation + ET goals

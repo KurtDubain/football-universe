@@ -550,6 +550,58 @@ function OverviewTab({ world }: { world: GameWorld }) {
         </div>
       )}
 
+      {/* Season preview — show at start of season (first few windows) */}
+      {pct < 10 && world.honorHistory.length > 0 && (() => {
+        const lastHonor = world.honorHistory[world.honorHistory.length - 1];
+        const newPromoted = lastHonor.promoted.map(p => getTeamName(p.teamId, world.teamBases));
+        const newRelegated = lastHonor.relegated.map(r => getTeamName(r.teamId, world.teamBases));
+        // Top 3 favorites by overall
+        const l1Teams = Object.values(world.teamStates).filter(s => s.leagueLevel === 1);
+        const favorites = l1Teams.map(s => ({ id: s.id, ovr: world.teamBases[s.id]?.overall ?? 0 })).sort((a, b) => b.ovr - a.ovr).slice(0, 3);
+
+        return (
+          <div className="bg-gradient-to-r from-blue-900/20 to-slate-800 rounded-xl border border-blue-800/30 p-3 sm:p-4">
+            <h3 className="text-xs font-semibold text-blue-300 mb-2">赛季前瞻 — 第{world.seasonState.seasonNumber}赛季</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-slate-500">夺冠热门</span>
+                <div className="mt-1 space-y-0.5">
+                  {favorites.map((f, i) => (
+                    <div key={f.id} className="flex items-center gap-1 text-slate-300">
+                      <span className="text-amber-400">{i + 1}.</span>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: (world.teamBases[f.id] as any)?.color ?? '#666' }} />
+                      {getTeamName(f.id, world.teamBases)}
+                      <span className="text-slate-500 ml-auto">{f.ovr}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {newPromoted.length > 0 && (
+                <div>
+                  <span className="text-slate-500">新升级球队</span>
+                  <div className="mt-1 space-y-0.5 text-green-400">
+                    {newPromoted.map(n => <div key={n}>{n}</div>)}
+                  </div>
+                </div>
+              )}
+              {newRelegated.length > 0 && (
+                <div>
+                  <span className="text-slate-500">降级球队</span>
+                  <div className="mt-1 space-y-0.5 text-red-400">
+                    {newRelegated.map(n => <div key={n}>{n}</div>)}
+                  </div>
+                </div>
+              )}
+              {world.seasonState.isWorldCupYear && (
+                <div>
+                  <span className="text-sky-400 font-semibold">本赛季为环球冠军杯年</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* League standings */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {leagues.map(({ standings, name, level }) => (

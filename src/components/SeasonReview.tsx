@@ -92,6 +92,18 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         </div>
       )}
 
+      {/* World Cup details */}
+      {honor.worldCupWinner && (
+        <div className="bg-sky-900/15 rounded-xl border border-sky-800/30 p-3">
+          <h3 className="text-xs font-semibold text-sky-400 mb-2">环球冠军杯</h3>
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <span className="text-amber-400 font-semibold">冠军:</span>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[honor.worldCupWinner]?.color ?? '#666' }} />
+            <Link to={`/team/${honor.worldCupWinner}`} className="hover:text-blue-400 font-medium">{getTeamName(honor.worldCupWinner, tb)}</Link>
+          </div>
+        </div>
+      )}
+
       {/* Promotions & Relegations */}
       {(honor.promoted.length > 0 || honor.relegated.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

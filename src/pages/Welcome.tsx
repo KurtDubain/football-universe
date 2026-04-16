@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
 import Logo from '../components/Logo';
 import { APP_VERSION } from '../version';
+import { defaultTeams } from '../config/teams';
 
 export default function Welcome() {
   const newGame = useGameStore((s) => s.newGame);
+  const setFavoriteTeam = useGameStore((s) => s.setFavoriteTeam);
   const [seed, setSeed] = useState('');
+  const [favTeam, setFavTeam] = useState('');
   const [starting, setStarting] = useState(false);
 
   function handleStart() {
     setStarting(true);
+    if (favTeam) setFavoriteTeam(favTeam);
     const seedNum = seed.trim() ? parseInt(seed.trim(), 10) : undefined;
     newGame(isNaN(seedNum as number) ? undefined : seedNum);
   }
@@ -62,6 +66,20 @@ export default function Welcome() {
               placeholder="留空自动生成"
               className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-colors"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5 text-left">关注球队 (可选)</label>
+            <select
+              value={favTeam}
+              onChange={(e) => setFavTeam(e.target.value)}
+              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="">不选择</option>
+              {defaultTeams.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </div>
 
           <button
