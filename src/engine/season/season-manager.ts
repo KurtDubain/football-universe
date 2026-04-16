@@ -1567,11 +1567,27 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     completed: true,
     awards: {
       league1Champion,
+      league1RunnerUp: world.league1Standings[1]?.teamId,
       league2Champion,
       league3Champion,
       leagueCupWinner,
+      leagueCupRunnerUp: world.leagueCup.rounds.at(-1)?.fixtures[0]
+        ? (world.leagueCup.rounds.at(-1)!.fixtures[0].homeTeamId === leagueCupWinner
+          ? world.leagueCup.rounds.at(-1)!.fixtures[0].awayTeamId
+          : world.leagueCup.rounds.at(-1)!.fixtures[0].homeTeamId)
+        : undefined,
       superCupWinner,
+      superCupRunnerUp: world.superCup.knockoutRounds.at(-1)?.fixtures[0]
+        ? (world.superCup.knockoutRounds.at(-1)!.fixtures[0].homeTeamId === superCupWinner
+          ? world.superCup.knockoutRounds.at(-1)!.fixtures[0].awayTeamId
+          : world.superCup.knockoutRounds.at(-1)!.fixtures[0].homeTeamId)
+        : undefined,
       worldCupWinner,
+      worldCupRunnerUp: world.worldCup?.knockoutRounds.at(-1)?.fixtures[0]
+        ? (world.worldCup!.knockoutRounds.at(-1)!.fixtures[0].homeTeamId === worldCupWinner
+          ? world.worldCup!.knockoutRounds.at(-1)!.fixtures[0].awayTeamId
+          : world.worldCup!.knockoutRounds.at(-1)!.fixtures[0].homeTeamId)
+        : undefined,
       promoted: proRelResult.promoted.map((p) => p.teamId),
       relegated: proRelResult.relegated.map((r) => r.teamId),
     },

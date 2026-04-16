@@ -273,6 +273,14 @@ export default function TeamDetail() {
         </div>
       )}
 
+      {/* ═══ 球队水平走势 ═══ */}
+      {records.length >= 2 && (
+        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+          <h3 className="text-sm font-semibold text-slate-200 mb-3">球队水平走势</h3>
+          <TeamTrendChart records={records} color={base.color} />
+        </div>
+      )}
+
       {/* ═══ 阵容名单 ═══ */}
       <SquadRoster teamId={id} />
     </div>
@@ -494,6 +502,63 @@ function SquadRoster({ teamId }: { teamId: string }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Team trend chart
+// ══════════════════════════════════════════════════════════════
+
+function TeamTrendChart({ records, color }: { records: { seasonNumber: number; leaguePosition: number; leaguePoints: number; leagueLevel: 1|2|3 }[]; color: string }) {
+  const sorted = [...records].sort((a, b) => a.seasonNumber - b.seasonNumber);
+  if (sorted.length < 2) return null;
+  const chartW = Math.max(sorted.length * 50, 200);
+  const chartH = 120;
+  const padL = 30; const padR = 10; const padT = 10; const padB = 25;
+  const maxPts = Math.max(...sorted.map(r => r.leaguePoints), 1);
+  const ptsPoints = sorted.map((r, i) => {
+    const x = padL + (i / (sorted.length - 1)) * (chartW - padL - padR);
+    const y = padT + (1 - r.leaguePoints / maxPts) * (chartH - padT - padB);
+    return `${x},${y}`;
+  }).join(' ');
+  const maxPos = Math.max(...sorted.map(r => r.leaguePosition), 1);
+  const posPoints = sorted.map((r, i) => {
+    const x = padL + (i / (sorted.length - 1)) * (chartW - padL - padR);
+    const y = padT + ((r.leaguePosition - 1) / Math.max(maxPos - 1, 1)) * (chartH - padT - padB);
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full" style={{ minWidth: '200px', height: `${chartH}px` }}>
+        {[0, 0.5, 1].map(r => (
+          <line key={r} x1={padL} y1={padT + r * (chartH - padT - padB)} x2={chartW - padR} y2={padT + r * (chartH - padT - padB)} stroke="#334155" strokeWidth="0.5" />
+        ))}
+        <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" points={ptsPoints} opacity="0.9" />
+        <polyline fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinejoin="round" strokeDasharray="4 3" points={posPoints} opacity="0.5" />
+        {sorted.map((r, i) => {
+          const x = padL + (i / (sorted.length - 1)) * (chartW - padL - padR);
+          const yPts = padT + (1 - r.leaguePoints / maxPts) * (chartH - padT - padB);
+          const lvColor = r.leagueLevel === 1 ? '#f59e0b' : r.leagueLevel === 2 ? '#3b82f6' : '#22c55e';
+          return (
+            <g key={r.seasonNumber}>
+              <circle cx={x} cy={yPts} r="3" fill={color} />
+              <text x={x} y={chartH - 3} textAnchor="middle" fill="#64748b" fontSize="8">S{r.seasonNumber}</text>
+              <text x={x} y={yPts - 6} textAnchor="middle" fill="#94a3b8" fontSize="7">{r.leaguePoints}分</text>
+              <circle cx={x} cy={chartH - 14} r="3" fill={lvColor} opacity="0.7" />
+            </g>
+          );
+        })}
+        <text x="2" y={padT + 3} fill="#64748b" fontSize="7">{maxPts}分</text>
+        <text x="2" y={chartH - padB} fill="#64748b" fontSize="7">0</text>
+      </svg>
+      <div className="flex gap-4 mt-1 text-[10px] text-slate-500">
+        <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded" style={{ backgroundColor: color }} /> 积分</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-slate-500" /> 排名</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 顶</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> 甲</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> 乙</span>
       </div>
     </div>
   );

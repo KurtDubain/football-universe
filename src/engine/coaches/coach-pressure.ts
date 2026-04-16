@@ -9,17 +9,6 @@ export interface PressureUpdate {
   fireReason: string | null;
 }
 
-/**
- * Update coach pressure after a match result.
- * Factors:
- * - Win decreases pressure
- * - Loss increases pressure
- * - Draw slightly increases pressure
- * - Big loss (3+ goal difference) increases more
- * - Elite teams (expectation >= 4) multiply pressure increases
- * - Cup elimination adds extra pressure
- * - Consecutive losses compound pressure
- */
 export function updateCoachPressure(
   currentPressure: number,
   result: MatchResult,
@@ -35,38 +24,42 @@ export function updateCoachPressure(
 
   let pressureChange = 0;
 
-  // Base change by result
   if (goalDiff > 0) {
+    // Win: pressure drops more for convincing wins
     pressureChange = -BALANCE.WIN_PRESSURE_DECREASE;
+    if (goalDiff >= 3) pressureChange -= 2; // big win extra relief
   } else if (goalDiff < 0) {
     pressureChange = BALANCE.LOSS_PRESSURE_INCREASE;
-    if (goalDiff <= -3) {
-      pressureChange += 3;
-    }
+    if (goalDiff <= -3) pressureChange += 2;
   } else {
+    // Draw: barely increases for mid/low teams, slightly more for elite
     pressureChange = BALANCE.DRAW_PRESSURE_INCREASE;
   }
 
-  // Cup elimination adds extra pressure
+  // Cup elimination: moderate pressure, not catastrophic
   if (isCupElimination) {
-    pressureChange += 4;
+    pressureChange += 3;
   }
 
-  // Consecutive losses compound pressure (only after 4+)
+  // Consecutive losses: only compounds at 5+ (was 4+)
   const consecutiveLosses = countConsecutiveLosses(recentForm);
-  if (consecutiveLosses >= 4) {
-    pressureChange += (consecutiveLosses - 3) * 2;
+  if (consecutiveLosses >= 5) {
+    pressureChange += (consecutiveLosses - 4) * 2;
   }
 
-  // Elite teams (expectation >= 4) multiply pressure increases
+  // Elite teams multiply pressure increases (but less aggressively)
   if (teamBase.expectation >= 4 && pressureChange > 0) {
     pressureChange = Math.round(pressureChange * BALANCE.ELITE_TEAM_PRESSURE_MULT);
   }
 
-  const newPressure = clampPressure(currentPressure + pressureChange);
+  // Natural pressure decay: pressure slowly decreases even without wins
+  let decay = 0;
+  if (currentPressure > 40) decay = -1;
+  if (currentPressure > 60) decay = -0.5; // high pressure decays slower
 
-  // Check firing conditions inline
-  const fireCheck = shouldFireCoach(newPressure, teamBase, recentForm, 1); // assume not in grace period for post-match check
+  const newPressure = clampPressure(currentPressure + pressureChange + decay);
+
+  const fireCheck = shouldFireCoach(newPressure, teamBase, recentForm, 1);
   return {
     newPressure,
     shouldFire: fireCheck.fire,
@@ -74,54 +67,46 @@ export function updateCoachPressure(
   };
 }
 
-/**
- * Check if a coach should be fired based on accumulated pressure and context.
- */
 export function shouldFireCoach(
   pressure: number,
   teamBase: TeamBase,
   recentForm: ('W' | 'D' | 'L')[],
-  seasonProgress: number, // 0-1, how far into the season
+  seasonProgress: number,
 ): { fire: boolean; reason: string } {
-  // Grace period: can't fire in first portion of season (~3 windows)
-  // With typical ~30 windows per season, 3/30 = 0.1
-  if (seasonProgress < 0.1) {
+  // Extended grace period: first 20% of season (was 10%)
+  if (seasonProgress < 0.2) {
     return { fire: false, reason: '' };
   }
 
-  // 5+ consecutive losses triggers immediate firing regardless of pressure
+  // 6+ consecutive losses triggers immediate firing (was 5)
   const consecutiveLosses = countConsecutiveLosses(recentForm);
-  if (consecutiveLosses >= 5) {
+  if (consecutiveLosses >= 6) {
     return {
       fire: true,
-      reason: `Fired after ${consecutiveLosses} consecutive losses`,
+      reason: `${consecutiveLosses}连败后被解雇`,
     };
   }
 
-  // Top teams (expectation 5) fire at lower threshold
+  // Firing thresholds raised significantly
   const threshold = teamBase.expectation >= 5
-    ? 65
-    : BALANCE.FIRING_THRESHOLD;
+    ? 75    // was 65
+    : BALANCE.FIRING_THRESHOLD; // 80
 
   if (pressure >= threshold) {
     return {
       fire: true,
-      reason: `Pressure too high (${pressure}/${threshold})`,
+      reason: `执教压力过大 (${pressure}/${threshold})`,
     };
   }
 
   return { fire: false, reason: '' };
 }
 
-/** Count how many consecutive losses from the end of recentForm. */
 function countConsecutiveLosses(form: ('W' | 'D' | 'L')[]): number {
   let count = 0;
   for (let i = form.length - 1; i >= 0; i--) {
-    if (form[i] === 'L') {
-      count++;
-    } else {
-      break;
-    }
+    if (form[i] === 'L') count++;
+    else break;
   }
   return count;
 }

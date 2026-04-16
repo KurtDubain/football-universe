@@ -24,11 +24,15 @@ export interface SeasonState {
 
 export interface SeasonAwards {
   league1Champion?: string;
+  league1RunnerUp?: string;
   league2Champion?: string;
   league3Champion?: string;
   leagueCupWinner?: string;
+  leagueCupRunnerUp?: string;
   superCupWinner?: string;
+  superCupRunnerUp?: string;
   worldCupWinner?: string;
+  worldCupRunnerUp?: string;
   promoted: string[];
   relegated: string[];
 }

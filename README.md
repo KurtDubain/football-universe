@@ -127,6 +127,22 @@ src/
 
 ## Changelog
 
+### v1.2.0
+- **Coach firing rebalanced** — much less frequent coaching changes:
+  - Grace period extended: first 20% of season (was 10%)
+  - Consecutive loss firing threshold: 6 (was 5)
+  - Elite team firing threshold: 75 (was 65)
+  - Big win gives extra -2 pressure relief
+  - Cup elimination pressure: 3 (was 4)
+  - Natural pressure decay when above 40
+  - Firing reasons now in Chinese
+- **Runner-up display** in season review (顶级联赛亚军)
+- **Season awards** now track runner-ups for all cups
+- **Team trend chart** in team detail page:
+  - SVG line chart showing points + position across seasons
+  - League level color dots (金=顶, 蓝=甲, 绿=乙)
+  - Shows when a team was promoted/relegated visually
+
 ### v1.1.0
 - **Game is now infinite** — world cup year no longer ends the game;
   next season auto-starts after world cup completes

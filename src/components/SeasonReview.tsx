@@ -48,7 +48,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* Champions grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <ChampionCard title="顶级联赛冠军" teamId={honor.league1Champion} tb={tb} accent="amber" />
+        <ChampionCard title="顶级联赛冠军" teamId={honor.league1Champion} runnerUp={l1Records[1]?.teamId} tb={tb} accent="amber" />
         <ChampionCard title="甲级联赛冠军" teamId={honor.league2Champion} tb={tb} accent="blue" />
         <ChampionCard title="乙级联赛冠军" teamId={honor.league3Champion} tb={tb} accent="emerald" />
         <ChampionCard title="联赛杯冠军" teamId={honor.leagueCupWinner} tb={tb} accent="amber" />
@@ -125,7 +125,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   );
 }
 
-function ChampionCard({ title, teamId, tb, accent }: { title: string; teamId: string; tb: Record<string, any>; accent: string }) {
+function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; teamId: string; runnerUp?: string; tb: Record<string, any>; accent: string }) {
   const team = tb[teamId];
   if (!team) return null;
   const colors: Record<string, string> = {
@@ -145,6 +145,13 @@ function ChampionCard({ title, teamId, tb, accent }: { title: string; teamId: st
         </span>
         <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-100 hover:text-blue-400 truncate">{team.name}</Link>
       </div>
+      {runnerUp && tb[runnerUp] && (
+        <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500">
+          <span>亚军:</span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[runnerUp]?.color ?? '#666' }} />
+          <Link to={`/team/${runnerUp}`} className="text-slate-400 hover:text-blue-400">{getTeamName(runnerUp, tb)}</Link>
+        </div>
+      )}
     </div>
   );
 }
