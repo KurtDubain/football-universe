@@ -1580,6 +1580,54 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     teamSeasonRecords[teamId] = [...(teamSeasonRecords[teamId] ?? []), record];
   }
 
+  // ── Coach voluntary departure (急流勇退) ─────────────────────
+  // Top coaches who just won a major trophy have a small chance of leaving
+  for (const teamId of getAllTeamIds(world.teamStates)) {
+    const coachId = world.teamStates[teamId]?.currentCoachId;
+    if (!coachId) continue;
+    const coach = world.coachBases[coachId];
+    if (!coach || coach.rating < 78) continue; // only elite coaches do this
+
+    // Check if this coach's team won a major trophy this season
+    const wonMajor = teamId === league1Champion || teamId === leagueCupWinner || teamId === superCupWinner;
+    if (!wonMajor) continue;
+
+    // 8% chance per major trophy won
+    if (rng.next() >= 0.08) continue;
+
+    // Coach voluntarily leaves
+    const allCoachData = Object.entries(world.coachStates).map(([id, cs]) => ({
+      base: world.coachBases[id], state: cs,
+    })).filter(c => c.base != null);
+
+    const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
+
+    world.coachStates[coachId] = { ...world.coachStates[coachId], ...firingResult.firedCoachUpdate };
+    world.coachStates[firingResult.newCoachId] = { ...world.coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
+    world.teamStates[teamId] = { ...world.teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+
+    const careerList = [...(world.coachCareers[coachId] ?? [])];
+    if (careerList.length > 0) {
+      careerList[careerList.length - 1] = { ...careerList[careerList.length - 1], toSeason: seasonNumber, fired: false };
+    }
+    world.coachCareers[coachId] = careerList;
+    world.coachCareers[firingResult.newCoachId] = [...(world.coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
+
+    const coachName = coach.name;
+    const newCoachName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `retire-${coachId}`),
+      seasonNumber, windowIndex, type: 'coach_fired',
+      title: `${coachName} 功成身退，告别${world.teamBases[teamId]?.name}`,
+      description: `${coachName}在率队夺冠后选择急流勇退，留下一段传奇执教生涯。${newCoachName}将接过教鞭。`,
+    });
+
+    world.coachChangesThisSeason.push({
+      teamId, oldCoachId: coachId, newCoachId: firingResult.newCoachId,
+      reason: '功成身退',
+    });
+  }
+
   // ── Check achievements ──────────────────────────────────────
   let achievements = [...(world.achievements ?? [])];
   for (const teamId of getAllTeamIds(world.teamStates)) {
@@ -1620,7 +1668,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     const entry = standings.find((s) => s.teamId === teamId);
     const position = entry ? standings.indexOf(entry) + 1 : standings.length;
     const total = standings.length;
-    const ratio = position / total; // 0=champion, 1=last
+    const ratio = position / total;
 
     // Champions and top finishers grow slightly
     if (ratio <= 0.15) {
@@ -1630,24 +1678,60 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     } else if (ratio <= 0.35) {
       base.overall = Math.min(99, base.overall + rng.nextInt(0, 1));
     }
-    // Bottom finishers decline slightly
+    // Bottom finishers decline slightly (milder for weak teams)
     else if (ratio >= 0.85) {
-      base.overall = Math.max(30, base.overall - rng.nextInt(0, 2));
-      base.attack = Math.max(30, base.attack - rng.nextInt(0, 1));
-      base.defense = Math.max(30, base.defense - rng.nextInt(0, 1));
+      // Weaker teams decline less — floor protection
+      const declineMax = base.overall > 60 ? 2 : 1;
+      base.overall = Math.max(35, base.overall - rng.nextInt(0, declineMax));
+      if (base.overall > 55) {
+        base.attack = Math.max(35, base.attack - rng.nextInt(0, 1));
+        base.defense = Math.max(35, base.defense - rng.nextInt(0, 1));
+      }
     } else if (ratio >= 0.7) {
-      base.overall = Math.max(30, base.overall - rng.nextInt(0, 1));
+      if (base.overall > 55) {
+        base.overall = Math.max(35, base.overall - rng.nextInt(0, 1));
+      }
     }
 
-    // Promoted teams get a small boost
+    // Promoted teams get a BIG boost (simulating transfer window investment)
     if (state.leagueLevel < base.initialLeagueLevel) {
-      base.overall = Math.min(99, base.overall + 1);
-      base.depth = Math.min(99, base.depth + 1);
+      const promoBoost = rng.nextInt(3, 5);
+      base.overall = Math.min(99, base.overall + promoBoost);
+      base.depth = Math.min(99, base.depth + rng.nextInt(2, 4));
+      base.attack = Math.min(99, base.attack + rng.nextInt(1, 3));
+      base.midfield = Math.min(99, base.midfield + rng.nextInt(1, 2));
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `boost-${teamId}`),
+        seasonNumber, windowIndex, type: 'match_result',
+        title: `${base.name} 升级后大力引援`,
+        description: `${base.name}升级后获得大量投资，整体实力提升${promoBoost}点。`,
+      });
     }
     // Relegated teams decline
     if (state.leagueLevel > base.initialLeagueLevel) {
-      base.overall = Math.max(30, base.overall - 1);
-      base.depth = Math.max(30, base.depth - 1);
+      base.overall = Math.max(35, base.overall - rng.nextInt(1, 2));
+      base.depth = Math.max(30, base.depth - rng.nextInt(1, 2));
+    }
+
+    // Strong teams have a small chance of "internal turmoil" — star leaves, drama
+    if (base.overall >= 85 && rng.next() < 0.12) {
+      const drop = rng.nextInt(2, 4);
+      base.overall = Math.max(70, base.overall - drop);
+      base.attack = Math.max(65, base.attack - rng.nextInt(1, 2));
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `turmoil-${teamId}`),
+        seasonNumber, windowIndex, type: 'coach_fired',
+        title: `${base.name} 遭遇内部动荡`,
+        description: `${base.name}核心球员出走，更衣室出现裂痕，实力下降${drop}点。`,
+      });
+    }
+
+    // Underperformance bonus — if team finished way above expectations, bigger growth
+    const expectedPos = Math.round(total * (1 - (base.expectation - 1) / 4));
+    if (position < expectedPos - 3 && ratio <= 0.4) {
+      const surpriseBoost = rng.nextInt(1, 3);
+      base.overall = Math.min(99, base.overall + surpriseBoost);
+      base.reputation = Math.min(99, base.reputation + rng.nextInt(2, 5));
     }
 
     // Clamp midfield/stability based on overall shift
