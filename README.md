@@ -127,6 +127,18 @@ src/
 
 ## Changelog
 
+### v0.8.3
+- **Bug fix**: promoted/relegated teams no longer show 0s in season records
+  - Season records now search ALL league standings to find the team's actual data
+  - leagueLevel in record reflects the league they played in, not the new one
+- **Team detail: coach change history** — shows all coach changes for the team across seasons
+- **Season records enhanced**:
+  - Coach column: shows which coach managed that season (clickable)
+  - Champion row highlighted in gold
+  - League level shown as 顶/甲/乙 colored tags
+  - Cup wins shown as badges (联杯/超杯/冠军杯)
+  - Responsive: hides W/D/L and GF/GA on smaller screens
+
 ### v0.8.2
 - **Super Cup two-legged ties merged** into single bracket columns
   - QF-L1 + QF-L2 → one "八强(两回合)" column showing aggregate scores

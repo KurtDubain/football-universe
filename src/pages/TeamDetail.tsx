@@ -146,6 +146,34 @@ export default function TeamDetail() {
         )}
       </div>
 
+      {/* Coach history for this team */}
+      {(() => {
+        const changes = world.honorHistory.flatMap(h =>
+          h.coachChanges.filter(c => c.teamId === id).map(c => ({ ...c, season: h.seasonNumber }))
+        );
+        if (changes.length === 0) return null;
+        return (
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+            <h3 className="text-sm font-semibold text-slate-200 mb-2">教练变更记录</h3>
+            <div className="space-y-1.5">
+              {changes.map((c, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-500 w-8 shrink-0">S{c.season}</span>
+                  <Link to={`/coach/${c.oldCoachId}`} className="text-red-400 hover:text-red-300">
+                    {getCoachName(c.oldCoachId, world.coachBases)}
+                  </Link>
+                  <span className="text-slate-600">→</span>
+                  <Link to={`/coach/${c.newCoachId}`} className="text-green-400 hover:text-green-300">
+                    {getCoachName(c.newCoachId, world.coachBases)}
+                  </Link>
+                  <span className="text-slate-600 text-[10px]">{c.reason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Trophies */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
         <h3 className="text-sm font-semibold text-slate-200 mb-2">
@@ -179,65 +207,67 @@ export default function TeamDetail() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-slate-400 border-b border-slate-700">
-                  <th className="px-3 py-1.5 text-left">赛季</th>
+                  <th className="px-2 py-1.5 text-left">赛季</th>
                   <th className="px-2 py-1.5 text-center">级别</th>
-                  <th className="px-2 py-1.5 text-center">排名</th>
-                  <th className="px-2 py-1.5 text-center">赛</th>
-                  <th className="px-2 py-1.5 text-center">胜</th>
-                  <th className="px-2 py-1.5 text-center">平</th>
-                  <th className="px-2 py-1.5 text-center">负</th>
-                  <th className="px-2 py-1.5 text-center">进</th>
-                  <th className="px-2 py-1.5 text-center">失</th>
+                  <th className="px-2 py-1.5 text-center">名次</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">赛</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">胜</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">平</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">负</th>
+                  <th className="hidden md:table-cell px-2 py-1.5 text-center">进</th>
+                  <th className="hidden md:table-cell px-2 py-1.5 text-center">失</th>
                   <th className="px-2 py-1.5 text-center">积分</th>
+                  <th className="px-2 py-1.5 text-left">教练</th>
                   <th className="px-2 py-1.5 text-center">备注</th>
                 </tr>
               </thead>
               <tbody>
-                {records.map((rec) => (
-                  <tr
-                    key={rec.seasonNumber}
-                    className="border-t border-slate-700/50"
-                  >
-                    <td className="px-3 py-1.5 text-slate-300">
-                      S{rec.seasonNumber}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-400">
-                      {getLeagueName(rec.leagueLevel)}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-200 font-semibold">
-                      {rec.leaguePosition}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-400">
-                      {rec.leaguePlayed}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300">
-                      {rec.leagueWon}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300">
-                      {rec.leagueDrawn}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300">
-                      {rec.leagueLost}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300">
-                      {rec.leagueGF}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300">
-                      {rec.leagueGA}
-                    </td>
-                    <td className="px-2 py-1.5 text-center text-slate-100 font-bold">
-                      {rec.leaguePoints}
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      {rec.promoted && (
-                        <span className="text-xs text-green-400">升级</span>
-                      )}
-                      {rec.relegated && (
-                        <span className="text-xs text-red-400">降级</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {records.map((rec) => {
+                  const isChamp = rec.leaguePosition === 1;
+                  const honor = world.honorHistory.find(h => h.seasonNumber === rec.seasonNumber);
+                  const cupWins: string[] = [];
+                  if (honor?.leagueCupWinner === id) cupWins.push('联杯');
+                  if (honor?.superCupWinner === id) cupWins.push('超杯');
+                  if (honor?.worldCupWinner === id) cupWins.push('冠军杯');
+
+                  return (
+                    <tr key={rec.seasonNumber} className={`border-t border-slate-700/50 ${isChamp ? 'bg-amber-900/10' : ''}`}>
+                      <td className="px-2 py-1.5 text-slate-300">S{rec.seasonNumber}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`text-[10px] px-1 py-0.5 rounded ${rec.leagueLevel === 1 ? 'bg-amber-900/40 text-amber-400' : rec.leagueLevel === 2 ? 'bg-blue-900/40 text-blue-400' : 'bg-emerald-900/40 text-emerald-400'}`}>
+                          {rec.leagueLevel === 1 ? '顶' : rec.leagueLevel === 2 ? '甲' : '乙'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`font-semibold ${isChamp ? 'text-amber-400' : rec.leaguePosition <= 3 ? 'text-slate-200' : 'text-slate-400'}`}>
+                          {rec.leaguePosition}
+                        </span>
+                      </td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center text-slate-400">{rec.leaguePlayed}</td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueWon}</td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueDrawn}</td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueLost}</td>
+                      <td className="hidden md:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueGF}</td>
+                      <td className="hidden md:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueGA}</td>
+                      <td className="px-2 py-1.5 text-center text-slate-100 font-bold">{rec.leaguePoints}</td>
+                      <td className="px-2 py-1.5">
+                        {rec.coachId ? (
+                          <Link to={`/coach/${rec.coachId}`} className="text-xs text-slate-400 hover:text-blue-400 truncate block max-w-[80px]">
+                            {getCoachName(rec.coachId, world.coachBases)}
+                          </Link>
+                        ) : <span className="text-xs text-slate-600">-</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <div className="flex flex-wrap gap-0.5 justify-center">
+                          {isChamp && <span className="text-[9px] bg-amber-900/50 text-amber-300 px-1 rounded">冠军</span>}
+                          {rec.promoted && <span className="text-[9px] bg-green-900/50 text-green-400 px-1 rounded">升级</span>}
+                          {rec.relegated && <span className="text-[9px] bg-red-900/50 text-red-400 px-1 rounded">降级</span>}
+                          {cupWins.map(c => <span key={c} className="text-[9px] bg-purple-900/50 text-purple-300 px-1 rounded">{c}</span>)}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

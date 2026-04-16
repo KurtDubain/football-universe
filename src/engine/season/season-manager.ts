@@ -1396,13 +1396,24 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
   for (const teamId of getAllTeamIds(world.teamStates)) {
     const teamState = world.teamStates[teamId];
-    const standings = allStandings[teamState.leagueLevel] ?? [];
-    const entry = standings.find((s) => s.teamId === teamId);
+    // Find this team's standings entry — search ALL leagues since leagueLevel
+    // may have changed due to promotion/relegation
+    let entry: StandingEntry | undefined;
+    let foundLevel: 1 | 2 | 3 = teamState.leagueLevel;
+    for (const [lvStr, st] of Object.entries(allStandings)) {
+      const found = st.find((s) => s.teamId === teamId);
+      if (found && found.played > 0) {
+        entry = found;
+        foundLevel = parseInt(lvStr) as 1 | 2 | 3;
+        break;
+      }
+    }
+    const standings = allStandings[foundLevel] ?? [];
     const position = entry ? standings.indexOf(entry) + 1 : standings.length;
 
     const record: SeasonRecord = {
       seasonNumber,
-      leagueLevel: teamState.leagueLevel,
+      leagueLevel: foundLevel, // the league they actually played in this season
       leaguePosition: position,
       leaguePlayed: entry?.played ?? 0,
       leagueWon: entry?.won ?? 0,
