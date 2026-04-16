@@ -6,6 +6,7 @@ import type { CupState, SuperCupState, WorldCupState, CupRound, SuperCupGroup, C
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
+import { isDerby, getDerbyName } from '../config/derbies';
 
 const roundNameCN: Record<string, string> = {
   R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
@@ -335,15 +336,18 @@ function TieCell({ tie, mr, tb, ts, onClick }: {
   const w1 = tie.winnerId === tie.team1Id;
   const w2 = tie.winnerId === tie.team2Id;
   const hasResult = tie.agg1 !== undefined;
+  const derbyName = isDerby(tie.team1Id, tie.team2Id) ? getDerbyName(tie.team1Id, tie.team2Id) : null;
 
-  // For click: prefer leg2 if exists and has result, else leg1
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
 
   return (
     <button
       onClick={() => clickTarget && onClick(clickTarget)}
-      className="w-44 sm:w-52 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer text-left"
+      className={`w-44 sm:w-52 bg-slate-800 rounded-lg border hover:border-slate-500 transition-colors cursor-pointer text-left ${derbyName ? 'border-orange-600/40' : 'border-slate-700'}`}
     >
+      {derbyName && (
+        <div className="text-[9px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
+      )}
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t1?.color ?? '#555' }} />

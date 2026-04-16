@@ -774,7 +774,9 @@ function ResultCard({
   const homeWon = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
   const awayWon = result.awayGoals + (result.etAwayGoals ?? 0) > result.homeGoals + (result.etHomeGoals ?? 0);
 
-  const tags = getMatchTags(result.competitionType, result.roundLabel, result.homeTeamId, result.awayTeamId);
+  const homeState = world.teamStates[result.homeTeamId];
+  const rStandings = homeState?.leagueLevel === 1 ? world.league1Standings : homeState?.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
+  const tags = getMatchTags(result.competitionType, result.roundLabel, result.homeTeamId, result.awayTeamId, rStandings, rStandings.length);
   const isFinal = tags.some(t => t.label === '决赛');
 
   return (

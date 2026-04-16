@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import MatchDetailModal from '../components/MatchDetailModal';
+import { isDerby, getDerbyName } from '../config/derbies';
 import {
   getTeamName,
   getWindowTypeColor,
@@ -174,11 +175,13 @@ export default function Calendar() {
                         const awayCoach = awayState.currentCoachId ? world.coachBases[awayState.currentCoachId] ?? null : null;
                         const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
 
+                        const calDerby = isDerby(fixture.homeTeamId, fixture.awayTeamId) ? getDerbyName(fixture.homeTeamId, fixture.awayTeamId) : null;
+
                         return (
                           <button
                             key={fixture.id}
                             onClick={() => handleFixtureClick(fixture)}
-                            className="w-full flex items-center text-sm py-2 px-3 rounded-lg bg-slate-700/15 hover:bg-slate-700/40 cursor-pointer transition-colors text-left"
+                            className={`w-full flex items-center text-sm py-2 px-3 rounded-lg hover:bg-slate-700/40 cursor-pointer transition-colors text-left ${calDerby ? 'bg-orange-900/10 border border-orange-800/20' : 'bg-slate-700/15'}`}
                           >
                             <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam.color }} />
@@ -198,7 +201,9 @@ export default function Calendar() {
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam.color }} />
                               <span className="text-slate-300 truncate">{awayTeam.name}</span>
                             </div>
-                            <span className="text-[10px] text-slate-600 ml-2 shrink-0">预测 →</span>
+                            <span className="text-[10px] text-slate-600 ml-2 shrink-0">
+                              {calDerby ? <span className="text-orange-400">{calDerby}</span> : '预测 →'}
+                            </span>
                           </button>
                         );
                       })}

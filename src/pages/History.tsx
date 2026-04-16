@@ -52,6 +52,22 @@ export default function History() {
         </div>
       )}
 
+      {/* Achievements */}
+      {(world.achievements ?? []).length > 0 && (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">成就殿堂</h3>
+          <div className="flex flex-wrap gap-2">
+            {(world.achievements ?? []).map((a: any) => (
+              <div key={a.id} className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-3 py-2 text-xs">
+                <span className="text-amber-400 font-semibold">{a.title}</span>
+                <span className="text-slate-500 ml-1.5">S{a.seasonNumber}</span>
+                <p className="text-slate-400 text-[10px] mt-0.5">{a.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Season list */}
       {honors.length === 0 ? (
         <p className="text-sm text-slate-500">暂无历史记录，完成至少一个赛季后显示</p>

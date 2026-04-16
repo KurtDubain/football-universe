@@ -7,10 +7,11 @@ export interface Achievement {
 }
 
 const ACHIEVEMENT_DEFS = [
-  { id: 'unbeaten', title: '不败赛季', check: (s: any) => s.leagueLost === 0 && s.leaguePlayed >= 10, desc: (t: string) => `${t}以全赛季不败战绩完成联赛` },
-  { id: 'perfect_home', title: '主场全胜', check: (s: any) => s.leagueWon >= s.leaguePlayed * 0.85, desc: (t: string) => `${t}主场表现近乎完美` },
-  { id: 'centurion', title: '百分赛季', check: (s: any) => s.leaguePoints >= 80, desc: (t: string) => `${t}联赛积分突破80大关` },
-  { id: 'promotion_streak', title: '连级跳', check: (_: any, rec: any[]) => { const last2 = rec.slice(-2); return last2.length === 2 && last2[0].promoted && last2[1].promoted; }, desc: (t: string) => `${t}连续两个赛季升级` },
+  { id: 'unbeaten', title: '不败赛季', check: (s: any) => s && s.leagueLost === 0 && (s.leaguePlayed ?? 0) >= 10, desc: (t: string) => `${t}以全赛季不败战绩完成联赛` },
+  { id: 'dominant', title: '统治级表现', check: (s: any) => s && (s.leagueWon ?? 0) >= (s.leaguePlayed ?? 1) * 0.8, desc: (t: string) => `${t}以超过80%的胜率统治联赛` },
+  { id: 'centurion', title: '百分赛季', check: (s: any) => s && (s.leaguePoints ?? 0) >= 80, desc: (t: string) => `${t}联赛积分突破80大关` },
+  { id: 'promotion_streak', title: '连级跳', check: (_: any, rec: any[]) => { if (!rec || rec.length < 2) return false; const last2 = rec.slice(-2); return last2.length === 2 && last2[0]?.promoted && last2[1]?.promoted; }, desc: (t: string) => `${t}连续两个赛季升级` },
+  { id: 'goal_machine', title: '进球机器', check: (s: any) => s && (s.leagueGF ?? 0) >= 60, desc: (t: string) => `${t}联赛进球突破60大关` },
 ];
 
 export function checkAchievements(
