@@ -1228,6 +1228,24 @@ export function executeCurrentWindow(world: GameWorld): {
     updatedWorld = initializeNewSeason(updatedWorld);
   }
 
+  // Pre-populate NEXT window if it needs dynamic fixtures (relegation playoff)
+  if (!isSeasonDone) {
+    const cal = updatedWorld.seasonState.calendar;
+    const nwi = updatedWorld.seasonState.currentWindowIndex;
+    if (nwi < cal.length) {
+      const nextWin = cal[nwi];
+      if (nextWin.type === 'relegation_playoff' && nextWin.fixtures.length === 0) {
+        const pr = determinePromotionRelegation(
+          updatedWorld.league1Standings,
+          updatedWorld.league2Standings,
+          updatedWorld.league3Standings,
+          seasonNumber,
+        );
+        nextWin.fixtures = pr.playoffFixtures;
+      }
+    }
+  }
+
   return {
     world: updatedWorld,
     results,
