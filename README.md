@@ -127,6 +127,16 @@ src/
 
 ## Changelog
 
+### v0.8.1
+- Cup pages: **qualification rules** banner for each cup type
+  - 联赛杯: "全部32支球队, 单场淘汰制"
+  - 超级杯: "顶级前10+甲级前4+乙级前2, 小组赛+两回合淘汰"
+  - 环球冠军杯: "实力前16, 全员进淘汰赛, 每4赛季一次"
+- **League level tags** (顶/甲/乙) shown next to every team name in bracket and group tables
+  - Gold for 顶级, blue for 甲级, green for 乙级
+- Group tables: added "前2名晋级" qualification line
+- Bracket cells widened (w-40/w-48) for better readability with tags
+
 ### v0.8.0
 - **Streak news**: 3+连胜/连败/5+不败自动推送新闻
 - **Special event news**: 帽子戏法、补时绝杀自动推送
