@@ -113,7 +113,6 @@ export default function PitchCanvas(props: Props) {
       };
     }
 
-    let raf: number;
     function render() {
       frameRef.current++;
       const f = frameRef.current;

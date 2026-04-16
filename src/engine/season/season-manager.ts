@@ -354,12 +354,15 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     description: `第${seasonNumber}赛季联赛杯抽签揭晓，32支球队将角逐联赛杯冠军。`,
   });
 
-  // Super cup draw
+  // Super cup draw — show league composition
+  const scL1Count = superCupTeams.filter(id => world.teamStates[id]?.leagueLevel === 1).length;
+  const scL2Count = superCupTeams.filter(id => world.teamStates[id]?.leagueLevel === 2).length;
+  const scL3Count = superCupTeams.filter(id => world.teamStates[id]?.leagueLevel === 3).length;
   const scGroupInfo = superCup.groups.map(g => `${g.groupName}组: ${g.teamIds.map(id => world.teamBases[id]?.name?.slice(0, 3) ?? id).join('/')}`).join(' | ');
   drawNews.push({
     id: `draw-sc-S${seasonNumber}`,
     seasonNumber, windowIndex: 0, type: 'match_result',
-    title: `超级杯分组抽签揭晓`,
+    title: `超级杯分组抽签揭晓 — ${scL1Count}顶${scL2Count}甲${scL3Count}乙`,
     description: scGroupInfo,
   });
 
