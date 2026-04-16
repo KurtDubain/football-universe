@@ -7,6 +7,7 @@ import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
 import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
+import ResultAnimation from '../components/ResultAnimation';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -426,6 +427,8 @@ function ResultsTab({
   lastNews: { id: string; type: string; title: string; description: string }[];
   onResultClick: (r: MatchResult) => void;
 }) {
+  const [animComplete, setAnimComplete] = useState(false);
+
   if (lastResults.length === 0) {
     return (
       <div className="text-center py-12">
@@ -436,35 +439,13 @@ function ResultsTab({
 
   return (
     <div className="space-y-4">
-      {/* Group results by competition */}
-      {(() => {
-        const resultGroups = new Map<string, MatchResult[]>();
-        for (const r of lastResults) {
-          const key = r.competitionName || r.competitionType;
-          if (!resultGroups.has(key)) resultGroups.set(key, []);
-          resultGroups.get(key)!.push(r);
-        }
-        const order = ['顶级联赛', '甲级联赛', '乙级联赛'];
-        const sorted = [...resultGroups.entries()].sort((a, b) => {
-          const ia = order.indexOf(a[0]);
-          const ib = order.indexOf(b[0]);
-          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-        });
-
-        return sorted.map(([groupName, results]) => (
-          <div key={groupName}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-semibold text-slate-400">{groupName}</span>
-              <span className="text-[10px] text-slate-600">{results.length}场</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 stagger-children">
-              {results.map((r) => (
-                <ResultCard key={r.fixtureId} result={r} world={world} onClick={() => onResultClick(r)} />
-              ))}
-            </div>
-          </div>
-        ));
-      })()}
+      {/* Animated result reveal */}
+      <ResultAnimation
+        results={lastResults}
+        teamBases={world.teamBases as Record<string, any>}
+        onComplete={() => setAnimComplete(true)}
+        onResultClick={onResultClick}
+      />
 
       {/* News feed */}
       {(lastNews.length > 0 || world.newsLog.length > 0) && (
