@@ -343,6 +343,26 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
 
   const rngState = rng.getState();
 
+  // ── Generate draw announcement news ──
+  const drawNews: NewsItem[] = [];
+
+  // League cup draw
+  drawNews.push({
+    id: `draw-lc-S${seasonNumber}`,
+    seasonNumber, windowIndex: 0, type: 'match_result',
+    title: `联赛杯抽签完成 — 32队单场淘汰`,
+    description: `第${seasonNumber}赛季联赛杯抽签揭晓，32支球队将角逐联赛杯冠军。`,
+  });
+
+  // Super cup draw
+  const scGroupInfo = superCup.groups.map(g => `${g.groupName}组: ${g.teamIds.map(id => world.teamBases[id]?.name?.slice(0, 3) ?? id).join('/')}`).join(' | ');
+  drawNews.push({
+    id: `draw-sc-S${seasonNumber}`,
+    seasonNumber, windowIndex: 0, type: 'match_result',
+    title: `超级杯分组抽签揭晓`,
+    description: scGroupInfo,
+  });
+
   return {
     ...world,
     seasonState,
@@ -354,6 +374,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     worldCup: null,
     coachChangesThisSeason: [],
     playerStats: createInitialPlayerStats(world.squads),
+    newsLog: [...(world.newsLog ?? []), ...drawNews],
     rngState,
   };
 }
@@ -1803,7 +1824,7 @@ function initializeWorldCup(world: GameWorld): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
 
-  // Select participants: top 16 teams by overall
+  // Select participants: all 32 teams
   const allTeamIds = getAllTeamIds(world.teamStates);
   const teamOveralls: Record<string, number> = {};
   for (const id of allTeamIds) {
@@ -1845,10 +1866,22 @@ function initializeWorldCup(world: GameWorld): GameWorld {
     currentWindowIndex: world.seasonState.calendar.length, // starts at first new window
   };
 
+  // WC draw news
+  const wcGroupInfo = worldCup.groups.map(g =>
+    `${g.groupName}组: ${g.teamIds.map(id => world.teamBases[id]?.name?.slice(0, 3) ?? id).join('/')}`
+  ).join(' | ');
+  const wcDrawNews: NewsItem = {
+    id: `draw-wc-S${seasonNumber}`,
+    seasonNumber, windowIndex: world.seasonState.calendar.length, type: 'trophy',
+    title: `环球冠军杯抽签揭晓 — 32队8组`,
+    description: wcGroupInfo,
+  };
+
   return {
     ...world,
     seasonState,
     worldCup,
+    newsLog: [...world.newsLog, wcDrawNews],
     rngState: rng.getState(),
   };
 }

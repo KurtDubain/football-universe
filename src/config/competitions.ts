@@ -51,10 +51,10 @@ export const superCupConfig = {
 export const worldCupConfig = {
   name: '环球冠军杯',
   interval: 4,
-  participantCount: 16,
-  groupCount: 4,
-  teamsPerGroup: 4,
-  allAdvance: true, // all 16 enter knockout
+  participantCount: 32,   // all teams
+  groupCount: 8,          // 8 groups
+  teamsPerGroup: 4,       // 2顶+1甲+1乙
+  advancePerGroup: 2,     // top 2 advance to R16
 } as const;
 
 export const leagueCupConfig = {

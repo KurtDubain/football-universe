@@ -120,48 +120,44 @@ const KNOCKOUT_NAME: Record<number, string> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Select 16 teams for world cup.
- * Takes the top 16 teams by their overall rating at the time of selection.
+ * Select all 32 teams for world cup.
  */
 export function selectWorldCupParticipants(
   allTeamIds: string[],
   teamOveralls: Record<string, number>,
 ): string[] {
-  return [...allTeamIds]
-    .sort((a, b) => (teamOveralls[b] ?? 0) - (teamOveralls[a] ?? 0))
-    .slice(0, 16);
+  // All 32 teams participate
+  return [...allTeamIds].sort((a, b) => (teamOveralls[b] ?? 0) - (teamOveralls[a] ?? 0));
 }
 
 /**
- * Initialize the world cup.
- * Draw 16 teams into 4 groups of 4 with pot-based seeding.
- * Generate group stage fixtures (6 rounds per group, double round-robin).
+ * Initialize the world cup — 32 teams, 8 groups of 4.
  *
- * Pots (based on the order of participantIds, which should be pre-sorted
- * by overall rating from selectWorldCupParticipants):
- *   Pot 1: teams 1-4 (highest rated)
- *   Pot 2: teams 5-8
- *   Pot 3: teams 9-12
- *   Pot 4: teams 13-16
+ * Pot system based on league level for balanced groups:
+ *   Pot 1: top 8 (by overall) — seeded into 8 groups
+ *   Pot 2: next 8
+ *   Pot 3: next 8
+ *   Pot 4: bottom 8
+ * Each group gets exactly 1 team from each pot.
  */
 export function initWorldCup(
   participantIds: string[],
   seasonNumber: number,
   rng: SeededRNG,
 ): WorldCupState {
-  if (participantIds.length !== 16) {
-    throw new Error(`World cup requires 16 teams, got ${participantIds.length}`);
+  if (participantIds.length !== 32) {
+    throw new Error(`World cup requires 32 teams, got ${participantIds.length}`);
   }
 
-  // Pot-based seeding: 4 pots of 4 teams each
+  // 4 pots of 8 teams each (already sorted by overall)
   const pots: string[][] = [
-    participantIds.slice(0, 4),
-    participantIds.slice(4, 8),
-    participantIds.slice(8, 12),
-    participantIds.slice(12, 16),
+    participantIds.slice(0, 8),
+    participantIds.slice(8, 16),
+    participantIds.slice(16, 24),
+    participantIds.slice(24, 32),
   ];
 
-  const groupTeams = drawGroups(participantIds, 4, rng, pots);
+  const groupTeams = drawGroups(participantIds, 8, rng, pots);
 
   const groups: SuperCupGroup[] = groupTeams.map((teamIds, i) => ({
     groupName: String.fromCharCode(65 + i),
@@ -254,66 +250,37 @@ export function updateWorldCupGroupStandings(
 }
 
 /**
- * Complete group stage. ALL 16 teams enter knockout.
+ * Complete group stage. Top 2 from each of 8 groups = 16 teams advance.
  *
- * Ranking: all teams ranked by group position, then by points, GD, GF.
- * R16 pairings: rank 1 vs rank 16, rank 2 vs rank 15, ..., rank 8 vs rank 9.
- * This ensures group winners (ranks 1-4) face group 4th-placers (ranks 13-16)
- * from other groups, rewarding strong group-stage performance.
- *
- * The higher-ranked team in each pair gets home advantage.
+ * R16 pairings (classic World Cup format):
+ *   1A vs 2B, 1B vs 2A, 1C vs 2D, 1D vs 2C,
+ *   1E vs 2F, 1F vs 2E, 1G vs 2H, 1H vs 2G
  */
 export function completeWorldCupGroupStage(
   state: WorldCupState,
   rng: SeededRNG,
 ): WorldCupState {
   const season = extractSeason(state);
+  const g = state.groups;
 
-  // Build a global ranking: position within group is primary, then tiebreakers
-  const rankedTeams: {
-    teamId: string;
-    groupIndex: number;
-    position: number;
-    standing: StandingEntry;
-  }[] = [];
+  // Classic cross-group pairings
+  const pairings: [string, string][] = [];
+  const crossPairs = [[0,1],[2,3],[4,5],[6,7]]; // A-B, C-D, E-F, G-H
 
-  for (let gi = 0; gi < state.groups.length; gi++) {
-    const group = state.groups[gi];
-    for (let pos = 0; pos < group.standings.length; pos++) {
-      rankedTeams.push({
-        teamId: group.standings[pos].teamId,
-        groupIndex: gi,
-        position: pos + 1, // 1-indexed
-        standing: group.standings[pos],
-      });
+  for (const [ga, gb] of crossPairs) {
+    if (g[ga] && g[gb]) {
+      pairings.push([g[ga].standings[0].teamId, g[gb].standings[1].teamId]); // 1st vs 2nd
+      pairings.push([g[gb].standings[0].teamId, g[ga].standings[1].teamId]); // 1st vs 2nd
     }
   }
 
-  // Sort: group position first (1st placers before 2nd, etc.), then points/GD/GF
-  rankedTeams.sort(
-    (a, b) =>
-      a.position - b.position ||
-      b.standing.points - a.standing.points ||
-      b.standing.goalDifference - a.standing.goalDifference ||
-      b.standing.goalsFor - a.standing.goalsFor,
-  );
-
-  // R16 pairings: rank 1 vs rank 16, rank 2 vs rank 15, etc.
-  const totalTeams = rankedTeams.length;
-  const r16Fixtures: CupFixture[] = [];
-
-  for (let i = 0; i < totalTeams / 2; i++) {
-    const higher = rankedTeams[i];
-    const lower = rankedTeams[totalTeams - 1 - i];
-
-    r16Fixtures.push({
-      id: `WC-S${season}-R16-M${i + 1}`,
-      round: 1,
-      roundName: 'R16',
-      homeTeamId: higher.teamId,
-      awayTeamId: lower.teamId,
-    });
-  }
+  const r16Fixtures: CupFixture[] = pairings.map((pair, i) => ({
+    id: `WC-S${season}-R16-M${i + 1}`,
+    round: 1,
+    roundName: 'R16',
+    homeTeamId: pair[0],
+    awayTeamId: pair[1],
+  }));
 
   const knockoutRounds: CupRound[] = [
     { roundNumber: 1, roundName: 'R16', fixtures: r16Fixtures, completed: false },

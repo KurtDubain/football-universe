@@ -143,9 +143,10 @@ function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record
         {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
       </div>
       <RulesCard lines={[
-        '参赛: 综合实力前16的球队',
-        '小组赛: 4组×4队，双循环6轮，全部16队晋级淘汰赛',
-        '淘汰赛: 按小组排名配对 (第1 vs 第16)，单场定胜负',
+        '参赛: 全部32支球队',
+        '抽签: 4档分组 (按实力排位)，每组2顶+1甲+1乙',
+        '小组赛: 8组×4队，双循环6轮，每组前2名晋级16强',
+        '淘汰赛: 16强→八强→四强→决赛，单场定胜负',
         '每4个赛季举办一次',
       ]} />
       <h3 className="text-sm font-semibold text-slate-300">小组赛</h3>
