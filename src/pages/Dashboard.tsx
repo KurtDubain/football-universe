@@ -17,6 +17,13 @@ import {
 
 type TabKey = 'matchday' | 'results' | 'overview' | 'review';
 
+const roundLabelCN: Record<string, string> = {
+  R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
+  'QF-L1': '八强首回合', 'QF-L2': '八强次回合',
+  'SF-L1': '四强首回合', 'SF-L2': '四强次回合',
+};
+function cnLabel(label: string) { return roundLabelCN[label] ?? label; }
+
 export default function Dashboard() {
   const world = useGameStore((s) => s.world);
   const lastResults = useGameStore((s) => s.lastResults);
@@ -724,7 +731,7 @@ function ResultCard({
 
       {/* Competition label */}
       <div className="text-[10px] text-slate-500 mt-1.5 text-center">
-        {result.competitionName} · {result.roundLabel}
+        {result.competitionName} · {cnLabel(result.roundLabel)}
       </div>
     </div>
   );

@@ -184,31 +184,133 @@ function RulesCard({ lines }: { lines: string[] }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  Bracket — horizontal tree
+//  Bracket — merges two-legged rounds into single columns
 // ══════════════════════════════════════════════════════════════
+
+interface MergedRound {
+  label: string;
+  twoLegged: boolean;
+  completed: boolean;
+  ties: MergedTie[];
+}
+
+interface MergedTie {
+  leg1: CupFixture | null;
+  leg2: CupFixture | null;
+  // For two-legged: team1 = home in leg1, team2 = away in leg1
+  team1Id: string;
+  team2Id: string;
+  winnerId?: string;
+  agg1?: number; // team1 aggregate
+  agg2?: number; // team2 aggregate
+  awayGoals1?: number; // team1 away goals (scored in leg2)
+  awayGoals2?: number; // team2 away goals (scored in leg1)
+}
+
+function buildMergedRounds(rounds: CupRound[]): MergedRound[] {
+  const merged: MergedRound[] = [];
+  const processed = new Set<number>();
+
+  for (let i = 0; i < rounds.length; i++) {
+    if (processed.has(i)) continue;
+    const r = rounds[i];
+    const name = r.roundName;
+
+    // Check if this is a first leg with a matching second leg
+    if (name.endsWith('-L1')) {
+      const baseName = name.replace('-L1', '');
+      const l2Idx = rounds.findIndex((rr, j) => j > i && rr.roundName === `${baseName}-L2`);
+
+      if (l2Idx !== -1) {
+        const l2 = rounds[l2Idx];
+        processed.add(i);
+        processed.add(l2Idx);
+
+        const ties: MergedTie[] = r.fixtures.map((leg1, fi) => {
+          const leg2 = l2.fixtures[fi] ?? null;
+          const team1Id = leg1.homeTeamId;
+          const team2Id = leg1.awayTeamId;
+
+          let agg1: number | undefined;
+          let agg2: number | undefined;
+          let awayGoals1: number | undefined;
+          let awayGoals2: number | undefined;
+
+          if (leg1.result && leg2?.result) {
+            // team1: home in L1 + away in L2
+            agg1 = leg1.result.home + leg2.result.away;
+            // team2: away in L1 + home in L2
+            agg2 = leg1.result.away + leg2.result.home;
+            awayGoals1 = leg2.result.away; // team1 scored away in L2
+            awayGoals2 = leg1.result.away; // team2 scored away in L1
+          } else if (leg1.result) {
+            // Only first leg played
+            agg1 = leg1.result.home;
+            agg2 = leg1.result.away;
+          }
+
+          return {
+            leg1, leg2,
+            team1Id, team2Id,
+            winnerId: leg2?.winnerId ?? leg1.winnerId,
+            agg1, agg2,
+            awayGoals1, awayGoals2,
+          };
+        });
+
+        merged.push({
+          label: cnRound(baseName) || baseName,
+          twoLegged: true,
+          completed: r.completed && (l2?.completed ?? false),
+          ties,
+        });
+        continue;
+      }
+    }
+
+    // Single-leg round (Final, or league cup rounds)
+    processed.add(i);
+    merged.push({
+      label: cnRound(name),
+      twoLegged: false,
+      completed: r.completed,
+      ties: r.fixtures.map(f => ({
+        leg1: f, leg2: null,
+        team1Id: f.homeTeamId, team2Id: f.awayTeamId,
+        winnerId: f.winnerId,
+        agg1: f.result?.home, agg2: f.result?.away,
+      })),
+    });
+  }
+
+  return merged;
+}
 
 function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   if (rounds.length === 0) return <p className="text-sm text-slate-500">淘汰赛尚未开始</p>;
 
+  const merged = buildMergedRounds(rounds);
+
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-3 sm:gap-5 min-w-max items-start">
-        {rounds.map((round) => {
-          const n = round.fixtures.length;
-          const cellGap = n <= 1 ? 0 : n <= 2 ? 40 : n <= 4 ? 16 : n <= 8 ? 6 : 3;
+        {merged.map((mr, ri) => {
+          const n = mr.ties.length;
+          const cellGap = n <= 1 ? 0 : n <= 2 ? 32 : n <= 4 ? 12 : n <= 8 ? 4 : 2;
 
           return (
-            <div key={round.roundNumber} className="flex flex-col">
+            <div key={ri} className="flex flex-col">
               <div className="text-[10px] sm:text-xs font-semibold text-slate-400 text-center mb-2 px-2 py-0.5 bg-slate-800 rounded border border-slate-700/50 whitespace-nowrap self-center">
-                {cnRound(round.roundName)}
-                {round.completed && <span className="text-green-400 ml-1">&#10003;</span>}
+                {mr.label}
+                {mr.twoLegged && <span className="text-slate-600 ml-1">(两回合)</span>}
+                {mr.completed && <span className="text-green-400 ml-1">&#10003;</span>}
               </div>
               <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
-                {round.fixtures.map(fix => (
-                  <BracketCell key={fix.id} fixture={fix} tb={tb} ts={ts} onClick={() => onClick(fix)} />
+                {mr.ties.map((tie, ti) => (
+                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} />
                 ))}
-                {round.fixtures.length === 0 && (
-                  <div className="w-40 sm:w-48 h-[52px] rounded-lg border border-dashed border-slate-700/50 flex items-center justify-center">
+                {mr.ties.length === 0 && (
+                  <div className="w-44 sm:w-52 h-[52px] rounded-lg border border-dashed border-slate-700/50 flex items-center justify-center">
                     <span className="text-[10px] text-slate-600">待定</span>
                   </div>
                 )}
@@ -221,38 +323,86 @@ function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Reco
   );
 }
 
-function BracketCell({ fixture: f, tb, ts, onClick }: { fixture: CupFixture; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: () => void }) {
-  const has = !!f.result;
-  const hw = f.winnerId === f.homeTeamId;
-  const aw = f.winnerId === f.awayTeamId;
-  const ht = tb[f.homeTeamId];
-  const at = tb[f.awayTeamId];
+function TieCell({ tie, mr, tb, ts, onClick }: {
+  tie: MergedTie;
+  mr: MergedRound;
+  tb: Record<string, TeamBase>;
+  ts: Record<string, TeamState>;
+  onClick: (f: CupFixture) => void;
+}) {
+  const t1 = tb[tie.team1Id];
+  const t2 = tb[tie.team2Id];
+  const w1 = tie.winnerId === tie.team1Id;
+  const w2 = tie.winnerId === tie.team2Id;
+  const hasResult = tie.agg1 !== undefined;
+
+  // For click: prefer leg2 if exists and has result, else leg1
+  const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
 
   return (
     <button
-      onClick={onClick}
-      className="w-40 sm:w-48 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer text-left"
+      onClick={() => clickTarget && onClick(clickTarget)}
+      className="w-44 sm:w-52 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer text-left"
     >
-      <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${hw ? 'bg-green-900/20' : ''} rounded-t-lg`}>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ht?.color ?? '#555' }} />
-        <TeamTag teamId={f.homeTeamId} ts={ts} />
-        <span className={`flex-1 truncate ${hw ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {ht ? getTeamName(f.homeTeamId, tb) : '待定'}
+      {/* Team 1 */}
+      <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t1?.color ?? '#555' }} />
+        <TeamTag teamId={tie.team1Id} ts={ts} />
+        <span className={`flex-1 truncate ${w1 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+          {t1 ? getTeamName(tie.team1Id, tb) : '待定'}
         </span>
-        {has && <span className={`font-bold tabular-nums ${hw ? 'text-green-400' : 'text-slate-500'}`}>{f.result!.home}</span>}
+        {hasResult && (
+          <span className={`font-bold tabular-nums ${w1 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg1}</span>
+        )}
       </div>
+
       <div className="border-t border-slate-700/60" />
-      <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${aw ? 'bg-green-900/20' : ''} rounded-b-lg`}>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: at?.color ?? '#555' }} />
-        <TeamTag teamId={f.awayTeamId} ts={ts} />
-        <span className={`flex-1 truncate ${aw ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {at ? getTeamName(f.awayTeamId, tb) : '待定'}
+
+      {/* Team 2 */}
+      <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w2 ? 'bg-green-900/20' : ''} ${mr.twoLegged ? '' : 'rounded-b-lg'}`}>
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t2?.color ?? '#555' }} />
+        <TeamTag teamId={tie.team2Id} ts={ts} />
+        <span className={`flex-1 truncate ${w2 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+          {t2 ? getTeamName(tie.team2Id, tb) : '待定'}
         </span>
-        {has && <span className={`font-bold tabular-nums ${aw ? 'text-green-400' : 'text-slate-500'}`}>{f.result!.away}</span>}
+        {hasResult && (
+          <span className={`font-bold tabular-nums ${w2 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg2}</span>
+        )}
       </div>
-      {has && (f.result!.penalties || f.result!.extraTime) && (
+
+      {/* Two-legged detail line */}
+      {mr.twoLegged && (
+        <div className="px-2 py-1 border-t border-slate-700/40 text-[9px] text-slate-500 rounded-b-lg bg-slate-700/10">
+          {tie.leg1?.result && tie.leg2?.result ? (
+            <span>
+              首回合 {tie.leg1.result.home}-{tie.leg1.result.away}
+              <span className="mx-1 text-slate-700">|</span>
+              次回合 {tie.leg2.result.home}-{tie.leg2.result.away}
+              {tie.agg1 === tie.agg2 && tie.awayGoals1 !== undefined && tie.awayGoals2 !== undefined && (
+                <span className="ml-1 text-amber-500">
+                  {tie.awayGoals1 !== tie.awayGoals2 ? '(客场进球)' : ''}
+                </span>
+              )}
+              {tie.leg2.result.penalties && (
+                <span className="ml-1 text-amber-400">点球 {tie.leg2.result.penHome}-{tie.leg2.result.penAway}</span>
+              )}
+            </span>
+          ) : tie.leg1?.result ? (
+            <span>
+              首回合 {tie.leg1.result.home}-{tie.leg1.result.away}
+              <span className="mx-1 text-slate-700">|</span>
+              <span className="text-slate-600">次回合待赛</span>
+            </span>
+          ) : (
+            <span className="text-slate-600">两回合待赛</span>
+          )}
+        </div>
+      )}
+
+      {/* Single-leg ET/Pen indicator */}
+      {!mr.twoLegged && tie.leg1?.result && (tie.leg1.result.penalties || tie.leg1.result.extraTime) && (
         <div className="text-center text-[9px] text-amber-400 pb-1">
-          {f.result!.penalties ? `点球 ${f.result!.penHome}-${f.result!.penAway}` : '加时'}
+          {tie.leg1.result.penalties ? `点球 ${tie.leg1.result.penHome}-${tie.leg1.result.penAway}` : '加时'}
         </div>
       )}
     </button>

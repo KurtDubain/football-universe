@@ -127,6 +127,16 @@ src/
 
 ## Changelog
 
+### v0.8.2
+- **Super Cup two-legged ties merged** into single bracket columns
+  - QF-L1 + QF-L2 → one "八强(两回合)" column showing aggregate scores
+  - Each cell shows: team names, aggregate total, first/second leg scores below
+  - Away goals rule indicator when aggregate is tied
+  - Penalty result shown when applicable
+  - "首回合 2-1 | 次回合待赛" for in-progress ties
+- League Cup and World Cup brackets unchanged (single-leg, works correctly)
+- Dashboard result cards: round labels translated (QF→八强, SF-L1→四强首回合, etc.)
+
 ### v0.8.1
 - Cup pages: **qualification rules** banner for each cup type
   - 联赛杯: "全部32支球队, 单场淘汰制"
