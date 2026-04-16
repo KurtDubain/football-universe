@@ -41,7 +41,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="text-center py-4 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30">
+      <div className="text-center py-4 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-lg border border-amber-700/30">
         <h2 className="text-2xl font-black text-slate-100">第{seasonNumber}赛季 回顾</h2>
         <p className="text-xs text-slate-500 mt-1">{totalMatches}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
       </div>

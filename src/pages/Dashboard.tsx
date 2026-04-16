@@ -541,7 +541,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
         const favorites = l1Teams.map(s => ({ id: s.id, ovr: world.teamBases[s.id]?.overall ?? 0 })).sort((a, b) => b.ovr - a.ovr).slice(0, 3);
 
         return (
-          <div className="bg-gradient-to-r from-blue-900/20 to-slate-800 rounded-xl border border-blue-800/30 p-3 sm:p-4">
+          <div className="bg-gradient-to-r from-blue-900/20 to-slate-800 rounded-lg border border-blue-800/30 p-3 sm:p-4">
             <h3 className="text-xs font-semibold text-blue-300 mb-2">赛季前瞻 — 第{world.seasonState.seasonNumber}赛季</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div>
@@ -724,108 +724,6 @@ function FixtureCard({
         <span className="text-green-400">{pred.homeWinPct}%</span>
         <span className="truncate px-1">{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
-      </div>
-    </div>
-  );
-}
-
-function ResultCard({
-  result,
-  world,
-  onClick,
-}: {
-  result: MatchResult;
-  world: GameWorld;
-  onClick: () => void;
-}) {
-  const homeTeam = world.teamBases[result.homeTeamId];
-  const awayTeam = world.teamBases[result.awayTeamId];
-  const homeWon = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
-  const awayWon = result.awayGoals + (result.etAwayGoals ?? 0) > result.homeGoals + (result.etHomeGoals ?? 0);
-
-  const homeState = world.teamStates[result.homeTeamId];
-  const rStandings = homeState?.leagueLevel === 1 ? world.league1Standings : homeState?.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
-  const tags = getMatchTags(result.competitionType, result.roundLabel, result.homeTeamId, result.awayTeamId, rStandings, rStandings.length);
-  const isFinal = tags.some(t => t.label === '决赛');
-
-  return (
-    <div
-      onClick={onClick}
-      className={`rounded-lg border p-3 hover:border-slate-500 transition-all cursor-pointer group animate-slide-up ${
-        isFinal ? 'bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 border-amber-600/40' : 'bg-slate-800 border-slate-700'
-      }`}
-    >
-      {/* Tags */}
-      {tags.length > 0 && (
-        <div className="flex gap-1 mb-1.5">
-          {tags.map((t, i) => (
-            <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
-          ))}
-          {isFinal && <span className="text-[9px] text-amber-400 animate-sparkle">✦</span>}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        {/* Home */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: homeTeam?.color ?? '#64748b' }}
-          />
-          <span
-            className={`text-sm truncate group-hover:text-blue-400 transition-colors ${
-              homeWon ? 'text-green-400 font-bold' : 'text-slate-200'
-            }`}
-          >
-            {getTeamName(result.homeTeamId, world.teamBases)}
-          </span>
-        </div>
-
-        {/* Score */}
-        <div className="flex items-center gap-1 px-2 shrink-0">
-          <span
-            className={`text-lg font-bold ${
-              homeWon ? 'text-green-400' : awayWon ? 'text-red-400' : 'text-slate-300'
-            }`}
-          >
-            {result.homeGoals}
-          </span>
-          <span className="text-slate-600 text-xs">:</span>
-          <span
-            className={`text-lg font-bold ${
-              awayWon ? 'text-green-400' : homeWon ? 'text-red-400' : 'text-slate-300'
-            }`}
-          >
-            {result.awayGoals}
-          </span>
-          {result.extraTime && (
-            <span className="text-[10px] text-amber-400 ml-0.5">
-              {result.penalties
-                ? `P${result.penaltyHome}-${result.penaltyAway}`
-                : '加时'}
-            </span>
-          )}
-        </div>
-
-        {/* Away */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span
-            className={`text-sm truncate text-right group-hover:text-blue-400 transition-colors ${
-              awayWon ? 'text-green-400 font-bold' : 'text-slate-200'
-            }`}
-          >
-            {getTeamName(result.awayTeamId, world.teamBases)}
-          </span>
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: awayTeam?.color ?? '#64748b' }}
-          />
-        </div>
-      </div>
-
-      {/* Competition label */}
-      <div className="text-[10px] text-slate-500 mt-1.5 text-center">
-        {result.competitionName} · {cnLabel(result.roundLabel)}
       </div>
     </div>
   );

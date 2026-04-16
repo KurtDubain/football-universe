@@ -293,29 +293,30 @@ function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Reco
 
   const merged = buildMergedRounds(rounds);
 
+  // If we have enough rounds for a symmetric bracket (QF+SF+Final or R16+QF+SF+Final), render it
+  // Otherwise fall back to linear layout
+  const hasFinal = merged.some(r => r.label.includes('决赛'));
+  const roundCount = merged.length;
+
+  if (hasFinal && roundCount >= 3) {
+    return <SymmetricBracket merged={merged} tb={tb} ts={ts} onClick={onClick} />;
+  }
+
+  // Linear fallback for simple brackets (e.g., early league cup rounds)
   return (
     <div className="overflow-x-auto pb-4">
-      <div className="flex gap-3 sm:gap-5 min-w-max items-start">
+      <div className="flex gap-3 sm:gap-4 min-w-max items-start">
         {merged.map((mr, ri) => {
           const n = mr.ties.length;
           const cellGap = n <= 1 ? 0 : n <= 2 ? 32 : n <= 4 ? 12 : n <= 8 ? 4 : 2;
-
           return (
             <div key={ri} className="flex flex-col">
-              <div className="text-[10px] sm:text-xs font-semibold text-slate-400 text-center mb-2 px-2 py-0.5 bg-slate-800 rounded border border-slate-700/50 whitespace-nowrap self-center">
-                {mr.label}
-                {mr.twoLegged && <span className="text-slate-600 ml-1">(两回合)</span>}
-                {mr.completed && <span className="text-green-400 ml-1">&#10003;</span>}
-              </div>
+              <RoundHeader mr={mr} />
               <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
                 {mr.ties.map((tie, ti) => (
                   <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} />
                 ))}
-                {mr.ties.length === 0 && (
-                  <div className="w-44 sm:w-52 h-[52px] rounded-lg border border-dashed border-slate-700/50 flex items-center justify-center">
-                    <span className="text-[10px] text-slate-600">待定</span>
-                  </div>
-                )}
+                <EmptySlot show={mr.ties.length === 0} />
               </div>
             </div>
           );
@@ -325,12 +326,117 @@ function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Reco
   );
 }
 
-function TieCell({ tie, mr, tb, ts, onClick }: {
+/**
+ * Symmetric bracket — left half flows right, right half flows left, final in center.
+ * Layout: [...leftRounds] [Final] [...rightRounds(reversed)]
+ */
+function SymmetricBracket({ merged, tb, ts, onClick }: {
+  merged: MergedRound[];
+  tb: Record<string, TeamBase>;
+  ts: Record<string, TeamState>;
+  onClick: (f: CupFixture) => void;
+}) {
+  const finalIdx = merged.findIndex(r => r.label.includes('决赛'));
+  const finalRound = merged[finalIdx];
+  const preRounds = merged.slice(0, finalIdx); // e.g., [R16, QF, SF] or [QF-merged, SF-merged]
+
+  // Split pre-final rounds into upper half and lower half
+  // Upper = first half of each round's ties, Lower = second half
+  const leftRounds = preRounds.map(r => ({
+    ...r,
+    ties: r.ties.slice(0, Math.ceil(r.ties.length / 2)),
+  }));
+  const rightRounds = preRounds.map(r => ({
+    ...r,
+    ties: r.ties.slice(Math.ceil(r.ties.length / 2)),
+  }));
+
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="flex items-center min-w-max gap-1">
+        {/* Left half — flows right toward center */}
+        {leftRounds.map((mr, ri) => {
+          const n = mr.ties.length;
+          const cellGap = n <= 1 ? 0 : n <= 2 ? 24 : n <= 4 ? 8 : 2;
+          return (
+            <div key={`L${ri}`} className="flex flex-col">
+              <RoundHeader mr={mr} />
+              <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
+                {mr.ties.map((tie, ti) => (
+                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} compact />
+                ))}
+                <EmptySlot show={mr.ties.length === 0} />
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Connector arrow left */}
+        <div className="text-slate-700 px-0.5 text-xs self-center">›</div>
+
+        {/* FINAL — center, highlighted */}
+        <div className="flex flex-col items-center mx-1">
+          <div className="text-xs font-bold text-amber-400 text-center mb-2 px-3 py-1 bg-amber-900/20 rounded-lg border border-amber-700/30">
+            🏆 决赛
+            {finalRound?.completed && <span className="text-green-400 ml-1">✓</span>}
+          </div>
+          {finalRound?.ties.map((tie, ti) => (
+            <TieCell key={ti} tie={tie} mr={finalRound} tb={tb} ts={ts} onClick={onClick} highlight />
+          ))}
+          <EmptySlot show={!finalRound || finalRound.ties.length === 0} />
+        </div>
+
+        {/* Connector arrow right */}
+        <div className="text-slate-700 px-0.5 text-xs self-center">‹</div>
+
+        {/* Right half — flows left toward center (reversed order) */}
+        {[...rightRounds].reverse().map((mr, ri) => {
+          const n = mr.ties.length;
+          const cellGap = n <= 1 ? 0 : n <= 2 ? 24 : n <= 4 ? 8 : 2;
+          return (
+            <div key={`R${ri}`} className="flex flex-col">
+              <RoundHeader mr={mr} />
+              <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
+                {mr.ties.map((tie, ti) => (
+                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} compact />
+                ))}
+                <EmptySlot show={mr.ties.length === 0} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RoundHeader({ mr }: { mr: MergedRound }) {
+  return (
+    <div className="text-[10px] sm:text-xs font-semibold text-slate-400 text-center mb-2 px-2 py-0.5 bg-slate-800 rounded border border-slate-700/50 whitespace-nowrap self-center">
+      {mr.label}
+      {mr.twoLegged && <span className="text-slate-600 ml-1">(两回合)</span>}
+      {mr.completed && <span className="text-green-400 ml-1">✓</span>}
+    </div>
+  );
+}
+
+function EmptySlot({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="w-36 sm:w-40 h-[44px] rounded-lg border border-dashed border-slate-700/40 flex items-center justify-center">
+      <span className="text-[10px] text-slate-600">待定</span>
+    </div>
+  );
+}
+
+function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
   tie: MergedTie;
   mr: MergedRound;
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
   onClick: (f: CupFixture) => void;
+  compact?: boolean;
+  highlight?: boolean;
 }) {
   const t1 = tb[tie.team1Id];
   const t2 = tb[tie.team2Id];
@@ -340,14 +446,17 @@ function TieCell({ tie, mr, tb, ts, onClick }: {
   const derbyName = isDerby(tie.team1Id, tie.team2Id) ? getDerbyName(tie.team1Id, tie.team2Id) : null;
 
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
+  const cellW = compact ? 'w-36 sm:w-40' : highlight ? 'w-44 sm:w-52' : 'w-40 sm:w-48';
 
   return (
     <button
       onClick={() => clickTarget && onClick(clickTarget)}
-      className={`w-44 sm:w-52 bg-slate-800 rounded-lg border hover:border-slate-500 transition-colors cursor-pointer text-left ${derbyName ? 'border-orange-600/40' : 'border-slate-700'}`}
+      className={`${cellW} bg-slate-800 rounded-lg border hover:border-slate-500 transition-all cursor-pointer text-left ${
+        highlight ? 'border-amber-600/40 shadow-lg shadow-amber-900/10' : derbyName ? 'border-orange-600/40' : 'border-slate-700'
+      }`}
     >
       {derbyName && (
-        <div className="text-[9px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
+        <div className="text-[8px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
       )}
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
