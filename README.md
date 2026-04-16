@@ -127,6 +127,22 @@ src/
 
 ## Changelog
 
+### v1.0.0
+- **Match tags system**: special labels on key fixtures
+  - 决赛 (gold, glowing border)
+  - 四强 / 八强 (purple / blue)
+  - 保级战 (red, glowing)
+  - 冠军战 (gold, top 2 teams late in season)
+  - 强弱对话 (top 3 vs bottom 3)
+  - 生死战 (final group stage round)
+- **Celebration animations** after big moments:
+  - 🏆 Trophy celebration: bouncing trophy + confetti shower on cup finals
+  - 🎊 Confetti rain on season end and relegation playoffs
+  - Random shapes (■●▲★◆♦✦) in team colors falling with rotation
+  - CSS animations: confetti-fall, sparkle, glow-pulse, trophy-bounce, slide-up
+- **Result cards**: finals highlighted with gold gradient + sparkle ✦
+- **Fixture cards**: glowing amber border on key matches
+
 ### v0.9.1
 - **Bug fix: relegation playoff matchday empty** — playoff fixtures now written to
   calendar window before simulation, so Dashboard shows the matchups

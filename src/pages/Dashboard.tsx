@@ -6,6 +6,7 @@ import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
+import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -38,11 +39,18 @@ export default function Dashboard() {
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
+  const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
 
-  // Auto-switch to results tab after advancing
+  // Auto-switch to results tab + trigger celebration after advancing
   useEffect(() => {
     if (lastResults.length > 0 && prevResultsLen.current === 0) {
       setActiveTab('results');
+      // Check if we should celebrate
+      const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
+      if (prevWindow) {
+        const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
+        if (celeb) setCelebrationType(celeb);
+      }
     }
     prevResultsLen.current = lastResults.length;
   }, [lastResults.length]);
@@ -187,6 +195,13 @@ export default function Dashboard() {
           <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
         )}
       </div>
+
+      {/* ═══════ Celebration ═══════ */}
+      <Celebration
+        active={celebrationType !== null}
+        type={celebrationType ?? 'confetti'}
+        duration={celebrationType === 'trophy' ? 5000 : 3500}
+      />
 
       {/* ═══════ Match Detail Modal ═══════ */}
       <MatchDetailModal
@@ -600,11 +615,29 @@ function FixtureCard({
 
   const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
 
+  // Get match tags
+  const standings = homeState.leagueLevel === 1 ? world.league1Standings : homeState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
+  const tags = getMatchTags(fixture.competitionType, fixture.roundLabel, fixture.homeTeamId, fixture.awayTeamId, standings, standings.length);
+
+  const hasGlow = tags.some(t => t.glow);
+
   return (
     <div
       onClick={onClick}
-      className="bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
+      className={`bg-slate-800 rounded-lg border p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group ${
+        hasGlow ? 'border-amber-600/50 animate-glow-pulse' : 'border-slate-700'
+      }`}
+      style={hasGlow ? { color: '#f59e0b' } : undefined}
     >
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex gap-1 mb-2">
+          {tags.map((t, i) => (
+            <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
         {/* Home */}
         <div className="flex-1 min-w-0">
@@ -663,14 +696,29 @@ function ResultCard({
 }) {
   const homeTeam = world.teamBases[result.homeTeamId];
   const awayTeam = world.teamBases[result.awayTeamId];
-  const homeWon = result.homeGoals > result.awayGoals;
-  const awayWon = result.awayGoals > result.homeGoals;
+  const homeWon = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
+  const awayWon = result.awayGoals + (result.etAwayGoals ?? 0) > result.homeGoals + (result.etHomeGoals ?? 0);
+
+  const tags = getMatchTags(result.competitionType, result.roundLabel, result.homeTeamId, result.awayTeamId);
+  const isFinal = tags.some(t => t.label === '决赛');
 
   return (
     <div
       onClick={onClick}
-      className="bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group"
+      className={`rounded-lg border p-3 hover:border-slate-500 transition-all cursor-pointer group animate-slide-up ${
+        isFinal ? 'bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 border-amber-600/40' : 'bg-slate-800 border-slate-700'
+      }`}
     >
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex gap-1 mb-1.5">
+          {tags.map((t, i) => (
+            <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
+          ))}
+          {isFinal && <span className="text-[9px] text-amber-400 animate-sparkle">✦</span>}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         {/* Home */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
