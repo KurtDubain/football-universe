@@ -1204,24 +1204,32 @@ export function executeCurrentWindow(world: GameWorld): {
     completed: isSeasonDone,
   };
 
+  let updatedWorld: GameWorld = {
+    ...world,
+    seasonState,
+    teamStates,
+    league1Standings,
+    league2Standings,
+    league3Standings,
+    leagueCup,
+    superCup,
+    worldCup,
+    coachStates,
+    coachCareers,
+    coachChangesThisSeason: coachChanges,
+    playerStats: updatedPlayerStats,
+    newsLog: [...world.newsLog, ...news],
+    rngState: rng.getState(),
+  };
+
+  // If the season (including world cup) just ended, auto-start next season
+  if (isSeasonDone && seasonState.worldCupPhase) {
+    // World cup year finished — start next season
+    updatedWorld = initializeNewSeason(updatedWorld);
+  }
+
   return {
-    world: {
-      ...world,
-      seasonState,
-      teamStates,
-      league1Standings,
-      league2Standings,
-      league3Standings,
-      leagueCup,
-      superCup,
-      worldCup,
-      coachStates,
-      coachCareers,
-      coachChangesThisSeason: coachChanges,
-      playerStats: updatedPlayerStats,
-      newsLog: [...world.newsLog, ...news],
-      rngState: rng.getState(),
-    },
+    world: updatedWorld,
     results,
     news,
   };
@@ -1337,6 +1345,51 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       title: `${world.teamBases[superCupWinner]?.name} 夺得超级杯冠军!`,
       description: `${world.teamBases[superCupWinner]?.name} 赢得超级杯冠军荣耀。`,
     });
+  }
+
+  // ── Multi-crown detection ──
+  const allWinners = [league1Champion, leagueCupWinner, superCupWinner, worldCupWinner].filter(Boolean);
+  const crownCounts = new Map<string, number>();
+  for (const w of allWinners) { if (w) crownCounts.set(w, (crownCounts.get(w) ?? 0) + 1); }
+  for (const [teamId, count] of crownCounts) {
+    if (count >= 4) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `四冠王！${world.teamBases[teamId]?.name} 包揽所有冠军！`,
+        description: `${world.teamBases[teamId]?.name}创造历史，在一个赛季内夺得全部冠军头衔！`,
+      });
+    } else if (count >= 3) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `三冠王！${world.teamBases[teamId]?.name} 创造伟业！`,
+        description: `${world.teamBases[teamId]?.name}一个赛季夺得三座冠军奖杯，成就三冠王荣耀！`,
+      });
+    } else if (count >= 2) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `双冠王！${world.teamBases[teamId]?.name}`,
+        description: `${world.teamBases[teamId]?.name}本赛季荣获两座冠军奖杯，成就双冠王！`,
+      });
+    }
+  }
+
+  // ── Underdog achievements ──
+  // Cup finalist from lower leagues
+  const cupFinalists = [leagueCupWinner, superCupWinner].filter(Boolean);
+  for (const fId of cupFinalists) {
+    if (!fId) continue;
+    const teamState = world.teamStates[fId];
+    if (teamState && teamState.leagueLevel >= 2) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `underdog-${fId}`),
+        seasonNumber, windowIndex, type: 'upset',
+        title: `黑马奇迹！${world.teamBases[fId]?.name} 以下克上夺冠！`,
+        description: `来自${teamState.leagueLevel === 2 ? '甲级' : '乙级'}联赛的${world.teamBases[fId]?.name}在杯赛中上演了不可思议的夺冠之旅！`,
+      });
+    }
   }
 
   // ── Season summary news ──

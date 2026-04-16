@@ -127,6 +127,20 @@ src/
 
 ## Changelog
 
+### v1.1.0
+- **Game is now infinite** — world cup year no longer ends the game;
+  next season auto-starts after world cup completes
+- **Multi-crown detection**: 双冠王/三冠王/四冠王 news at season end
+- **Underdog achievement news**: lower-league teams winning cups get special celebration
+- **Underdog boost** in match simulation — weaker teams get small attack/midfield
+  bonus when overall gap > 8 (makes upsets more possible without being absurd)
+- **Cup win morale bonus**: extra morale for cup wins, big bonus for finals
+- **Enriched Dashboard overview tab**:
+  - Season stats cards: progress %, cup status, top scorer, coach changes
+  - World cup status bar when applicable
+  - League standings remain below
+- **Balance**: cup randomness 0.22→0.25 for more drama
+
 ### v1.0.0
 - **Match tags system**: special labels on key fixtures
   - 决赛 (gold, glowing border)

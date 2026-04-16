@@ -238,7 +238,20 @@ export function simulateMatch(
   const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, true);
   const awayAdj = calculateAdjustedStrengths(awayTeam, awayState, awayCoach, false);
 
-  // 2. Midfield dominance (0 = away dominant, 1 = home dominant)
+  // 2. Underdog boost — weaker team gets a small boost to enable upsets
+  const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);
+  if (overallGap > 8) {
+    const boost = BALANCE.UNDERDOG_BOOST * overallGap;
+    if (homeTeam.overall < awayTeam.overall) {
+      homeAdj.attack += boost;
+      homeAdj.midfield += boost * 0.5;
+    } else {
+      awayAdj.attack += boost;
+      awayAdj.midfield += boost * 0.5;
+    }
+  }
+
+  // 3. Midfield dominance (0 = away dominant, 1 = home dominant)
   const midfieldDominance = homeAdj.midfield / (homeAdj.midfield + awayAdj.midfield);
 
   // 3. Expected goals
