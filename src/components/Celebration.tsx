@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { isDerby, getDerbyName } from '../config/derbies';
 
 interface CelebrationProps {
   active: boolean;
@@ -95,6 +96,12 @@ export function getMatchTags(
 ): MatchTag[] {
   const tags: MatchTag[] = [];
   const rl = roundLabel.toLowerCase();
+
+  // Derby check
+  if (isDerby(homeTeamId, awayTeamId)) {
+    const derbyName = getDerbyName(homeTeamId, awayTeamId);
+    tags.push({ label: derbyName ?? '德比战', color: 'bg-orange-600 text-white', glow: true });
+  }
 
   // Cup finals
   if (rl.includes('final') || rl.includes('决赛') || roundLabel === 'Final') {

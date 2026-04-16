@@ -20,6 +20,8 @@ import { applyMatchStateChanges, applyRestRecovery, applySeasonEndReset } from '
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
 import { generateAllSquads } from '../players/generator';
 import { createInitialPlayerStats, updatePlayerStatsFromResults } from '../players/stats';
+import { maybeGenerateEvent, applyEventEffect } from '../events';
+import { checkAchievements, Achievement } from '../achievements';
 import { buildSeasonCalendar, appendWorldCupWindows, CalendarBuildInput } from './calendar-builder';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
@@ -57,6 +59,8 @@ export interface GameWorld {
   coachChangesThisSeason: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];
   squads: Record<string, Player[]>;
   playerStats: Record<string, PlayerSeasonStats>;
+  activeEvents: import('../events').SeasonEvent[];
+  achievements: Achievement[];
   newsLog: NewsItem[];
   seed: number;
   rngState: number;
@@ -228,6 +232,8 @@ export function initializeGameWorld(seed: number): GameWorld {
     coachChangesThisSeason: [],
     squads,
     playerStats,
+    activeEvents: [],
+    achievements: [],
     newsLog: [],
     seed,
     rngState: rng.getState(),
@@ -1181,6 +1187,55 @@ export function executeCurrentWindow(world: GameWorld): {
     }
   }
 
+  // ── Random season events ─────────────────────────────────────
+  let activeEvents = [...(world.activeEvents ?? [])];
+  let teamBasesUpdated = { ...world.teamBases };
+
+  // Expire old events
+  const expired = activeEvents.filter(e => e.duration > 0 && windowIndex - e.windowApplied >= e.duration);
+  for (const e of expired) {
+    teamBasesUpdated = applyEventEffect(teamBasesUpdated, e, true); // reverse
+  }
+  activeEvents = activeEvents.filter(e => !expired.includes(e));
+
+  // ── Midseason milestone check (~50% progress) ───────────────
+  const totalWindows = seasonState.calendar.length;
+  const midPoint = Math.floor(totalWindows / 2);
+  if (windowIndex === midPoint && window.type === 'league') {
+    const leader1 = league1Standings[0];
+    const leader2 = league2Standings[0];
+    const bottom1 = league1Standings[league1Standings.length - 1];
+    if (leader1) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, 'milestone-mid'),
+        seasonNumber, windowIndex, type: 'streak',
+        title: '赛季半程：联赛格局初定',
+        description: `顶级联赛半程领头羊: ${world.teamBases[leader1.teamId]?.name}(${leader1.points}分)。${bottom1 ? `保级区: ${world.teamBases[bottom1.teamId]?.name}(${bottom1.points}分)` : ''}`,
+      });
+    }
+  }
+
+  // Maybe generate new event
+  const newEvent = maybeGenerateEvent(rng, teamBasesUpdated, seasonNumber, windowIndex, activeEvents);
+  if (newEvent) {
+    activeEvents.push(newEvent);
+    if (newEvent.effect.field === 'morale') {
+      // Apply morale directly to teamState
+      const ts = teamStates[newEvent.teamId];
+      if (ts) {
+        teamStates[newEvent.teamId] = { ...ts, morale: Math.max(10, Math.min(100, ts.morale + newEvent.effect.delta)) };
+      }
+    } else {
+      teamBasesUpdated = applyEventEffect(teamBasesUpdated, newEvent);
+    }
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `event-${newEvent.type}`),
+      seasonNumber, windowIndex, type: 'match_result',
+      title: newEvent.title,
+      description: newEvent.description,
+    });
+  }
+
   // ── Update player stats ──────────────────────────────────────
   const updatedPlayerStats = results.length > 0
     ? updatePlayerStatsFromResults(world.playerStats, results, world.squads)
@@ -1207,6 +1262,7 @@ export function executeCurrentWindow(world: GameWorld): {
   let updatedWorld: GameWorld = {
     ...world,
     seasonState,
+    teamBases: teamBasesUpdated,
     teamStates,
     league1Standings,
     league2Standings,
@@ -1218,6 +1274,7 @@ export function executeCurrentWindow(world: GameWorld): {
     coachCareers,
     coachChangesThisSeason: coachChanges,
     playerStats: updatedPlayerStats,
+    activeEvents,
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),
   };
@@ -1523,6 +1580,26 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     teamSeasonRecords[teamId] = [...(teamSeasonRecords[teamId] ?? []), record];
   }
 
+  // ── Check achievements ──────────────────────────────────────
+  let achievements = [...(world.achievements ?? [])];
+  for (const teamId of getAllTeamIds(world.teamStates)) {
+    const records = teamSeasonRecords[teamId] ?? [];
+    const currentRecord = records[records.length - 1];
+    if (!currentRecord) continue;
+    const newAch = checkAchievements(teamId, world.teamBases[teamId]?.name ?? teamId, seasonNumber, currentRecord, records, achievements);
+    if (newAch.length > 0) {
+      achievements = [...achievements, ...newAch];
+      for (const a of newAch) {
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `ach-${a.id}`),
+          seasonNumber, windowIndex, type: 'trophy',
+          title: `成就解锁: ${a.title}`,
+          description: a.description,
+        });
+      }
+    }
+  }
+
   // Apply season-end reset to team states
   let teamStates = { ...world.teamStates };
   for (const teamId of getAllTeamIds(teamStates)) {
@@ -1620,6 +1697,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     coachTrophies,
     teamSeasonRecords,
     honorHistory,
+    achievements,
+    activeEvents: [], // clear events for new season
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),
   };

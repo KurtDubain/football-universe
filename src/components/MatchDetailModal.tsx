@@ -440,6 +440,29 @@ function PostMatchView({
         </div>
       </div>
 
+      {/* ──── Half-time score ──── */}
+      {(() => {
+        const firstHalfGoals = goalEvents.filter(e => e.minute <= 45);
+        const htHome = firstHalfGoals.filter(e => e.teamId === fixture.homeTeamId).length;
+        const htAway = firstHalfGoals.filter(e => e.teamId === fixture.awayTeamId).length;
+        return (
+          <div className="px-6 py-2 border-b border-slate-700/50 flex items-center justify-center gap-4 text-xs">
+            <span className="text-slate-500">上半场</span>
+            <span className="font-bold text-slate-300">{htHome} - {htAway}</span>
+            <span className="text-slate-700">|</span>
+            <span className="text-slate-500">下半场</span>
+            <span className="font-bold text-slate-300">{result.homeGoals - htHome} - {result.awayGoals - htAway}</span>
+            {result.extraTime && (
+              <>
+                <span className="text-slate-700">|</span>
+                <span className="text-slate-500">加时</span>
+                <span className="font-bold text-amber-400">{result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ──── Goal timeline ──── */}
       {goalEvents.length > 0 && (
         <div className="px-6 py-4 border-b border-slate-700/50">

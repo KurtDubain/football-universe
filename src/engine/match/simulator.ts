@@ -8,6 +8,7 @@ import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
 import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
+import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents } from './events';
@@ -249,6 +250,14 @@ export function simulateMatch(
       awayAdj.attack += boost;
       awayAdj.midfield += boost * 0.5;
     }
+  }
+
+  // 2b. Derby boost — derbies are more intense and unpredictable
+  if (isDerby(homeTeam.id, awayTeam.id)) {
+    const derbyBoost = 3;
+    homeAdj.attack += derbyBoost;
+    awayAdj.attack += derbyBoost;
+    // Derbies have extra randomness added in expected goals via higher noise
   }
 
   // 3. Midfield dominance (0 = away dominant, 1 = home dominant)

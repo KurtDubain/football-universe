@@ -127,6 +127,21 @@ src/
 
 ## Changelog
 
+### v1.4.0
+- **Derby system**: 11 classic rivalries (国家德比/米兰德比/北伦敦德比/京沪大战 etc.)
+  - Derby matches get attack +3 for both teams, more unpredictable
+  - Orange glowing "德比战" tag with specific derby name
+- **Random season events**: ~15% chance per window
+  - 核心伤病 (overall -3, 5 windows), 青训新星 (attack +4 permanent)
+  - 财团注资 (depth +5), 球迷风波 (morale -10), 状态回暖 (morale +12)
+  - Effects expire after duration, news pushed when triggered
+- **Achievement system**: unlockable badges at season end
+  - 不败赛季, 主场全胜, 百分赛季, 连级跳
+  - Shown in season-end news as "成就解锁"
+- **Half-time score**: MatchDetailModal shows 上半场/下半场/加时 score breakdown
+- **Match event context**: goals now labeled [扳平比分！]/[反超！]/[绝杀！]/[帽子戏法！]
+- **Midseason milestone**: news at ~50% progress with league leader + relegation zone status
+
 ### v1.3.0
 - **Fast forward**: dropdown menu on advance button — "快进5步"/"快进10步"/"快进到杯赛"/"快进到赛季末"
 - **Favorite team**: select at game start, shown in sidebar with morale/momentum, team color dot
