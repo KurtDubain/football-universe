@@ -8,6 +8,7 @@ import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
 import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
 import ResultAnimation from '../components/ResultAnimation';
+import MatchLive from '../components/MatchLive';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -41,16 +42,26 @@ export default function Dashboard() {
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
   const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
+  const [liveResult, setLiveResult] = useState<MatchResult | null>(null);
 
-  // Auto-switch to results tab + trigger celebration after advancing
+  // Auto-switch to results tab + trigger live/celebration after advancing
   useEffect(() => {
     if (lastResults.length > 0 && prevResultsLen.current === 0) {
-      setActiveTab('results');
-      // Check if we should celebrate
+      // Check if there's a final result — trigger live view
+      const finalResult = lastResults.find(r =>
+        r.roundLabel === 'Final' || r.roundLabel === '决赛'
+      );
+      if (finalResult) {
+        setLiveResult(finalResult);
+      } else {
+        setActiveTab('results');
+      }
+
+      // Check celebration
       const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
       if (prevWindow) {
         const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
-        if (celeb) setCelebrationType(celeb);
+        if (celeb && !finalResult) setCelebrationType(celeb);
       }
     }
     prevResultsLen.current = lastResults.length;
@@ -196,6 +207,19 @@ export default function Dashboard() {
           <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
         )}
       </div>
+
+      {/* ═══════ Live Match View ═══════ */}
+      {liveResult && (
+        <MatchLive
+          result={liveResult}
+          teamBases={world.teamBases as Record<string, any>}
+          onClose={() => {
+            setLiveResult(null);
+            setActiveTab('results');
+            setCelebrationType('trophy');
+          }}
+        />
+      )}
 
       {/* ═══════ Celebration ═══════ */}
       <Celebration
