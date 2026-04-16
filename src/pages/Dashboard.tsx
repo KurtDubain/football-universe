@@ -680,61 +680,49 @@ function FixtureCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-slate-800 rounded-lg border p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group ${
+      className={`bg-slate-800 rounded-lg border p-2 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group hover-lift ${
         hasGlow ? 'border-amber-600/50 animate-glow-pulse' : 'border-slate-700'
       }`}
       style={hasGlow ? { color: '#f59e0b' } : undefined}
     >
       {/* Tags */}
       {tags.length > 0 && (
-        <div className="flex gap-1 mb-2">
+        <div className="flex gap-1 mb-1">
           {tags.map((t, i) => (
-            <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
+            <span key={i} className={`text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
           ))}
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center mb-1.5">
         {/* Home */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: homeTeam.color }}
-            />
-            <span className="text-sm font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
-              {homeTeam.name}
-            </span>
-            <span className="text-[10px] text-slate-500 font-mono">{homeTeam.overall}</span>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam.color }} />
+            <span className="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-400">{homeTeam.name}</span>
+            <span className="text-[9px] text-slate-500">{homeTeam.overall}</span>
           </div>
         </div>
-
-        <span className="text-xs font-bold text-slate-600 px-2 shrink-0">VS</span>
-
+        <span className="text-[10px] font-bold text-slate-600 px-1.5 shrink-0">VS</span>
         {/* Away */}
         <div className="flex-1 min-w-0 text-right">
-          <div className="flex items-center gap-1.5 justify-end">
-            <span className="text-[10px] text-slate-500 font-mono">{awayTeam.overall}</span>
-            <span className="text-sm font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors">
-              {awayTeam.name}
-            </span>
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: awayTeam.color }}
-            />
+          <div className="flex items-center gap-1 justify-end">
+            <span className="text-[9px] text-slate-500">{awayTeam.overall}</span>
+            <span className="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-400">{awayTeam.name}</span>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam.color }} />
           </div>
         </div>
       </div>
 
       {/* Mini probability bar */}
-      <div className="flex h-1 rounded-full overflow-hidden bg-slate-700">
+      <div className="flex h-0.5 rounded-full overflow-hidden bg-slate-700">
         <div className="bg-green-500" style={{ width: `${pred.homeWinPct}%` }} />
         <div className="bg-slate-400" style={{ width: `${pred.drawPct}%` }} />
         <div className="bg-red-500" style={{ width: `${pred.awayWinPct}%` }} />
       </div>
-      <div className="flex justify-between text-[10px] mt-0.5 text-slate-500">
+      <div className="flex justify-between text-[9px] mt-0.5 text-slate-500">
         <span className="text-green-400">{pred.homeWinPct}%</span>
-        <span>{pred.verdict}</span>
+        <span className="truncate px-1">{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
       </div>
     </div>

@@ -64,8 +64,8 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
         </div>
       )}
 
-      {/* Results list */}
-      <div className="space-y-1.5">
+      {/* Results grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         {sorted.slice(0, revealedCount).map((r, i) => {
           const importance = getMatchImportance(r, teamBases);
           const isNew = i === revealedCount - 1 && phase === 'revealing';
@@ -120,69 +120,69 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick }
   // Determine card style based on importance
   const isKeyMatch = importance >= 3;
   const baseClass = isKeyMatch
-    ? 'bg-gradient-to-r from-slate-800 via-slate-800 to-slate-800 border-amber-600/30 shadow-lg shadow-amber-900/10'
+    ? 'bg-gradient-to-r from-slate-800 via-slate-800 to-slate-800 border-amber-600/30'
     : 'bg-slate-800 border-slate-700';
 
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-lg border p-3 text-left cursor-pointer transition-all hover-lift ${baseClass} ${
+      className={`w-full rounded-lg border p-2 text-left cursor-pointer transition-all hover-lift ${baseClass} ${
         isNew ? 'animate-scale-in' : ''
       }`}
     >
-      {/* Tags row */}
+      {/* Tags row — compact */}
       {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
-        <div className="flex gap-1 mb-1.5 flex-wrap">
-          {derbyName && <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
-          {isUpset && <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
-          {isHighScoring && <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
+        <div className="flex gap-1 mb-1 flex-wrap">
+          {derbyName && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
+          {isUpset && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
+          {isHighScoring && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
           {r.competitionType !== 'league' && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
+            <span className="text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
           )}
         </div>
       )}
 
       {/* Score line */}
       <div className="flex items-center">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ht?.color ?? '#666' }} />
-          <span className={`text-sm truncate ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ht?.color ?? '#666' }} />
+          <span className={`text-xs truncate ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
             {getTeamName(r.homeTeamId, teamBases)}
           </span>
         </div>
 
-        <div className="flex items-center gap-1 px-3 shrink-0">
-          <span className={`text-xl font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${homeWon ? 'text-green-400' : 'text-slate-300'}`}>
+        <div className="flex items-center gap-1 px-2 shrink-0">
+          <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${homeWon ? 'text-green-400' : 'text-slate-300'}`}>
             {totalHome}
           </span>
-          <span className="text-slate-600 text-xs">:</span>
-          <span className={`text-xl font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${awayWon ? 'text-green-400' : 'text-slate-300'}`}>
+          <span className="text-slate-600 text-[10px]">:</span>
+          <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${awayWon ? 'text-green-400' : 'text-slate-300'}`}>
             {totalAway}
           </span>
           {r.extraTime && (
-            <span className="text-[9px] text-amber-400 ml-0.5">
-              {r.penalties ? `P${r.penaltyHome}-${r.penaltyAway}` : '加时'}
+            <span className="text-[8px] text-amber-400 ml-0.5">
+              {r.penalties ? `P` : '加时'}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className={`text-sm truncate text-right ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+        <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
+          <span className={`text-xs truncate text-right ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
             {getTeamName(r.awayTeamId, teamBases)}
           </span>
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: at?.color ?? '#666' }} />
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: at?.color ?? '#666' }} />
         </div>
       </div>
 
-      {/* Key goal events for important matches */}
+      {/* Key goal events — only for key matches, max 3 */}
       {isKeyMatch && r.events.length > 0 && (
-        <div className="mt-1.5 flex gap-2 text-[10px] text-slate-500 overflow-hidden">
+        <div className="mt-1 flex gap-1.5 text-[9px] text-slate-500 overflow-hidden">
           {r.events
             .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
-            .slice(0, 4)
+            .slice(0, 3)
             .map((e, i) => (
-              <span key={i} className={e.teamId === r.homeTeamId ? 'text-slate-400' : 'text-slate-400'}>
-                {e.minute}' {e.playerNumber ? `${e.playerNumber}号` : ''}
+              <span key={i}>
+                {e.minute}'{e.playerNumber ? ` ${e.playerNumber}号` : ''}
               </span>
             ))}
         </div>
