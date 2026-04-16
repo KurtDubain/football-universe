@@ -66,7 +66,7 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
       )}
 
       {/* Results grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
         {sorted.slice(0, revealedCount).map((r, i) => {
           const importance = getMatchImportance(r, teamBases);
           const isNew = i === revealedCount - 1 && phase === 'revealing';

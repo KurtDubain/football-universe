@@ -296,7 +296,7 @@ function MatchdayTab({
             <h3 className="text-sm font-semibold text-slate-200">{groupName}</h3>
             <span className="text-[10px] text-slate-500">{fixtures.length}场</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 stagger-children">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5 stagger-children">
             {fixtures.map((fixture) => (
               <FixtureCard
                 key={fixture.id}
