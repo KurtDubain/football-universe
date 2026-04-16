@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
+import { APP_VERSION } from '../version';
 
 export default function Settings() {
   const world = useGameStore((s) => s.world);
@@ -39,7 +40,7 @@ export default function Settings() {
           <span className="text-slate-500">存档大小</span>
           <span className="text-slate-200">{saveSize}</span>
           <span className="text-slate-500">版本</span>
-          <span className="text-slate-200">v0.8.0</span>
+          <span className="text-slate-200">v{APP_VERSION}</span>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor } from '../utils/format';
 import Logo from '../components/Logo';
+import { APP_VERSION } from '../version';
 
 interface LayoutProps {
   children: ReactNode;
@@ -144,7 +145,7 @@ export default function Layout({ children }: LayoutProps) {
         >
           重置游戏
         </button>
-        <p className="text-[9px] text-slate-600 text-center">by KurtDubain</p>
+        <p className="text-[9px] text-slate-600 text-center">v{APP_VERSION} · by KurtDubain</p>
       </div>
     </>
   );

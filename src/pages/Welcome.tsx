@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
 import Logo from '../components/Logo';
+import { APP_VERSION } from '../version';
 
 export default function Welcome() {
   const newGame = useGameStore((s) => s.newGame);
@@ -73,7 +74,7 @@ export default function Welcome() {
         </div>
 
         <p className="text-xs text-slate-700">
-          v0.6.1 · by KurtDubain
+          v{APP_VERSION} · by KurtDubain
         </p>
       </div>
     </div>
