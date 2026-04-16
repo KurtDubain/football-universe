@@ -11,13 +11,14 @@ interface ResultAnimationProps {
   teamBases: Record<string, TeamBase>;
   onComplete: () => void;
   onResultClick: (r: MatchResult) => void;
+  onLiveView?: (r: MatchResult) => void;
 }
 
 /**
  * Animated results reveal — shows match results one by one with dramatic timing.
  * Key matches (derbies, upsets, big scores) get extra fanfare.
  */
-export default function ResultAnimation({ results, teamBases, onComplete, onResultClick }: ResultAnimationProps) {
+export default function ResultAnimation({ results, teamBases, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
   const [revealedCount, setRevealedCount] = useState(0);
   const [phase, setPhase] = useState<'revealing' | 'done'>('revealing');
 
@@ -78,6 +79,7 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
               importance={importance}
               isNew={isNew}
               onClick={() => onResultClick(r)}
+              onLiveView={onLiveView && importance >= 2 ? () => onLiveView(r) : undefined}
             />
           );
         })}
@@ -99,12 +101,13 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
   );
 }
 
-function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick }: {
+function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, onLiveView }: {
   result: MatchResult;
   teamBases: Record<string, TeamBase>;
   importance: number;
   isNew: boolean;
   onClick: () => void;
+  onLiveView?: () => void;
 }) {
   const ht = teamBases[r.homeTeamId];
   const at = teamBases[r.awayTeamId];
@@ -188,6 +191,19 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick }
                 {e.minute}'{e.playerNumber ? ` ${e.playerNumber}号` : ''}
               </span>
             ))}
+        </div>
+      )}
+
+      {/* Live replay button for important matches */}
+      {onLiveView && (
+        <div className="mt-1 pt-1 border-t border-slate-700/30">
+          <span
+            onClick={(e) => { e.stopPropagation(); onLiveView(); }}
+            className="text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
+          >
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-breathe" />
+            观看直播回放
+          </span>
         </div>
       )}
     </button>

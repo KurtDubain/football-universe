@@ -100,44 +100,70 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
         </div>
 
         {/* Score board */}
-        <div className="flex items-center justify-center py-4 px-6 gap-4 relative">
+        <div className="flex items-center justify-center py-5 px-6 gap-4 relative"
+          style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}15 0%, transparent 30%, transparent 70%, ${at?.color ?? '#333'}15 100%)` }}
+        >
           <div className="flex-1 text-right">
-            <div className="text-lg font-bold text-slate-100">{ht?.name ?? '主队'}</div>
+            <div className="flex items-center gap-2 justify-end">
+              <div className="text-lg font-bold text-slate-100">{ht?.name ?? '主队'}</div>
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: ht?.color ?? '#666' }} />
+            </div>
             <div className="text-[10px] text-slate-500">主场</div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`text-4xl font-black tabular-nums text-slate-100 ${homeScore > awayScore ? 'text-green-400' : ''} ${flashEvent && flashEvent.teamId === result.homeTeamId ? 'animate-score-pop' : ''}`}>
+          <div className="flex items-center gap-4 px-4">
+            <span className={`text-5xl font-black tabular-nums transition-colors ${homeScore > awayScore ? 'text-green-400' : 'text-slate-100'} ${flashEvent && flashEvent.teamId === result.homeTeamId ? 'animate-score-pop' : ''}`}>
               {homeScore}
             </span>
-            <span className="text-xl text-slate-600">:</span>
-            <span className={`text-4xl font-black tabular-nums text-slate-100 ${awayScore > homeScore ? 'text-green-400' : ''} ${flashEvent && flashEvent.teamId === result.awayTeamId ? 'animate-score-pop' : ''}`}>
+            <div className="flex flex-col items-center">
+              <span className="text-lg text-slate-600">:</span>
+              <span className="text-[10px] text-emerald-400 font-mono mt-1">{minute}'</span>
+            </div>
+            <span className={`text-5xl font-black tabular-nums transition-colors ${awayScore > homeScore ? 'text-green-400' : 'text-slate-100'} ${flashEvent && flashEvent.teamId === result.awayTeamId ? 'animate-score-pop' : ''}`}>
               {awayScore}
             </span>
           </div>
           <div className="flex-1">
-            <div className="text-lg font-bold text-slate-100">{at?.name ?? '客队'}</div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: at?.color ?? '#666' }} />
+              <div className="text-lg font-bold text-slate-100">{at?.name ?? '客队'}</div>
+            </div>
             <div className="text-[10px] text-slate-500">客场</div>
           </div>
         </div>
 
         {/* Mini pitch + time */}
         <div className="px-4 pb-2">
-          <div className="relative bg-emerald-900/30 rounded-lg border border-emerald-800/30 h-24 overflow-hidden">
+          <div className="relative bg-gradient-to-b from-emerald-900/40 to-emerald-900/20 rounded-xl border border-emerald-800/30 h-28 overflow-hidden">
             {/* Pitch lines */}
             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="none">
-              <rect x="1" y="1" width="198" height="98" fill="none" stroke="#166534" strokeWidth="1" rx="4" />
-              <line x1="100" y1="1" x2="100" y2="99" stroke="#166534" strokeWidth="0.5" />
-              <circle cx="100" cy="50" r="15" fill="none" stroke="#166534" strokeWidth="0.5" />
-              <rect x="1" y="25" width="25" height="50" fill="none" stroke="#166534" strokeWidth="0.5" />
-              <rect x="174" y="25" width="25" height="50" fill="none" stroke="#166534" strokeWidth="0.5" />
+              <rect x="2" y="2" width="196" height="96" fill="none" stroke="#16653480" strokeWidth="1" rx="3" />
+              <line x1="100" y1="2" x2="100" y2="98" stroke="#16653460" strokeWidth="0.8" />
+              <circle cx="100" cy="50" r="18" fill="none" stroke="#16653460" strokeWidth="0.6" />
+              <circle cx="100" cy="50" r="1.5" fill="#16653480" />
+              {/* Left penalty area */}
+              <rect x="2" y="22" width="28" height="56" fill="none" stroke="#16653460" strokeWidth="0.6" />
+              <rect x="2" y="32" width="12" height="36" fill="none" stroke="#16653440" strokeWidth="0.5" />
+              {/* Right penalty area */}
+              <rect x="170" y="22" width="28" height="56" fill="none" stroke="#16653460" strokeWidth="0.6" />
+              <rect x="186" y="32" width="12" height="36" fill="none" stroke="#16653440" strokeWidth="0.5" />
+              {/* Corner arcs */}
+              <path d="M2 6 A4 4 0 0 1 6 2" fill="none" stroke="#16653440" strokeWidth="0.5" />
+              <path d="M194 2 A4 4 0 0 1 198 6" fill="none" stroke="#16653440" strokeWidth="0.5" />
+              <path d="M2 94 A4 4 0 0 0 6 98" fill="none" stroke="#16653440" strokeWidth="0.5" />
+              <path d="M198 94 A4 4 0 0 1 194 98" fill="none" stroke="#16653440" strokeWidth="0.5" />
             </svg>
 
-            {/* Ball position indicator — moves with time */}
+            {/* Grass stripes */}
+            <div className="absolute inset-0 opacity-5" style={{
+              backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 12.5%, rgba(255,255,255,0.3) 12.5%, rgba(255,255,255,0.3) 25%)',
+            }} />
+
+            {/* Ball position indicator */}
             <div
-              className="absolute w-2 h-2 bg-white rounded-full shadow-lg transition-all duration-300"
+              className="absolute w-2.5 h-2.5 bg-white rounded-full shadow-lg shadow-white/30 transition-all duration-500"
               style={{
                 left: `${20 + Math.sin(minute * 0.3) * 30 + 30}%`,
-                top: `${30 + Math.cos(minute * 0.5) * 20 + 20}%`,
+                top: `${25 + Math.cos(minute * 0.5) * 25 + 25}%`,
               }}
             />
 

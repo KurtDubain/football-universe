@@ -198,6 +198,7 @@ export default function Dashboard() {
             lastResults={lastResults}
             lastNews={lastNews}
             onResultClick={handleResultClick}
+            onLiveView={(r) => setLiveResult(r)}
           />
         )}
 
@@ -445,11 +446,13 @@ function ResultsTab({
   lastResults,
   lastNews,
   onResultClick,
+  onLiveView,
 }: {
   world: GameWorld;
   lastResults: MatchResult[];
   lastNews: { id: string; type: string; title: string; description: string }[];
   onResultClick: (r: MatchResult) => void;
+  onLiveView: (r: MatchResult) => void;
 }) {
   const [animComplete, setAnimComplete] = useState(false);
 
@@ -469,6 +472,7 @@ function ResultsTab({
         teamBases={world.teamBases as Record<string, any>}
         onComplete={() => setAnimComplete(true)}
         onResultClick={onResultClick}
+        onLiveView={onLiveView}
       />
 
       {/* News feed */}
