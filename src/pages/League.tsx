@@ -288,7 +288,7 @@ export default function League() {
                     return (
                       <tr
                         key={entry.teamId}
-                        className={`border-t hover:bg-slate-700/30 transition-colors ${
+                        className={`border-t hover:bg-slate-700/30 transition-all hover-lift ${
                           boundary ? 'border-t-2' : 'border-slate-700/50'
                         } ${
                           boundary && (zone === 'releg' || zone === 'playoff-releg')

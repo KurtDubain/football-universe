@@ -30,31 +30,155 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }
 ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
 
-/* ── Animations ── */
-@keyframes confetti-fall {
-  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+/* ══════════════════════════════════════════
+   1. 进入动效 — 元素出现
+   ══════════════════════════════════════════ */
+
+@keyframes slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
-@keyframes sparkle {
-  0%, 100% { opacity: 0; transform: scale(0); }
-  50% { opacity: 1; transform: scale(1); }
+@keyframes slide-down {
+  from { transform: translateY(-12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-up { animation: slide-up 0.35s ease-out both; }
+.animate-slide-down { animation: slide-down 0.3s ease-out both; }
+.animate-fade-in { animation: fade-in 0.4s ease-out both; }
+.animate-scale-in { animation: scale-in 0.3s ease-out both; }
+.animate-slide-in-right { animation: slide-in-right 0.35s ease-out both; }
+
+/* Staggered children — apply to parent, children get delayed entry */
+.stagger-children > * { animation: slide-up 0.3s ease-out both; }
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(n+9) { animation-delay: 400ms; }
+
+/* ══════════════════════════════════════════
+   2. 交互动效 — 点击/hover
+   ══════════════════════════════════════════ */
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.hover-lift:active {
+  transform: translateY(0);
+}
+
+.press-scale {
+  transition: transform 0.1s ease;
+}
+.press-scale:active {
+  transform: scale(0.97);
+}
+
+.hover-glow {
+  transition: box-shadow 0.3s ease;
+}
+.hover-glow:hover {
+  box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.15);
+}
+
+/* ══════════════════════════════════════════
+   3. 数据变化动效 — 比分/数值
+   ══════════════════════════════════════════ */
+
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes number-flash {
+  0% { color: inherit; }
+  30% { color: #fbbf24; }
+  100% { color: inherit; }
+}
+
+.animate-score-pop { animation: score-pop 0.5s ease-out; }
+.animate-number-flash { animation: number-flash 0.8s ease-out; }
+
+/* ══════════════════════════════════════════
+   4. 状态指示动效 — 持续性
+   ══════════════════════════════════════════ */
+
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 4px 0px currentColor; }
   50% { box-shadow: 0 0 16px 4px currentColor; }
 }
-@keyframes slide-up {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(180deg); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
+.animate-sparkle { animation: sparkle 1.5s ease-in-out infinite; }
+.animate-breathe { animation: breathe 2s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.05) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ══════════════════════════════════════════
+   5. 庆祝动效
+   ══════════════════════════════════════════ */
+
+@keyframes confetti-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
 }
 @keyframes trophy-bounce {
   0%, 100% { transform: translateY(0) scale(1); }
   30% { transform: translateY(-12px) scale(1.15); }
   60% { transform: translateY(-4px) scale(1.05); }
 }
+@keyframes victory-ring {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
 
 .animate-confetti { animation: confetti-fall linear forwards; }
-.animate-sparkle { animation: sparkle 1.5s ease-in-out infinite; }
-.animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
-.animate-slide-up { animation: slide-up 0.4s ease-out; }
 .animate-trophy-bounce { animation: trophy-bounce 0.8s ease-out; }
+.animate-victory-ring { animation: victory-ring 1s ease-out forwards; }
+
+/* ══════════════════════════════════════════
+   6. 转场动效 — tab/page
+   ══════════════════════════════════════════ */
+
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-tab-enter { animation: tab-enter 0.25s ease-out both; }

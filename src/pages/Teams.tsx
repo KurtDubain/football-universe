@@ -232,7 +232,7 @@ function TeamCard({
   return (
     <Link
       to={`/team/${base.id}`}
-      className="flex items-center gap-3 bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all group"
+      className="flex items-center gap-3 bg-slate-800 rounded-lg border border-slate-700 p-3 hover:border-slate-500 hover:bg-slate-800/80 transition-all group hover-lift"
     >
       {/* Team badge */}
       <TeamBadge shortName={base.shortName} color={base.color} size={36} />

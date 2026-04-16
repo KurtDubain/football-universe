@@ -171,7 +171,7 @@ export default function Dashboard() {
       </div>
 
       {/* ═══════ Tab Content ═══════ */}
-      <div className="flex-1 overflow-auto pt-4 pb-2">
+      <div className="flex-1 overflow-auto pt-4 pb-2 animate-tab-enter" key={activeTab}>
         {activeTab === 'matchday' && (
           <MatchdayTab
             world={world}
@@ -295,7 +295,7 @@ function MatchdayTab({
             <h3 className="text-sm font-semibold text-slate-200">{groupName}</h3>
             <span className="text-[10px] text-slate-500">{fixtures.length}场</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 stagger-children">
             {fixtures.map((fixture) => (
               <FixtureCard
                 key={fixture.id}
@@ -457,7 +457,7 @@ function ResultsTab({
               <span className="text-xs font-semibold text-slate-400">{groupName}</span>
               <span className="text-[10px] text-slate-600">{results.length}场</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 stagger-children">
               {results.map((r) => (
                 <ResultCard key={r.fixtureId} result={r} world={world} onClick={() => onResultClick(r)} />
               ))}

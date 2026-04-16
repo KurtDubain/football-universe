@@ -108,7 +108,7 @@ export default function Coaches() {
             <Link
               key={base.id}
               to={`/coach/${base.id}`}
-              className="block bg-slate-800 rounded-xl border border-slate-700/60 hover:border-slate-600 transition-colors"
+              className="block bg-slate-800 rounded-xl border border-slate-700/60 hover:border-slate-600 transition-all hover-lift"
             >
               <div className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
                 {/* Rating badge */}

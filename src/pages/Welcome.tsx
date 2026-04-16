@@ -85,7 +85,7 @@ export default function Welcome() {
           <button
             onClick={handleStart}
             disabled={starting}
-            className="w-full px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-600 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-900/40 hover:shadow-blue-800/50"
+            className="w-full px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-600 disabled:cursor-not-allowed text-white text-lg font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-900/40 hover:shadow-blue-800/50 press-scale"
           >
             {starting ? '正在构建联赛宇宙...' : '开始新游戏'}
           </button>

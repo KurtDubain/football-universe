@@ -37,7 +37,7 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
   return (
     <div className="h-7 bg-slate-800/90 backdrop-blur border-t border-slate-700/50 flex items-center px-3 sm:px-5 gap-2 overflow-hidden shrink-0">
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${typeColors[item.type] ?? 'bg-slate-500'}`} />
-      <p className="text-[11px] text-slate-400 truncate animate-slide-up" key={item.id}>
+      <p className="text-[11px] text-slate-400 truncate animate-slide-down" key={item.id}>
         <span className="text-slate-200 font-medium">{item.title}</span>
         {item.description && <span className="hidden sm:inline ml-2 text-slate-500">{item.description}</span>}
       </p>

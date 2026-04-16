@@ -268,7 +268,7 @@ export default function Layout({ children }: LayoutProps) {
         <NewsTicker news={world?.newsLog.slice(-20) ?? []} />
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-3 sm:p-5" key={location.pathname}>
+        <main className="flex-1 overflow-auto p-3 sm:p-5 animate-fade-in" key={location.pathname}>
           {children}
         </main>
       </div>
