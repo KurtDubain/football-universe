@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
 import { getTeamName } from '../utils/format';
+import PitchCanvas from './PitchCanvas';
 
 interface Props {
   result: MatchResult;
@@ -35,27 +36,6 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
     [...result.events].filter(e => e.minute <= maxMin).sort((a, b) => a.minute - b.minute),
     [result.events, maxMin]
   );
-
-  // Ball position — biased toward the team that's attacking around event times
-  const ballX = useMemo(() => {
-    // Near an event minute, ball moves toward the relevant goal
-    const nearEvent = allEvents.find(e => Math.abs(e.minute - minute) <= 2);
-    if (nearEvent) {
-      const isHome = nearEvent.teamId === result.homeTeamId;
-      // Goals: ball near opponent's goal
-      if (nearEvent.type === 'goal' || nearEvent.type === 'penalty_goal') {
-        return isHome ? 82 + Math.random() * 10 : 8 + Math.random() * 10;
-      }
-      // Saves: ball near the goalkeeper
-      if (nearEvent.type === 'save') return isHome ? 12 : 88;
-      // Cards: midfield area
-      return 40 + Math.random() * 20;
-    }
-    // General play — oscillate with some randomness
-    return 25 + Math.sin(minute * 0.4) * 25 + Math.cos(minute * 0.7) * 15 + 15;
-  }, [minute, allEvents, result.homeTeamId]);
-
-  const ballY = useMemo(() => 20 + Math.sin(minute * 0.6 + 1) * 20 + Math.cos(minute * 0.3) * 15 + 15, [minute]);
 
   // Tick
   useEffect(() => {
@@ -196,64 +176,17 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
 
         {/* Pitch */}
         <div className="px-3 py-2">
-          <div className="relative bg-gradient-to-b from-emerald-900/50 to-emerald-800/30 rounded-xl h-32 overflow-hidden border border-emerald-700/20">
-            {/* SVG pitch */}
-            <svg className="absolute inset-0 w-full h-full opacity-40" viewBox="0 0 200 100" preserveAspectRatio="none">
-              <rect x="2" y="2" width="196" height="96" fill="none" stroke="#22c55e" strokeWidth="0.8" rx="3" />
-              <line x1="100" y1="2" x2="100" y2="98" stroke="#22c55e" strokeWidth="0.5" />
-              <circle cx="100" cy="50" r="16" fill="none" stroke="#22c55e" strokeWidth="0.4" />
-              <circle cx="100" cy="50" r="1" fill="#22c55e" />
-              <rect x="2" y="24" width="24" height="52" fill="none" stroke="#22c55e" strokeWidth="0.4" />
-              <rect x="174" y="24" width="24" height="52" fill="none" stroke="#22c55e" strokeWidth="0.4" />
-              <rect x="2" y="34" width="10" height="32" fill="none" stroke="#22c55e" strokeWidth="0.3" />
-              <rect x="188" y="34" width="10" height="32" fill="none" stroke="#22c55e" strokeWidth="0.3" />
-            </svg>
-
-            {/* Grass stripes */}
-            <div className="absolute inset-0 opacity-[0.03]" style={{
-              backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 12%, white 12%, white 13%)',
-            }} />
-
-            {/* Ball */}
-            <div className="absolute w-3 h-3 rounded-full bg-white transition-all duration-700 ease-in-out"
-              style={{
-                left: `${ballX}%`, top: `${ballY}%`,
-                boxShadow: goalFlash ? '0 0 20px 6px rgba(250,204,21,0.6)' : '0 0 8px 2px rgba(255,255,255,0.3)',
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-
-            {/* Team side indicators */}
-            <div className="absolute left-2 top-2 bottom-2 w-0.5 rounded opacity-60" style={{ backgroundColor: ht?.color }} />
-            <div className="absolute right-2 top-2 bottom-2 w-0.5 rounded opacity-60" style={{ backgroundColor: at?.color }} />
-
-            {/* Half-time overlay */}
-            {htShow && minute <= 46 && minute >= 45 && (
-              <div className="absolute inset-0 bg-black/60 flex items-center justify-center animate-fade-in">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-white">中场休息</div>
-                  <div className="text-sm text-slate-400 mt-1">{homeScore} - {awayScore}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Event flash on pitch */}
-            {flashEvent && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className={`px-3 py-1.5 rounded-lg text-xs font-bold animate-scale-in max-w-[80%] text-center ${
-                  (flashEvent.type === 'goal' || flashEvent.type === 'penalty_goal')
-                    ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/40'
-                    : flashEvent.type === 'yellow_card' ? 'bg-yellow-400 text-black'
-                    : flashEvent.type === 'red_card' ? 'bg-red-600 text-white'
-                    : flashEvent.type === 'save' ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-200'
-                }`}>
-                  <span className="mr-1">{EVENT_ICONS[flashEvent.type] ?? ''}</span>
-                  {flashEvent.minute}' {flashEvent.description}
-                </div>
-              </div>
-            )}
-          </div>
+          <PitchCanvas
+            minute={minute}
+            maxMinute={maxMin}
+            homeColor={ht?.color ?? '#ef4444'}
+            awayColor={at?.color ?? '#3b82f6'}
+            homeTeamId={result.homeTeamId}
+            flashEvent={flashEvent}
+            allEvents={allEvents}
+            finished={finished}
+            halftime={htShow && minute >= 45 && minute <= 46}
+          />
         </div>
 
         {/* Commentary line */}
