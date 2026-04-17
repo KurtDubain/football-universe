@@ -7,397 +7,191 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-3.0.0-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
+  <img src="https://img.shields.io/badge/15000+-lines-green" alt="lines"/>
 </p>
 
 ---
 
-## What is this?
+## 这是什么？
 
-A **fully client-side football season simulator** — not about controlling players or watching animations, but about watching an entire football universe unfold: league standings, cup upsets, coach firings, promotion battles, and glory accumulation across seasons.
+一个**纯前端的足球赛季宇宙模拟器** — 不是操控球员踢球，而是看一整个足球世界自动运转：联赛积分、杯赛爆冷、教练下课、升降级、荣誉积累，长期游玩自然生成"历史"和"故事"。
 
-Think of it as **"electronic cricket fighting" (电子斗蛐蛐)** for football leagues.
+核心体验：**电子斗蛐蛐** — 按下推进键，看比分一个个翻出来，看谁夺冠谁降级。
 
-## Features
+## 核心功能
 
-### Leagues & Competitions
-- **3-tier league system**: Premier League (16 teams) / Championship (8 teams) / League One (8 teams)
-- **Double round-robin** format: 30 rounds for top tier, 14 for lower tiers
-- **Promotion & relegation** with playoff matches
-- **League Cup**: 32-team single-leg knockout (5 rounds)
-- **Super Cup**: 16 teams in 4 groups + two-legged knockouts + single-leg final
-- **World Championship Cup**: Every 4 seasons, 16 teams, all advance from groups to knockout
+### 联赛体系
+- **三级联赛**：顶级联赛(16队) / 甲级联赛(8队) / 乙级联赛(8队)
+- 双循环赛制：顶级30轮，甲乙14轮
+- 升降级 + 附加赛（顶级倒3 vs 甲级第3，甲级倒3 vs 乙级第3）
+- 积分榜排名变动箭头（▲▼—）
+- 联赛积分走势折线图（前6名）
+- 收官之战标签（最后3轮）
 
-### Simulation Engine
-- **Seeded PRNG** (mulberry32) for deterministic, replayable results
-- **Poisson-distributed** goal scoring
-- **Multi-factor match simulation**: base stats, coach buffs, morale, fatigue, momentum, home advantage, squad health
-- **Dynamic state system**: each match affects future matches through morale/fatigue/momentum cascades
-- **Match events**: goals, cards, saves with minute-by-minute timeline
+### 杯赛系统
+- **联赛杯**：32队单场淘汰赛（5轮）
+- **超级杯**：16队（10顶+4甲+2乙），4组小组赛 + 两回合淘汰赛 + 单场决赛
+- **环球冠军杯**：每4赛季，32队全参加，8组×4队，每组前2名晋级16强
+- 对称淘汰赛对阵树（左右半区 + 中间决赛）
+- 杯赛晋级规则说明卡 + 抽签新闻
 
-### Coach System
-- **36 real coaches** with distinct styles (attacking/defensive/possession/counter/balanced)
-- **Coach buffs** affect match outcomes (league specialist, cup specialist, etc.)
-- **Pressure system**: consecutive losses, big defeats, cup eliminations build pressure
-- **Auto-firing**: coaches get sacked when pressure exceeds threshold (elite teams fire faster)
-- **Hiring**: best available unemployed coach is matched to team expectations
-- **Career tracking**: full career history with trophies per stint
+### 比赛模拟
+- **Seeded PRNG** (mulberry32) — 同种子可复现
+- 泊松分布进球采样
+- 多因素加权：基础属性、教练buff、士气、疲劳、主场优势、势头、阵容深度
+- **德比系统**：11组经典对决（国家德比/米兰德比/北伦敦德比/京沪大战等）
+- **弱队加成**：实力差距>8时弱队获得小幅攻击力提升
+- 杯赛随机性更高，更容易爆冷
 
-### Teams
-- **32 real teams** from Europe's Big 5 leagues + Chinese Super League
-- Each team has unique **color accent** throughout the UI
-- Base attributes: attack, midfield, defense, stability, depth, reputation
-- Dynamic state: morale, fatigue, momentum, squad health, coach pressure
+### 比赛直播
+- **Canvas 2D 球场**：22个带号码的球员 + 4-4-2阵型
+- 球在球员之间传递（5种战术模式：后场组织/快速反击/边路进攻/中路渗透/防守倒脚）
+- 进球时球飞向球门 + 金色光环 + 球网震动
+- 半场休息自动暂停 + 解说文字
+- 1x/2x/4x 速度控制 + 暂停/跳过
+- 杯赛决赛自动触发直播，重要比赛可手动回放
 
-### Global Calendar Window System
-- The entire season is structured as **~48 sequential windows**
-- Leagues, cups, and super cup are **interleaved** in a fixed order
-- You can only advance the **current window** — no skipping ahead
-- Each window's results cascade into subsequent matches
-- View upcoming fixtures with **pre-match predictions** at any time
+### 球员系统
+- 每队22名球员（3门将+7后卫+7中场+5前锋）
+- 号码1-99，永久绑定俱乐部
+- 2-3名明星球员（#1/#7/#9/#10/#11 标志性号码）
+- 比赛事件绑定球员号码（"35' 7号 反击中冷静推射得手 [反超比分！]"）
+- 球员详情页（/player/:id）
+- 射手榜 / 助攻榜 / 纪律榜
 
-### Match Detail Modal
-- Click **any fixture** (upcoming or completed) for a detailed breakdown
-- **Pre-match**: win probability bars, state comparison, base stat comparison, coach analysis, verdict + hot tips
-- **Post-match**: score, goal timeline, full match stats, event list
+### 教练系统
+- 36名教练，5种风格（进攻/防守/控球/反击/均衡）
+- 教练buff影响比赛结果（联赛专精/杯赛专精）
+- 压力下课机制（连败/远低预期/杯赛耻辱出局）
+- **急流勇退**：名帅夺冠后8%概率主动离任
+- 执教成绩统计（胜率/场均积分/冠军数/最佳赛季）
+- 名帅殿堂排行榜
 
-### Persistence
-- Full game state saved to **localStorage** automatically
-- Survives page refresh / browser close
-- Reset game to start fresh
+### 球队系统
+- 32支真实球队（五大联赛 + 中超）
+- 5档分类：豪门/劲旅/中游/平民/草根
+- 球队颜色标识 + 盾形徽章
+- 赛季间成长/衰退（冠军+OVR，末位-OVR）
+- 升级球队大幅补强（+3~5 OVR）
+- 强队12%概率内部动荡
+- **OVR走势折线图**（积分+排名+OVR三线并行）
+- 每赛季杯赛成绩记录（冠军/亚军/八强/小组赛出局等）
 
-## Teams
+### 赛历窗口系统
+- 每赛季~48个窗口，联赛/杯赛/超级杯严格交叉推进
+- 只能执行当前窗口，不能跳过
+- 每个窗口的结果影响后续比赛（士气/疲劳/势头联动）
+- **快速推进**：快进5步/10步/到杯赛/到赛季末
 
-| Tier | Teams |
-|------|-------|
-| **Premier** | 皇马, 曼城, 拜仁, 利物浦, 巴萨, 阿森纳, 国米, 大巴黎, 尤文, 马竞, 多特, AC米兰, 切尔西, 那不勒斯, 上海海港, 热刺 |
-| **Championship** | 勒沃库森, 阿斯顿维拉, 罗马, 马赛, 山东泰山, 北京国安, 塞维利亚, 里昂 |
-| **League One** | 成都蓉城, 武汉三镇, 浙江队, 南安普顿, 伯恩利, 河南队, 天津津门虎, 长春亚泰 |
+### 动画与视觉
+- 结算逐场揭晓动画（重要比赛最后揭晓，比分弹跳）
+- 纸屑庆祝 / 奖杯庆祝（决赛/赛季结束自动触发）
+- 比赛标签：决赛/保级战/冠军战/德比战/爆冷/收官之战/生死战
+- Canvas 粒子背景（欢迎页）+ 侧边栏微光
+- 进球上下文：[扳平比分！]/[反超！]/[绝杀！]/[帽子戏法！]
+- 新闻轮播条（可展开详情面板）
 
-## Tech Stack
+### 随机事件 & 成就
+- 每窗口15%概率触发随机事件（伤病/青训新星/财团注资/球迷风波/状态回暖）
+- 成就系统：不败赛季/统治级表现/百分赛季/连级跳/进球机器
+- 双冠王/三冠王/四冠王检测
+- 赛季半程里程碑新闻
+- 赛季前展望（夺冠热门/升降级球队）
 
-| Layer | Tech |
-|-------|------|
-| Build | Vite 8 |
-| Framework | React 18 + TypeScript |
-| State | Zustand 5 (persisted) |
-| Styling | Tailwind CSS 4 |
-| Routing | React Router 7 |
-| RNG | Seeded mulberry32 |
-| Deploy | Vercel (static) |
+### 历史与数据
+- 赛季回顾：冠军墙 + 亚军 + 射手王高光 + 升降级一览
+- **趣味数据**：最高积分/最多进球/最佳防守/连冠纪录/最动荡赛季
+- **名帅殿堂**：教练生涯排行（奖杯数/执教赛季/被解雇次数）
+- 历史奖杯榜 + 成就殿堂
 
-## Getting Started
+### 持久化
+- localStorage 自动存档
+- 导出/导入存档（JSON文件）
+- 自动裁剪旧新闻和事件数据防溢出
+- 关注球队持久化
+
+## 球队阵容
+
+| 级别 | 球队 |
+|------|------|
+| **顶级联赛** | 皇马, 曼城, 拜仁, 利物浦, 巴萨, 阿森纳, 国米, 大巴黎, 尤文, 马竞, 多特, AC米兰, 切尔西, 那不勒斯, 上海海港, 热刺 |
+| **甲级联赛** | 勒沃库森, 阿斯顿维拉, 罗马, 马赛, 山东泰山, 北京国安, 塞维利亚, 里昂 |
+| **乙级联赛** | 成都蓉城, 武汉三镇, 浙江队, 南安普顿, 伯恩利, 河南队, 天津津门虎, 长春亚泰 |
+
+## 技术栈
+
+| 层 | 技术 |
+|---|------|
+| 构建 | Vite 8 |
+| 框架 | React 18 + TypeScript |
+| 状态 | Zustand 5 (persisted) |
+| 样式 | Tailwind CSS 4 |
+| 路由 | React Router 7 |
+| 随机 | Seeded mulberry32 |
+| 渲染 | Canvas 2D (比赛直播) |
+| 部署 | Vercel (静态站点) |
+
+## 快速开始
 
 ```bash
-# Install
 pnpm install
-
-# Dev server
-pnpm dev
-
-# Production build
-pnpm build
-
-# Preview production build
-pnpm preview
+pnpm dev      # 开发服务器
+pnpm build    # 生产构建
+pnpm preview  # 预览
 ```
 
-## Project Structure
+## 项目结构
 
 ```
 src/
-  app/          — App shell, layout, router
-  components/   — Reusable UI (MatchDetailModal, Logo)
-  pages/        — Route pages (Dashboard, League, Cup, Calendar, etc.)
-  engine/       — Pure simulation logic (no React dependency)
-    match/      — RNG, Poisson, simulator, events, prediction
-    season/     — Calendar builder, season manager
-    standings/  — League table, fixtures, promotion/relegation
-    cups/       — League cup, super cup, world cup
-    coaches/    — Coach effects, pressure, hiring
-    honors/     — Trophy tracking
-  config/       — Game data (teams, coaches, competitions, balance)
-  store/        — Zustand store
-  types/        — TypeScript interfaces
-  utils/        — Formatting helpers
+  app/            — 应用外壳、布局、路由
+  components/     — 可复用组件 (11个)
+    MatchDetailModal  — 赛前预测/赛后分析弹窗
+    MatchLive         — 比赛直播模拟器
+    PitchCanvas       — Canvas 2D 球场引擎
+    ResultAnimation   — 结算逐场揭晓
+    Celebration       — 庆祝动画 + 比赛标签
+    SeasonReview      — 赛季回顾
+    NewsTicker        — 新闻轮播条
+    TeamBadge         — 球队盾形徽章
+    TeamName          — 球队名+档次标签
+    CanvasEffects     — 粒子背景/能量波/微光
+    Logo              — 应用Logo
+  pages/          — 路由页面 (13个)
+    Dashboard, Calendar, League, Cup
+    Teams, Coaches, Players
+    TeamDetail, CoachDetail, PlayerDetail
+    History, Settings, Welcome
+  engine/         — 纯模拟逻辑 (24个文件)
+    match/        — RNG, 泊松分布, 模拟器, 事件, 预测
+    season/       — 赛历构建, 赛季管理, 辅助函数
+    standings/    — 积分榜, 赛程, 升降级
+    cups/         — 联赛杯, 超级杯, 环球冠军杯
+    coaches/      — 教练效果, 压力, 招聘
+    players/      — 球员生成, 统计
+    honors/       — 荣誉追踪
+    events.ts     — 随机赛季事件
+    achievements.ts — 成就系统
+  config/         — 游戏数据 (球队/教练/赛事/平衡)
+  store/          — Zustand 状态管理
+  types/          — TypeScript 类型定义
+  utils/          — 格式化工具
 ```
 
-## Changelog
+## 规模
 
-### v1.4.0
-- **Derby system**: 11 classic rivalries (国家德比/米兰德比/北伦敦德比/京沪大战 etc.)
-  - Derby matches get attack +3 for both teams, more unpredictable
-  - Orange glowing "德比战" tag with specific derby name
-- **Random season events**: ~15% chance per window
-  - 核心伤病 (overall -3, 5 windows), 青训新星 (attack +4 permanent)
-  - 财团注资 (depth +5), 球迷风波 (morale -10), 状态回暖 (morale +12)
-  - Effects expire after duration, news pushed when triggered
-- **Achievement system**: unlockable badges at season end
-  - 不败赛季, 主场全胜, 百分赛季, 连级跳
-  - Shown in season-end news as "成就解锁"
-- **Half-time score**: MatchDetailModal shows 上半场/下半场/加时 score breakdown
-- **Match event context**: goals now labeled [扳平比分！]/[反超！]/[绝杀！]/[帽子戏法！]
-- **Midseason milestone**: news at ~50% progress with league leader + relegation zone status
-
-### v1.3.0
-- **Fast forward**: dropdown menu on advance button — "快进5步"/"快进10步"/"快进到杯赛"/"快进到赛季末"
-- **Favorite team**: select at game start, shown in sidebar with morale/momentum, team color dot
-- **News ticker**: fixed bottom bar with auto-rotating top 5 news, priority-sorted, 4s interval
-- **Richer match events**: goal context labels — [扳平比分！]/[反超比分！]/[绝杀！]/[锁定胜局]/[帽子戏法！]
-- **Season preview**: "赛季前瞻" card in overview tab (first 10% of season) showing title favorites, promoted/relegated teams, world cup year flag
-- **World Cup in season review**: dedicated section with champion display
-- **localStorage optimization**: auto-trim newsLog >300, trim old event details, called on season end
-
-### v1.2.1
-- **Bug fix: ET goals not counted** in coach pressure and team state calculations
-  - coach-pressure.ts: goal diff now uses regulation + ET goals
-  - state-updater.ts: morale/momentum now based on total score including ET
-  - MatchDetailModal: win/loss detection uses total, ET score shown clearly
-- **Bug fix: player appearances inflated** — was counting all 22 squad members
-  per match, now only top 14 by rating (11 starters + 3 subs)
-- **Clean up**: removed unused `useMemo` imports in Dashboard and League pages
-
-### v1.2.0
-- **Coach firing rebalanced** — much less frequent coaching changes:
-  - Grace period extended: first 20% of season (was 10%)
-  - Consecutive loss firing threshold: 6 (was 5)
-  - Elite team firing threshold: 75 (was 65)
-  - Big win gives extra -2 pressure relief
-  - Cup elimination pressure: 3 (was 4)
-  - Natural pressure decay when above 40
-  - Firing reasons now in Chinese
-- **Runner-up display** in season review (顶级联赛亚军)
-- **Season awards** now track runner-ups for all cups
-- **Team trend chart** in team detail page:
-  - SVG line chart showing points + position across seasons
-  - League level color dots (金=顶, 蓝=甲, 绿=乙)
-  - Shows when a team was promoted/relegated visually
-
-### v1.1.0
-- **Game is now infinite** — world cup year no longer ends the game;
-  next season auto-starts after world cup completes
-- **Multi-crown detection**: 双冠王/三冠王/四冠王 news at season end
-- **Underdog achievement news**: lower-league teams winning cups get special celebration
-- **Underdog boost** in match simulation — weaker teams get small attack/midfield
-  bonus when overall gap > 8 (makes upsets more possible without being absurd)
-- **Cup win morale bonus**: extra morale for cup wins, big bonus for finals
-- **Enriched Dashboard overview tab**:
-  - Season stats cards: progress %, cup status, top scorer, coach changes
-  - World cup status bar when applicable
-  - League standings remain below
-- **Balance**: cup randomness 0.22→0.25 for more drama
-
-### v1.0.0
-- **Match tags system**: special labels on key fixtures
-  - 决赛 (gold, glowing border)
-  - 四强 / 八强 (purple / blue)
-  - 保级战 (red, glowing)
-  - 冠军战 (gold, top 2 teams late in season)
-  - 强弱对话 (top 3 vs bottom 3)
-  - 生死战 (final group stage round)
-- **Celebration animations** after big moments:
-  - 🏆 Trophy celebration: bouncing trophy + confetti shower on cup finals
-  - 🎊 Confetti rain on season end and relegation playoffs
-  - Random shapes (■●▲★◆♦✦) in team colors falling with rotation
-  - CSS animations: confetti-fall, sparkle, glow-pulse, trophy-bounce, slide-up
-- **Result cards**: finals highlighted with gold gradient + sparkle ✦
-- **Fixture cards**: glowing amber border on key matches
-
-### v0.9.1
-- **Bug fix: relegation playoff matchday empty** — playoff fixtures now written to
-  calendar window before simulation, so Dashboard shows the matchups
-- Fixed remaining English news: "promoted!"→"附加赛升级成功!", "relegated"→"附加赛降级"
-
-### v0.9.0
-- **Bug fix: ET goal double-counting** — MatchResult now stores regulation goals
-  separately from ET goals; homeGoals = regulation only, etHomeGoals = extra time only
-- **Bug fix: league cup matchday empty** — league cup windows beyond R1 now get
-  pre-populated with fixtures after each round completes
-- **Chinese shortNames** — all 32 teams use 2-char Chinese abbreviations
-  (皇马/曼城/拜仁/利物/巴萨/国米/热刺/蓉城/亚泰 etc.)
-- **Team badges** — new TeamBadge SVG component (shield shape + team color + initials)
-  used in team detail header and teams hub
-
-### v0.8.3
-- **Bug fix**: promoted/relegated teams no longer show 0s in season records
-  - Season records now search ALL league standings to find the team's actual data
-  - leagueLevel in record reflects the league they played in, not the new one
-- **Team detail: coach change history** — shows all coach changes for the team across seasons
-- **Season records enhanced**:
-  - Coach column: shows which coach managed that season (clickable)
-  - Champion row highlighted in gold
-  - League level shown as 顶/甲/乙 colored tags
-  - Cup wins shown as badges (联杯/超杯/冠军杯)
-  - Responsive: hides W/D/L and GF/GA on smaller screens
-
-### v0.8.2
-- **Super Cup two-legged ties merged** into single bracket columns
-  - QF-L1 + QF-L2 → one "八强(两回合)" column showing aggregate scores
-  - Each cell shows: team names, aggregate total, first/second leg scores below
-  - Away goals rule indicator when aggregate is tied
-  - Penalty result shown when applicable
-  - "首回合 2-1 | 次回合待赛" for in-progress ties
-- League Cup and World Cup brackets unchanged (single-leg, works correctly)
-- Dashboard result cards: round labels translated (QF→八强, SF-L1→四强首回合, etc.)
-
-### v0.8.1
-- Cup pages: **qualification rules** banner for each cup type
-  - 联赛杯: "全部32支球队, 单场淘汰制"
-  - 超级杯: "顶级前10+甲级前4+乙级前2, 小组赛+两回合淘汰"
-  - 环球冠军杯: "实力前16, 全员进淘汰赛, 每4赛季一次"
-- **League level tags** (顶/甲/乙) shown next to every team name in bracket and group tables
-  - Gold for 顶级, blue for 甲级, green for 乙级
-- Group tables: added "前2名晋级" qualification line
-- Bracket cells widened (w-40/w-48) for better readability with tags
-
-### v0.8.0
-- **Streak news**: 3+连胜/连败/5+不败自动推送新闻
-- **Special event news**: 帽子戏法、补时绝杀自动推送
-- **Team growth/decline**: 赛季结束后球队属性微调
-  - 冠军/前列球队 overall +0~2
-  - 末尾/降级球队 overall -0~2
-  - 升级球队 depth/overall +1
-- **League trend chart**: 联赛页新增"走势"tab
-  - SVG 折线图展示前6名积分累计变化
-  - 球队颜色对应折线，带图例
-- **Settings page** (`/settings`):
-  - 游戏信息（赛季/种子/球队数/存档大小）
-  - 导出存档为 JSON 文件
-  - 导入存档从 JSON 文件恢复
-  - 重置游戏（二次确认）
-- **Richer match events**: 新增5种进球描述、2种扑救描述、2种犯规描述
-
-### v0.7.0
-- **Season Review** component: shows full season summary after each season ends
-  - Champions grid (all competitions)
-  - Season stats: best attack, best defense, most wins, coach changes
-  - Top 5 scorers with team colors
-  - Promotions & relegations with color-coded cards
-- Dashboard: new "S{N}回顾" tab appears after completing a season
-- History page rewritten: expandable season cards with full SeasonReview inside
-- **Season-end news push** — much richer end-of-season news:
-  - League champions with points total
-  - Season top scorer (射手王)
-  - Best defense team
-  - Best attack team
-  - All promoted/relegated teams
-  - Coach changes summary
-
-### v0.6.1
-- Cup page rewritten with **horizontal bracket/tree** for knockout rounds
-  - Each match displayed as a card: team color dots + names + score
-  - Winner highlighted in green, loser dimmed
-  - Later rounds spaced wider to align with earlier match outcomes
-  - Horizontal scroll on mobile for full bracket view
-  - Placeholder cells for future rounds (待定)
-- Round names fully Chinese: 第一轮/第二轮/八强/四强/决赛
-- Two-legged knockout labels: 八强首回合/八强次回合/四强首回合/四强次回合
-- Group tables: 4-team standings with expandable fixture list
-- Winner celebration badge with team color accent
-- Fixed remaining English: AET→加时, ET→加时, P→点球, OG→乌龙球
-- Modal stat labels: ATK→进攻, MID→中场, DEF→防守, STA→稳定, DEP→深度, OVR→综合
-
-### v0.6.0
-- **Player system**: each team has 22 permanent players (3 GK, 7 DF, 7 MF, 5 FW)
-- Players identified by shirt number (1-99), permanently bound to clubs
-- 2-3 star players per squad with boosted ratings and iconic numbers (#1, #7, #9, #10, #11)
-- Match events now bind to player numbers: "7号 反击中冷静推射得手"
-- All match event descriptions rewritten in Chinese
-- Player stats tracked per season: goals, assists, yellow/red cards, appearances
-- New **Players Hub** page (`/players`) with tabs: 射手榜 / 助攻榜 / 纪律
-- Top scorers/assisters with gold/silver/bronze badges
-- **Team detail page** now shows full squad roster grouped by position
-- Squad roster: number badge, position tag, rating bar, season stats, star indicator
-- Sidebar: added "球员中心" nav link
-
-### v0.5.1
-- Match day fixtures grouped by league level (顶级联赛/甲级联赛/乙级联赛/杯赛)
-- Contextual tips for key matches:
-  - 强强对话: elite/strong teams facing each other
-  - 爆冷预警: big overall gap between teams
-  - 保级生死战: both teams in relegation zone
-  - 争冠焦点: both teams in top 3
-  - 下课危机: coach pressure > 55
-- Results tab also grouped by competition
-- League fixture competitionName changed to Chinese (顶级联赛/甲级联赛/乙级联赛)
-- All news text fully Chinese (promotions, relegations, firings, upsets, trophies)
-
-### v0.5.0
-- Full Chinese localization: W/D/L → 胜/平/负, all labels in Chinese
-- New **Teams Hub** page (`/teams`) with tier classification system
-  - 5 tiers: 豪门 / 劲旅 / 中游 / 平民 / 草根
-  - Toggle view: "按档次" (by tier) or "按联赛" (by league level)
-  - Team cards with color badge, OVR, coach, morale indicator, form
-- Added `tier` field to TeamBase type for all 32 teams
-- **Dashboard completely redesigned** with tabbed layout:
-  - "比赛日" tab: fixture cards with predictions
-  - "战报" tab: results + news (auto-switches after advancing)
-  - "总览" tab: quick standings for all leagues
-  - Compact single-row header, no excessive scrolling
-- Sidebar: added "球队中心" nav link under 管理 section
-
-### v0.4.1
-- Full mobile responsive overhaul
-- Collapsible hamburger menu for mobile (sidebar hidden, overlay nav drawer)
-- League standings: hide W/D/L/GF/GA columns on mobile, show #/Team/Played/GD/Pts/Form
-- Cup group tables: hide secondary columns on mobile
-- Dashboard: stacked match day header, responsive banner, hidden decorative elements
-- Modal slides up from bottom on mobile (sheet-style)
-- Team detail: color badge header with OVR and star rating
-- Coaches page: responsive card padding and sizing
-- All touch targets >= 44px
-- Responsive font sizes and padding throughout
-
-### v0.4.0
-- New **Coaches Hub** page (`/coaches`) with full coach roster
-- Filter tabs: all / employed / unemployed
-- Sort by: rating, trophies, pressure, name
-- Each coach card shows: rating badge, style label, team color dot, buffs, pressure gauge
-- Redesigned coach detail page with gradient header, buff grid, trait bars, career timeline
-- Added "教练中心" nav link in sidebar under new "管理" section
-
-### v0.3.1
-- Balance overhaul: fatigue, morale, squad health, coach pressure all retuned
-- Fatigue per match: 8 → 4, recovery per rest: 5 → 6
-- Morale: win +6/loss -4 (was +5/-8), natural drift toward 65
-- Squad health: lighter wear (-1/match), injury risk only above 70 fatigue
-- Coach pressure: loss +5 (was +8), win -4 (was -3), firing threshold raised to 80
-- Fatigue penalty on match strength halved
-- Initial states: morale 70, squad health 92, fatigue 5, pressure 5
-- Season reset carries only 30% of pressure
-- Momentum decays naturally toward 0
-
-### v0.3.0
-- Custom logo icon (favicon + in-app)
-- Author credit (by KurtDubain)
-- README with full game documentation
-
-### v0.2.0
-- Real teams from Big 5 leagues + Chinese Super League
-- Team color accents throughout UI
-- MatchDetailModal with pre-match predictions and post-match analysis
-- Clickable fixtures everywhere (Dashboard, Calendar, League, Cup)
-- UI overhaul: gradient banners, better cards, zone indicators
-- Enhanced league page with schedule tab and season stats
-- Improved welcome screen and layout design
-
-### v0.1.0
-- Initial release
-- 3-tier league system with 32 teams
-- Global calendar window system (~48 windows/season)
-- Match simulation engine (seeded Poisson)
-- League Cup, Super Cup, World Championship Cup
-- Coach system with 36 coaches, firing/hiring
-- Honor system and season history
-- localStorage persistence
-- 7 pages: Dashboard, Calendar, League, Cup, Team, Coach, History
+- **69 个源文件**
+- **15,000+ 行 TypeScript/React 代码**
+- **50+ 次 Git 提交**
+- **13 个页面 + 11 个组件 + 24 个引擎模块**
 
 ---
 
 <p align="center">
-  <sub>Built with Vite + React + TypeScript + Tailwind</sub><br/>
+  <sub>Built with Vite + React + TypeScript + Tailwind + Canvas</sub><br/>
   <sub>by <a href="https://github.com/KurtDubain">KurtDubain</a></sub>
 </p>
