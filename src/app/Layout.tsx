@@ -86,7 +86,7 @@ export default function Layout({ children }: LayoutProps) {
       {favoriteTeamId && world?.teamBases[favoriteTeamId] && (
         <div className="px-4 py-2 border-b border-slate-700/60">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: (world.teamBases[favoriteTeamId] as any)?.color ?? '#666' }} />
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: world.teamBases[favoriteTeamId]?.color ?? '#666' }} />
             <NavLink to={`/team/${favoriteTeamId}`} className="text-xs text-slate-200 hover:text-blue-400 truncate font-medium">
               {getTeamName(favoriteTeamId, world.teamBases)}
             </NavLink>

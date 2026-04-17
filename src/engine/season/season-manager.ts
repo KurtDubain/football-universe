@@ -23,6 +23,11 @@ import { createInitialPlayerStats, updatePlayerStatsFromResults } from '../playe
 import { maybeGenerateEvent, applyEventEffect } from '../events';
 import { checkAchievements, Achievement } from '../achievements';
 import { buildSeasonCalendar, appendWorldCupWindows, CalendarBuildInput } from './calendar-builder';
+import {
+  getTeamIdsByLeague, getAllTeamIds, createNewsId, isUpset,
+  countTrailingResult, countTrailingNotResult, cnRoundLabel,
+  countCompletedSuperCupGroupWindows, isTeamEliminated, buildSimulationContext,
+} from './helpers';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
 import { leagueConfigs, superCupConfig } from '../../config/competitions';
@@ -65,97 +70,6 @@ export interface GameWorld {
   seed: number;
   rngState: number;
 }
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-function getTeamIdsByLeague(teamStates: Record<string, TeamState>, level: 1 | 2 | 3): string[] {
-  return Object.values(teamStates)
-    .filter((ts) => ts.leagueLevel === level)
-    .map((ts) => ts.id);
-}
-
-function getAllTeamIds(teamStates: Record<string, TeamState>): string[] {
-  return Object.keys(teamStates);
-}
-
-function buildSimulationContext(
-  fixture: MatchFixture,
-  world: GameWorld,
-  rng: SeededRNG,
-): SimulationContext {
-  const homeTeam = world.teamBases[fixture.homeTeamId];
-  const awayTeam = world.teamBases[fixture.awayTeamId];
-  const homeState = world.teamStates[fixture.homeTeamId];
-  const awayState = world.teamStates[fixture.awayTeamId];
-  const homeCoachId = homeState.currentCoachId;
-  const awayCoachId = awayState.currentCoachId;
-  const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
-  const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
-
-  const isKnockout = fixture.competitionType === 'league_cup'
-    || fixture.competitionType === 'relegation_playoff'
-    || fixture.competitionType === 'world_cup'
-    || (fixture.competitionType === 'super_cup');
-
-  return {
-    homeTeam,
-    awayTeam,
-    homeState,
-    awayState,
-    homeCoach,
-    awayCoach,
-    competitionType: fixture.competitionType,
-    isKnockout,
-    rng,
-    homeSquad: world.squads[fixture.homeTeamId],
-    awaySquad: world.squads[fixture.awayTeamId],
-  };
-}
-
-function createNewsId(seasonNumber: number, windowIndex: number, suffix: string): string {
-  return `S${seasonNumber}-W${windowIndex}-${suffix}`;
-}
-
-function isUpset(homeTeam: TeamBase, awayTeam: TeamBase, result: MatchResult): boolean {
-  const homeGoalsTotal = result.homeGoals + (result.etHomeGoals ?? 0);
-  const awayGoalsTotal = result.awayGoals + (result.etAwayGoals ?? 0);
-  const overallDiff = Math.abs(homeTeam.overall - awayTeam.overall);
-  if (overallDiff < 10) return false;
-  const strongerIsHome = homeTeam.overall > awayTeam.overall;
-  if (strongerIsHome) {
-    return awayGoalsTotal > homeGoalsTotal;
-  }
-  return homeGoalsTotal > awayGoalsTotal;
-}
-
-function countTrailingResult(form: ('W'|'D'|'L')[], target: 'W'|'D'|'L'): number {
-  let count = 0;
-  for (let i = form.length - 1; i >= 0; i--) {
-    if (form[i] === target) count++;
-    else break;
-  }
-  return count;
-}
-
-function cnRoundLabel(name: string): string {
-  const map: Record<string, string> = { R32: '第一轮止步', R16: '第二轮止步', QF: '八强', SF: '四强', Final: '决赛' };
-  return map[name] ?? name;
-}
-
-function countTrailingNotResult(form: ('W'|'D'|'L')[], exclude: 'W'|'D'|'L'): number {
-  let count = 0;
-  for (let i = form.length - 1; i >= 0; i--) {
-    if (form[i] !== exclude) count++;
-    else break;
-  }
-  return count;
-}
-
-// Count completed super cup group windows so far
-function countCompletedSuperCupGroupWindows(calendar: CalendarWindow[]): number {
-  return calendar.filter((w) => w.type === 'super_cup_group' && w.completed).length;
-}
-
 // ── Main public functions ────────────────────────────────────────
 
 /**
@@ -1500,7 +1414,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
   // Top scorer
   const allPlayerStats = Object.values(world.playerStats);
-  const topScorer = allPlayerStats.reduce((best, s) => s.goals > (best?.goals ?? 0) ? s : best, null as any);
+  const topScorer = allPlayerStats.reduce((best, s) => s.goals > (best?.goals ?? 0) ? s : best, null as { goals: number; playerId: string; teamId: string } | null);
   if (topScorer && topScorer.goals > 0) {
     const parts = topScorer.playerId.split('-');
     const num = parts[parts.length - 1];
@@ -1966,18 +1880,3 @@ export function isSeasonFullyComplete(world: GameWorld): boolean {
 /**
  * Determine if a team was eliminated in a knockout match.
  */
-function isTeamEliminated(teamId: string, result: MatchResult): boolean {
-  const homeGoalsTotal = result.homeGoals + (result.etHomeGoals ?? 0);
-  const awayGoalsTotal = result.awayGoals + (result.etAwayGoals ?? 0);
-
-  let winnerId: string;
-  if (homeGoalsTotal !== awayGoalsTotal) {
-    winnerId = homeGoalsTotal > awayGoalsTotal ? result.homeTeamId : result.awayTeamId;
-  } else if (result.penalties && result.penaltyHome != null && result.penaltyAway != null) {
-    winnerId = result.penaltyHome > result.penaltyAway ? result.homeTeamId : result.awayTeamId;
-  } else {
-    winnerId = result.homeTeamId;
-  }
-
-  return winnerId !== teamId;
-}

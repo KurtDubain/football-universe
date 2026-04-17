@@ -128,7 +128,7 @@ export function getMatchTags(
 
     if (homePos > 0 && awayPos > 0) {
       // Title decider
-      if (homePos <= 2 && awayPos <= 2 && standings[0] && (standings[0] as any).played > 10) {
+      if (homePos <= 2 && awayPos <= 2 && standings[0] && ((standings[0] as { played?: number })?.played ?? 0) > 10) {
         tags.push({ label: '冠军战', color: 'bg-amber-600 text-white', glow: true });
       }
       // Relegation six-pointer
@@ -149,7 +149,7 @@ export function getMatchTags(
 
   // League endgame — last 3 rounds (check if round number is high)
   if (competitionType === 'league' && standings && leagueSize) {
-    const totalPlayed = (standings[0] as any)?.played ?? 0;
+    const totalPlayed = (standings[0] as { played?: number })?.played ?? 0;
     // For top league 30 rounds: endgame at round 28+
     // For mid/low 14 rounds: endgame at round 12+
     const maxRounds = leagueSize >= 16 ? 30 : 14;

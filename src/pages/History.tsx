@@ -20,7 +20,7 @@ export default function History() {
         teamId,
         name: getTeamName(teamId, world.teamBases),
         count: trophies.length,
-        color: (world.teamBases[teamId] as any)?.color ?? '#666',
+        color: (world.teamBases[teamId] as { color?: string })?.color ?? '#666',
       });
     }
   }

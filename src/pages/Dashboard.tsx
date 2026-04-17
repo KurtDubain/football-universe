@@ -529,7 +529,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
 
   // Top scorer
   const topScorer = Object.values(world.playerStats).reduce(
-    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best), null as any
+    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best), null as { goals: number; playerId: string; teamId: string; assists: number; appearances: number } | null
   );
   let topScorerText = '暂无';
   if (topScorer && topScorer.goals > 0) {
@@ -579,7 +579,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
                   {favorites.map((f, i) => (
                     <div key={f.id} className="flex items-center gap-1 text-slate-300">
                       <span className="text-amber-400">{i + 1}.</span>
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: (world.teamBases[f.id] as any)?.color ?? '#666' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: world.teamBases[f.id]?.color ?? '#666' }} />
                       {getTeamName(f.id, world.teamBases)}
                       <span className="text-slate-500 ml-auto">{f.ovr}</span>
                     </div>

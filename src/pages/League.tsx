@@ -713,7 +713,7 @@ function TrendChart({ rounds, standings, world, leagueLevel }: {
           {/* Team lines */}
           {showTeams.map((tid, ti) => {
             const pts = cumPoints[tid];
-            const color = (world.teamBases[tid] as any)?.color ?? '#888';
+            const color = world.teamBases[tid]?.color ?? '#888';
             const points = pts.map((p, i) => {
               const x = 30 + i * ((roundCount > 1 ? (roundCount * 30 - 30) / (roundCount - 1) : 0));
               const y = chartH - (p / maxPts) * chartH + 10;
@@ -751,7 +751,7 @@ function TrendChart({ rounds, standings, world, leagueLevel }: {
           const pts = cumPoints[tid][cumPoints[tid].length - 1] ?? 0;
           return (
             <div key={tid} className="flex items-center gap-1.5 text-xs">
-              <span className="w-3 h-1 rounded-full shrink-0" style={{ backgroundColor: (team as any)?.color ?? '#888' }} />
+              <span className="w-3 h-1 rounded-full shrink-0" style={{ backgroundColor: world.teamBases[tid]?.color ?? '#888' }} />
               <Link to={`/team/${tid}`} className="text-slate-300 hover:text-blue-400">{getTeamName(tid, world.teamBases)}</Link>
               <span className="text-slate-500">{pts}分</span>
             </div>
