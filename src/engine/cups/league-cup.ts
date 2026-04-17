@@ -145,7 +145,7 @@ export function advanceLeagueCup(
   // Create next round's fixtures
   const season = extractSeason(cup);
   const nextRoundNumber = roundIndex + 1;
-  const nextRoundName = ROUND_NAMES[roundIndex]; // 0-indexed access with 1-based roundIndex
+  const nextRoundName = ROUND_NAMES[nextRoundNumber - 1];
 
   const nextFixtures: CupFixture[] = [];
   for (let i = 0; i < winners.length; i += 2) {
