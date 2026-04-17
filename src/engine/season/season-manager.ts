@@ -137,6 +137,11 @@ function countTrailingResult(form: ('W'|'D'|'L')[], target: 'W'|'D'|'L'): number
   return count;
 }
 
+function cnRoundLabel(name: string): string {
+  const map: Record<string, string> = { R32: '第一轮止步', R16: '第二轮止步', QF: '八强', SF: '四强', Final: '决赛' };
+  return map[name] ?? name;
+}
+
 function countTrailingNotResult(form: ('W'|'D'|'L')[], exclude: 'W'|'D'|'L'): number {
   let count = 0;
   for (let i = form.length - 1; i >= 0; i--) {
@@ -1585,9 +1590,66 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     const standings = allStandings[foundLevel] ?? [];
     const position = entry ? standings.indexOf(entry) + 1 : standings.length;
 
+    // Determine cup results for this team
+    let cupResult: string | undefined;
+    let superCupResult: string | undefined;
+    let worldCupResult: string | undefined;
+
+    // League cup
+    if (teamId === leagueCupWinner) cupResult = '冠军';
+    else {
+      // Check if runner-up (in final but lost)
+      const lcFinal = world.leagueCup.rounds.at(-1);
+      if (lcFinal?.fixtures[0] && (lcFinal.fixtures[0].homeTeamId === teamId || lcFinal.fixtures[0].awayTeamId === teamId)) {
+        cupResult = '亚军';
+      } else {
+        // Find which round they were eliminated
+        for (const round of world.leagueCup.rounds) {
+          const inRound = round.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId);
+          if (inRound && round.completed) {
+            const won = round.fixtures.some(f => f.winnerId === teamId);
+            if (!won) { cupResult = cnRoundLabel(round.roundName); break; }
+          }
+        }
+      }
+    }
+
+    // Super cup
+    if (teamId === superCupWinner) superCupResult = '冠军';
+    else {
+      const scFinal = world.superCup.knockoutRounds.at(-1);
+      if (scFinal?.fixtures[0] && (scFinal.fixtures[0].homeTeamId === teamId || scFinal.fixtures[0].awayTeamId === teamId)) {
+        superCupResult = '亚军';
+      } else if (world.superCup.groups.some(g => g.teamIds.includes(teamId))) {
+        if (world.superCup.groupStageCompleted) {
+          const inKnockout = world.superCup.knockoutRounds.some(r => r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId));
+          superCupResult = inKnockout ? '淘汰赛' : '小组赛出局';
+        } else {
+          superCupResult = '参赛中';
+        }
+      }
+    }
+
+    // World cup
+    if (world.worldCup) {
+      if (teamId === worldCupWinner) worldCupResult = '冠军';
+      else if (world.worldCup.knockoutRounds.at(-1)?.fixtures[0] &&
+        (world.worldCup.knockoutRounds.at(-1)!.fixtures[0].homeTeamId === teamId ||
+         world.worldCup.knockoutRounds.at(-1)!.fixtures[0].awayTeamId === teamId)) {
+        worldCupResult = '亚军';
+      } else if (world.worldCup.participantIds.includes(teamId)) {
+        const inKnockout = world.worldCup.knockoutRounds.some(r => r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId));
+        if (world.worldCup.completed) {
+          worldCupResult = inKnockout ? '淘汰赛' : '小组赛出局';
+        } else {
+          worldCupResult = '参赛中';
+        }
+      }
+    }
+
     const record: SeasonRecord = {
       seasonNumber,
-      leagueLevel: foundLevel, // the league they actually played in this season
+      leagueLevel: foundLevel,
       leaguePosition: position,
       leaguePlayed: entry?.played ?? 0,
       leagueWon: entry?.won ?? 0,
@@ -1596,6 +1658,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       leagueGF: entry?.goalsFor ?? 0,
       leagueGA: entry?.goalsAgainst ?? 0,
       leaguePoints: entry?.points ?? 0,
+      cupResult,
+      superCupResult,
+      worldCupResult,
       coachId: teamState.currentCoachId ?? '',
       promoted: teamState.leagueLevel < world.teamBases[teamId].initialLeagueLevel,
       relegated: teamState.leagueLevel > world.teamBases[teamId].initialLeagueLevel,

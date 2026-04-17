@@ -216,6 +216,9 @@ export default function TeamDetail() {
                   <th className="hidden md:table-cell px-2 py-1.5 text-center">进</th>
                   <th className="hidden md:table-cell px-2 py-1.5 text-center">失</th>
                   <th className="px-2 py-1.5 text-center">积分</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">联杯</th>
+                  <th className="hidden sm:table-cell px-2 py-1.5 text-center">超杯</th>
+                  <th className="hidden md:table-cell px-2 py-1.5 text-center">冠军杯</th>
                   <th className="px-2 py-1.5 text-left">教练</th>
                   <th className="px-2 py-1.5 text-center">备注</th>
                 </tr>
@@ -249,6 +252,27 @@ export default function TeamDetail() {
                       <td className="hidden md:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueGF}</td>
                       <td className="hidden md:table-cell px-2 py-1.5 text-center text-slate-300">{rec.leagueGA}</td>
                       <td className="px-2 py-1.5 text-center text-slate-100 font-bold">{rec.leaguePoints}</td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center">
+                        {rec.cupResult && (
+                          <span className={`text-[9px] px-1 rounded ${rec.cupResult === '冠军' ? 'bg-amber-900/50 text-amber-300' : rec.cupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                            {rec.cupResult}
+                          </span>
+                        )}
+                      </td>
+                      <td className="hidden sm:table-cell px-2 py-1.5 text-center">
+                        {rec.superCupResult && (
+                          <span className={`text-[9px] px-1 rounded ${rec.superCupResult === '冠军' ? 'bg-purple-900/50 text-purple-300' : rec.superCupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                            {rec.superCupResult}
+                          </span>
+                        )}
+                      </td>
+                      <td className="hidden md:table-cell px-2 py-1.5 text-center">
+                        {rec.worldCupResult && (
+                          <span className={`text-[9px] px-1 rounded ${rec.worldCupResult === '冠军' ? 'bg-sky-900/50 text-sky-300' : rec.worldCupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                            {rec.worldCupResult}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-1.5">
                         {rec.coachId ? (
                           <Link to={`/coach/${rec.coachId}`} className="text-xs text-slate-400 hover:text-blue-400 truncate block max-w-[80px]">
