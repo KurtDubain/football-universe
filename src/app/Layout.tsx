@@ -255,7 +255,7 @@ export default function Layout({ children }: LayoutProps) {
               </button>
             )}
             {showFastMenu && currentWindow && (
-              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
+              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[60] py-1 min-w-[140px]">
                 <button onClick={() => { batchAdvance(5); setShowFastMenu(false); }} className="w-full px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 5 步</button>
                 <button onClick={() => { batchAdvance(10); setShowFastMenu(false); }} className="w-full px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 10 步</button>
                 <div className="border-t border-slate-700 my-0.5" />

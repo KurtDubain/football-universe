@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { NewsItem } from '../engine/season/season-manager';
 
 const priorityMap: Record<string, number> = {
@@ -6,21 +6,40 @@ const priorityMap: Record<string, number> = {
   promotion: 5, relegation: 5, streak: 4, match_result: 2,
 };
 
+const typeIcon: Record<string, string> = {
+  trophy: '🏆', upset: '🔥', coach_fired: '📋', coach_hired: '✅',
+  promotion: '⬆️', relegation: '⬇️', streak: '📊', match_result: '⚽',
+};
+
+const typeBg: Record<string, string> = {
+  trophy: 'border-l-amber-500',
+  upset: 'border-l-purple-500',
+  coach_fired: 'border-l-red-500',
+  coach_hired: 'border-l-blue-500',
+  promotion: 'border-l-green-500',
+  relegation: 'border-l-red-400',
+  streak: 'border-l-sky-500',
+  match_result: 'border-l-emerald-500',
+};
+
 export default function NewsTicker({ news }: { news: NewsItem[] }) {
   const [index, setIndex] = useState(0);
+  const [expanded, setExpanded] = useState(false);
 
-  // Sort by priority, take top 5
-  const sorted = [...news]
-    .sort((a, b) => (priorityMap[b.type] ?? 0) - (priorityMap[a.type] ?? 0))
-    .slice(0, 5);
+  const sorted = useMemo(() =>
+    [...news]
+      .sort((a, b) => (priorityMap[b.type] ?? 0) - (priorityMap[a.type] ?? 0))
+      .slice(0, 8),
+    [news]
+  );
 
   useEffect(() => {
-    if (sorted.length <= 1) return;
+    if (sorted.length <= 1 || expanded) return;
     const timer = setInterval(() => {
       setIndex(prev => (prev + 1) % sorted.length);
-    }, 4000);
+    }, 4500);
     return () => clearInterval(timer);
-  }, [sorted.length]);
+  }, [sorted.length, expanded]);
 
   useEffect(() => { setIndex(0); }, [news.length]);
 
@@ -28,21 +47,45 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
   const item = sorted[index % sorted.length];
   if (!item) return null;
 
-  const typeColors: Record<string, string> = {
-    trophy: 'bg-amber-500', upset: 'bg-purple-500', coach_fired: 'bg-red-500',
-    coach_hired: 'bg-blue-500', promotion: 'bg-green-500', relegation: 'bg-red-500',
-    streak: 'bg-sky-500', match_result: 'bg-emerald-500',
-  };
-
   return (
-    <div className="h-7 bg-slate-800/90 backdrop-blur border-t border-slate-700/50 flex items-center px-3 sm:px-5 gap-2 overflow-hidden shrink-0">
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${typeColors[item.type] ?? 'bg-slate-500'}`} />
-      <p className="text-[11px] text-slate-400 truncate animate-slide-down" key={item.id}>
-        <span className="text-slate-200 font-medium">{item.title}</span>
-        {item.description && <span className="hidden sm:inline ml-2 text-slate-500">{item.description}</span>}
-      </p>
-      {sorted.length > 1 && (
-        <span className="text-[9px] text-slate-600 shrink-0 ml-auto">{index + 1}/{sorted.length}</span>
+    <div className="relative shrink-0">
+      {/* Main ticker bar */}
+      <div
+        className="h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="text-xs shrink-0">{typeIcon[item.type] ?? '📰'}</span>
+        <p className="text-[11px] text-slate-300 truncate flex-1 animate-slide-down" key={item.id}>
+          {item.title}
+        </p>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {sorted.length > 1 && (
+            <span className="text-[9px] text-slate-600">{index + 1}/{sorted.length}</span>
+          )}
+          <span className="text-[10px] text-slate-600">{expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Expanded news panel */}
+      {expanded && (
+        <div className="absolute left-0 right-0 top-full bg-slate-800 border-b border-slate-700 shadow-xl z-[55] max-h-60 overflow-y-auto animate-slide-down">
+          {sorted.map((n, i) => (
+            <div
+              key={n.id}
+              className={`flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
+              onClick={() => { setIndex(i); setExpanded(false); }}
+            >
+              <span className="text-xs mt-0.5 shrink-0">{typeIcon[n.type] ?? '📰'}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-slate-200 font-medium leading-tight">{n.title}</p>
+                {n.description && (
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight truncate">{n.description}</p>
+                )}
+              </div>
+              <span className="text-[9px] text-slate-600 shrink-0 mt-0.5">S{n.seasonNumber}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
