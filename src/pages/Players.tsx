@@ -216,7 +216,7 @@ export default function Players() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-400 border-b border-slate-700">
-                <th className="px-2 sm:px-3 py-2.5 text-center w-10">#</th>
+                <th className="px-1 sm:px-2 py-2 text-center w-10">#</th>
                 <th className="px-2 py-2.5 text-center">号码</th>
                 <th className="px-2 py-2.5 text-left">球队</th>
                 <th className="px-2 py-2.5 text-center hidden sm:table-cell">

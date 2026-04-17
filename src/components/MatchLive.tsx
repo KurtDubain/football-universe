@@ -144,20 +144,20 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
             {/* Home */}
             <div className="flex-1 text-right">
               <div className="flex items-center gap-2 justify-end">
-                <span className="text-base sm:text-lg font-bold text-slate-100 truncate">{ht?.name ?? '主队'}</span>
+                <span className="text-sm sm:text-lg font-bold text-slate-100 truncate">{ht?.name ?? '主队'}</span>
                 <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: ht?.color ?? '#666' }} />
               </div>
             </div>
 
             {/* Score */}
-            <div className="flex items-center gap-3 px-4 min-w-[120px] justify-center">
-              <span className={`text-5xl font-black tabular-nums transition-all duration-300 ${
+            <div className="flex items-center gap-3 px-4 min-w-[90px] justify-center">
+              <span className={`text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
                 homeScore > awayScore ? 'text-green-400' : 'text-white'
               } ${goalFlash === 'home' ? 'animate-score-pop scale-110' : ''}`}>
                 {homeScore}
               </span>
               <span className="text-2xl text-slate-700 font-light">-</span>
-              <span className={`text-5xl font-black tabular-nums transition-all duration-300 ${
+              <span className={`text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
                 awayScore > homeScore ? 'text-green-400' : 'text-white'
               } ${goalFlash === 'away' ? 'animate-score-pop scale-110' : ''}`}>
                 {awayScore}
@@ -168,7 +168,7 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: at?.color ?? '#666' }} />
-                <span className="text-base sm:text-lg font-bold text-slate-100 truncate">{at?.name ?? '客队'}</span>
+                <span className="text-sm sm:text-lg font-bold text-slate-100 truncate">{at?.name ?? '客队'}</span>
               </div>
             </div>
           </div>

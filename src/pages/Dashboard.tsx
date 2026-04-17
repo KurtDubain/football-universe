@@ -161,7 +161,7 @@ export default function Dashboard() {
       </div>
 
       {/* ═══════ Tab Bar ═══════ */}
-      <div className="flex gap-4 border-b border-slate-700/50 mt-1">
+      <div className="flex gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -544,7 +544,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
   return (
     <div className="space-y-4">
       {/* Season stats cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
         <StatMini label="赛季进度" value={`${pct}%`} sub={`${completedW}/${totalW}`} />
         <StatMini label="联赛杯" value={lcRound} sub={world.leagueCup.winnerId ? `冠军: ${getTeamName(world.leagueCup.winnerId, world.teamBases)}` : '进行中'} />
         <StatMini label="超级杯" value={scStatus} sub={world.superCup.winnerId ? `冠军: ${getTeamName(world.superCup.winnerId, world.teamBases)}` : '进行中'} />

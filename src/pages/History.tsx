@@ -190,7 +190,7 @@ export default function History() {
       {tab === 'records' && funRecords && (
         <div className="space-y-4">
           {/* Overview stats */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <RecordCard label="历史总赛季" value={`${funRecords.totalSeasons}`} />
             <RecordCard label="历史总进球" value={`${funRecords.totalGoals}`} />
             <RecordCard label="历史总场次" value={`${Math.round(funRecords.totalMatches)}`} />

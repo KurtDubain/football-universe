@@ -430,7 +430,7 @@ function RoundHeader({ mr }: { mr: MergedRound }) {
 function EmptySlot({ show }: { show: boolean }) {
   if (!show) return null;
   return (
-    <div className="w-36 sm:w-40 h-[44px] rounded-lg border border-dashed border-slate-700/40 flex items-center justify-center">
+    <div className="w-28 sm:w-36 h-[44px] rounded-lg border border-dashed border-slate-700/40 flex items-center justify-center">
       <span className="text-[10px] text-slate-600">待定</span>
     </div>
   );
@@ -453,7 +453,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
   const derbyName = isDerby(tie.team1Id, tie.team2Id) ? getDerbyName(tie.team1Id, tie.team2Id) : null;
 
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
-  const cellW = compact ? 'w-36 sm:w-40' : highlight ? 'w-44 sm:w-52' : 'w-40 sm:w-48';
+  const cellW = compact ? 'w-28 sm:w-36' : highlight ? 'w-32 sm:w-44' : 'w-30 sm:w-40';
 
   return (
     <button

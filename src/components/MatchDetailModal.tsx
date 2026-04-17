@@ -131,7 +131,7 @@ function PreMatchView({
           className="w-1.5 shrink-0"
           style={{ backgroundColor: homeTeam.color }}
         />
-        <div className="flex-1 flex items-center justify-between px-5 py-5">
+        <div className="flex-1 flex items-center justify-between px-3 sm:px-5 py-3 sm:py-5">
           {/* Home team */}
           <div className="flex-1 min-w-0">
             <Link

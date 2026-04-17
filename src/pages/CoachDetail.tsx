@@ -138,7 +138,7 @@ export default function CoachDetail() {
         {/* Buffs */}
         <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">教练加成</h3>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             {buffs.map((b) => (
               <div key={b.label} className="bg-slate-700/30 rounded-lg p-2 text-center">
                 <div className="text-[10px] text-slate-500">{b.label}</div>
