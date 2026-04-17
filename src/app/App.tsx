@@ -11,6 +11,7 @@ import CoachDetail from '../pages/CoachDetail';
 import History from '../pages/History';
 import Teams from '../pages/Teams';
 import Players from '../pages/Players';
+import PlayerDetail from '../pages/PlayerDetail';
 import Settings from '../pages/Settings';
 import Welcome from '../pages/Welcome';
 
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/teams" element={<Teams />} />
         <Route path="/coaches" element={<Coaches />} />
         <Route path="/players" element={<Players />} />
+        <Route path="/player/:id" element={<PlayerDetail />} />
         <Route path="/team/:id" element={<TeamDetail />} />
         <Route path="/coach/:id" element={<CoachDetail />} />
         <Route path="/history" element={<History />} />

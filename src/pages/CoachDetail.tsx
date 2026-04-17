@@ -86,6 +86,53 @@ export default function CoachDetail() {
         </div>
       </div>
 
+      {/* Coaching stats */}
+      {(() => {
+        // Aggregate stats from all season records where this coach managed
+        const allRecords = Object.entries(world.teamSeasonRecords).flatMap(([tid, recs]) =>
+          recs.filter(r => r.coachId === id).map(r => ({ ...r, teamId: tid }))
+        );
+        if (allRecords.length === 0) return null;
+        const totalW = allRecords.reduce((s, r) => s + r.leagueWon, 0);
+        const totalD = allRecords.reduce((s, r) => s + r.leagueDrawn, 0);
+        const totalL = allRecords.reduce((s, r) => s + r.leagueLost, 0);
+        const totalP = allRecords.reduce((s, r) => s + r.leaguePlayed, 0);
+        const totalPts = allRecords.reduce((s, r) => s + r.leaguePoints, 0);
+        const winRate = totalP > 0 ? ((totalW / totalP) * 100).toFixed(1) : '0';
+        const avgPts = allRecords.length > 0 ? (totalPts / allRecords.length).toFixed(1) : '0';
+        const best = allRecords.reduce((b, r) => r.leaguePosition < b.leaguePosition ? r : b, allRecords[0]);
+        const championships = allRecords.filter(r => r.leaguePosition === 1).length;
+
+        return (
+          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">执教数据</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="text-center">
+                <div className="text-lg font-bold text-slate-100">{allRecords.length}</div>
+                <div className="text-[10px] text-slate-500">执教赛季</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-400">{winRate}%</div>
+                <div className="text-[10px] text-slate-500">胜率 ({totalW}胜{totalD}平{totalL}负)</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-blue-400">{avgPts}</div>
+                <div className="text-[10px] text-slate-500">赛季场均积分</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-400">{championships}</div>
+                <div className="text-[10px] text-slate-500">联赛冠军</div>
+              </div>
+            </div>
+            {best && (
+              <div className="mt-2 text-[10px] text-slate-500 text-center">
+                最佳赛季: S{best.seasonNumber} {world.teamBases[best.teamId]?.name} 第{best.leaguePosition}名 ({best.leaguePoints}分)
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Buff grid + meta */}
       <div className="grid grid-cols-2 gap-4">
         {/* Buffs */}

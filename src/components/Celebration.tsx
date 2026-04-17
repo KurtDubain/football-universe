@@ -147,6 +147,17 @@ export function getMatchTags(
     tags.push({ label: '生死战', color: 'bg-red-500 text-white' });
   }
 
+  // League endgame — last 3 rounds (check if round number is high)
+  if (competitionType === 'league' && standings && leagueSize) {
+    const totalPlayed = (standings[0] as any)?.played ?? 0;
+    // For top league 30 rounds: endgame at round 28+
+    // For mid/low 14 rounds: endgame at round 12+
+    const maxRounds = leagueSize >= 16 ? 30 : 14;
+    if (totalPlayed >= maxRounds - 3 && totalPlayed > 5) {
+      tags.push({ label: '收官之战', color: 'bg-emerald-700 text-white' });
+    }
+  }
+
   return tags;
 }
 

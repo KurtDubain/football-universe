@@ -456,12 +456,12 @@ function SquadRoster({ teamId }: { teamId: string }) {
                     key={player.id}
                     className="flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors"
                   >
-                    {/* Number badge */}
-                    <div className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0">
+                    {/* Number badge — clickable */}
+                    <Link to={`/player/${player.id}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors">
                       <span className="text-xs font-bold text-slate-200">
                         {player.number}
                       </span>
-                    </div>
+                    </Link>
 
                     {/* Position + star */}
                     <div className="flex items-center gap-1 w-10 shrink-0">

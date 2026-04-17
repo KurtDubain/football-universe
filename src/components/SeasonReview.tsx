@@ -70,27 +70,53 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         <StatCard label="换帅次数" value={`${honor.coachChanges.length}次`} sub={honor.coachChanges.length > 0 ? honor.coachChanges.map(c => tb[c.teamId]?.name).slice(0, 2).join('、') : '无'} />
       </div>
 
-      {/* Top scorers */}
-      {scorers.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
-          <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季射手榜</h3>
-          <div className="space-y-1">
-            {scorers.map((s, i) => {
-              const parts = s.playerId.split('-');
-              const num = parts[parts.length - 1];
-              return (
-                <div key={s.playerId} className="flex items-center gap-2 text-xs">
-                  <span className={`w-4 text-center font-bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-500'}`}>{i + 1}</span>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                  <Link to={`/team/${s.teamId}`} className="text-slate-300 hover:text-blue-400 flex-1 truncate">{getTeamName(s.teamId, tb)} {num}号</Link>
-                  <span className="font-bold text-slate-200">{s.goals}球</span>
-                  {s.assists > 0 && <span className="text-slate-500">{s.assists}助</span>}
+      {/* Top scorer highlight + list */}
+      {scorers.length > 0 && (() => {
+        const king = scorers[0];
+        const kingParts = king.playerId.split('-');
+        const kingNum = kingParts[kingParts.length - 1];
+        const kingTeam = tb[king.teamId];
+
+        return (
+          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            {/* Shooter king card */}
+            <div className="p-4 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <Link to={`/player/${king.playerId}`} className="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black text-white shrink-0 hover:opacity-80 transition-opacity" style={{ backgroundColor: kingTeam?.color ?? '#f59e0b' }}>
+                  {kingNum}
+                </Link>
+                <div>
+                  <div className="text-[10px] text-amber-400 font-semibold">赛季射手王 👑</div>
+                  <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
+                  <div className="flex gap-3 mt-0.5">
+                    <span className="text-sm font-bold text-amber-400">{king.goals} 球</span>
+                    {king.assists > 0 && <span className="text-xs text-slate-400">{king.assists} 助攻</span>}
+                    <span className="text-xs text-slate-500">{king.appearances} 场</span>
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            </div>
+            {/* Rest of top scorers */}
+            {scorers.length > 1 && (
+              <div className="p-3 space-y-1">
+                {scorers.slice(1).map((s, i) => {
+                  const parts = s.playerId.split('-');
+                  const num = parts[parts.length - 1];
+                  return (
+                    <div key={s.playerId} className="flex items-center gap-2 text-xs">
+                      <span className={`w-4 text-center font-bold ${i === 0 ? 'text-slate-300' : i === 1 ? 'text-amber-700' : 'text-slate-500'}`}>{i + 2}</span>
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
+                      <Link to={`/player/${s.playerId}`} className="text-slate-300 hover:text-blue-400 flex-1 truncate">{getTeamName(s.teamId, tb)} {num}号</Link>
+                      <span className="font-bold text-slate-200">{s.goals}球</span>
+                      {s.assists > 0 && <span className="text-slate-500">{s.assists}助</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* World Cup details */}
       {honor.worldCupWinner && (

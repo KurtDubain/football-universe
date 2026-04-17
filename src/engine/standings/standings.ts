@@ -32,10 +32,15 @@ export function updateStandings(
   currentStandings: StandingEntry[],
   results: MatchResult[],
 ): StandingEntry[] {
+  // Record previous positions before re-sorting
+  const prevPositions = new Map<string, number>();
+  currentStandings.forEach((e, i) => prevPositions.set(e.teamId, i + 1));
+
   // Deep clone so we don't mutate the original
   const standings = currentStandings.map((entry) => ({
     ...entry,
     form: [...entry.form],
+    previousPosition: prevPositions.get(entry.teamId),
   }));
 
   for (const result of results) {

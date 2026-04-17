@@ -21,4 +21,5 @@ export interface StandingEntry {
   goalDifference: number;
   points: number;
   form: ('W' | 'D' | 'L')[];
+  previousPosition?: number;
 }
