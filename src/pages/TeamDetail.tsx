@@ -535,53 +535,93 @@ function SquadRoster({ teamId }: { teamId: string }) {
 //  Team trend chart
 // ══════════════════════════════════════════════════════════════
 
-function TeamTrendChart({ records, color }: { records: { seasonNumber: number; leaguePosition: number; leaguePoints: number; leagueLevel: 1|2|3 }[]; color: string }) {
+function TeamTrendChart({ records, color }: { records: { seasonNumber: number; leaguePosition: number; leaguePoints: number; leagueLevel: 1|2|3; teamOverall?: number }[]; color: string }) {
   const sorted = [...records].sort((a, b) => a.seasonNumber - b.seasonNumber);
   if (sorted.length < 1) return null;
   const n = sorted.length;
   const chartW = Math.max(n * 60, 150);
-  const chartH = 120;
+  const chartH = 140;
   const padL = 30; const padR = 10; const padT = 10; const padB = 25;
-  const maxPts = Math.max(...sorted.map(r => r.leaguePoints), 1);
   const xScale = n > 1 ? (chartW - padL - padR) / (n - 1) : 0;
-  const ptsPoints = sorted.map((r, i) => {
-    const x = padL + (n > 1 ? i * xScale : (chartW - padL - padR) / 2);
-    const y = padT + (1 - r.leaguePoints / maxPts) * (chartH - padT - padB);
-    return `${x},${y}`;
-  }).join(' ');
+  const getX = (i: number) => padL + (n > 1 ? i * xScale : (chartW - padL - padR) / 2);
+
+  // Points line
+  const maxPts = Math.max(...sorted.map(r => r.leaguePoints), 1);
+  const ptsPoints = sorted.map((r, i) => `${getX(i)},${padT + (1 - r.leaguePoints / maxPts) * (chartH - padT - padB)}`).join(' ');
+
+  // Position line (inverted)
   const maxPos = Math.max(...sorted.map(r => r.leaguePosition), 1);
-  const posPoints = sorted.map((r, i) => {
-    const x = padL + (n > 1 ? i * xScale : (chartW - padL - padR) / 2);
-    const y = padT + ((r.leaguePosition - 1) / Math.max(maxPos - 1, 1)) * (chartH - padT - padB);
-    return `${x},${y}`;
-  }).join(' ');
+  const posPoints = sorted.map((r, i) => `${getX(i)},${padT + ((r.leaguePosition - 1) / Math.max(maxPos - 1, 1)) * (chartH - padT - padB)}`).join(' ');
+
+  // OVR line
+  const hasOvr = sorted.some(r => r.teamOverall && r.teamOverall > 0);
+  const maxOvr = hasOvr ? Math.max(...sorted.map(r => r.teamOverall ?? 0)) : 100;
+  const minOvr = hasOvr ? Math.min(...sorted.filter(r => r.teamOverall).map(r => r.teamOverall!)) : 0;
+  const ovrRange = Math.max(maxOvr - minOvr, 10); // at least 10 range for visibility
+  const ovrPoints = hasOvr ? sorted.map((r, i) => {
+    const ovr = r.teamOverall ?? 0;
+    if (ovr === 0) return null;
+    const y = padT + (1 - (ovr - minOvr + 5) / (ovrRange + 10)) * (chartH - padT - padB);
+    return `${getX(i)},${y}`;
+  }).filter(Boolean).join(' ') : '';
+
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full" style={{ minWidth: '200px', height: `${chartH}px` }}>
+        {/* Grid lines */}
         {[0, 0.5, 1].map(r => (
           <line key={r} x1={padL} y1={padT + r * (chartH - padT - padB)} x2={chartW - padR} y2={padT + r * (chartH - padT - padB)} stroke="#334155" strokeWidth="0.5" />
         ))}
+
+        {/* Points line (team color) */}
         <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" points={ptsPoints} opacity="0.9" />
-        <polyline fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinejoin="round" strokeDasharray="4 3" points={posPoints} opacity="0.5" />
+
+        {/* Position line (gray dashed) */}
+        <polyline fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinejoin="round" strokeDasharray="4 3" points={posPoints} opacity="0.4" />
+
+        {/* OVR line (amber) */}
+        {hasOvr && ovrPoints && (
+          <polyline fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinejoin="round" points={ovrPoints} opacity="0.8" />
+        )}
+
+        {/* Data points */}
         {sorted.map((r, i) => {
-          const x = padL + (n > 1 ? i * xScale : (chartW - padL - padR) / 2);
+          const x = getX(i);
           const yPts = padT + (1 - r.leaguePoints / maxPts) * (chartH - padT - padB);
           const lvColor = r.leagueLevel === 1 ? '#f59e0b' : r.leagueLevel === 2 ? '#3b82f6' : '#22c55e';
+          const ovr = r.teamOverall ?? 0;
+          const yOvr = ovr > 0 ? padT + (1 - (ovr - minOvr + 5) / (ovrRange + 10)) * (chartH - padT - padB) : 0;
           return (
             <g key={r.seasonNumber}>
+              {/* Points dot */}
               <circle cx={x} cy={yPts} r="3" fill={color} />
-              <text x={x} y={chartH - 3} textAnchor="middle" fill="#64748b" fontSize="8">S{r.seasonNumber}</text>
               <text x={x} y={yPts - 6} textAnchor="middle" fill="#94a3b8" fontSize="7">{r.leaguePoints}分</text>
+
+              {/* OVR dot */}
+              {ovr > 0 && (
+                <>
+                  <circle cx={x} cy={yOvr} r="2.5" fill="#f59e0b" />
+                  <text x={x} y={yOvr - 5} textAnchor="middle" fill="#f59e0b" fontSize="6.5" opacity="0.8">{ovr}</text>
+                </>
+              )}
+
+              {/* Season label + league level */}
+              <text x={x} y={chartH - 3} textAnchor="middle" fill="#64748b" fontSize="8">S{r.seasonNumber}</text>
               <circle cx={x} cy={chartH - 14} r="3" fill={lvColor} opacity="0.7" />
             </g>
           );
         })}
+
+        {/* Y-axis labels */}
         <text x="2" y={padT + 3} fill="#64748b" fontSize="7">{maxPts}分</text>
         <text x="2" y={chartH - padB} fill="#64748b" fontSize="7">0</text>
       </svg>
-      <div className="flex gap-4 mt-1 text-[10px] text-slate-500">
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-1 text-[10px] text-slate-500">
         <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded" style={{ backgroundColor: color }} /> 积分</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-slate-500" /> 排名</span>
+        {hasOvr && <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-amber-500" /> OVR</span>}
+        <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-slate-500 border-t border-dashed border-slate-400" /> 排名</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 顶</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> 甲</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> 乙</span>

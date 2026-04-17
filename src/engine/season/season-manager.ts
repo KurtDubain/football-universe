@@ -1662,6 +1662,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       superCupResult,
       worldCupResult,
       coachId: teamState.currentCoachId ?? '',
+      teamOverall: world.teamBases[teamId]?.overall ?? 0,
       promoted: teamState.leagueLevel < world.teamBases[teamId].initialLeagueLevel,
       relegated: teamState.leagueLevel > world.teamBases[teamId].initialLeagueLevel,
     };

@@ -45,6 +45,7 @@ export interface SeasonRecord {
   superCupResult?: string;
   worldCupResult?: string;
   coachId: string;
+  teamOverall?: number; // team OVR at end of season
   promoted: boolean;
   relegated: boolean;
 }
