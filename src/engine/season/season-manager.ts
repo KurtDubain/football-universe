@@ -1268,14 +1268,24 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const superCupWinner = world.superCup.winnerId ?? '';
   const worldCupWinner = world.worldCup?.winnerId;
 
-  // Promotion / relegation (already applied during relegation_playoff window)
-  // Collect the movements that happened
-  const proRelResult = determinePromotionRelegation(
-    world.league1Standings,
-    world.league2Standings,
-    world.league3Standings,
-    seasonNumber,
-  );
+  // Promotion / relegation — derive ACTUAL movements from teamStates
+  const proRelStandings: Record<number, StandingEntry[]> = {
+    1: world.league1Standings, 2: world.league2Standings, 3: world.league3Standings,
+  };
+  const actualPromoted: { teamId: string; from: number; to: number }[] = [];
+  const actualRelegated: { teamId: string; from: number; to: number }[] = [];
+  for (const teamId of getAllTeamIds(world.teamStates)) {
+    const currentLevel = world.teamStates[teamId].leagueLevel;
+    let playedLevel = currentLevel;
+    for (const [lvStr, st] of Object.entries(proRelStandings)) {
+      if (st.some(s => s.teamId === teamId && s.played > 0)) {
+        playedLevel = parseInt(lvStr) as 1 | 2 | 3;
+        break;
+      }
+    }
+    if (currentLevel < playedLevel) actualPromoted.push({ teamId, from: playedLevel, to: currentLevel });
+    else if (currentLevel > playedLevel) actualRelegated.push({ teamId, from: playedLevel, to: currentLevel });
+  }
 
   // Create honor record
   const honor = createHonorRecord(
@@ -1286,8 +1296,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     leagueCupWinner,
     superCupWinner,
     worldCupWinner,
-    proRelResult.promoted,
-    proRelResult.relegated,
+    actualPromoted,
+    actualRelegated,
     world.coachChangesThisSeason,
   );
   const honorHistory = [...world.honorHistory, honor];
@@ -1450,7 +1460,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // Promoted teams
-  for (const p of proRelResult.promoted) {
+  for (const p of actualPromoted) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, `promo-${p.teamId}`),
       seasonNumber, windowIndex, type: 'promotion',
@@ -1460,7 +1470,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // Relegated teams
-  for (const r of proRelResult.relegated) {
+  for (const r of actualRelegated) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, `releg-${r.teamId}`),
       seasonNumber, windowIndex, type: 'relegation',
@@ -1668,11 +1678,17 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   for (const teamId of getAllTeamIds(teamStates)) {
     const base = { ...teamBases[teamId] };
     const state = teamStates[teamId];
-    const standings = allStandings[state.leagueLevel] ?? [];
-    const entry = standings.find((s) => s.teamId === teamId);
-    const position = entry ? standings.indexOf(entry) + 1 : standings.length;
+    // Search ALL leagues for this team's actual data (leagueLevel may have changed from playoffs)
+    let growthEntry: StandingEntry | undefined;
+    let growthLevel: number = state.leagueLevel;
+    for (const [lvStr, st] of Object.entries(allStandings)) {
+      const found = st.find((s) => s.teamId === teamId);
+      if (found && found.played > 0) { growthEntry = found; growthLevel = parseInt(lvStr); break; }
+    }
+    const standings = allStandings[growthLevel] ?? [];
+    const position = growthEntry ? standings.indexOf(growthEntry) + 1 : standings.length;
     const total = standings.length;
-    const ratio = position / total;
+    const ratio = total > 0 ? position / total : 1;
 
     // Champions and top finishers grow slightly
     if (ratio <= 0.15) {
@@ -1771,8 +1787,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
           ? world.worldCup!.knockoutRounds.at(-1)!.fixtures[0].awayTeamId
           : world.worldCup!.knockoutRounds.at(-1)!.fixtures[0].homeTeamId)
         : undefined,
-      promoted: proRelResult.promoted.map((p) => p.teamId),
-      relegated: proRelResult.relegated.map((r) => r.teamId),
+      promoted: actualPromoted.map((p) => p.teamId),
+      relegated: actualRelegated.map((r) => r.teamId),
     },
   };
 
