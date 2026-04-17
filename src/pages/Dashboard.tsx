@@ -9,6 +9,7 @@ import SeasonReview from '../components/SeasonReview';
 import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
+import TeamName from '../components/TeamName';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -726,8 +727,7 @@ function FixtureCard({
         {/* Home */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam.color }} />
-            <span className="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-400">{homeTeam.name}</span>
+            <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
             <span className="text-[9px] text-slate-500">{homeTeam.overall}</span>
           </div>
         </div>
@@ -736,8 +736,7 @@ function FixtureCard({
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center gap-1 justify-end">
             <span className="text-[9px] text-slate-500">{awayTeam.overall}</span>
-            <span className="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-400">{awayTeam.name}</span>
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam.color }} />
+            <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
           </div>
         </div>
       </div>

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName } from '../utils/format';
+import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
 import type { CupState, SuperCupState, WorldCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
+import TeamName from '../components/TeamName';
 import { isDerby, getDerbyName } from '../config/derbies';
 
 const roundNameCN: Record<string, string> = {
@@ -21,11 +22,17 @@ const levelTag: Record<number, { text: string; cls: string }> = {
   3: { text: '乙', cls: 'bg-emerald-900/40 text-emerald-400' },
 };
 
-function TeamTag({ teamId, ts }: { teamId: string; ts: Record<string, TeamState> }) {
+function TeamTag({ teamId, ts, tb }: { teamId: string; ts: Record<string, TeamState>; tb?: Record<string, TeamBase> }) {
   const lv = ts[teamId]?.leagueLevel;
-  if (!lv) return null;
-  const t = levelTag[lv];
-  return t ? <span className={`text-[9px] px-1 py-0.5 rounded font-medium shrink-0 ${t.cls}`}>{t.text}</span> : null;
+  const tier = tb?.[teamId]?.tier;
+  if (!lv && !tier) return null;
+  const t = lv ? levelTag[lv] : null;
+  return (
+    <span className="flex gap-0.5 shrink-0">
+      {t && <span className={`text-[8px] px-1 py-0 rounded font-medium ${t.cls}`}>{t.text}</span>}
+      {tier && <span className={`text-[8px] px-1 py-0 rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
+    </span>
+  );
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -461,7 +468,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t1?.color ?? '#555' }} />
-        <TeamTag teamId={tie.team1Id} ts={ts} />
+        <TeamTag teamId={tie.team1Id} ts={ts} tb={tb} />
         <span className={`flex-1 truncate ${w1 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
           {t1 ? getTeamName(tie.team1Id, tb) : '待定'}
         </span>
@@ -475,7 +482,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
       {/* Team 2 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w2 ? 'bg-green-900/20' : ''} ${mr.twoLegged ? '' : 'rounded-b-lg'}`}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t2?.color ?? '#555' }} />
-        <TeamTag teamId={tie.team2Id} ts={ts} />
+        <TeamTag teamId={tie.team2Id} ts={ts} tb={tb} />
         <span className={`flex-1 truncate ${w2 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
           {t2 ? getTeamName(tie.team2Id, tb) : '待定'}
         </span>
@@ -555,7 +562,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
               <td className="px-1 py-1.5">
                 <div className="flex items-center gap-1 min-w-0">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[e.teamId]?.color ?? '#666' }} />
-                  <TeamTag teamId={e.teamId} ts={ts} />
+                  <TeamTag teamId={e.teamId} ts={ts} tb={tb} />
                   <Link to={`/team/${e.teamId}`} className="text-slate-200 hover:text-blue-400 truncate">{getTeamName(e.teamId, tb)}</Link>
                 </div>
               </td>
@@ -585,7 +592,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
                 return (
                   <button key={fix.id} onClick={() => onClick(fix)} className="w-full flex items-center text-xs py-1 px-2 rounded hover:bg-slate-700/40 cursor-pointer text-left">
                     <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
-                      <TeamTag teamId={fix.homeTeamId} ts={ts} />
+                      <TeamTag teamId={fix.homeTeamId} ts={ts} tb={tb} />
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tb[fix.homeTeamId]?.color ?? '#666' }} />
                       <span className="text-slate-300 truncate">{getTeamName(fix.homeTeamId, tb)}</span>
                     </div>
@@ -595,7 +602,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tb[fix.awayTeamId]?.color ?? '#666' }} />
                       <span className="text-slate-300 truncate">{getTeamName(fix.awayTeamId, tb)}</span>
-                      <TeamTag teamId={fix.awayTeamId} ts={ts} />
+                      <TeamTag teamId={fix.awayTeamId} ts={ts} tb={tb} />
                     </div>
                   </button>
                 );

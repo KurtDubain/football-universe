@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import type { MatchResult } from '../types/match';
 import type { TeamBase } from '../types/team';
+import TeamName from './TeamName';
 import { getTeamName } from '../utils/format';
 import { isDerby, getDerbyName } from '../config/derbies';
 import { EnergyWave } from './CanvasEffects';
@@ -150,11 +150,9 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
 
       {/* Score line */}
       <div className="flex items-center">
-        <div className="flex items-center gap-1 flex-1 min-w-0">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ht?.color ?? '#666' }} />
-          <span className={`text-xs truncate ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-            {getTeamName(r.homeTeamId, teamBases)}
-          </span>
+        <div className="flex-1 min-w-0">
+          <TeamName teamId={r.homeTeamId} teamBases={teamBases as Record<string, TeamBase>} showTier link={false}
+            className={`text-xs ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`} />
         </div>
 
         <div className="flex items-center gap-1 px-2 shrink-0">
@@ -172,11 +170,9 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
           )}
         </div>
 
-        <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
-          <span className={`text-xs truncate text-right ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-            {getTeamName(r.awayTeamId, teamBases)}
-          </span>
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: at?.color ?? '#666' }} />
+        <div className="flex-1 min-w-0 text-right">
+          <TeamName teamId={r.awayTeamId} teamBases={teamBases as Record<string, TeamBase>} showTier link={false}
+            className={`text-xs ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'} justify-end`} />
         </div>
       </div>
 
