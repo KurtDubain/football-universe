@@ -13,7 +13,7 @@ export interface CalendarBuildInput {
 
 function cupFixturesToMatchFixtures(
   cupFixtures: CupFixture[],
-  competitionType: 'league_cup' | 'super_cup' | 'super_cup_group',
+  competitionType: 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup_group',
   competitionName: string,
 ): MatchFixture[] {
   return cupFixtures.map(f => ({
@@ -321,7 +321,7 @@ export function appendWorldCupWindows(
       type: 'world_cup_group',
       label: `环球冠军杯 小组赛R${i + 1}`,
       description: `第${seasonNumber}赛季后 环球冠军杯小组赛第${i + 1}轮 (8组×4队)`,
-      fixtures: cupFixturesToMatchFixtures(groupRoundFixtures[i], 'super_cup_group', '环球冠军杯'),
+      fixtures: cupFixturesToMatchFixtures(groupRoundFixtures[i], 'world_cup_group', '环球冠军杯'),
       completed: false,
       results: [],
     });

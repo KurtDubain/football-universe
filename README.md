@@ -7,11 +7,11 @@
 <p align="center">by <a href="https://github.com/KurtDubain">KurtDubain</a></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.0-blue" alt="version"/>
+  <img src="https://img.shields.io/badge/version-3.1.0-blue" alt="version"/>
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Vite-8-646cff" alt="Vite"/>
-  <img src="https://img.shields.io/badge/15000+-lines-green" alt="lines"/>
+  <img src="https://img.shields.io/badge/16000+-lines-green" alt="lines"/>
 </p>
 
 ---
@@ -114,6 +114,14 @@
 - 自动裁剪旧新闻和事件数据防溢出
 - 关注球队持久化
 
+### 设置与指南
+- **游戏内指南**：8个可折叠说明卡片（核心玩法/联赛体系/杯赛赛制/比赛模拟/教练系统/球队变化/状态系统/德比与成就）
+- 关注球队随时切换（不用重开游戏）
+- 历史统计面板（总进球/总场次/场均进球/换帅次数/奖杯王/卫冕冠军）
+- 世界杯年标识
+- 游戏信息总览（赛季/种子/球队/教练/球员数/存档大小）
+- 移动端全页面适配
+
 ## 球队阵容
 
 | 级别 | 球队 |
@@ -184,14 +192,29 @@ src/
 
 ## 规模
 
-- **69 个源文件**
-- **15,000+ 行 TypeScript/React 代码**
+- **70 个源文件**
+- **16,000+ 行 TypeScript/React 代码**
 - **50+ 次 Git 提交**
 - **13 个页面 + 11 个组件 + 24 个引擎模块**
 
 ---
 
+## 更新日志
+
+### v3.1.0
+- 设置页面改造：游戏内指南、关注球队切换、历史统计面板
+- Welcome 页面优化：玩法说明 + 无限赛季标签
+- 修复：世界杯小组赛 competitionType 标记错误
+- 修复：教练压力只取单场结果改为处理所有比赛
+- 优化：教练压力衰减逻辑（高压衰减更快）
+- 移动端适配：8个组件布局优化
+
+### v3.0.0
+- 首次完整版本发布
+- 三级联赛 + 四项赛事 + 32支球队
+- 比赛直播 Canvas 2D 引擎
+- 教练/球员/德比/成就系统
+
 <p align="center">
-  <sub>Built with Vite + React + TypeScript + Tailwind + Canvas</sub><br/>
   <sub>by <a href="https://github.com/KurtDubain">KurtDubain</a></sub>
 </p>

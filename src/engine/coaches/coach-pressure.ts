@@ -58,8 +58,11 @@ export function updateCoachPressure(
 
   // Natural pressure decay: pressure slowly decreases even without wins
   let decay = 0;
-  if (currentPressure > 40) decay = -1;
-  if (currentPressure > 60) decay = -0.5; // high pressure decays slower
+  if (currentPressure > 60) {
+    decay = -1.5;
+  } else if (currentPressure > 40) {
+    decay = -0.5;
+  }
 
   const newPressure = clampPressure(currentPressure + pressureChange + decay);
 

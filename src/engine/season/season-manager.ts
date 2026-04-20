@@ -913,32 +913,44 @@ export function executeCurrentWindow(world: GameWorld): {
     const coachId = state.currentCoachId;
     if (!coachId) continue;
 
-    // Find this team's match result
-    const teamResult = results.find(
+    // Find this team's match results (may have multiple in one window)
+    const teamResults = results.filter(
       (r) => r.homeTeamId === teamId || r.awayTeamId === teamId,
     );
-    if (!teamResult) continue;
+    if (teamResults.length === 0) continue;
 
-    // Check for cup elimination
-    const isCupElimination =
-      (window.type === 'league_cup' || window.type === 'super_cup' || window.type === 'world_cup') &&
-      isTeamEliminated(teamId, teamResult);
+    let currentPressure = state.coachPressure;
+    let shouldFire = false;
+    let fireResult: ReturnType<typeof updateCoachPressure> | null = null;
 
-    const pressureUpdate = updateCoachPressure(
-      state.coachPressure,
-      teamResult,
-      teamId,
-      teamBase,
-      state.recentForm,
-      isCupElimination,
-    );
+    for (const teamResult of teamResults) {
+      // Check for cup elimination
+      const isCupElimination =
+        (window.type === 'league_cup' || window.type === 'super_cup' || window.type === 'world_cup') &&
+        isTeamEliminated(teamId, teamResult);
+
+      const pressureUpdate = updateCoachPressure(
+        currentPressure,
+        teamResult,
+        teamId,
+        teamBase,
+        teamStates[teamId].recentForm,
+        isCupElimination,
+      );
+
+      currentPressure = pressureUpdate.newPressure;
+      if (pressureUpdate.shouldFire) {
+        shouldFire = true;
+        fireResult = pressureUpdate;
+      }
+    }
 
     teamStates[teamId] = {
       ...teamStates[teamId],
-      coachPressure: pressureUpdate.newPressure,
+      coachPressure: currentPressure,
     };
 
-    if (pressureUpdate.shouldFire) {
+    if (shouldFire && fireResult) {
       // Process coach firing
       const allCoachData = Object.entries(coachStates).map(([id, cs]) => ({
         base: world.coachBases[id],
@@ -999,7 +1011,7 @@ export function executeCurrentWindow(world: GameWorld): {
         teamId,
         oldCoachId: coachId,
         newCoachId: firingResult.newCoachId,
-        reason: pressureUpdate.fireReason ?? 'Pressure too high',
+        reason: fireResult.fireReason ?? 'Pressure too high',
       });
 
       const newCoachName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
@@ -1011,7 +1023,7 @@ export function executeCurrentWindow(world: GameWorld): {
         windowIndex,
         type: 'coach_fired',
         title: `${firedCoachName} 被解雇 — ${teamBase.name}`,
-        description: `${firedCoachName} 已被解雇。原因: ${pressureUpdate.fireReason}`,
+        description: `${firedCoachName} 已被解雇。原因: ${fireResult.fireReason}`,
       });
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `hire-${teamId}`),

@@ -40,8 +40,13 @@ export default function Welcome() {
           <p className="text-xl text-slate-400 font-light">电子斗蛐蛐模拟器</p>
         </div>
 
-        <div className="space-y-3 text-sm text-slate-500">
-          <div className="flex items-center justify-center gap-6">
+        <div className="space-y-4 text-sm text-slate-500">
+          <p className="text-slate-400 text-sm leading-relaxed max-w-md mx-auto">
+            你不操控比赛 — 你观看整个足球宇宙自动演化。
+            <br />
+            升降级、杯赛冷门、教练下课、王朝崛起……一切自然涌现。
+          </p>
+          <div className="flex items-center justify-center gap-6 flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 bg-green-500 rounded-full" />
               32 支球队
@@ -53,6 +58,10 @@ export default function Welcome() {
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 bg-purple-500 rounded-full" />
               4 项赛事
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-amber-500 rounded-full" />
+              无限赛季
             </span>
           </div>
           <p className="text-slate-600">联赛 · 联赛杯 · 超级杯 · 环球冠军杯</p>
