@@ -213,7 +213,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-12 bg-slate-800/60 backdrop-blur border-b border-slate-700/50 flex items-center justify-between px-3 sm:px-5 shrink-0">
+        <header className="h-12 bg-slate-800/60 backdrop-blur border-b border-slate-700/50 flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile hamburger */}
             <button
