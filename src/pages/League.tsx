@@ -317,6 +317,9 @@ export default function League() {
                             <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 transition-colors truncate text-xs sm:text-sm">
                               {getTeamName(entry.teamId, world.teamBases)}
                             </Link>
+                            {teamBase?.region && (
+                              <span className="hidden sm:inline text-[9px] text-slate-600 shrink-0">{teamBase.region.split('+')[1]}</span>
+                            )}
                           </div>
                         </td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>

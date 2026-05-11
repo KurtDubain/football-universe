@@ -11,7 +11,7 @@ import {
 } from '../utils/format';
 import type { TeamTier, TeamBase, TeamState } from '../types/team';
 
-type ViewMode = 'tier' | 'league';
+type ViewMode = 'tier' | 'league' | 'region';
 
 const TIER_ORDER: TeamTier[] = ['elite', 'strong', 'mid', 'lower', 'underdog'];
 const LEAGUE_ORDER: (1 | 2 | 3)[] = [1, 2, 3];
@@ -60,6 +60,25 @@ export default function Teams() {
     return groups;
   }, [allTeams]);
 
+  const groupedByRegion = useMemo(() => {
+    const groups: Record<string, { base: TeamBase; state: TeamState }[]> = {};
+    allTeams.forEach((t) => {
+      const continent = t.base.region?.split('+')[0] ?? '未知';
+      if (!groups[continent]) groups[continent] = [];
+      groups[continent].push(t);
+    });
+    Object.values(groups).forEach((g) => g.sort((a, b) => b.base.overall - a.base.overall));
+    return groups;
+  }, [allTeams]);
+
+  const regionOrder = useMemo(() => {
+    return Object.keys(groupedByRegion).sort((a, b) => {
+      const aMax = groupedByRegion[a]?.[0]?.base.overall ?? 0;
+      const bMax = groupedByRegion[b]?.[0]?.base.overall ?? 0;
+      return bMax - aMax;
+    });
+  }, [groupedByRegion]);
+
   return (
     <div className="max-w-6xl space-y-4">
       {/* Header */}
@@ -93,6 +112,16 @@ export default function Teams() {
           >
             按联赛
           </button>
+          <button
+            onClick={() => setViewMode('region')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+              viewMode === 'region'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            按地区
+          </button>
         </div>
       </div>
 
@@ -112,7 +141,8 @@ export default function Teams() {
               />
             );
           })
-        : LEAGUE_ORDER.map((level) => {
+        : viewMode === 'league'
+          ? LEAGUE_ORDER.map((level) => {
             const teams = groupedByLeague[level];
             if (teams.length === 0) return null;
             return (
@@ -120,6 +150,19 @@ export default function Teams() {
                 key={level}
                 label={getLeagueName(level)}
                 level={level}
+                count={teams.length}
+                teams={teams}
+                world={world}
+              />
+            );
+          })
+          : regionOrder.map((continent) => {
+            const teams = groupedByRegion[continent];
+            if (!teams || teams.length === 0) return null;
+            return (
+              <RegionGroup
+                key={continent}
+                continent={continent}
                 count={teams.length}
                 teams={teams}
                 world={world}
@@ -195,6 +238,41 @@ function LeagueGroup({
   );
 }
 
+const CONTINENT_COLORS: Record<string, string> = {
+  '大陆': 'bg-amber-900/30 text-amber-400',
+  '南洲': 'bg-teal-900/30 text-teal-400',
+  '东洲': 'bg-rose-900/30 text-rose-400',
+};
+
+function RegionGroup({
+  continent,
+  count,
+  teams,
+  world,
+}: {
+  continent: string;
+  count: number;
+  teams: { base: TeamBase; state: TeamState }[];
+  world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+}) {
+  const colorClass = CONTINENT_COLORS[continent] ?? 'bg-slate-700/50 text-slate-300';
+  const subRegions = new Set(teams.map(t => t.base.region?.split('+')[1] ?? ''));
+
+  return (
+    <div>
+      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-semibold mb-2 ${colorClass}`}>
+        {continent}
+        <span className="text-xs opacity-70">{count}队 · {subRegions.size}地区</span>
+      </div>
+      <div className="space-y-2">
+        {teams.map((t) => (
+          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Team card ───────────────────────────────────────────────────
 
 function TeamCard({
@@ -246,6 +324,11 @@ function TeamCard({
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tierColor}`}>
             {tierLabel}
           </span>
+          {base.region && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400">
+              {base.region.split('+')[1]}
+            </span>
+          )}
           <span className="text-xs text-slate-400 font-mono font-semibold">
             {base.overall}
           </span>

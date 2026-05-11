@@ -25,12 +25,14 @@ const levelTag: Record<number, { text: string; cls: string }> = {
 function TeamTag({ teamId, ts, tb }: { teamId: string; ts: Record<string, TeamState>; tb?: Record<string, TeamBase> }) {
   const lv = ts[teamId]?.leagueLevel;
   const tier = tb?.[teamId]?.tier;
+  const region = tb?.[teamId]?.region?.split('+')[1];
   if (!lv && !tier) return null;
   const t = lv ? levelTag[lv] : null;
   return (
     <span className="flex gap-0.5 shrink-0">
       {t && <span className={`text-[8px] px-1 py-0 rounded font-medium ${t.cls}`}>{t.text}</span>}
       {tier && <span className={`text-[8px] px-1 py-0 rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
+      {region && <span className="text-[8px] px-1 py-0 rounded bg-slate-700/50 text-slate-500">{region}</span>}
     </span>
   );
 }
