@@ -136,6 +136,17 @@ function pickGoalScorer(squad: Player[], rng: SeededRNG): Player {
   );
 }
 
+function pickAssistProvider(squad: Player[], scorerId: string, rng: SeededRNG): Player {
+  const candidates = squad.filter(p => p.id !== scorerId);
+  if (candidates.length === 0) return squad[0];
+  return pickPlayer(
+    candidates,
+    { MF: 10, FW: 6, DF: 3, GK: 0.1 },
+    rng,
+    false,
+  );
+}
+
 /**
  * Pick a player for yellow/red cards: mostly DF and MF.
  */
@@ -240,6 +251,8 @@ export function generateMatchEvents(
   penaltyAway?: number,
   homeSquad?: Player[],
   awaySquad?: Player[],
+  etHomeGoals: number = 0,
+  etAwayGoals: number = 0,
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const maxNormalMinute = 90;
@@ -269,8 +282,10 @@ export function generateMatchEvents(
       // ~10% of goals are from set pieces, ~8% are penalties in open play
       const roll = rng.next();
       let description: string;
+      let isPenalty = false;
       if (roll < 0.08) {
         description = rng.pick(PENALTY_GOALS);
+        isPenalty = true;
       } else if (roll < 0.18) {
         description = rng.pick(SET_PIECE_GOALS);
       } else {
@@ -294,12 +309,31 @@ export function generateMatchEvents(
         playerNumber,
         description: formatDescription(description, playerNumber),
       });
+
+      // ~70% of non-penalty goals have an assist
+      if (squad && playerId && !isPenalty && rng.next() < 0.70) {
+        const assister = pickAssistProvider(squad, playerId, rng);
+        events.push({
+          minute,
+          type: 'assist',
+          teamId,
+          playerId: assister.id,
+          playerNumber: assister.number,
+          description: `${assister.number}号 送出助攻`,
+        });
+      }
     }
   };
 
-  // Normal-time goals
+  // Regulation goals
   generateGoalEvents(homeGoals, homeTeamId, false);
   generateGoalEvents(awayGoals, awayTeamId, false);
+
+  // Extra time goals (separate so they get 91-120 minute range)
+  if (extraTime) {
+    generateGoalEvents(etHomeGoals, homeTeamId, true);
+    generateGoalEvents(etAwayGoals, awayTeamId, true);
+  }
 
   // ── Yellow cards (2-6 per match) ─────────────────────────────────
 

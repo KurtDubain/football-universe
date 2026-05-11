@@ -320,8 +320,8 @@ export function simulateMatch(
 
   // 6. Generate match events
   const events = generateMatchEvents(
-    homeGoals,
-    awayGoals,
+    regHomeGoals,
+    regAwayGoals,
     homeTeam.id,
     awayTeam.id,
     ctx.competitionType,
@@ -331,6 +331,8 @@ export function simulateMatch(
     penaltyAway,
     ctx.homeSquad,
     ctx.awaySquad,
+    etHomeGoals ?? 0,
+    etAwayGoals ?? 0,
   );
 
   // 7. Generate match stats
