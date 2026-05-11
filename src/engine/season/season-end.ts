@@ -445,7 +445,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   for (const teamId of getAllTeamIds(teamStates)) {
     const base = { ...teamBases[teamId] };
     const state = teamStates[teamId];
-    // Search ALL leagues for this team's actual data (leagueLevel may have changed from playoffs)
+    const originalOvr = base.overall;
+
     let growthEntry: StandingEntry | undefined;
     let growthLevel: number = state.leagueLevel;
     for (const [lvStr, st] of Object.entries(allStandings)) {
@@ -457,37 +458,63 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     const total = standings.length;
     const ratio = total > 0 ? position / total : 1;
 
-    // Champions and top finishers grow slightly
+    // ── Performance-based growth ──
     if (ratio <= 0.15) {
-      base.overall = Math.min(99, base.overall + rng.nextInt(0, 2));
-      base.attack = Math.min(99, base.attack + rng.nextInt(0, 1));
-      base.defense = Math.min(99, base.defense + rng.nextInt(0, 1));
+      base.overall = Math.min(95, base.overall + rng.nextInt(0, 2));
     } else if (ratio <= 0.35) {
-      base.overall = Math.min(99, base.overall + rng.nextInt(0, 1));
-    }
-    // Bottom finishers decline slightly (milder for weak teams)
-    else if (ratio >= 0.85) {
-      // Weaker teams decline less — floor protection
+      base.overall = Math.min(95, base.overall + rng.nextInt(0, 1));
+    } else if (ratio >= 0.85) {
       const declineMax = base.overall > 60 ? 2 : 1;
-      base.overall = Math.max(35, base.overall - rng.nextInt(0, declineMax));
-      if (base.overall > 55) {
-        base.attack = Math.max(35, base.attack - rng.nextInt(0, 1));
-        base.defense = Math.max(35, base.defense - rng.nextInt(0, 1));
-      }
+      base.overall = Math.max(38, base.overall - rng.nextInt(0, declineMax));
     } else if (ratio >= 0.7) {
-      if (base.overall > 55) {
-        base.overall = Math.max(35, base.overall - rng.nextInt(0, 1));
+      if (base.overall > 50) {
+        base.overall = Math.max(38, base.overall - rng.nextInt(0, 1));
       }
     }
 
-    // Promoted teams get a BIG boost (simulating transfer window investment)
+    // ── Natural aging: elite squads always lose a little ──
+    if (base.overall >= 88) {
+      base.overall = base.overall - 1;
+    }
+
+    // ── Floor uplift: weakest teams always improve a little ──
+    if (base.overall <= 45) {
+      base.overall = base.overall + 1;
+    }
+
+    // ── Mean reversion: pull toward league average (~65) ──
+    const leagueMean = 65;
+    const distFromMean = base.overall - leagueMean;
+    if (Math.abs(distFromMean) > 15) {
+      const pullChance = Math.min(0.6, Math.abs(distFromMean) / 80);
+      if (rng.next() < pullChance) {
+        base.overall += distFromMean > 0 ? -1 : 1;
+      }
+    }
+
+    // Clamp overall
+    base.overall = Math.max(38, Math.min(95, base.overall));
+
+    // ── Proportional attribute sync ──
+    const ovrDelta = base.overall - originalOvr;
+    if (ovrDelta !== 0) {
+      const sign = ovrDelta > 0 ? 1 : -1;
+      const mag = Math.abs(ovrDelta);
+      base.attack = Math.max(35, Math.min(96, base.attack + sign * rng.nextInt(0, mag)));
+      base.midfield = Math.max(35, Math.min(96, base.midfield + sign * rng.nextInt(0, Math.max(1, mag - 1))));
+      base.defense = Math.max(35, Math.min(96, base.defense + sign * rng.nextInt(0, Math.max(1, mag - 1))));
+      base.stability = Math.max(35, Math.min(96, base.stability + sign * rng.nextInt(0, 1)));
+      base.depth = Math.max(30, Math.min(96, base.depth + sign * rng.nextInt(0, mag)));
+    }
+
+    // ── Promoted teams get a boost ──
     const startLevel = (world.seasonStartLevels ?? {})[teamId] ?? base.initialLeagueLevel;
     if (state.leagueLevel < startLevel) {
       const promoBoost = rng.nextInt(3, 5);
-      base.overall = Math.min(99, base.overall + promoBoost);
-      base.depth = Math.min(99, base.depth + rng.nextInt(2, 4));
-      base.attack = Math.min(99, base.attack + rng.nextInt(1, 3));
-      base.midfield = Math.min(99, base.midfield + rng.nextInt(1, 2));
+      base.overall = Math.min(95, base.overall + promoBoost);
+      base.depth = Math.min(96, base.depth + rng.nextInt(2, 4));
+      base.attack = Math.min(96, base.attack + rng.nextInt(1, 3));
+      base.midfield = Math.min(96, base.midfield + rng.nextInt(1, 2));
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `boost-${teamId}`),
         seasonNumber, windowIndex, type: 'match_result',
@@ -497,15 +524,16 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
     // Relegated teams decline
     if (state.leagueLevel > startLevel) {
-      base.overall = Math.max(35, base.overall - rng.nextInt(1, 2));
+      base.overall = Math.max(38, base.overall - rng.nextInt(1, 2));
       base.depth = Math.max(30, base.depth - rng.nextInt(1, 2));
     }
 
-    // Strong teams have a small chance of "internal turmoil" — star leaves, drama
-    if (base.overall >= 85 && rng.next() < 0.12) {
-      const drop = rng.nextInt(2, 4);
-      base.overall = Math.max(70, base.overall - drop);
-      base.attack = Math.max(65, base.attack - rng.nextInt(1, 2));
+    // Strong teams have a chance of "internal turmoil"
+    if (base.overall >= 83 && rng.next() < 0.15) {
+      const drop = rng.nextInt(2, 5);
+      base.overall = Math.max(65, base.overall - drop);
+      base.attack = Math.max(60, base.attack - rng.nextInt(1, 3));
+      base.stability = Math.max(50, base.stability - rng.nextInt(2, 5));
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `turmoil-${teamId}`),
         seasonNumber, windowIndex, type: 'coach_fired',
@@ -514,16 +542,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       });
     }
 
-    // Underperformance bonus — if team finished way above expectations, bigger growth
+    // Underperformance bonus
     const expectedPos = Math.round(total * (1 - (base.expectation - 1) / 4));
     if (position < expectedPos - 3 && ratio <= 0.4) {
       const surpriseBoost = rng.nextInt(1, 3);
-      base.overall = Math.min(99, base.overall + surpriseBoost);
+      base.overall = Math.min(95, base.overall + surpriseBoost);
       base.reputation = Math.min(99, base.reputation + rng.nextInt(2, 5));
     }
-
-    // Clamp midfield/stability based on overall shift
-    base.midfield = Math.max(30, Math.min(99, base.midfield + (base.overall - teamBases[teamId].overall)));
 
     teamBases[teamId] = base;
   }
