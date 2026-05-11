@@ -62,6 +62,15 @@ export interface GameWorld {
   seed: number;
   rngState: number;
   seasonStartLevels: Record<string, 1 | 2 | 3>;
+  seasonBuffs: SeasonBuff[];
+}
+
+export interface SeasonBuff {
+  teamId: string;
+  type: string;
+  label: string;
+  description: string;
+  effects: { field: string; delta: number }[];
 }
 // ── Main public functions ────────────────────────────────────────
 
@@ -150,6 +159,7 @@ export function initializeGameWorld(seed: number): GameWorld {
     seed,
     rngState: rng.getState(),
     seasonStartLevels: {},
+    seasonBuffs: [],
   };
 
   // Initialize empty trophies / records for every team
@@ -285,8 +295,28 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     description: scGroupInfo,
   });
 
+  // ── Season buffs: pick 3 teams for season-long storylines ──
+  const seasonBuffs = generateSeasonBuffs(allTeamIds, world.teamBases, rng);
+  const buffNews: NewsItem[] = seasonBuffs.map(buff => ({
+    id: `buff-S${seasonNumber}-${buff.type}`,
+    seasonNumber, windowIndex: 0, type: 'streak' as const,
+    title: `${world.teamBases[buff.teamId]?.name} — ${buff.label}`,
+    description: buff.description,
+  }));
+
+  // Apply buff effects to team bases
+  let buffedTeamBases = { ...world.teamBases };
+  for (const buff of seasonBuffs) {
+    const base = { ...buffedTeamBases[buff.teamId] };
+    for (const eff of buff.effects) {
+      (base as any)[eff.field] = Math.max(30, Math.min(99, ((base as any)[eff.field] ?? 50) + eff.delta));
+    }
+    buffedTeamBases[buff.teamId] = base;
+  }
+
   return {
     ...world,
+    teamBases: buffedTeamBases,
     seasonState,
     league1Standings,
     league2Standings,
@@ -296,10 +326,98 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     worldCup: null,
     coachChangesThisSeason: [],
     playerStats: createInitialPlayerStats(world.squads),
-    newsLog: [...(world.newsLog ?? []), ...drawNews],
+    newsLog: [...(world.newsLog ?? []), ...drawNews, ...buffNews],
     rngState,
     seasonStartLevels,
+    seasonBuffs,
   };
+}
+
+const SEASON_BUFF_TEMPLATES: {
+  type: string;
+  label: string;
+  desc: (team: string) => string;
+  effects: { field: string; delta: number }[];
+  positive: boolean;
+}[] = [
+  {
+    type: 'hot_streak', label: '状态火热',
+    desc: (t) => `${t}赛季前集训效果显著，全队状态爆棚，攻防两端均有提升。`,
+    effects: [{ field: 'attack', delta: 4 }, { field: 'midfield', delta: 3 }, { field: 'stability', delta: 5 }],
+    positive: true,
+  },
+  {
+    type: 'cold_spell', label: '状态低迷',
+    desc: (t) => `${t}休赛期人心涣散，多名主力表达不满，赛季前景堪忧。`,
+    effects: [{ field: 'attack', delta: -3 }, { field: 'stability', delta: -5 }, { field: 'depth', delta: -3 }],
+    positive: false,
+  },
+  {
+    type: 'wonderkid', label: '球星诞生',
+    desc: (t) => `${t}青训营走出一位天才少年，被誉为未来之星，攻击力大增。`,
+    effects: [{ field: 'attack', delta: 6 }, { field: 'reputation', delta: 3 }],
+    positive: true,
+  },
+  {
+    type: 'iron_wall', label: '铁血防线',
+    desc: (t) => `${t}苦练防守体系，后防线固若金汤，被称为本赛季最难攻破的堡垒。`,
+    effects: [{ field: 'defense', delta: 6 }, { field: 'stability', delta: 4 }],
+    positive: true,
+  },
+  {
+    type: 'financial_crisis', label: '财务危机',
+    desc: (t) => `${t}遭遇资金链断裂，被迫甩卖球员，阵容厚度严重缩水。`,
+    effects: [{ field: 'depth', delta: -6 }, { field: 'overall', delta: -2 }],
+    positive: false,
+  },
+  {
+    type: 'tactical_revolution', label: '战术革新',
+    desc: (t) => `${t}引入全新战术体系，中场控制力和进攻组织焕然一新。`,
+    effects: [{ field: 'midfield', delta: 5 }, { field: 'attack', delta: 3 }],
+    positive: true,
+  },
+];
+
+function generateSeasonBuffs(
+  teamIds: string[],
+  teamBases: Record<string, TeamBase>,
+  rng: SeededRNG,
+): SeasonBuff[] {
+  const shuffled = rng.shuffle([...teamIds]);
+  const positiveTemplates = SEASON_BUFF_TEMPLATES.filter(t => t.positive);
+  const negativeTemplates = SEASON_BUFF_TEMPLATES.filter(t => !t.positive);
+
+  const buffs: SeasonBuff[] = [];
+  const used = new Set<string>();
+
+  // 2 positive + 1 negative
+  for (let i = 0; i < 2; i++) {
+    const teamId = shuffled.find(id => !used.has(id));
+    if (!teamId) break;
+    used.add(teamId);
+    const template = rng.pick(positiveTemplates);
+    buffs.push({
+      teamId,
+      type: template.type,
+      label: template.label,
+      description: template.desc(teamBases[teamId]?.name ?? teamId),
+      effects: template.effects,
+    });
+  }
+  const negTeamId = shuffled.find(id => !used.has(id));
+  if (negTeamId) {
+    used.add(negTeamId);
+    const template = rng.pick(negativeTemplates);
+    buffs.push({
+      teamId: negTeamId,
+      type: template.type,
+      label: template.label,
+      description: template.desc(teamBases[negTeamId]?.name ?? negTeamId),
+      effects: template.effects,
+    });
+  }
+
+  return buffs;
 }
 
 /**

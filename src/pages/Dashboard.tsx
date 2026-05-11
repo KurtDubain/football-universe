@@ -560,6 +560,24 @@ function OverviewTab({ world }: { world: GameWorld }) {
         </div>
       )}
 
+      {/* Season buffs */}
+      {(world.seasonBuffs ?? []).length > 0 && (
+        <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
+          <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">赛季剧情</h4>
+          <div className="flex flex-wrap gap-2">
+            {(world.seasonBuffs ?? []).map(buff => {
+              const isPositive = buff.effects.some(e => e.delta > 0);
+              return (
+                <div key={buff.teamId} className={`text-xs px-2.5 py-1 rounded-lg border ${isPositive ? 'bg-emerald-900/20 border-emerald-700/30 text-emerald-400' : 'bg-red-900/20 border-red-700/30 text-red-400'}`}>
+                  <span className="font-medium">{getTeamName(buff.teamId, world.teamBases)}</span>
+                  <span className="ml-1.5 opacity-75">{buff.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Season preview — show at start of season (first few windows) */}
       {pct < 10 && world.honorHistory.length > 0 && (() => {
         const lastHonor = world.honorHistory[world.honorHistory.length - 1];
