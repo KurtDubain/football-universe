@@ -115,7 +115,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
   const totalAway = r.awayGoals + (r.etAwayGoals ?? 0);
   const homeWon = totalHome > totalAway || (r.penalties && (r.penaltyHome ?? 0) > (r.penaltyAway ?? 0));
   const awayWon = totalAway > totalHome || (r.penalties && (r.penaltyAway ?? 0) > (r.penaltyHome ?? 0));
-  const derbyName = isDerby(r.homeTeamId, r.awayTeamId) ? getDerbyName(r.homeTeamId, r.awayTeamId) : null;
+  const derbyName = isDerby(r.homeTeamId, r.awayTeamId, teamBases) ? getDerbyName(r.homeTeamId, r.awayTeamId, teamBases) : null;
   const isUpset = Math.abs((ht?.overall ?? 0) - (at?.overall ?? 0)) > 12 &&
     ((ht?.overall ?? 0) > (at?.overall ?? 0) ? awayWon : homeWon);
   const totalGoals = totalHome + totalAway;
@@ -214,7 +214,7 @@ function getMatchImportance(r: MatchResult, teamBases: Record<string, TeamBase>)
   const totalAway = r.awayGoals + (r.etAwayGoals ?? 0);
 
   // Derby
-  if (isDerby(r.homeTeamId, r.awayTeamId)) score += 2;
+  if (isDerby(r.homeTeamId, r.awayTeamId, teamBases)) score += 2;
   // Cup match
   if (r.competitionType !== 'league') score += 1;
   // Final

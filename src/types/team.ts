@@ -16,6 +16,7 @@ export interface TeamBase {
   reputation: number;
   initialLeagueLevel: 1 | 2 | 3;
   expectation: number; // 1-5
+  region: string; // "大洲+地区" format, e.g. "大陆+北京"
 }
 
 export interface TeamState {

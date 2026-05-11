@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { isDerby, getDerbyName } from '../config/derbies';
+import type { TeamBase } from '../types/team';
 
 interface CelebrationProps {
   active: boolean;
@@ -93,13 +94,14 @@ export function getMatchTags(
   awayTeamId: string,
   standings?: { teamId: string }[] | null,
   leagueSize?: number,
+  teamBases?: Record<string, TeamBase>,
 ): MatchTag[] {
   const tags: MatchTag[] = [];
   const rl = roundLabel.toLowerCase();
 
   // Derby check
-  if (isDerby(homeTeamId, awayTeamId)) {
-    const derbyName = getDerbyName(homeTeamId, awayTeamId);
+  if (isDerby(homeTeamId, awayTeamId, teamBases)) {
+    const derbyName = getDerbyName(homeTeamId, awayTeamId, teamBases);
     tags.push({ label: derbyName ?? '德比战', color: 'bg-orange-600 text-white', glow: true });
   }
 

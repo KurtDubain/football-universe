@@ -450,7 +450,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
   const w1 = tie.winnerId === tie.team1Id;
   const w2 = tie.winnerId === tie.team2Id;
   const hasResult = tie.agg1 !== undefined;
-  const derbyName = isDerby(tie.team1Id, tie.team2Id) ? getDerbyName(tie.team1Id, tie.team2Id) : null;
+  const derbyName = isDerby(tie.team1Id, tie.team2Id, tb) ? getDerbyName(tie.team1Id, tie.team2Id, tb) : null;
 
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
   const cellW = compact ? 'w-28 sm:w-36' : highlight ? 'w-32 sm:w-44' : 'w-30 sm:w-40';

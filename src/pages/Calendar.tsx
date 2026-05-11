@@ -175,7 +175,7 @@ export default function Calendar() {
                         const awayCoach = awayState.currentCoachId ? world.coachBases[awayState.currentCoachId] ?? null : null;
                         const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
 
-                        const calDerby = isDerby(fixture.homeTeamId, fixture.awayTeamId) ? getDerbyName(fixture.homeTeamId, fixture.awayTeamId) : null;
+                        const calDerby = isDerby(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) ? getDerbyName(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) : null;
 
                         return (
                           <button
