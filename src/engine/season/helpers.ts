@@ -23,12 +23,17 @@ export function buildSimulationContext(
     || fixture.competitionType === 'world_cup'
     || fixture.competitionType === 'super_cup';
 
+  const pickMatchday = (squad: import('../../types/player').Player[] | undefined) => {
+    if (!squad || squad.length <= 14) return squad;
+    return [...squad].sort((a, b) => b.rating - a.rating).slice(0, 14);
+  };
+
   return {
     homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
     competitionType: fixture.competitionType,
     isKnockout, rng,
-    homeSquad: world.squads[fixture.homeTeamId],
-    awaySquad: world.squads[fixture.awayTeamId],
+    homeSquad: pickMatchday(world.squads[fixture.homeTeamId]),
+    awaySquad: pickMatchday(world.squads[fixture.awayTeamId]),
   };
 }
 
