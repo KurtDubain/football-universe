@@ -237,7 +237,7 @@ export default function Layout({ children }: LayoutProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 relative">
+          <div className="flex items-center gap-1 shrink-0 relative z-[65]">
             <button
               onClick={advanceWindow}
               disabled={isAdvancing || !currentWindow}
