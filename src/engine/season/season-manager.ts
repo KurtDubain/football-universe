@@ -298,17 +298,29 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     description: scGroupInfo,
   });
 
-  // ── Season buffs: pick 3 teams for season-long storylines ──
-  const seasonBuffs = generateSeasonBuffs(allTeamIds, world.teamBases, rng);
+  // ── Season buffs: reverse old buffs, then apply new ones ──
+  let buffedTeamBases = { ...world.teamBases };
+
+  // Reverse previous season's buffs
+  for (const oldBuff of (world.seasonBuffs ?? [])) {
+    const base = { ...buffedTeamBases[oldBuff.teamId] };
+    if (!base) continue;
+    for (const eff of oldBuff.effects) {
+      (base as any)[eff.field] = Math.max(30, Math.min(99, ((base as any)[eff.field] ?? 50) - eff.delta));
+    }
+    buffedTeamBases[oldBuff.teamId] = base;
+  }
+
+  // Generate and apply new buffs
+  const seasonBuffs = generateSeasonBuffs(allTeamIds, buffedTeamBases, rng);
   const buffNews: NewsItem[] = seasonBuffs.map(buff => ({
     id: `buff-S${seasonNumber}-${buff.type}`,
     seasonNumber, windowIndex: 0, type: 'streak' as const,
-    title: `${world.teamBases[buff.teamId]?.name} — ${buff.label}`,
+    title: `${buffedTeamBases[buff.teamId]?.name} — ${buff.label}`,
     description: buff.description,
   }));
 
-  // Apply buff effects to team bases
-  let buffedTeamBases = { ...world.teamBases };
+  // Apply new buff effects to team bases
   for (const buff of seasonBuffs) {
     const base = { ...buffedTeamBases[buff.teamId] };
     for (const eff of buff.effects) {
