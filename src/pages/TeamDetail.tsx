@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import {
@@ -139,6 +139,7 @@ export default function TeamDetail() {
                 评分: {world.coachBases[coachId].rating}
               </span>
             )}
+            <FireCoachButton teamId={id!} coachId={coachId} teamName={base.name} />
           </div>
         ) : (
           <span className="text-sm text-slate-500">暂无教练</span>
@@ -627,5 +628,31 @@ function TeamTrendChart({ records, color }: { records: { seasonNumber: number; l
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> 乙</span>
       </div>
     </div>
+  );
+}
+
+function FireCoachButton({ teamId, coachId, teamName }: { teamId: string; coachId: string; teamName: string }) {
+  const favoriteTeamId = useGameStore(s => s.favoriteTeamId);
+  const fireCoach = useGameStore(s => s.fireCoach);
+  const [confirming, setConfirming] = useState(false);
+
+  if (favoriteTeamId !== teamId) return null;
+
+  if (confirming) {
+    return (
+      <span className="flex gap-1 ml-auto">
+        <button onClick={() => { fireCoach(teamId); setConfirming(false); }}
+          className="px-2 py-0.5 text-[10px] bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer">确认解雇</button>
+        <button onClick={() => setConfirming(false)}
+          className="px-2 py-0.5 text-[10px] bg-slate-700 text-slate-300 rounded cursor-pointer">取消</button>
+      </span>
+    );
+  }
+
+  return (
+    <button onClick={() => setConfirming(true)}
+      className="ml-auto px-2 py-0.5 text-[10px] bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded cursor-pointer transition-colors">
+      解雇教练
+    </button>
   );
 }

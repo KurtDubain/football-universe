@@ -578,6 +578,30 @@ function OverviewTab({ world }: { world: GameWorld }) {
         </div>
       )}
 
+      {/* Season prediction — show at season start if not yet predicted */}
+      {pct < 15 && !world.prediction && (() => {
+        const l1Teams = Object.values(world.teamStates).filter(s => s.leagueLevel === 1).map(s => s.id);
+        return (
+          <PredictionPanel l1Teams={l1Teams} teamBases={world.teamBases} seasonNumber={world.seasonState.seasonNumber} />
+        );
+      })()}
+
+      {/* Prediction result — settled */}
+      {world.prediction?.settled && pct < 10 && (
+        <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
+          <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">上赛季竞猜结果</h4>
+          <div className="flex gap-3 text-xs">
+            <span>冠军预测: {getTeamName(world.prediction.champion, world.teamBases)} {world.prediction.correctCount !== undefined && world.prediction.correctCount > 0 ? '✅' : '❌'}</span>
+            <span>降级预测: {getTeamName(world.prediction.relegated, world.teamBases)} {world.prediction.correctCount !== undefined && world.prediction.correctCount >= 2 ? '✅' : '❌'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* God's Hand */}
+      {!(world.godHandUsed ?? false) && (
+        <GodHandPanel teamBases={world.teamBases} />
+      )}
+
       {/* Season preview — show at start of season (first few windows) */}
       {pct < 10 && world.honorHistory.length > 0 && (() => {
         const lastHonor = world.honorHistory[world.honorHistory.length - 1];
@@ -786,4 +810,83 @@ function getNewsBorderColor(type: string): string {
     streak: '#0ea5e9',
   };
   return colors[type] ?? '#64748b';
+}
+
+function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string[]; teamBases: Record<string, any>; seasonNumber: number }) {
+  const setPrediction = useGameStore(s => s.setPrediction);
+  const [champion, setChampion] = useState('');
+  const [relegated, setRelegated] = useState('');
+
+  return (
+    <div className="bg-gradient-to-r from-amber-900/20 to-slate-800 rounded-lg border border-amber-700/30 p-3">
+      <h4 className="text-xs font-semibold text-amber-300 mb-2">赛季竞猜 — 第{seasonNumber}赛季</h4>
+      <p className="text-[10px] text-slate-500 mb-2">预测本赛季的顶级联赛冠军和降级队</p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <select value={champion} onChange={e => setChampion(e.target.value)}
+          className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 cursor-pointer">
+          <option value="">选择冠军</option>
+          {l1Teams.map(id => <option key={id} value={id}>{teamBases[id]?.name ?? id}</option>)}
+        </select>
+        <select value={relegated} onChange={e => setRelegated(e.target.value)}
+          className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 cursor-pointer">
+          <option value="">选择降级队</option>
+          {l1Teams.map(id => <option key={id} value={id}>{teamBases[id]?.name ?? id}</option>)}
+        </select>
+        <button onClick={() => { if (champion && relegated) setPrediction(champion, relegated); }}
+          disabled={!champion || !relegated}
+          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
+          确认预测
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GodHandPanel({ teamBases }: { teamBases: Record<string, any> }) {
+  const useGodHand = useGameStore(s => s.useGodHand);
+  const [show, setShow] = useState(false);
+  const [teamId, setTeamId] = useState('');
+  const [type, setType] = useState<'boost' | 'nerf'>('boost');
+
+  if (!show) {
+    return (
+      <button onClick={() => setShow(true)}
+        className="w-full bg-slate-800 hover:bg-slate-700 border border-dashed border-slate-600 rounded-lg p-2 text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">
+        上帝之手 — 本赛季可使用1次
+      </button>
+    );
+  }
+
+  const teamIds = Object.keys(teamBases);
+  return (
+    <div className="bg-slate-800 rounded-lg border border-purple-700/30 p-3">
+      <h4 className="text-xs font-semibold text-purple-300 mb-2">上帝之手</h4>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <select value={teamId} onChange={e => setTeamId(e.target.value)}
+          className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 cursor-pointer">
+          <option value="">选择球队</option>
+          {teamIds.map(id => <option key={id} value={id}>{teamBases[id]?.name ?? id}</option>)}
+        </select>
+        <div className="flex gap-1">
+          <button onClick={() => setType('boost')}
+            className={`px-3 py-1.5 text-xs rounded cursor-pointer ${type === 'boost' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            祝福
+          </button>
+          <button onClick={() => setType('nerf')}
+            className={`px-3 py-1.5 text-xs rounded cursor-pointer ${type === 'nerf' ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            诅咒
+          </button>
+        </div>
+        <button onClick={() => { if (teamId) { useGodHand(teamId, type); setShow(false); } }}
+          disabled={!teamId}
+          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
+          施法
+        </button>
+        <button onClick={() => setShow(false)}
+          className="px-3 py-1.5 bg-slate-700 text-slate-400 text-xs rounded cursor-pointer hover:bg-slate-600">
+          取消
+        </button>
+      </div>
+    </div>
+  );
 }

@@ -63,6 +63,8 @@ export interface GameWorld {
   rngState: number;
   seasonStartLevels: Record<string, 1 | 2 | 3>;
   seasonBuffs: SeasonBuff[];
+  prediction?: { champion: string; relegated: string; settled?: boolean; correctCount?: number };
+  godHandUsed: boolean;
 }
 
 export interface SeasonBuff {
@@ -160,6 +162,7 @@ export function initializeGameWorld(seed: number): GameWorld {
     rngState: rng.getState(),
     seasonStartLevels: {},
     seasonBuffs: [],
+    godHandUsed: false,
   };
 
   // Initialize empty trophies / records for every team
@@ -330,6 +333,8 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     rngState,
     seasonStartLevels,
     seasonBuffs,
+    prediction: undefined,
+    godHandUsed: false,
   };
 }
 

@@ -587,6 +587,16 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     },
   };
 
+  // ── Settle prediction ──
+  let prediction = world.prediction;
+  if (prediction && !prediction.settled) {
+    const relegatedTeamIds = actualRelegated.map(r => r.teamId);
+    let correct = 0;
+    if (prediction.champion === league1Champion) correct++;
+    if (relegatedTeamIds.includes(prediction.relegated)) correct++;
+    prediction = { ...prediction, settled: true, correctCount: correct };
+  }
+
   const updatedWorld: GameWorld = {
     ...world,
     seasonState,
@@ -597,7 +607,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     teamSeasonRecords,
     honorHistory,
     achievements,
-    activeEvents: [], // clear events for new season
+    prediction,
+    activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),
   };
