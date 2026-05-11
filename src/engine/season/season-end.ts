@@ -460,20 +460,20 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
     // ── Performance-based growth ──
     if (ratio <= 0.15) {
-      base.overall = Math.min(95, base.overall + rng.nextInt(0, 2));
+      base.overall = Math.min(97, base.overall + rng.nextInt(1, 2));
     } else if (ratio <= 0.35) {
-      base.overall = Math.min(95, base.overall + rng.nextInt(0, 1));
+      base.overall = Math.min(97, base.overall + rng.nextInt(0, 1));
     } else if (ratio >= 0.85) {
       const declineMax = base.overall > 60 ? 2 : 1;
-      base.overall = Math.max(38, base.overall - rng.nextInt(0, declineMax));
+      base.overall = Math.max(38, base.overall - rng.nextInt(1, declineMax));
     } else if (ratio >= 0.7) {
       if (base.overall > 50) {
         base.overall = Math.max(38, base.overall - rng.nextInt(0, 1));
       }
     }
 
-    // ── Natural aging: elite squads always lose a little ──
-    if (base.overall >= 88) {
+    // ── Natural aging: only the very top, and probabilistic ──
+    if (base.overall >= 93 && rng.next() < 0.5) {
       base.overall = base.overall - 1;
     }
 
@@ -482,18 +482,18 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       base.overall = base.overall + 1;
     }
 
-    // ── Mean reversion: pull toward league average (~65) ──
+    // ── Mean reversion: gentle pull, skip teams that just won ──
     const leagueMean = 65;
     const distFromMean = base.overall - leagueMean;
-    if (Math.abs(distFromMean) > 15) {
-      const pullChance = Math.min(0.6, Math.abs(distFromMean) / 80);
+    if (Math.abs(distFromMean) > 20 && ratio > 0.15) {
+      const pullChance = Math.min(0.4, Math.abs(distFromMean) / 120);
       if (rng.next() < pullChance) {
         base.overall += distFromMean > 0 ? -1 : 1;
       }
     }
 
     // Clamp overall
-    base.overall = Math.max(38, Math.min(95, base.overall));
+    base.overall = Math.max(38, Math.min(97, base.overall));
 
     // ── Proportional attribute sync ──
     const ovrDelta = base.overall - originalOvr;
@@ -511,10 +511,10 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     const startLevel = (world.seasonStartLevels ?? {})[teamId] ?? base.initialLeagueLevel;
     if (state.leagueLevel < startLevel) {
       const promoBoost = rng.nextInt(3, 5);
-      base.overall = Math.min(95, base.overall + promoBoost);
-      base.depth = Math.min(96, base.depth + rng.nextInt(2, 4));
-      base.attack = Math.min(96, base.attack + rng.nextInt(1, 3));
-      base.midfield = Math.min(96, base.midfield + rng.nextInt(1, 2));
+      base.overall = Math.min(97, base.overall + promoBoost);
+      base.depth = Math.min(97, base.depth + rng.nextInt(2, 4));
+      base.attack = Math.min(97, base.attack + rng.nextInt(1, 3));
+      base.midfield = Math.min(97, base.midfield + rng.nextInt(1, 2));
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `boost-${teamId}`),
         seasonNumber, windowIndex, type: 'match_result',
@@ -529,11 +529,11 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
 
     // Strong teams have a chance of "internal turmoil"
-    if (base.overall >= 83 && rng.next() < 0.15) {
-      const drop = rng.nextInt(2, 5);
-      base.overall = Math.max(65, base.overall - drop);
-      base.attack = Math.max(60, base.attack - rng.nextInt(1, 3));
-      base.stability = Math.max(50, base.stability - rng.nextInt(2, 5));
+    if (base.overall >= 87 && rng.next() < 0.10) {
+      const drop = rng.nextInt(2, 4);
+      base.overall = Math.max(70, base.overall - drop);
+      base.attack = Math.max(60, base.attack - rng.nextInt(1, 2));
+      base.stability = Math.max(50, base.stability - rng.nextInt(1, 3));
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `turmoil-${teamId}`),
         seasonNumber, windowIndex, type: 'coach_fired',
@@ -546,7 +546,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     const expectedPos = Math.round(total * (1 - (base.expectation - 1) / 4));
     if (position < expectedPos - 3 && ratio <= 0.4) {
       const surpriseBoost = rng.nextInt(1, 3);
-      base.overall = Math.min(95, base.overall + surpriseBoost);
+      base.overall = Math.min(97, base.overall + surpriseBoost);
       base.reputation = Math.min(99, base.reputation + rng.nextInt(2, 5));
     }
 
