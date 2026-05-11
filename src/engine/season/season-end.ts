@@ -492,9 +492,10 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       }
     }
 
-    // Clamp overall — elite teams have a higher floor (dynasty DNA)
-    const tierFloor = base.tier === 'elite' ? 82 : base.tier === 'strong' ? 65 : 38;
-    base.overall = Math.max(tierFloor, Math.min(97, base.overall));
+    // Clamp overall — top 3 teams have a higher floor (dynasty DNA)
+    const PROTECTED_TEAMS = ['gz_hengda', 'shimazu', 'xibei_wolf'];
+    const floor = PROTECTED_TEAMS.includes(teamId) ? 82 : 38;
+    base.overall = Math.max(floor, Math.min(97, base.overall));
 
     // ── Proportional attribute sync ──
     const ovrDelta = base.overall - originalOvr;
