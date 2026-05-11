@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord } from '../types/team';
-import { getTeamName } from '../utils/format';
+import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
 import { getTopScorers, getTopAssists } from '../engine/players/stats';
 
 interface Props {
@@ -17,7 +17,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   const tb = world.teamBases;
 
-  // Collect season records
   const seasonRecords: RecordWithTeam[] = [];
   for (const [teamId, records] of Object.entries(world.teamSeasonRecords)) {
     const rec = records.find(r => r.seasonNumber === seasonNumber);
@@ -25,25 +24,31 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   }
 
   const l1Records = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
+  const l2Records = seasonRecords.filter(r => r.leagueLevel === 2).sort((a, b) => a.leaguePosition - b.leaguePosition);
 
-  // Total goals across all leagues
   const totalGoals = seasonRecords.reduce((s, r) => s + r.leagueGF, 0);
   const totalMatches = seasonRecords.reduce((s, r) => s + r.leaguePlayed, 0) / 2;
 
-  // Best defense / attack in top league
   const bestDefense = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGA < b.leagueGA ? r : b) : null;
   const bestAttack = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGF > b.leagueGF ? r : b) : null;
+  const mostWins = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueWon > b.leagueWon ? r : b) : null;
+  const mostLosses = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueLost > b.leagueLost ? r : b) : null;
 
-  // Top scorers
   const scorers = getTopScorers(world.playerStats, 5);
-  const assists = getTopAssists(world.playerStats, 3);
+  const assisters = getTopAssists(world.playerStats, 3);
+
+  // Season buffs for this season
+  const buffs = world.seasonBuffs ?? [];
+
+  // Prediction
+  const prediction = world.prediction;
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="text-center py-4 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-lg border border-amber-700/30">
+      <div className="text-center py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30">
         <h2 className="text-2xl font-black text-slate-100">第{seasonNumber}赛季 回顾</h2>
-        <p className="text-xs text-slate-500 mt-1">{totalMatches}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
+        <p className="text-xs text-slate-500 mt-1">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
       </div>
 
       {/* Champions grid */}
@@ -56,69 +61,139 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         {honor.worldCupWinner && <ChampionCard title="环球冠军杯" teamId={honor.worldCupWinner} tb={tb} accent="sky" />}
       </div>
 
-      {/* Stats row */}
+      {/* Prediction result */}
+      {prediction?.settled && (
+        <div className={`rounded-xl border p-3 ${prediction.correctCount && prediction.correctCount > 0 ? 'bg-emerald-900/15 border-emerald-700/30' : 'bg-slate-800 border-slate-700'}`}>
+          <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季竞猜结果</h3>
+          <div className="flex flex-wrap gap-4 text-xs">
+            <div>
+              <span className="text-slate-500">冠军预测: </span>
+              <span className="text-slate-200">{getTeamName(prediction.champion, tb)}</span>
+              <span className="ml-1">{prediction.champion === honor.league1Champion ? '✅' : '❌'}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">降级预测: </span>
+              <span className="text-slate-200">{getTeamName(prediction.relegated, tb)}</span>
+              <span className="ml-1">{honor.relegated.some(r => r.teamId === prediction.relegated) ? '✅' : '❌'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* L1 final standings */}
+      {l1Records.length > 0 && (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-700/60">
+            <h3 className="text-xs font-semibold text-slate-400">顶级联赛最终积分榜</h3>
+          </div>
+          <div className="divide-y divide-slate-700/30">
+            {l1Records.map((r, i) => {
+              const team = tb[r.teamId];
+              const isChampion = i === 0;
+              const isRelegated = r.relegated;
+              return (
+                <div key={r.teamId} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${isChampion ? 'bg-amber-900/10' : isRelegated ? 'bg-red-900/10' : ''}`}>
+                  <span className={`w-4 text-center font-bold ${isChampion ? 'text-amber-400' : isRelegated ? 'text-red-400' : 'text-slate-500'}`}>{i + 1}</span>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team?.color ?? '#666' }} />
+                  <Link to={`/team/${r.teamId}`} className="flex-1 truncate text-slate-200 hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
+                  <span className="text-slate-500 w-6 text-center">{r.leagueWon}</span>
+                  <span className="text-slate-500 w-6 text-center">{r.leagueDrawn}</span>
+                  <span className="text-slate-500 w-6 text-center">{r.leagueLost}</span>
+                  <span className="text-slate-400 w-6 text-center">{r.leagueGF - r.leagueGA > 0 ? '+' : ''}{r.leagueGF - r.leagueGA}</span>
+                  <span className="font-bold text-slate-200 w-8 text-center">{r.leaguePoints}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Season awards row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {bestAttack && (
-          <StatCard label="最强火力" value={`${getTeamName(bestAttack.teamId, tb)}`} sub={`${bestAttack.leagueGF}球`} />
+          <StatCard label="最强火力" value={getTeamName(bestAttack.teamId, tb)} sub={`${bestAttack.leagueGF}球`} />
         )}
         {bestDefense && (
-          <StatCard label="最佳防守" value={`${getTeamName(bestDefense.teamId, tb)}`} sub={`仅失${bestDefense.leagueGA}球`} />
+          <StatCard label="最佳防守" value={getTeamName(bestDefense.teamId, tb)} sub={`仅失${bestDefense.leagueGA}球`} />
         )}
-        {l1Records.length > 0 && (
-          <StatCard label="最多胜场" value={getTeamName(l1Records.reduce((b, r) => r.leagueWon > b.leagueWon ? r : b).teamId, tb)} sub={`${l1Records.reduce((b, r) => r.leagueWon > b.leagueWon ? r : b).leagueWon}胜`} />
+        {mostWins && (
+          <StatCard label="最多胜场" value={getTeamName(mostWins.teamId, tb)} sub={`${mostWins.leagueWon}胜`} />
         )}
         <StatCard label="换帅次数" value={`${honor.coachChanges.length}次`} sub={honor.coachChanges.length > 0 ? honor.coachChanges.map(c => tb[c.teamId]?.name).slice(0, 2).join('、') : '无'} />
       </div>
 
-      {/* Top scorer highlight + list */}
-      {scorers.length > 0 && (() => {
-        const king = scorers[0];
-        const kingParts = king.playerId.split('-');
-        const kingNum = kingParts[kingParts.length - 1];
-        const kingTeam = tb[king.teamId];
-
-        return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            {/* Shooter king card */}
-            <div className="p-4 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
-              <div className="flex items-center gap-3">
-                <Link to={`/player/${king.playerId}`} className="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black text-white shrink-0 hover:opacity-80 transition-opacity" style={{ backgroundColor: kingTeam?.color ?? '#f59e0b' }}>
-                  {kingNum}
-                </Link>
-                <div>
-                  <div className="text-[10px] text-amber-400 font-semibold">赛季射手王 👑</div>
-                  <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
-                  <div className="flex gap-3 mt-0.5">
-                    <span className="text-sm font-bold text-amber-400">{king.goals} 球</span>
-                    {king.assists > 0 && <span className="text-xs text-slate-400">{king.assists} 助攻</span>}
-                    <span className="text-xs text-slate-500">{king.appearances} 场</span>
+      {/* Top scorer + assist provider */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {scorers.length > 0 && (() => {
+          const king = scorers[0];
+          const kingNum = king.playerId.split('-').pop();
+          const kingTeam = tb[king.teamId];
+          return (
+            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+              <div className="p-3 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
+                <div className="flex items-center gap-3">
+                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: kingTeam?.color ?? '#f59e0b' }}>
+                    {kingNum}
+                  </Link>
+                  <div>
+                    <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
+                    <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
+                    <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
                   </div>
                 </div>
               </div>
-            </div>
-            {/* Rest of top scorers */}
-            {scorers.length > 1 && (
-              <div className="p-3 space-y-1">
-                {scorers.slice(1).map((s, i) => {
-                  const parts = s.playerId.split('-');
-                  const num = parts[parts.length - 1];
-                  return (
-                    <div key={s.playerId} className="flex items-center gap-2 text-xs">
-                      <span className={`w-4 text-center font-bold ${i === 0 ? 'text-slate-300' : i === 1 ? 'text-amber-700' : 'text-slate-500'}`}>{i + 2}</span>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                      <Link to={`/player/${s.playerId}`} className="text-slate-300 hover:text-blue-400 flex-1 truncate">{getTeamName(s.teamId, tb)} {num}号</Link>
-                      <span className="font-bold text-slate-200">{s.goals}球</span>
-                      {s.assists > 0 && <span className="text-slate-500">{s.assists}助</span>}
+              {scorers.length > 1 && (
+                <div className="p-2 space-y-0.5">
+                  {scorers.slice(1).map((s, i) => (
+                    <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
+                      <span className="w-4 text-center text-slate-500">{i + 2}</span>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
+                      <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {s.playerId.split('-').pop()}号</span>
+                      <span className="text-slate-200 font-bold">{s.goals}球</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
-      {/* World Cup details */}
+        {assisters.length > 0 && (() => {
+          const king = assisters[0];
+          const kingNum = king.playerId.split('-').pop();
+          const kingTeam = tb[king.teamId];
+          return (
+            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+              <div className="p-3 bg-gradient-to-r from-emerald-900/20 to-slate-800 border-b border-slate-700/50">
+                <div className="flex items-center gap-3">
+                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: kingTeam?.color ?? '#10b981' }}>
+                    {kingNum}
+                  </Link>
+                  <div>
+                    <div className="text-[10px] text-emerald-400 font-semibold">赛季助攻王</div>
+                    <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
+                    <div className="text-xs text-emerald-400 font-bold">{king.assists}助 {king.goals > 0 ? `${king.goals}球` : ''}</div>
+                  </div>
+                </div>
+              </div>
+              {assisters.length > 1 && (
+                <div className="p-2 space-y-0.5">
+                  {assisters.slice(1).map((s, i) => (
+                    <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
+                      <span className="w-4 text-center text-slate-500">{i + 2}</span>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
+                      <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {s.playerId.split('-').pop()}号</span>
+                      <span className="text-slate-200 font-bold">{s.assists}助</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* World Cup */}
       {honor.worldCupWinner && (
         <div className="bg-sky-900/15 rounded-xl border border-sky-800/30 p-3">
           <h3 className="text-xs font-semibold text-sky-400 mb-2">环球冠军杯</h3>
@@ -126,6 +201,28 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             <span className="text-amber-400 font-semibold">冠军:</span>
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[honor.worldCupWinner]?.color ?? '#666' }} />
             <Link to={`/team/${honor.worldCupWinner}`} className="hover:text-blue-400 font-medium">{getTeamName(honor.worldCupWinner, tb)}</Link>
+          </div>
+        </div>
+      )}
+
+      {/* Season buffs recap */}
+      {buffs.length > 0 && (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+          <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季剧情回顾</h3>
+          <div className="space-y-1.5">
+            {buffs.map(buff => {
+              const isPositive = buff.effects.some(e => e.delta > 0);
+              return (
+                <div key={buff.teamId} className="flex items-center gap-2 text-xs">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isPositive ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
+                    {buff.label}
+                  </span>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[buff.teamId]?.color ?? '#666' }} />
+                  <span className="text-slate-300">{getTeamName(buff.teamId, tb)}</span>
+                  <span className="text-slate-600 text-[10px] truncate flex-1">{buff.description}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -157,6 +254,13 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Most losses / bottom note */}
+      {mostLosses && mostLosses.leagueLost > 0 && (
+        <div className="text-center text-[10px] text-slate-600 py-1">
+          本赛季最多败场: {getTeamName(mostLosses.teamId, tb)} ({mostLosses.leagueLost}负)
         </div>
       )}
     </div>
