@@ -492,8 +492,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       }
     }
 
-    // Clamp overall
-    base.overall = Math.max(38, Math.min(97, base.overall));
+    // Clamp overall — elite teams have a higher floor (dynasty DNA)
+    const tierFloor = base.tier === 'elite' ? 82 : base.tier === 'strong' ? 65 : 38;
+    base.overall = Math.max(tierFloor, Math.min(97, base.overall));
 
     // ── Proportional attribute sync ──
     const ovrDelta = base.overall - originalOvr;
