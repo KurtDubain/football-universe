@@ -193,6 +193,78 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         })()}
       </div>
 
+      {/* Season Awards */}
+      <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-purple-900/15 rounded-xl border border-purple-700/30 overflow-hidden">
+        <div className="px-4 py-3 border-b border-purple-700/20">
+          <h3 className="text-sm font-bold text-purple-300">赛季颁奖典礼</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-700/30">
+          {/* MVP — best goals+assists combined */}
+          {scorers.length > 0 && (() => {
+            const allStats = [...scorers, ...assisters].reduce((map, s) => {
+              const key = s.playerId;
+              const existing = map.get(key);
+              if (existing) { existing.goals = Math.max(existing.goals, s.goals); existing.assists = Math.max(existing.assists, s.assists); }
+              else map.set(key, { ...s });
+              return map;
+            }, new Map<string, typeof scorers[0]>());
+            const mvp = [...allStats.values()].sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists))[0];
+            if (!mvp) return null;
+            const num = mvp.playerId.split('-').pop();
+            return (
+              <AwardCard emoji="🏆" title="赛季MVP" value={`${getTeamName(mvp.teamId, tb)} ${num}号`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
+            );
+          })()}
+          {/* Best Coach — team with highest position vs expectation */}
+          {l1Records.length > 0 && (() => {
+            const bestCoach = l1Records.reduce((best, r) => {
+              const exp = tb[r.teamId]?.expectation ?? 3;
+              const expectedPos = Math.round(l1Records.length * (1 - (exp - 1) / 4));
+              const overperformance = expectedPos - r.leaguePosition;
+              const bestExp = tb[best.teamId]?.expectation ?? 3;
+              const bestExpPos = Math.round(l1Records.length * (1 - (bestExp - 1) / 4));
+              const bestOver = bestExpPos - best.leaguePosition;
+              return overperformance > bestOver ? r : best;
+            });
+            const coachName = world.coachBases[bestCoach.coachId]?.name ?? '未知';
+            return (
+              <AwardCard emoji="👔" title="最佳教练" value={coachName} sub={`${getTeamName(bestCoach.teamId, tb)} 第${bestCoach.leaguePosition}名`} />
+            );
+          })()}
+          {/* Best Newcomer — top scorer from non-L1 team, or lowest-OVR team's scorer */}
+          {scorers.length > 0 && (() => {
+            const nonEliteScorer = scorers.find(s => (tb[s.teamId]?.overall ?? 99) < 75);
+            if (!nonEliteScorer) return null;
+            const num = nonEliteScorer.playerId.split('-').pop();
+            return (
+              <AwardCard emoji="⭐" title="最佳新星" value={`${getTeamName(nonEliteScorer.teamId, tb)} ${num}号`} sub={`${nonEliteScorer.goals}球`} />
+            );
+          })()}
+          {/* Most Improved — team that climbed the most positions vs last season */}
+          {l1Records.length > 0 && (() => {
+            const prev = world.honorHistory.find(h => h.seasonNumber === seasonNumber - 1);
+            if (!prev) return null;
+            const prevRecords: RecordWithTeam[] = [];
+            for (const [tid, recs] of Object.entries(world.teamSeasonRecords)) {
+              const r = recs.find(r => r.seasonNumber === seasonNumber - 1 && r.leagueLevel === 1);
+              if (r) prevRecords.push({ ...r, teamId: tid });
+            }
+            let bestClimb = { teamId: '', climb: 0 };
+            for (const r of l1Records) {
+              const prevR = prevRecords.find(p => p.teamId === r.teamId);
+              if (prevR) {
+                const climb = prevR.leaguePosition - r.leaguePosition;
+                if (climb > bestClimb.climb) bestClimb = { teamId: r.teamId, climb };
+              }
+            }
+            if (bestClimb.climb <= 0) return null;
+            return (
+              <AwardCard emoji="📈" title="最大黑马" value={getTeamName(bestClimb.teamId, tb)} sub={`排名提升${bestClimb.climb}位`} />
+            );
+          })()}
+        </div>
+      </div>
+
       {/* World Cup */}
       {honor.worldCupWinner && (
         <div className="bg-sky-900/15 rounded-xl border border-sky-800/30 p-3">
@@ -257,6 +329,41 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         </div>
       )}
 
+      {/* Season Timeline */}
+      {(() => {
+        const seasonNews = world.newsLog.filter(n => n.seasonNumber === seasonNumber);
+        const highlights = seasonNews.filter(n =>
+          n.type === 'trophy' || n.type === 'upset' || n.type === 'coach_fired' ||
+          n.type === 'coach_hired' || n.type === 'promotion' || n.type === 'relegation' ||
+          (n.type === 'streak' && (n.title.includes('连胜') || n.title.includes('连败')))
+        ).slice(0, 12);
+        if (highlights.length === 0) return null;
+        return (
+          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div className="px-4 py-2 border-b border-slate-700/60">
+              <h3 className="text-xs font-semibold text-slate-400">赛季大事记</h3>
+            </div>
+            <div className="relative px-4 py-3">
+              <div className="absolute left-6 top-3 bottom-3 w-px bg-slate-700" />
+              <div className="space-y-2">
+                {highlights.map((n, i) => {
+                  const icon = n.type === 'trophy' ? '🏆' : n.type === 'upset' ? '💥' : n.type === 'coach_fired' ? '📋' : n.type === 'promotion' ? '⬆️' : n.type === 'relegation' ? '⬇️' : '📰';
+                  return (
+                    <div key={n.id ?? i} className="flex items-start gap-3 pl-3 relative">
+                      <span className="text-sm shrink-0 relative z-10 bg-slate-800">{icon}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs text-slate-200 font-medium leading-tight">{n.title}</div>
+                        {n.description && <div className="text-[10px] text-slate-500 mt-0.5 truncate">{n.description}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Most losses / bottom note */}
       {mostLosses && mostLosses.leagueLost > 0 && (
         <div className="text-center text-[10px] text-slate-600 py-1">
@@ -304,6 +411,17 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
       <div className="text-[10px] text-slate-500">{label}</div>
       <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate">{value}</div>
       <div className="text-[10px] text-slate-500 truncate">{sub}</div>
+    </div>
+  );
+}
+
+function AwardCard({ emoji, title, value, sub }: { emoji: string; title: string; value: string; sub: string }) {
+  return (
+    <div className="bg-slate-800 p-3 text-center">
+      <div className="text-xl mb-1">{emoji}</div>
+      <div className="text-[10px] text-purple-400 font-semibold">{title}</div>
+      <div className="text-xs text-slate-200 font-medium mt-1 truncate">{value}</div>
+      <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>
     </div>
   );
 }

@@ -65,6 +65,8 @@ export interface GameWorld {
   seasonBuffs: SeasonBuff[];
   prediction?: { champion: string; relegated: string; settled?: boolean; correctCount?: number };
   godHandUsed: boolean;
+  coins: number;
+  bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
 }
 
 export interface SeasonBuff {
@@ -163,6 +165,8 @@ export function initializeGameWorld(seed: number): GameWorld {
     seasonStartLevels: {},
     seasonBuffs: [],
     godHandUsed: false,
+    coins: 1000,
+    bets: [],
   };
 
   // Initialize empty trophies / records for every team

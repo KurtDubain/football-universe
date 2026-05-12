@@ -22,6 +22,7 @@ interface GameStore {
   setPrediction: (champion: string, relegated: string) => void;
   useGodHand: (teamId: string, type: 'boost' | 'nerf') => void;
   fireCoach: (teamId: string) => void;
+  placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => void;
   resetGame: () => void;
   getCurrentWindow: () => CalendarWindow | null;
   getTeamsByLeague: (level: 1 | 2 | 3) => string[];
@@ -51,9 +52,22 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true });
         try {
           const result = executeCurrentWindow(world);
-          set({ world: result.world, lastResults: result.results, lastNews: result.news, isAdvancing: false });
-          // Auto-trim storage periodically
-          if (result.world.seasonState.completed || result.world.newsLog.length > 300) {
+          // Settle bets
+          let coins = result.world.coins ?? 1000;
+          const settledBets = (result.world.bets ?? []).length > 0 ? [] : [];
+          for (const bet of (result.world.bets ?? [])) {
+            const matchResult = result.results.find(r => r.fixtureId === bet.fixtureId);
+            if (!matchResult) continue;
+            const totalHome = matchResult.homeGoals + (matchResult.etHomeGoals ?? 0);
+            const totalAway = matchResult.awayGoals + (matchResult.etAwayGoals ?? 0);
+            const actual = totalHome > totalAway ? 'home' : totalAway > totalHome ? 'away' : 'draw';
+            if (actual === bet.outcome) {
+              coins += Math.round(bet.amount * bet.odds);
+            }
+          }
+          const updatedWorld = { ...result.world, coins, bets: [] as typeof result.world.bets };
+          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false });
+          if (updatedWorld.seasonState.completed || updatedWorld.newsLog.length > 300) {
             get().trimStorage();
           }
         } catch (e) {
@@ -200,6 +214,19 @@ export const useGameStore = create<GameStore>()(
         const coachChanges = [...world.coachChangesThisSeason, { teamId, oldCoachId: coachId, newCoachId: result.newCoachId, reason: '管理层决定' }];
 
         set({ world: { ...world, teamStates, coachStates, coachCareers, coachChangesThisSeason: coachChanges, newsLog: [...world.newsLog, ...news], rngState: rng.getState() } });
+      },
+
+      placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => {
+        const { world } = get();
+        if (!world || (world.coins ?? 0) < amount) return;
+        const bets = [...(world.bets ?? [])];
+        const existing = bets.findIndex(b => b.fixtureId === fixtureId);
+        if (existing >= 0) {
+          world.coins = (world.coins ?? 1000) + bets[existing].amount;
+          bets.splice(existing, 1);
+        }
+        bets.push({ fixtureId, outcome, amount, odds });
+        set({ world: { ...world, coins: (world.coins ?? 1000) - amount, bets } });
       },
 
       resetGame: () => {

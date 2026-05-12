@@ -132,6 +132,8 @@ export default function Dashboard() {
           </span>
           <span className="text-slate-500">·</span>
           <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
+          <span className="text-slate-500">·</span>
+          <span className="text-xs text-amber-400 font-medium">{world.coins ?? 1000} 金币</span>
         </div>
 
         {/* Center: current window badge */}
@@ -334,6 +336,9 @@ function MatchdayTab({
           </div>
         </div>
       ))}
+
+      {/* Betting panel */}
+      <BettingPanel world={world} fixtures={currentWindow.fixtures} />
     </div>
   );
 }
@@ -887,6 +892,80 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, any> }) {
           取消
         </button>
       </div>
+    </div>
+  );
+}
+
+function BettingPanel({ world, fixtures }: { world: GameWorld; fixtures: MatchFixture[] }) {
+  const placeBet = useGameStore(s => s.placeBet);
+  const [expanded, setExpanded] = useState(false);
+  const coins = world.coins ?? 1000;
+  const existingBets = world.bets ?? [];
+
+  if (fixtures.length === 0) return null;
+
+  const calcOdds = (homeId: string, awayId: string): { home: number; draw: number; away: number } => {
+    const hOvr = world.teamBases[homeId]?.overall ?? 50;
+    const aOvr = world.teamBases[awayId]?.overall ?? 50;
+    const diff = hOvr - aOvr;
+    const homeProb = 0.45 + diff * 0.008;
+    const drawProb = 0.25;
+    const awayProb = 1 - homeProb - drawProb;
+    return {
+      home: Math.max(1.1, +(1 / Math.max(0.05, homeProb)).toFixed(2)),
+      draw: Math.max(1.5, +(1 / Math.max(0.05, drawProb)).toFixed(2)),
+      away: Math.max(1.1, +(1 / Math.max(0.05, awayProb)).toFixed(2)),
+    };
+  };
+
+  if (!expanded) {
+    return (
+      <button onClick={() => setExpanded(true)}
+        className="w-full bg-slate-800 hover:bg-slate-700 border border-dashed border-amber-700/30 rounded-lg p-2 text-xs text-amber-400/60 hover:text-amber-400 transition-colors cursor-pointer">
+        竞猜下注 — {coins} 金币可用 {existingBets.length > 0 ? `· 已下${existingBets.length}注` : ''}
+      </button>
+    );
+  }
+
+  const leagueFixtures = fixtures.filter(f => f.competitionType === 'league').slice(0, 4);
+  const betFixtures = leagueFixtures.length > 0 ? leagueFixtures : fixtures.slice(0, 4);
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-amber-700/30 p-3">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-xs font-semibold text-amber-400">竞猜下注</h4>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-amber-300 font-medium">{coins} 金币</span>
+          <button onClick={() => setExpanded(false)} className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-300">收起</button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {betFixtures.map(f => {
+          const odds = calcOdds(f.homeTeamId, f.awayTeamId);
+          const existing = existingBets.find(b => b.fixtureId === f.id);
+          const homeName = world.teamBases[f.homeTeamId]?.shortName ?? '主';
+          const awayName = world.teamBases[f.awayTeamId]?.shortName ?? '客';
+          return (
+            <div key={f.id} className="flex items-center gap-2 text-xs">
+              <span className="flex-1 truncate text-slate-300">{homeName} vs {awayName}</span>
+              {existing ? (
+                <span className="text-[10px] text-amber-400">已押 {existing.outcome === 'home' ? '主胜' : existing.outcome === 'away' ? '客胜' : '平局'} {existing.amount}币 @{existing.odds}</span>
+              ) : (
+                <div className="flex gap-1">
+                  {(['home', 'draw', 'away'] as const).map(outcome => (
+                    <button key={outcome} onClick={() => placeBet(f.id, outcome, 50, odds[outcome])}
+                      disabled={coins < 50}
+                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-slate-300 rounded text-[10px] cursor-pointer transition-colors">
+                      {outcome === 'home' ? '主' : outcome === 'away' ? '客' : '平'} {odds[outcome]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于OVR差距 · 推进后自动结算</p>
     </div>
   );
 }
