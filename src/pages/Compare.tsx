@@ -44,27 +44,39 @@ export default function Compare() {
     const aChampions = aRecords.filter(r => r.leaguePosition === 1).length;
     const bChampions = bRecords.filter(r => r.leaguePosition === 1).length;
 
-    // Scan all calendar windows for head-to-head matches
+    // Scan matchHistory (past seasons) + current season calendar
     const matches: { season: number; home: string; away: string; homeGoals: number; awayGoals: number; comp: string; round: string; et?: boolean; pen?: string }[] = [];
-    for (const honor of world.honorHistory) {
-      const sn = honor.seasonNumber;
-      // Search the stored season's calendar if available, otherwise skip
-      // Results are in calendar windows
+
+    // Past seasons from matchHistory
+    for (const m of (world.matchHistory ?? [])) {
+      if ((m.homeId === teamA && m.awayId === teamB) ||
+          (m.homeId === teamB && m.awayId === teamA)) {
+        matches.push({
+          season: m.season,
+          home: m.homeId,
+          away: m.awayId,
+          homeGoals: m.homeGoals,
+          awayGoals: m.awayGoals,
+          comp: m.comp,
+          round: '',
+          et: m.et,
+          pen: m.pen,
+        });
+      }
     }
-    // Scan current season calendar
+
+    // Current season from calendar
     for (const w of world.seasonState.calendar) {
       if (!w.completed || w.results.length === 0) continue;
       for (const r of w.results) {
         if ((r.homeTeamId === teamA && r.awayTeamId === teamB) ||
             (r.homeTeamId === teamB && r.awayTeamId === teamA)) {
-          const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
-          const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
           matches.push({
             season: world.seasonState.seasonNumber,
             home: r.homeTeamId,
             away: r.awayTeamId,
-            homeGoals: totalH,
-            awayGoals: totalA,
+            homeGoals: r.homeGoals + (r.etHomeGoals ?? 0),
+            awayGoals: r.awayGoals + (r.etAwayGoals ?? 0),
             comp: r.competitionName,
             round: r.roundLabel,
             et: r.extraTime || undefined,
@@ -87,7 +99,7 @@ export default function Compare() {
     }
 
     return { aTrophies, bTrophies, aChampions, bChampions, aSeasons: aRecords.length, bSeasons: bRecords.length, matches, aWins, bWins, draws, aGoals, bGoals };
-  }, [teamA, teamB, world.teamTrophies, world.teamSeasonRecords, world.seasonState.calendar, world.honorHistory]);
+  }, [teamA, teamB, world.teamTrophies, world.teamSeasonRecords, world.seasonState.calendar, world.matchHistory]);
 
   return (
     <div className="max-w-3xl space-y-5">

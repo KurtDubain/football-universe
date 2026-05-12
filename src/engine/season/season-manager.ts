@@ -67,6 +67,18 @@ export interface GameWorld {
   godHandUsed: boolean;
   coins: number;
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
+  matchHistory: MatchHistoryEntry[];
+}
+
+export interface MatchHistoryEntry {
+  season: number;
+  homeId: string;
+  awayId: string;
+  homeGoals: number;
+  awayGoals: number;
+  comp: string;
+  et?: boolean;
+  pen?: string;
 }
 
 export interface SeasonBuff {
@@ -167,6 +179,7 @@ export function initializeGameWorld(seed: number): GameWorld {
     godHandUsed: false,
     coins: 1000,
     bets: [],
+    matchHistory: [],
   };
 
   // Initialize empty trophies / records for every team
@@ -333,6 +346,27 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     buffedTeamBases[buff.teamId] = base;
   }
 
+  // Archive current season's match results into matchHistory
+  const prevSeason = world.seasonState?.seasonNumber ?? 0;
+  const newMatchHistory = [...(world.matchHistory ?? [])];
+  if (world.seasonState?.calendar) {
+    for (const w of world.seasonState.calendar) {
+      if (!w.completed || !w.results) continue;
+      for (const r of w.results) {
+        newMatchHistory.push({
+          season: prevSeason,
+          homeId: r.homeTeamId,
+          awayId: r.awayTeamId,
+          homeGoals: r.homeGoals + (r.etHomeGoals ?? 0),
+          awayGoals: r.awayGoals + (r.etAwayGoals ?? 0),
+          comp: r.competitionName,
+          et: r.extraTime || undefined,
+          pen: r.penalties ? `${r.penaltyHome}-${r.penaltyAway}` : undefined,
+        });
+      }
+    }
+  }
+
   return {
     ...world,
     teamBases: buffedTeamBases,
@@ -351,6 +385,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     seasonBuffs,
     prediction: undefined,
     godHandUsed: false,
+    matchHistory: newMatchHistory,
   };
 }
 
