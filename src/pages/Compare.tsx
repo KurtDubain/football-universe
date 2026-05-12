@@ -34,7 +34,7 @@ export default function Compare() {
     { key: 'squadHealth', label: '球员健康', max: 100 },
   ];
 
-  // Historical head-to-head from season records
+  // Historical head-to-head from season records + match results
   const h2h = useMemo(() => {
     if (!teamA || !teamB) return null;
     const aTrophies = (world.teamTrophies[teamA] ?? []).length;
@@ -43,8 +43,51 @@ export default function Compare() {
     const bRecords = world.teamSeasonRecords[teamB] ?? [];
     const aChampions = aRecords.filter(r => r.leaguePosition === 1).length;
     const bChampions = bRecords.filter(r => r.leaguePosition === 1).length;
-    return { aTrophies, bTrophies, aChampions, bChampions, aSeasons: aRecords.length, bSeasons: bRecords.length };
-  }, [teamA, teamB, world.teamTrophies, world.teamSeasonRecords]);
+
+    // Scan all calendar windows for head-to-head matches
+    const matches: { season: number; home: string; away: string; homeGoals: number; awayGoals: number; comp: string; round: string; et?: boolean; pen?: string }[] = [];
+    for (const honor of world.honorHistory) {
+      const sn = honor.seasonNumber;
+      // Search the stored season's calendar if available, otherwise skip
+      // Results are in calendar windows
+    }
+    // Scan current season calendar
+    for (const w of world.seasonState.calendar) {
+      if (!w.completed || w.results.length === 0) continue;
+      for (const r of w.results) {
+        if ((r.homeTeamId === teamA && r.awayTeamId === teamB) ||
+            (r.homeTeamId === teamB && r.awayTeamId === teamA)) {
+          const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
+          const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
+          matches.push({
+            season: world.seasonState.seasonNumber,
+            home: r.homeTeamId,
+            away: r.awayTeamId,
+            homeGoals: totalH,
+            awayGoals: totalA,
+            comp: r.competitionName,
+            round: r.roundLabel,
+            et: r.extraTime || undefined,
+            pen: r.penalties ? `${r.penaltyHome}-${r.penaltyAway}` : undefined,
+          });
+        }
+      }
+    }
+
+    let aWins = 0, bWins = 0, draws = 0, aGoals = 0, bGoals = 0;
+    for (const m of matches) {
+      const aIsHome = m.home === teamA;
+      const aG = aIsHome ? m.homeGoals : m.awayGoals;
+      const bG = aIsHome ? m.awayGoals : m.homeGoals;
+      aGoals += aG;
+      bGoals += bG;
+      if (aG > bG) aWins++;
+      else if (bG > aG) bWins++;
+      else draws++;
+    }
+
+    return { aTrophies, bTrophies, aChampions, bChampions, aSeasons: aRecords.length, bSeasons: bRecords.length, matches, aWins, bWins, draws, aGoals, bGoals };
+  }, [teamA, teamB, world.teamTrophies, world.teamSeasonRecords, world.seasonState.calendar, world.honorHistory]);
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -127,6 +170,62 @@ export default function Compare() {
                 <div className="text-slate-200 font-bold">{h2h.bSeasons}</div>
               </div>
             </div>
+          )}
+
+          {/* Head-to-head record */}
+          {h2h && h2h.matches.length > 0 && (
+            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/60">
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">交手记录</h3>
+              </div>
+              {/* Summary bar */}
+              <div className="px-4 py-3 border-b border-slate-700/30">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold" style={{ color: a.color }}>{h2h.aWins}胜</span>
+                  <div className="flex-1 h-3 bg-slate-700 rounded-full overflow-hidden flex">
+                    {h2h.aWins + h2h.bWins + h2h.draws > 0 && (
+                      <>
+                        <div className="h-full" style={{ width: `${(h2h.aWins / (h2h.aWins + h2h.bWins + h2h.draws)) * 100}%`, backgroundColor: a.color }} />
+                        <div className="h-full bg-slate-500" style={{ width: `${(h2h.draws / (h2h.aWins + h2h.bWins + h2h.draws)) * 100}%` }} />
+                        <div className="h-full" style={{ width: `${(h2h.bWins / (h2h.aWins + h2h.bWins + h2h.draws)) * 100}%`, backgroundColor: b.color }} />
+                      </>
+                    )}
+                  </div>
+                  <span className="font-bold" style={{ color: b.color }}>{h2h.bWins}胜</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                  <span>{h2h.aGoals}进球</span>
+                  <span>{h2h.matches.length}场 · {h2h.draws}平</span>
+                  <span>{h2h.bGoals}进球</span>
+                </div>
+              </div>
+              {/* Match list */}
+              <div className="divide-y divide-slate-700/30 max-h-48 overflow-y-auto">
+                {[...h2h.matches].reverse().map((m, i) => {
+                  const aIsHome = m.home === teamA;
+                  const aScore = aIsHome ? m.homeGoals : m.awayGoals;
+                  const bScore = aIsHome ? m.awayGoals : m.homeGoals;
+                  const resultColor = aScore > bScore ? a.color : bScore > aScore ? b.color : '#94a3b8';
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-4 py-2 text-xs">
+                      <span className="text-[10px] text-slate-600 w-8 shrink-0">S{m.season}</span>
+                      <span className="flex-1 truncate text-slate-400">{getTeamName(m.home, world.teamBases)}</span>
+                      <span className="font-bold tabular-nums px-2 py-0.5 rounded" style={{ color: resultColor }}>
+                        {m.homeGoals} - {m.awayGoals}
+                      </span>
+                      <span className="flex-1 truncate text-slate-400 text-right">{getTeamName(m.away, world.teamBases)}</span>
+                      <span className="text-[10px] text-slate-600 w-12 text-right shrink-0 truncate">{m.comp}</span>
+                      {m.et && <span className="text-[9px] text-amber-500">ET</span>}
+                      {m.pen && <span className="text-[9px] text-amber-500">P{m.pen}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {h2h && h2h.matches.length === 0 && (
+            <div className="text-center text-xs text-slate-500 py-4">本赛季暂无交手记录</div>
           )}
         </>
       )}
