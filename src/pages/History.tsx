@@ -7,7 +7,7 @@ import SeasonReview from '../components/SeasonReview';
 export default function History() {
   const world = useGameStore((s) => s.world);
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
-  const [tab, setTab] = useState<'seasons' | 'records' | 'coaches'>('seasons');
+  const [tab, setTab] = useState<'seasons' | 'records' | 'coaches' | 'hall'>('seasons');
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
@@ -101,6 +101,7 @@ export default function History() {
   const tabs = [
     { key: 'seasons' as const, label: '赛季历史' },
     { key: 'records' as const, label: '趣味数据' },
+    { key: 'hall' as const, label: '荣誉殿堂' },
     { key: 'coaches' as const, label: '名帅殿堂' },
   ];
 
@@ -232,6 +233,165 @@ export default function History() {
       )}
       {tab === 'records' && !funRecords && (
         <p className="text-sm text-slate-500">完成至少一个赛季后显示趣味数据</p>
+      )}
+
+      {/* ═══ Tab: 荣誉殿堂 ═══ */}
+      {tab === 'hall' && honors.length > 0 && (
+        <div className="space-y-5">
+          {/* Competition Kings */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">赛事之王</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(() => {
+                const countByType = (type: string) => {
+                  const counts: Record<string, number> = {};
+                  for (const [tid, trophies] of Object.entries(world.teamTrophies)) {
+                    const c = trophies.filter(t => t.type === type).length;
+                    if (c > 0) counts[tid] = c;
+                  }
+                  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                  return sorted[0] ?? null;
+                };
+                const kings = [
+                  { type: 'league1', label: '联赛之王', emoji: '🏟️' },
+                  { type: 'league_cup', label: '联赛杯之王', emoji: '🏆' },
+                  { type: 'super_cup', label: '超级杯之王', emoji: '⭐' },
+                  { type: 'world_cup', label: '环球杯之王', emoji: '🌍' },
+                ];
+                return kings.map(k => {
+                  const top = countByType(k.type);
+                  if (!top) return (
+                    <div key={k.type} className="bg-slate-700/30 rounded-lg p-3 text-center">
+                      <div className="text-lg">{k.emoji}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">{k.label}</div>
+                      <div className="text-xs text-slate-600 mt-1">暂无</div>
+                    </div>
+                  );
+                  return (
+                    <div key={k.type} className="bg-slate-700/30 rounded-lg p-3 text-center">
+                      <div className="text-lg">{k.emoji}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">{k.label}</div>
+                      <Link to={`/team/${top[0]}`} className="text-xs text-slate-200 font-bold mt-1 block hover:text-blue-400">{getTeamName(top[0], world.teamBases)}</Link>
+                      <div className="text-sm font-black text-amber-400 mt-0.5">{top[1]}冠</div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+
+          {/* Record Wall */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">纪录墙</h3>
+            <div className="space-y-2">
+              {(() => {
+                const records: { icon: string; label: string; team: string; teamId: string; detail: string }[] = [];
+                const allRecords = Object.entries(world.teamSeasonRecords);
+
+                // Never relegated
+                const neverRelegated = allRecords.filter(([, recs]) => recs.length >= 2 && recs.every(r => !r.relegated)).map(([tid]) => tid);
+                if (neverRelegated.length > 0 && neverRelegated.length <= 8) {
+                  records.push({ icon: '🌲', label: '常青树（从未降级）', team: neverRelegated.map(id => getTeamName(id, world.teamBases)).join('、'), teamId: neverRelegated[0], detail: '' });
+                }
+
+                // Most times relegated
+                const relegCounts = allRecords.map(([tid, recs]) => ({ tid, count: recs.filter(r => r.relegated).length })).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
+                if (relegCounts[0]) {
+                  records.push({ icon: '🛗', label: '最多降级', team: getTeamName(relegCounts[0].tid, world.teamBases), teamId: relegCounts[0].tid, detail: `${relegCounts[0].count}次` });
+                }
+
+                // Most times promoted
+                const promoCounts = allRecords.map(([tid, recs]) => ({ tid, count: recs.filter(r => r.promoted).length })).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
+                if (promoCounts[0]) {
+                  records.push({ icon: '🚀', label: '最多升级', team: getTeamName(promoCounts[0].tid, world.teamBases), teamId: promoCounts[0].tid, detail: `${promoCounts[0].count}次` });
+                }
+
+                // Elevator team (most combined prom+releg)
+                const elevatorCounts = allRecords.map(([tid, recs]) => ({ tid, count: recs.filter(r => r.promoted || r.relegated).length })).sort((a, b) => b.count - a.count);
+                if (elevatorCounts[0] && elevatorCounts[0].count >= 3) {
+                  records.push({ icon: '🎢', label: '电梯队', team: getTeamName(elevatorCounts[0].tid, world.teamBases), teamId: elevatorCounts[0].tid, detail: `${elevatorCounts[0].count}次升降级` });
+                }
+
+                // Never won L1
+                const l1Winners = new Set(honors.map(h => h.league1Champion));
+                const l1Teams = allRecords.filter(([tid, recs]) => recs.some(r => r.leagueLevel === 1)).map(([tid]) => tid);
+                const neverWon = l1Teams.filter(id => !l1Winners.has(id));
+                if (neverWon.length > 0 && neverWon.length <= 6) {
+                  records.push({ icon: '😤', label: '无冕之王（顶级联赛从未夺冠）', team: neverWon.map(id => getTeamName(id, world.teamBases)).join('、'), teamId: neverWon[0], detail: '' });
+                }
+
+                return records.map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-slate-700/20 rounded-lg p-3">
+                    <span className="text-xl shrink-0">{r.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] text-slate-500">{r.label}</div>
+                      <div className="text-xs text-slate-200 font-medium mt-0.5 truncate">{r.team}</div>
+                    </div>
+                    {r.detail && <span className="text-xs text-amber-400 font-bold shrink-0">{r.detail}</span>}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+
+          {/* Coach Records */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">教练纪录</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(() => {
+                const coachCards: { icon: string; label: string; name: string; coachId: string; detail: string }[] = [];
+
+                // Longest tenure at one club
+                let longestTenure = { coachId: '', teamName: '', seasons: 0 };
+                for (const [cid, career] of Object.entries(world.coachCareers)) {
+                  for (const entry of career) {
+                    const len = (entry.toSeason ?? world.seasonState.seasonNumber) - entry.fromSeason + 1;
+                    if (len > longestTenure.seasons) {
+                      longestTenure = { coachId: cid, teamName: entry.teamName, seasons: len };
+                    }
+                  }
+                }
+                if (longestTenure.seasons > 0) {
+                  coachCards.push({ icon: '🏠', label: '最长单队执教', name: getCoachName(longestTenure.coachId, world.coachBases), coachId: longestTenure.coachId, detail: `${longestTenure.teamName} ${longestTenure.seasons}季` });
+                }
+
+                // Most times fired
+                let mostFired = { coachId: '', count: 0 };
+                for (const [cid, career] of Object.entries(world.coachCareers)) {
+                  const fireCount = career.filter(e => e.fired).length;
+                  if (fireCount > mostFired.count) mostFired = { coachId: cid, count: fireCount };
+                }
+                if (mostFired.count > 0) {
+                  coachCards.push({ icon: '🚪', label: '最多被解雇', name: getCoachName(mostFired.coachId, world.coachBases), coachId: mostFired.coachId, detail: `${mostFired.count}次` });
+                }
+
+                // Most teams managed
+                let mostTeams = { coachId: '', count: 0 };
+                for (const [cid, career] of Object.entries(world.coachCareers)) {
+                  const teamCount = new Set(career.map(e => e.teamId)).size;
+                  if (teamCount > mostTeams.count) mostTeams = { coachId: cid, count: teamCount };
+                }
+                if (mostTeams.count > 1) {
+                  coachCards.push({ icon: '🧳', label: '最多执教球队', name: getCoachName(mostTeams.coachId, world.coachBases), coachId: mostTeams.coachId, detail: `${mostTeams.count}支` });
+                }
+
+                return coachCards.map((c, i) => (
+                  <Link key={i} to={`/coach/${c.coachId}`} className="bg-slate-700/20 rounded-lg p-3 hover:bg-slate-700/40 transition-colors block">
+                    <div className="text-center">
+                      <div className="text-xl">{c.icon}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">{c.label}</div>
+                      <div className="text-xs text-slate-200 font-bold mt-1">{c.name}</div>
+                      <div className="text-[10px] text-amber-400 mt-0.5">{c.detail}</div>
+                    </div>
+                  </Link>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === 'hall' && honors.length === 0 && (
+        <p className="text-sm text-slate-500">完成至少一个赛季后显示荣誉殿堂</p>
       )}
 
       {/* ═══ Tab: 名帅殿堂 ═══ */}
