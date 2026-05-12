@@ -35,6 +35,7 @@ export default function Dashboard() {
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
+  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
 
   const [activeTab, setActiveTab] = useState<TabKey>('matchday');
   const prevResultsLen = useRef(0);
@@ -161,6 +162,42 @@ export default function Dashboard() {
               : '赛季已结束'}
         </button>
       </div>
+
+      {/* ═══════ Favorite Team Card ═══════ */}
+      {favoriteTeamId && world.teamBases[favoriteTeamId] && (() => {
+        const fav = world.teamBases[favoriteTeamId];
+        const favState = world.teamStates[favoriteTeamId];
+        if (!favState) return null;
+        const standings = favState.leagueLevel === 1 ? world.league1Standings : favState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
+        const posEntry = standings.find(s => s.teamId === favoriteTeamId);
+        const pos = posEntry ? standings.indexOf(posEntry) + 1 : '-';
+        const pts = posEntry?.points ?? 0;
+        const coachName = favState.currentCoachId ? getCoachName(favState.currentCoachId, world.coachBases) : '无';
+        const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === favoriteTeamId || f.awayTeamId === favoriteTeamId);
+        const opponentId = nextFixture ? (nextFixture.homeTeamId === favoriteTeamId ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
+
+        return (
+          <div className="flex items-center gap-3 bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2 mt-1">
+            <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
+            <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto text-xs">
+              <Link to={`/team/${favoriteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400 shrink-0">{fav.name}</Link>
+              <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
+              <span className="text-slate-600 shrink-0">{coachName}</span>
+              <div className="flex gap-0.5 shrink-0">
+                {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
+                  <span key={i} className={`w-4 h-4 rounded text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
+                ))}
+              </div>
+              {opponentId && (
+                <span className="text-slate-500 shrink-0">
+                  下场: vs <span className="text-slate-300">{getTeamName(opponentId, world.teamBases)}</span>
+                  {nextFixture?.homeTeamId === favoriteTeamId ? ' (主)' : ' (客)'}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ═══════ Tab Bar ═══════ */}
       <div className="flex gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">

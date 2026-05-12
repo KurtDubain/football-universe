@@ -332,6 +332,34 @@ export default function League() {
                           {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
                         </td>
                         <td className="text-center px-1.5 sm:px-2 py-2 font-bold text-sm sm:text-lg text-slate-100">{entry.points}</td>
+                        <td className="hidden sm:table-cell text-center px-1 py-2">
+                          {(() => {
+                            const totalRounds = config?.rounds ?? 30;
+                            const played = entry.played;
+                            const remaining = totalRounds - played;
+                            if (remaining <= 0 || played < 3) return null;
+                            const maxPts = entry.points + remaining * 3;
+                            const leaderPts = standings[0]?.points ?? 0;
+                            const relegZone = config?.directRelegation ?? 2;
+                            const relegIdx = standings.length - relegZone;
+                            const safeTeamPts = standings[relegIdx - 1]?.points ?? 0;
+                            const myIdx = standings.indexOf(entry);
+
+                            if (myIdx <= 2) {
+                              const gap = entry.points - (standings[1]?.points ?? 0);
+                              const secondMax = (standings[1]?.points ?? 0) + remaining * 3;
+                              if (entry.points > secondMax) return <span className="text-[9px] text-amber-400 font-bold">冠 ✓</span>;
+                              const pct = Math.min(95, Math.max(5, 50 + gap * 3));
+                              if (myIdx === 0 && pct > 30) return <span className="text-[9px] text-emerald-400">{pct}%冠</span>;
+                            }
+                            if (myIdx >= relegIdx) {
+                              const gap = (standings[relegIdx - 1]?.points ?? 0) - entry.points;
+                              const pct = Math.min(90, Math.max(10, 50 + gap * 4));
+                              return <span className="text-[9px] text-red-400">{pct}%降</span>;
+                            }
+                            return null;
+                          })()}
+                        </td>
                         <td className="text-center px-1 sm:px-2 py-2">
                           <div className="flex gap-0.5 justify-center">
                             {formatForm(entry.form.slice(-5)).map((f, fi) => (

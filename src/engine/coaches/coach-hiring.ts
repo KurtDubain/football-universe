@@ -102,6 +102,7 @@ export function processCoachFiring(
       currentTeamId: teamId,
       isUnemployed: false,
       unemployedSince: null,
+      contractEnd: seasonNumber + rng.nextInt(2, 4),
     },
     newCareerEntry,
     firedCareerUpdate: {

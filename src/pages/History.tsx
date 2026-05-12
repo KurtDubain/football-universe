@@ -388,6 +388,64 @@ export default function History() {
               })()}
             </div>
           </div>
+
+          {/* Continental Power Rankings */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">大洲对抗</h3>
+            {(() => {
+              const continents: Record<string, { teams: string[]; trophies: number; avgOvr: number; l1Count: number; wins: number; losses: number }> = {};
+              for (const [tid, base] of Object.entries(world.teamBases)) {
+                const cont = base.region?.split('+')[0] ?? '未知';
+                if (!continents[cont]) continents[cont] = { teams: [], trophies: 0, avgOvr: 0, l1Count: 0, wins: 0, losses: 0 };
+                continents[cont].teams.push(tid);
+                continents[cont].trophies += (world.teamTrophies[tid] ?? []).length;
+                continents[cont].avgOvr += base.overall;
+                if (world.teamStates[tid]?.leagueLevel === 1) continents[cont].l1Count++;
+              }
+              for (const c of Object.values(continents)) {
+                c.avgOvr = c.teams.length > 0 ? Math.round(c.avgOvr / c.teams.length) : 0;
+              }
+              for (const m of (world.matchHistory ?? [])) {
+                const hCont = world.teamBases[m.homeId]?.region?.split('+')[0];
+                const aCont = world.teamBases[m.awayId]?.region?.split('+')[0];
+                if (!hCont || !aCont || hCont === aCont) continue;
+                if (m.homeGoals > m.awayGoals) {
+                  if (continents[hCont]) continents[hCont].wins++;
+                  if (continents[aCont]) continents[aCont].losses++;
+                } else if (m.awayGoals > m.homeGoals) {
+                  if (continents[aCont]) continents[aCont].wins++;
+                  if (continents[hCont]) continents[hCont].losses++;
+                }
+              }
+              const contColors: Record<string, string> = { '大陆': 'border-amber-600/40', '南洲': 'border-teal-600/40', '东洲': 'border-rose-600/40' };
+              const sorted = Object.entries(continents).sort((a, b) => b[1].trophies - a[1].trophies);
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {sorted.map(([name, data]) => {
+                    const total = data.wins + data.losses;
+                    const winRate = total > 0 ? Math.round((data.wins / total) * 100) : 0;
+                    return (
+                      <div key={name} className={`bg-slate-700/20 rounded-lg p-3 border ${contColors[name] ?? 'border-slate-600/40'}`}>
+                        <div className="text-sm font-bold text-slate-200 text-center mb-2">{name}</div>
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
+                          <span className="text-slate-500">球队数</span>
+                          <span className="text-slate-300 text-right">{data.teams.length}</span>
+                          <span className="text-slate-500">平均OVR</span>
+                          <span className="text-slate-300 text-right">{data.avgOvr}</span>
+                          <span className="text-slate-500">顶级联赛</span>
+                          <span className="text-slate-300 text-right">{data.l1Count}队</span>
+                          <span className="text-slate-500">总奖杯</span>
+                          <span className="text-amber-400 text-right font-bold">{data.trophies}</span>
+                          <span className="text-slate-500">跨洲胜率</span>
+                          <span className={`text-right font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>{total > 0 ? `${winRate}%` : '-'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
       {tab === 'hall' && honors.length === 0 && (

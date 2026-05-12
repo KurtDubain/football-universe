@@ -21,7 +21,8 @@ export interface CoachState {
   id: string;
   currentTeamId: string | null;
   isUnemployed: boolean;
-  unemployedSince: number | null; // season number
+  unemployedSince: number | null;
+  contractEnd?: number;
 }
 
 export interface CareerEntry {

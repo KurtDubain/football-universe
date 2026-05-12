@@ -364,6 +364,57 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         );
       })()}
 
+      {/* Continental Season Report */}
+      {(() => {
+        const contStats: Record<string, { wins: number; draws: number; losses: number; goals: number; champion?: string }> = {};
+        // Scan current season results for cross-continent matches
+        for (const w of world.seasonState.calendar) {
+          if (!w.completed || !w.results) continue;
+          for (const r of w.results) {
+            const hCont = tb[r.homeTeamId]?.region?.split('+')[0];
+            const aCont = tb[r.awayTeamId]?.region?.split('+')[0];
+            if (!hCont || !aCont || hCont === aCont) continue;
+            const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
+            const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
+            for (const cont of [hCont, aCont]) {
+              if (!contStats[cont]) contStats[cont] = { wins: 0, draws: 0, losses: 0, goals: 0 };
+            }
+            if (totalH > totalA) { contStats[hCont].wins++; contStats[aCont].losses++; }
+            else if (totalA > totalH) { contStats[aCont].wins++; contStats[hCont].losses++; }
+            else { contStats[hCont].draws++; contStats[aCont].draws++; }
+            contStats[hCont].goals += totalH;
+            contStats[aCont].goals += totalA;
+          }
+        }
+        // Find champion continent
+        const l1ChampCont = tb[honor.league1Champion]?.region?.split('+')[0];
+        if (l1ChampCont && contStats[l1ChampCont]) contStats[l1ChampCont].champion = honor.league1Champion;
+
+        const entries = Object.entries(contStats);
+        if (entries.length === 0) return null;
+        const dominant = entries.sort((a, b) => b[1].wins - a[1].wins)[0];
+
+        return (
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+            <h3 className="text-xs font-semibold text-slate-400 mb-2">大洲赛季对抗</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {entries.map(([name, data]) => {
+                const total = data.wins + data.draws + data.losses;
+                const isDominant = name === dominant[0];
+                return (
+                  <div key={name} className={`text-center p-2 rounded-lg ${isDominant ? 'bg-amber-900/15 border border-amber-700/30' : 'bg-slate-700/20'}`}>
+                    <div className={`text-xs font-bold ${isDominant ? 'text-amber-400' : 'text-slate-300'}`}>{name}</div>
+                    <div className="text-[10px] text-slate-500 mt-1">{data.wins}胜 {data.draws}平 {data.losses}负</div>
+                    <div className="text-[10px] text-slate-500">{data.goals}球</div>
+                    {isDominant && <div className="text-[9px] text-amber-400 mt-1">本季最强</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Most losses / bottom note */}
       {mostLosses && mostLosses.leagueLost > 0 && (
         <div className="text-center text-[10px] text-slate-600 py-1">

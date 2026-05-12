@@ -409,6 +409,65 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     });
   }
 
+  // ── Coach contract expiry ──────────────────────────────────
+  for (const teamId of getAllTeamIds(world.teamStates)) {
+    const coachId = world.teamStates[teamId]?.currentCoachId;
+    if (!coachId) continue;
+    const coachState = world.coachStates[coachId];
+    if (!coachState?.contractEnd || coachState.contractEnd > seasonNumber) continue;
+
+    // Contract expired — decide renewal
+    const standings = allStandings[world.teamStates[teamId].leagueLevel] ?? [];
+    const pos = standings.findIndex(s => s.teamId === teamId) + 1;
+    const total = standings.length;
+    const ratio = total > 0 ? pos / total : 1;
+    const wonTrophy = teamId === league1Champion || teamId === leagueCupWinner || teamId === superCupWinner;
+
+    let renewChance = wonTrophy ? 0.85 : ratio <= 0.3 ? 0.70 : ratio <= 0.6 ? 0.45 : 0.25;
+
+    if (rng.next() < renewChance) {
+      const extension = wonTrophy ? rng.nextInt(2, 3) : rng.nextInt(1, 2);
+      world.coachStates[coachId] = { ...world.coachStates[coachId], contractEnd: seasonNumber + extension };
+      const coachName = world.coachBases[coachId]?.name ?? coachId;
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `renew-${coachId}`),
+        seasonNumber, windowIndex, type: 'coach_hired',
+        title: `${coachName} 与${world.teamBases[teamId]?.name}续约${extension}年`,
+        description: `${coachName}续签了一份${extension}年的新合同。`,
+      });
+    } else {
+      const allCoachData = Object.entries(world.coachStates).map(([id, cs]) => ({
+        base: world.coachBases[id], state: cs,
+      })).filter(c => c.base != null);
+      const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
+
+      world.coachStates[coachId] = { ...world.coachStates[coachId], ...firingResult.firedCoachUpdate };
+      if (world.coachStates[firingResult.newCoachId]) {
+        world.coachStates[firingResult.newCoachId] = { ...world.coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
+      } else {
+        world.coachStates[firingResult.newCoachId] = { id: firingResult.newCoachId, currentTeamId: teamId, isUnemployed: false, unemployedSince: null, contractEnd: seasonNumber + rng.nextInt(2, 4) };
+      }
+      world.teamStates[teamId] = { ...world.teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+
+      const careerList = [...(world.coachCareers[coachId] ?? [])];
+      if (careerList.length > 0) {
+        careerList[careerList.length - 1] = { ...careerList[careerList.length - 1], toSeason: seasonNumber, fired: false };
+      }
+      world.coachCareers[coachId] = careerList;
+      world.coachCareers[firingResult.newCoachId] = [...(world.coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
+
+      const coachName = world.coachBases[coachId]?.name ?? coachId;
+      const newName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `expire-${coachId}`),
+        seasonNumber, windowIndex, type: 'coach_fired',
+        title: `${coachName} 合同到期离开${world.teamBases[teamId]?.name}`,
+        description: `${coachName}合同到期后未能续约，${newName}接任。`,
+      });
+      world.coachChangesThisSeason.push({ teamId, oldCoachId: coachId, newCoachId: firingResult.newCoachId, reason: '合同到期' });
+    }
+  }
+
   // ── Check achievements ──────────────────────────────────────
   let achievements = [...(world.achievements ?? [])];
   for (const teamId of getAllTeamIds(world.teamStates)) {

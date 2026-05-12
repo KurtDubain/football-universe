@@ -66,6 +66,11 @@ export default function CoachDetail() {
               {trophies.length > 0 && (
                 <span className="text-xs text-amber-400">{trophies.length} 座奖杯</span>
               )}
+              {!state.isUnemployed && state.contractEnd && (
+                <span className="text-xs text-slate-500">
+                  合同至S{state.contractEnd} ({state.contractEnd - world.seasonState.seasonNumber > 0 ? `剩${state.contractEnd - world.seasonState.seasonNumber}季` : '到期'})
+                </span>
+              )}
             </div>
           </div>
           {/* Pressure gauge */}
