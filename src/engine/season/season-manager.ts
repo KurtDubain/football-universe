@@ -25,6 +25,7 @@ import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
+import { enforceStorageLimits } from './storage-limits';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ export interface SeasonBuff {
   type: string;
   label: string;
   description: string;
-  effects: { field: string; delta: number }[];
+  effects: { field: import('../events').TeamNumericField; delta: number }[];
 }
 
 const MEMORABLE_CAP = 30;
@@ -353,7 +354,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     const base = { ...buffedTeamBases[oldBuff.teamId] };
     if (!base) continue;
     for (const eff of oldBuff.effects) {
-      (base as any)[eff.field] = Math.max(30, Math.min(99, ((base as any)[eff.field] ?? 50) - eff.delta));
+      base[eff.field] = Math.max(30, Math.min(99, (base[eff.field] ?? 50) - eff.delta));
     }
     buffedTeamBases[oldBuff.teamId] = base;
   }
@@ -371,7 +372,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   for (const buff of seasonBuffs) {
     const base = { ...buffedTeamBases[buff.teamId] };
     for (const eff of buff.effects) {
-      (base as any)[eff.field] = Math.max(30, Math.min(99, ((base as any)[eff.field] ?? 50) + eff.delta));
+      base[eff.field] = Math.max(30, Math.min(99, (base[eff.field] ?? 50) + eff.delta));
     }
     buffedTeamBases[buff.teamId] = base;
   }
@@ -405,7 +406,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     newBuffsHistory.push({ season: prevSeason, buffs: world.seasonBuffs ?? [] });
   }
 
-  return {
+  return enforceStorageLimits({
     ...world,
     teamBases: buffedTeamBases,
     seasonState,
@@ -425,14 +426,14 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     godHandUsed: false,
     matchHistory: newMatchHistory,
     seasonBuffsHistory: newBuffsHistory,
-  };
+  });
 }
 
 const SEASON_BUFF_TEMPLATES: {
   type: string;
   label: string;
   desc: (team: string) => string;
-  effects: { field: string; delta: number }[];
+  effects: { field: import('../events').TeamNumericField; delta: number }[];
   positive: boolean;
 }[] = [
   {
