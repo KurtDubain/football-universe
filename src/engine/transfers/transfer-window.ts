@@ -10,12 +10,11 @@ import { SeededRNG } from '../match/rng';
  * - Identify "transfer candidates" — top scorers from non-elite teams (overall < 80)
  *   who scored 6+ goals.
  * - For each candidate, ~30% chance an elite team (overall ≥ 82) poaches them.
- * - Swap: candidate moves to elite team; a random non-star player from that elite
- *   team moves down to fill the slot. Both players keep their numbers if available;
- *   otherwise we reassign the lowest unused number.
- * - Generates TransferRecord entries.
- *
- * Returns the new squads + transfer records. Does NOT mutate the world.
+ * - Swap: candidate moves to elite team; the WEAKEST player AT THE SAME POSITION
+ *   from that elite team moves down to fill the slot. This preserves squad
+ *   composition (3 GK / 7 DF / 7 MF / 5 FW) over many seasons.
+ * - Returns an `idMap` of {oldId → newId} so callers can rewrite playerStats,
+ *   playerAwardsHistory and transferHistory keys to follow the players.
  */
 export function processTransferWindow(
   world: GameWorld,
@@ -23,8 +22,10 @@ export function processTransferWindow(
 ): {
   squads: Record<string, Player[]>;
   transfers: TransferRecord[];
+  idMap: Map<string, string>;
 } {
   const transfers: TransferRecord[] = [];
+  const idMap = new Map<string, string>();
   const squads: Record<string, Player[]> = { ...world.squads };
   // Make per-team mutable copies as we modify them
   for (const tid of Object.keys(squads)) {
@@ -36,7 +37,7 @@ export function processTransferWindow(
     .filter((t) => t.overall >= 82)
     .map((t) => t.id);
   if (eliteTeamIds.length === 0) {
-    return { squads, transfers };
+    return { squads, transfers, idMap };
   }
 
   // Identify transfer candidates: top scorers from non-elite teams
@@ -71,19 +72,22 @@ export function processTransferWindow(
     const incomingPlayer = fromSquad.find((p) => p.id === cand.playerId);
     if (!incomingPlayer) continue;
 
-    // Pick a random non-star player from the buyer team (lowest-rated outfield)
-    // to swap down. Keep elite team's stars intact.
-    const buyerOutfield = toSquad.filter((p) => p.position !== 'GK');
-    if (buyerOutfield.length === 0) continue;
-    buyerOutfield.sort((a, b) => a.rating - b.rating);
-    const swapOut = buyerOutfield[0]; // weakest outfield player
+    // Pick the weakest player AT THE SAME POSITION from the buyer team — this
+    // preserves the formation composition (3GK/7DF/7MF/5FW) over many seasons.
+    const sameRolePool = toSquad
+      .filter((p) => p.position === incomingPlayer.position)
+      .sort((a, b) => a.rating - b.rating);
+    if (sameRolePool.length === 0) continue;
+    const swapOut = sameRolePool[0]; // weakest at this position
+    // Don't swap if the elite's "weakest" is already as good as / better than
+    // the candidate — no realistic transfer there.
+    if (swapOut.rating >= incomingPlayer.rating) continue;
 
-    // Perform swap. Update teamId; reassign IDs to new "team-number" format.
-    // Try to keep numbers; if conflict, reassign.
+    // Compute new shirt numbers (try to keep, otherwise pick lowest free)
     const buyerNumbersUsed = new Set(toSquad.filter((p) => p.id !== swapOut.id).map((p) => p.number));
     const sellerNumbersUsed = new Set(fromSquad.filter((p) => p.id !== incomingPlayer.id).map((p) => p.number));
 
-    function pickFreeNumber(used: Set<string | number>, preferred: number): number {
+    function pickFreeNumber(used: Set<number>, preferred: number): number {
       if (!used.has(preferred)) return preferred;
       for (let n = 2; n <= 99; n++) {
         if (!used.has(n)) return n;
@@ -91,8 +95,8 @@ export function processTransferWindow(
       return preferred;
     }
 
-    const incomingNumber = pickFreeNumber(buyerNumbersUsed as Set<number>, incomingPlayer.number);
-    const outgoingNumber = pickFreeNumber(sellerNumbersUsed as Set<number>, swapOut.number);
+    const incomingNumber = pickFreeNumber(buyerNumbersUsed, incomingPlayer.number);
+    const outgoingNumber = pickFreeNumber(sellerNumbersUsed, swapOut.number);
 
     const movedToElite: Player = {
       ...incomingPlayer,
@@ -106,6 +110,10 @@ export function processTransferWindow(
       number: outgoingNumber,
       id: `${cand.teamId}-${outgoingNumber}`,
     };
+
+    // Track ID rewrites so callers can update playerStats / awards / etc.
+    idMap.set(incomingPlayer.id, movedToElite.id);
+    idMap.set(swapOut.id, movedToWeak.id);
 
     // Apply swap
     squads[cand.teamId] = fromSquad
@@ -124,9 +132,9 @@ export function processTransferWindow(
     transfers.push({
       season: seasonNumber,
       windowIndex,
-      playerId: incomingPlayer.id,
+      playerId: movedToElite.id, // NEW id — link will resolve to current location
       playerName: incomingPlayer.name ?? `${incomingPlayer.number}号`,
-      playerNumber: incomingPlayer.number,
+      playerNumber: incomingNumber,
       position: incomingPlayer.position,
       fromTeamId: cand.teamId,
       fromTeamName: fromTeam?.name ?? cand.teamId,
@@ -137,13 +145,13 @@ export function processTransferWindow(
       reason: `${cand.goals}球身价飙升`,
     });
 
-    // Also record the reverse "loan-down" move so TeamDetail shows incoming weak-team transfer
+    // Reverse "loan-down" move so TeamDetail shows the swap
     transfers.push({
       season: seasonNumber,
       windowIndex,
-      playerId: swapOut.id,
+      playerId: movedToWeak.id, // NEW id
       playerName: swapOut.name ?? `${swapOut.number}号`,
-      playerNumber: swapOut.number,
+      playerNumber: outgoingNumber,
       position: swapOut.position,
       fromTeamId: buyerId,
       fromTeamName: toTeam?.name ?? buyerId,
@@ -154,5 +162,53 @@ export function processTransferWindow(
     });
   }
 
-  return { squads, transfers };
+  return { squads, transfers, idMap };
 }
+
+/**
+ * Rewrite playerId references throughout the world after a transfer window.
+ * Mutates: playerStats keys, playerAwardsHistory[*].playerId, transferHistory[*].playerId.
+ *
+ * Returns the new playerStats record (callers should reassign).
+ * Other arrays are mutated in place but a new world spread is recommended.
+ */
+export function applyTransferIdMap(
+  world: GameWorld,
+  idMap: Map<string, string>,
+): {
+  playerStats: typeof world.playerStats;
+  playerAwardsHistory: typeof world.playerAwardsHistory;
+  transferHistory: typeof world.transferHistory;
+} {
+  if (idMap.size === 0) {
+    return {
+      playerStats: world.playerStats,
+      playerAwardsHistory: world.playerAwardsHistory,
+      transferHistory: world.transferHistory,
+    };
+  }
+
+  // Rewrite playerStats keys. Build a fresh record so React/zustand reactivity fires.
+  const newStats: typeof world.playerStats = {};
+  for (const [pid, stat] of Object.entries(world.playerStats)) {
+    const newId = idMap.get(pid) ?? pid;
+    newStats[newId] = { ...stat, playerId: newId };
+  }
+
+  // Rewrite awards
+  const newAwards = (world.playerAwardsHistory ?? []).map((a) =>
+    idMap.has(a.playerId) ? { ...a, playerId: idMap.get(a.playerId)! } : a,
+  );
+
+  // Rewrite transferHistory (entries created BEFORE this window may reference old IDs)
+  const newTransfers = (world.transferHistory ?? []).map((t) =>
+    idMap.has(t.playerId) ? { ...t, playerId: idMap.get(t.playerId)! } : t,
+  );
+
+  return {
+    playerStats: newStats,
+    playerAwardsHistory: newAwards,
+    transferHistory: newTransfers,
+  };
+}
+

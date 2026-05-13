@@ -38,9 +38,10 @@ export default function Dashboard() {
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const advanceTick = useGameStore((s) => s.advanceTick);
 
   const [activeTab, setActiveTab] = useState<TabKey>('matchday');
-  const prevResultsLen = useRef(0);
+  const prevAdvanceTick = useRef(advanceTick);
 
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
@@ -50,36 +51,40 @@ export default function Dashboard() {
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const clearStarredFixtures = useGameStore((s) => s.clearStarredFixtures);
 
-  // Auto-switch to results tab + trigger live/celebration after advancing
+  // Auto-switch to results tab + trigger live/celebration after each advance
+  // (advanceTick bumps in store on every successful advance — robust across
+  //  any number of advances, unlike length-based heuristics).
   useEffect(() => {
-    if (lastResults.length > 0 && prevResultsLen.current === 0) {
-      // Priority 1: starred fixture in this batch → auto-live the first one
-      const starredHit = starredFixtureIds.length > 0
-        ? lastResults.find((r) => starredFixtureIds.includes(r.fixtureId))
-        : undefined;
-      // Priority 2: cup final
-      const finalResult = lastResults.find(r =>
-        r.roundLabel === 'Final' || r.roundLabel === '决赛'
-      );
-      if (starredHit) {
-        setLiveResult(starredHit);
-        // Clear starred (one-shot per advance)
-        clearStarredFixtures();
-      } else if (finalResult) {
-        setLiveResult(finalResult);
-      } else {
-        setActiveTab('results');
-      }
+    if (advanceTick === prevAdvanceTick.current) return;
+    prevAdvanceTick.current = advanceTick;
+    if (lastResults.length === 0) return;
 
-      // Check celebration
-      const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
-      if (prevWindow) {
-        const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
-        if (celeb && !finalResult && !starredHit) setCelebrationType(celeb);
-      }
+    // Priority 1: starred fixture in this batch → auto-live the first one
+    const starredHit = starredFixtureIds.length > 0
+      ? lastResults.find((r) => starredFixtureIds.includes(r.fixtureId))
+      : undefined;
+    // Priority 2: cup final
+    const finalResult = lastResults.find(r =>
+      r.roundLabel === 'Final' || r.roundLabel === '决赛'
+    );
+    if (starredHit) {
+      setLiveResult(starredHit);
+      // Clear starred (one-shot per advance)
+      clearStarredFixtures();
+    } else if (finalResult) {
+      setLiveResult(finalResult);
+    } else {
+      setActiveTab('results');
     }
-    prevResultsLen.current = lastResults.length;
-  }, [lastResults.length]);
+
+    // Check celebration
+    const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
+    if (prevWindow) {
+      const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
+      if (celeb && !finalResult && !starredHit) setCelebrationType(celeb);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceTick]);
 
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -357,11 +362,12 @@ function MatchdayTab({
   const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2);
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
 
-  // Group fixtures by competition
+  // Group fixtures by competition (excluding ones already shown in focus banner)
   const groups: { label: string; color: string; fixtures: MatchFixture[] }[] = [];
   const groupMap = new Map<string, MatchFixture[]>();
 
   for (const f of currentWindow.fixtures) {
+    if (focusFixtureIds.has(f.id)) continue; // already rendered in focus banner above
     const key = f.competitionName || f.competitionType;
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key)!.push(f);

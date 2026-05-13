@@ -135,9 +135,9 @@ export function generateStorylineCards(
     }
 
     // ── Cup deep run ───────────────────────────────────────────
-    // League cup
+    // League cup — only if cup not yet decided AND team is in latest round
     const lc = world.leagueCup;
-    if (lc && lc.rounds.length >= 3) {
+    if (lc && !lc.completed && lc.rounds.length >= 3) {
       const recentRound = lc.rounds[lc.rounds.length - 1];
       if (recentRound.fixtures.some((f) => f.homeTeamId === teamId || f.awayTeamId === teamId)) {
         const roundName = ['', '32强', '16强', '八强', '四强', '决赛'][lc.rounds.length] ?? `第${lc.rounds.length}轮`;

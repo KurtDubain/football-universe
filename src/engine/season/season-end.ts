@@ -20,7 +20,7 @@ import { BALANCE } from '../../config/balance';
 import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
-import { processTransferWindow } from '../transfers/transfer-window';
+import { processTransferWindow, applyTransferIdMap } from '../transfers/transfer-window';
 import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
@@ -257,7 +257,17 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const transferResult = processTransferWindow(world, rng);
   if (transferResult.transfers.length > 0) {
     world.squads = transferResult.squads;
-    world.transferHistory = [...(world.transferHistory ?? []), ...transferResult.transfers];
+
+    // Rewrite all stale playerId references (playerStats keys, awards, prior
+    // transfer entries) so links from /history, /chronicle and SeasonReview
+    // resolve to the player's CURRENT squad slot. Run BEFORE appending the new
+    // transfers — they already use the new IDs and would be incorrectly
+    // re-mapped if a new id happens to collide with an old key (e.g., when a
+    // transferred-up player and the swap-down player share a shirt number).
+    const rewritten = applyTransferIdMap(world, transferResult.idMap);
+    world.playerStats = rewritten.playerStats;
+    world.playerAwardsHistory = rewritten.playerAwardsHistory;
+    world.transferHistory = [...rewritten.transferHistory, ...transferResult.transfers];
 
     // Top 3 transfers as news
     const topTransfers = transferResult.transfers

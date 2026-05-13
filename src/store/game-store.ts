@@ -15,6 +15,9 @@ interface GameStore {
   lastResults: MatchResult[];
   lastNews: NewsItem[];
   isAdvancing: boolean;
+  /** Bumps on every successful advance — Dashboard listens for changes to trigger
+   *  auto-live / celebration / tab switch reliably each advance, not just the first. */
+  advanceTick: number;
   /** Single-team selection — kept for backward compatibility. Prefer `favoriteTeamIds`. */
   favoriteTeamId: string | null;
   /** Multi-favorite list (up to 3 teams). */
@@ -56,6 +59,7 @@ export const useGameStore = create<GameStore>()(
       lastResults: [],
       lastNews: [],
       isAdvancing: false,
+      advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
       starredFixtureIds: [],
@@ -96,7 +100,7 @@ export const useGameStore = create<GameStore>()(
           const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
           const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
 
-          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false, newAchievements: [...get().newAchievements, ...newAch] });
+          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false, advanceTick: get().advanceTick + 1, newAchievements: [...get().newAchievements, ...newAch] });
           if (updatedWorld.seasonState.completed || updatedWorld.newsLog.length > 300) {
             get().trimStorage();
           }
@@ -123,7 +127,7 @@ export const useGameStore = create<GameStore>()(
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          set({ world, lastResults: allResults, lastNews: allNews, isAdvancing: false });
+          set({ world, lastResults: allResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in batch advance:', e);
           set({ world, isAdvancing: false });
@@ -151,7 +155,7 @@ export const useGameStore = create<GameStore>()(
             safety++;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          set({ world, lastResults, lastNews: allNews, isAdvancing: false });
+          set({ world, lastResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in advanceUntil:', e);
           set({ world, isAdvancing: false });

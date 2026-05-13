@@ -260,52 +260,61 @@ export default function CoachDetail() {
       {/* Coach rivalries */}
       {(() => {
         const rivalries = computeCoachRivalries(world, id, 5);
-        if (rivalries.length === 0) return null;
         return (
           <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 宿敌录
               </h3>
-              <span className="text-[10px] text-slate-500">最常对话的 {rivalries.length} 位教练</span>
+              {rivalries.length > 0 && (
+                <span className="text-[10px] text-slate-500">最常对话的 {rivalries.length} 位教练</span>
+              )}
             </div>
-            <div className="divide-y divide-slate-700/40">
-              {rivalries.map((r) => (
-                <div key={r.opponentCoachId} className="px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Link to={`/coach/${r.opponentCoachId}`} className="text-sm font-medium text-slate-100 hover:text-blue-300">
-                      {r.opponentName}
-                    </Link>
-                    {r.isRival && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 font-semibold">
-                        宿敌
+            {rivalries.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <div className="text-2xl mb-1.5">🤝</div>
+                <div className="text-xs text-slate-500">暂无对手数据</div>
+                <div className="text-[10px] text-slate-600 mt-0.5">完成更多赛季后会自动统计教练间的交手记录</div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-700/40">
+                {rivalries.map((r) => (
+                  <div key={r.opponentCoachId} className="px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Link to={`/coach/${r.opponentCoachId}`} className="text-sm font-medium text-slate-100 hover:text-blue-300">
+                        {r.opponentName}
+                      </Link>
+                      {r.isRival && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 font-semibold">
+                          宿敌
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-500 ml-auto">
+                        共 {r.meetings} 次交手
                       </span>
-                    )}
-                    <span className="text-[10px] text-slate-500 ml-auto">
-                      共 {r.meetings} 次交手
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                    <div className="bg-slate-900/40 rounded p-1.5">
-                      <div className="text-emerald-400 font-bold">{r.wins}</div>
-                      <div className="text-[9px] text-slate-500">胜</div>
                     </div>
-                    <div className="bg-slate-900/40 rounded p-1.5">
-                      <div className="text-slate-300 font-bold">{r.draws}</div>
-                      <div className="text-[9px] text-slate-500">平</div>
-                    </div>
-                    <div className="bg-slate-900/40 rounded p-1.5">
-                      <div className="text-red-400 font-bold">{r.losses}</div>
-                      <div className="text-[9px] text-slate-500">负</div>
-                    </div>
-                    <div className="bg-slate-900/40 rounded p-1.5">
-                      <div className="text-slate-300 font-bold">{r.goalsFor}-{r.goalsAgainst}</div>
-                      <div className="text-[9px] text-slate-500">进/失</div>
+                    <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                      <div className="bg-slate-900/40 rounded p-1.5">
+                        <div className="text-emerald-400 font-bold">{r.wins}</div>
+                        <div className="text-[9px] text-slate-500">胜</div>
+                      </div>
+                      <div className="bg-slate-900/40 rounded p-1.5">
+                        <div className="text-slate-300 font-bold">{r.draws}</div>
+                        <div className="text-[9px] text-slate-500">平</div>
+                      </div>
+                      <div className="bg-slate-900/40 rounded p-1.5">
+                        <div className="text-red-400 font-bold">{r.losses}</div>
+                        <div className="text-[9px] text-slate-500">负</div>
+                      </div>
+                      <div className="bg-slate-900/40 rounded p-1.5">
+                        <div className="text-slate-300 font-bold">{r.goalsFor}-{r.goalsAgainst}</div>
+                        <div className="text-[9px] text-slate-500">进/失</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}

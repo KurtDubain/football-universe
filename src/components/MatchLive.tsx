@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
-import { getTeamName } from '../utils/format';
 import PitchCanvas from './PitchCanvas';
 
 interface Props {

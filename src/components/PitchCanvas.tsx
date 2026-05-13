@@ -138,8 +138,6 @@ export default function PitchCanvas(props: Props) {
   const interceptedRef = useRef(false);
   const ballSpinRef = useRef(0);
 
-  const isGoalEvent = flashEvent && (flashEvent.type === 'goal' || flashEvent.type === 'penalty_goal');
-
   const attackSide = useMemo(() => {
     const ev = allEvents.find(e => Math.abs(e.minute - minute) <= 2);
     if (ev) return ev.teamId === homeTeamId ? 'home' : 'away';
@@ -154,6 +152,65 @@ export default function PitchCanvas(props: Props) {
 
   const shiftRef = useRef(0);
 
+  // Live snapshot of props for the long-running rAF loop to read from.
+  // Avoids restarting the rAF chain on every minute / flashEvent change.
+  const liveRef = useRef({
+    minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+  });
+  liveRef.current = { minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift };
+
+  // Goal-trigger effect: fires once per new flashEvent (goal/penalty_goal).
+  // Spawns particles + camera shake. Does NOT restart the rAF loop.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const isGoal = flashEvent && (flashEvent.type === 'goal' || flashEvent.type === 'penalty_goal');
+    if (!isGoal) return;
+    const W = canvas.width, H = canvas.height;
+    const P = 10;
+    const fw = W - P * 2;
+    goalCelebFrame.current = 110;
+    cameraShakeRef.current = 35;
+    flashWhiteRef.current = 12;
+    const evIsHome = flashEvent.teamId === homeTeamId;
+    const goalColor = evIsHome ? homeColor : awayColor;
+    const goalX = P + (evIsHome ? 0.97 : 0.03) * fw;
+    const goalY = H / 2;
+    // Inline particle spawn (kept here so the trigger effect is self-contained)
+    for (let i = 0; i < 28; i++) {
+      const angle = (i / 28) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const speed = 2 + Math.random() * 4;
+      particlesRef.current.push({
+        x: goalX, y: goalY,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 1,
+        life: 70 + Math.random() * 30, maxLife: 90,
+        color: goalColor, size: 1.5 + Math.random() * 2, gravity: 0.08,
+      });
+    }
+    for (let i = 0; i < 18; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 5;
+      particlesRef.current.push({
+        x: goalX, y: goalY,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 1.5,
+        life: 40 + Math.random() * 25, maxLife: 60,
+        color: '#ffffff', size: 0.8 + Math.random() * 1.2, gravity: 0.1,
+      });
+    }
+    for (let i = 0; i < 22; i++) {
+      const startX = goalX + (Math.random() - 0.5) * 80;
+      const startY = goalY - 30 - Math.random() * 60;
+      particlesRef.current.push({
+        x: startX, y: startY,
+        vx: (Math.random() - 0.5) * 1.5, vy: 0.5 + Math.random() * 1.5,
+        life: 100 + Math.random() * 50, maxLife: 140,
+        color: Math.random() > 0.5 ? goalColor : '#fbbf24',
+        size: 1.2 + Math.random() * 1.2, gravity: 0.04,
+      });
+    }
+  }, [flashEvent, homeTeamId, homeColor, awayColor]);
+
+  // Main rAF loop — starts once on mount, reads from liveRef. No restarts.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -161,66 +218,6 @@ export default function PitchCanvas(props: Props) {
     const W = canvas.width, H = canvas.height;
     const P = 10;
     const fw = W - P * 2, fh = H - P * 2;
-
-    if (isGoalEvent) {
-      goalCelebFrame.current = 110;
-      cameraShakeRef.current = 35;
-      flashWhiteRef.current = 12;
-      // Spawn goal particles in team color
-      const evIsHome = flashEvent.teamId === homeTeamId;
-      const goalColor = evIsHome ? homeColor : awayColor;
-      const goalX = P + (evIsHome ? 0.97 : 0.03) * fw;
-      const goalY = H / 2;
-      spawnGoalBurst(goalX, goalY, goalColor);
-    }
-
-    function spawnGoalBurst(cx: number, cy: number, color: string) {
-      // Big burst of team-colored particles + white sparks
-      for (let i = 0; i < 28; i++) {
-        const angle = (i / 28) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-        const speed = 2 + Math.random() * 4;
-        particlesRef.current.push({
-          x: cx, y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 1,
-          life: 70 + Math.random() * 30,
-          maxLife: 90,
-          color,
-          size: 1.5 + Math.random() * 2,
-          gravity: 0.08,
-        });
-      }
-      // Bright white sparks
-      for (let i = 0; i < 18; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 3 + Math.random() * 5;
-        particlesRef.current.push({
-          x: cx, y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 1.5,
-          life: 40 + Math.random() * 25,
-          maxLife: 60,
-          color: '#ffffff',
-          size: 0.8 + Math.random() * 1.2,
-          gravity: 0.1,
-        });
-      }
-      // Confetti drifting down
-      for (let i = 0; i < 22; i++) {
-        const startX = cx + (Math.random() - 0.5) * 80;
-        const startY = cy - 30 - Math.random() * 60;
-        particlesRef.current.push({
-          x: startX, y: startY,
-          vx: (Math.random() - 0.5) * 1.5,
-          vy: 0.5 + Math.random() * 1.5,
-          life: 100 + Math.random() * 50,
-          maxLife: 140,
-          color: Math.random() > 0.5 ? color : '#fbbf24',
-          size: 1.2 + Math.random() * 1.2,
-          gravity: 0.04,
-        });
-      }
-    }
 
     function spawnTackleSparks(cx: number, cy: number) {
       for (let i = 0; i < 8; i++) {
@@ -267,7 +264,7 @@ export default function PitchCanvas(props: Props) {
 
     // Bootstrap sequence if empty
     if (sequenceRef.current.length === 0) {
-      sequenceSeedRef.current = minute * 137 + frameRef.current;
+      sequenceSeedRef.current = liveRef.current.minute * 137 + frameRef.current;
       const gen = generateSequence(sequenceSeedRef.current);
       sequenceRef.current = gen.phases;
       phaseIdxRef.current = 0;
@@ -283,6 +280,15 @@ export default function PitchCanvas(props: Props) {
     function render() {
       frameRef.current++;
       const f = frameRef.current;
+      // Read live props from ref (no closure capture → no rAF restart on prop change)
+      const live = liveRef.current;
+      const minute = live.minute;
+      const homeColor = live.homeColor;
+      const awayColor = live.awayColor;
+      const homeTeamId = live.homeTeamId;
+      const allEvents = live.allEvents;
+      const halftime = live.halftime;
+      const targetShift = live.targetShift;
 
       // Camera shake
       let camOffX = 0, camOffY = 0;
@@ -719,8 +725,9 @@ export default function PitchCanvas(props: Props) {
 
     let raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minute, flashEvent, halftime, homeColor, awayColor, attackSide, allEvents, homeTeamId]);
+    // Empty deps — render loop runs once for the lifetime of the component.
+    // All reactive props are read via liveRef.current inside render().
+  }, []);
 
   return (
     <canvas
