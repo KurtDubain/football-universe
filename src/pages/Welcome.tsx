@@ -19,7 +19,7 @@ export default function Welcome() {
     setStarting(true);
     if (favTeam) setFavoriteTeam(favTeam);
     const seedNum = seed.trim() ? parseInt(seed.trim(), 10) : undefined;
-    newGame(isNaN(seedNum as number) ? undefined : seedNum, { gameMode: mode });
+    newGame(seedNum === undefined || isNaN(seedNum) ? undefined : seedNum, { gameMode: mode });
   }
 
   return (

@@ -697,7 +697,7 @@ export default function League() {
 // ══════════════════════════════════════════════════════════════
 
 function TrendChart({ rounds, standings, world, leagueLevel }: {
-  rounds: any[];
+  rounds: { windowId: number; windowIndex: number; label: string; completed: boolean; fixtures: MatchFixture[]; results: MatchResult[] }[];
   standings: StandingEntry[];
   world: GameWorld;
   leagueLevel: number;

@@ -4,6 +4,8 @@ import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
+import type { TeamBase } from '../types/team';
+import type { PlayerSeasonStats } from '../types/player';
 import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
 import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
@@ -296,7 +298,7 @@ export default function Dashboard() {
       {liveResult && (
         <MatchLive
           result={liveResult}
-          teamBases={world.teamBases as Record<string, any>}
+          teamBases={world.teamBases}
           onClose={() => {
             setLiveResult(null);
             setActiveTab('results');
@@ -611,7 +613,7 @@ function ResultsTab({
       {/* Animated result reveal */}
       <ResultAnimation
         results={lastResults}
-        teamBases={world.teamBases as Record<string, any>}
+        teamBases={world.teamBases}
         onComplete={() => setAnimComplete(true)}
         onResultClick={onResultClick}
         onLiveView={onLiveView}
@@ -669,8 +671,8 @@ function OverviewTab({ world }: { world: GameWorld }) {
   const wcStatus = world.worldCup ? (world.worldCup.completed ? '已结束' : world.worldCup.groupStageCompleted ? '淘汰赛' : '小组赛') : null;
 
   // Top scorer
-  const topScorer = Object.values(world.playerStats).reduce(
-    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best), null as { goals: number; playerId: string; teamId: string; assists: number; appearances: number } | null
+  const topScorer = Object.values(world.playerStats).reduce<PlayerSeasonStats | null>(
+    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best), null
   );
   let topScorerText = '暂无';
   if (topScorer && topScorer.goals > 0) {
@@ -966,7 +968,7 @@ function getNewsBorderColor(type: string): string {
   return colors[type] ?? '#64748b';
 }
 
-function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string[]; teamBases: Record<string, any>; seasonNumber: number }) {
+function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string[]; teamBases: Record<string, TeamBase>; seasonNumber: number }) {
   const setPrediction = useGameStore(s => s.setPrediction);
   const [champion, setChampion] = useState('');
   const [relegated, setRelegated] = useState('');
@@ -996,7 +998,7 @@ function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string
   );
 }
 
-function GodHandPanel({ teamBases }: { teamBases: Record<string, any> }) {
+function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
   const useGodHand = useGameStore(s => s.useGodHand);
   const [show, setShow] = useState(false);
   const [teamId, setTeamId] = useState('');

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { MatchFixture, MatchResult, MatchEvent } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
+import type { TeamBase, TeamState } from '../types/team';
+import type { CoachBase } from '../types/coach';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
 import {
   getTeamName,
@@ -104,12 +106,12 @@ function PreMatchView({
 }: {
   fixture: MatchFixture;
   world: GameWorld;
-  homeTeam: any;
-  awayTeam: any;
-  homeState: any;
-  awayState: any;
-  homeCoach: any;
-  awayCoach: any;
+  homeTeam: TeamBase;
+  awayTeam: TeamBase;
+  homeState: TeamState | undefined;
+  awayState: TeamState | undefined;
+  homeCoach: CoachBase | null;
+  awayCoach: CoachBase | null;
 }) {
   const prediction: MatchPrediction | null = useMemo(() => {
     if (!homeState || !awayState) return null;
@@ -350,8 +352,8 @@ function PostMatchView({
   fixture: MatchFixture;
   result: MatchResult;
   world: GameWorld;
-  homeTeam: any;
-  awayTeam: any;
+  homeTeam: TeamBase;
+  awayTeam: TeamBase;
 }) {
   const totalHome = result.homeGoals + (result.etHomeGoals ?? 0);
   const totalAway = result.awayGoals + (result.etAwayGoals ?? 0);

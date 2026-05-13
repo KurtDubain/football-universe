@@ -2,7 +2,7 @@ import { SeasonState } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState, CupFixture } from '../../types/cup';
+import { CupState, SuperCupState, WorldCupState, CupFixture, CupRound } from '../../types/cup';
 import { MatchResult } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats } from '../../types/player';
@@ -194,7 +194,10 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
   // Top scorer
   const allPlayerStats = Object.values(world.playerStats);
-  const topScorer = allPlayerStats.reduce((best, s) => s.goals > (best?.goals ?? 0) ? s : best, null as { goals: number; playerId: string; teamId: string } | null);
+  const topScorer = allPlayerStats.reduce<PlayerSeasonStats | null>(
+    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best),
+    null,
+  );
   if (topScorer && topScorer.goals > 0) {
     const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
     const playerName = world.squads[topScorer.teamId]?.find(p => p.id === topScorer.playerId)?.name
@@ -365,10 +368,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
     // Walk knockout rounds from latest to earliest, return the team's
     // elimination round name (or null if they're still alive / not in knockouts).
-    function findEliminationRound(rounds: CupFixture[][] | { fixtures: CupFixture[]; completed: boolean; roundName: string }[]): string | null {
-      const arr = rounds as { fixtures: CupFixture[]; completed: boolean; roundName: string }[];
-      for (let i = arr.length - 1; i >= 0; i--) {
-        const r = arr[i];
+    function findEliminationRound(rounds: CupRound[]): string | null {
+      for (let i = rounds.length - 1; i >= 0; i--) {
+        const r = rounds[i];
         const playerFixture = r.fixtures.find(
           (f) => f.homeTeamId === teamId || f.awayTeamId === teamId,
         );

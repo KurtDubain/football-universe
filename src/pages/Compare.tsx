@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName, formatForm } from '../utils/format';
 import TeamBadge from '../components/TeamBadge';
+import type { TeamBase, TeamState } from '../types/team';
+
+type TeamNumericKey = 'overall' | 'attack' | 'midfield' | 'defense' | 'stability' | 'depth';
+type StateNumericKey = 'morale' | 'fatigue' | 'coachPressure' | 'squadHealth';
 
 export default function Compare() {
   const world = useGameStore((s) => s.world);
@@ -18,7 +22,7 @@ export default function Compare() {
   const aState = teamA ? world.teamStates[teamA] : null;
   const bState = teamB ? world.teamStates[teamB] : null;
 
-  const attrs = [
+  const attrs: { key: TeamNumericKey; label: string; max: number }[] = [
     { key: 'overall', label: '综合', max: 100 },
     { key: 'attack', label: '攻击', max: 100 },
     { key: 'midfield', label: '中场', max: 100 },
@@ -27,7 +31,7 @@ export default function Compare() {
     { key: 'depth', label: '厚度', max: 100 },
   ];
 
-  const stateAttrs = [
+  const stateAttrs: { key: StateNumericKey; label: string; max: number; inverted?: boolean }[] = [
     { key: 'morale', label: '士气', max: 100 },
     { key: 'fatigue', label: '疲劳', max: 100, inverted: true },
     { key: 'coachPressure', label: '教练压力', max: 100, inverted: true },
@@ -133,8 +137,8 @@ export default function Compare() {
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">属性对比</h3>
             <div className="space-y-2.5">
               {attrs.map(attr => {
-                const va = (a as any)[attr.key] ?? 0;
-                const vb = (b as any)[attr.key] ?? 0;
+                const va = a[attr.key] ?? 0;
+                const vb = b[attr.key] ?? 0;
                 return <DualBar key={attr.key} label={attr.label} left={va} right={vb} max={attr.max} leftColor={a.color} rightColor={b.color} />;
               })}
             </div>
@@ -145,8 +149,8 @@ export default function Compare() {
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">当前状态</h3>
             <div className="space-y-2.5">
               {stateAttrs.map(attr => {
-                const va = (aState as any)[attr.key] ?? 0;
-                const vb = (bState as any)[attr.key] ?? 0;
+                const va = aState[attr.key] ?? 0;
+                const vb = bState[attr.key] ?? 0;
                 return <DualBar key={attr.key} label={attr.label} left={va} right={vb} max={attr.max} leftColor={a.color} rightColor={b.color} />;
               })}
             </div>
@@ -245,7 +249,7 @@ export default function Compare() {
   );
 }
 
-function TeamHeader({ base, state, coachName }: { base: any; state: any; coachName: string }) {
+function TeamHeader({ base, coachName }: { base: TeamBase; state: TeamState; coachName: string }) {
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
       <TeamBadge shortName={base.shortName} color={base.color} size={40} />

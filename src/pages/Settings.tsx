@@ -127,7 +127,7 @@ export default function Settings() {
               >
                 {team ? (
                   <div className="flex flex-col items-center gap-1">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: (team as { color?: string }).color ?? '#666' }} />
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
                     <div className="text-xs text-slate-100 font-medium truncate max-w-full">{team.name}</div>
                     <button
                       onClick={() => toggleFavoriteTeam(tid)}

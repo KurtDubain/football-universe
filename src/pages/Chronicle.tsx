@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName } from '../utils/format';
-import type { GameWorld } from '../engine/season/season-manager';
+import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
+import type { TeamBase, SeasonRecord } from '../types/team';
+
+type SeasonRow = SeasonRecord & { teamId: string };
 
 export default function Chronicle() {
   const world = useGameStore((s) => s.world);
@@ -55,7 +58,7 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
     season: h.seasonNumber,
     champion: h.league1Champion,
     name: getTeamName(h.league1Champion, tb),
-    color: (tb[h.league1Champion] as any)?.color ?? '#666',
+    color: tb[h.league1Champion]?.color ?? '#666',
     cups: [h.leagueCupWinner, h.superCupWinner, h.worldCupWinner].filter(Boolean).length,
     worldCup: !!h.worldCupWinner,
   }));
@@ -67,13 +70,13 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
     if (c.champion === curTeam) {
       curCount++;
     } else {
-      if (curCount >= 2) dynasties.push({ team: curTeam, name: getTeamName(curTeam, tb), from: curFrom, to: c.season - 1, count: curCount, color: (tb[curTeam] as any)?.color ?? '#666' });
+      if (curCount >= 2) dynasties.push({ team: curTeam, name: getTeamName(curTeam, tb), from: curFrom, to: c.season - 1, count: curCount, color: tb[curTeam]?.color ?? '#666' });
       curTeam = c.champion;
       curFrom = c.season;
       curCount = 1;
     }
   }
-  if (curCount >= 2) dynasties.push({ team: curTeam, name: getTeamName(curTeam, tb), from: curFrom, to: honors[honors.length - 1].seasonNumber, count: curCount, color: (tb[curTeam] as any)?.color ?? '#666' });
+  if (curCount >= 2) dynasties.push({ team: curTeam, name: getTeamName(curTeam, tb), from: curFrom, to: honors[honors.length - 1].seasonNumber, count: curCount, color: tb[curTeam]?.color ?? '#666' });
 
   // OVR evolution for top 5 teams (by total trophies)
   const topTeams = Object.entries(world.teamTrophies)
@@ -170,11 +173,11 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
               const diff = current - initial;
               return (
                 <div key={tid} className="flex items-center gap-2 text-xs">
-                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: (team as any)?.color ?? '#666' }} />
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: team?.color ?? '#666' }} />
                   <Link to={`/team/${tid}`} className="text-slate-200 hover:text-blue-400 w-20 truncate">{getTeamName(tid, tb)}</Link>
                   <span className="text-slate-500">{initial}</span>
                   <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, (current / 97) * 100)}%`, backgroundColor: (team as any)?.color ?? '#666' }} />
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, (current / 97) * 100)}%`, backgroundColor: team?.color ?? '#666' }} />
                   </div>
                   <span className="text-slate-200 font-bold w-6 text-right">{current}</span>
                   <span className={`w-8 text-right ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-slate-500'}`}>
@@ -203,12 +206,11 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
     );
   }
 
-  const seasonRecords = Object.entries(world.teamSeasonRecords)
-    .map(([teamId, recs]) => {
+  const seasonRecords: SeasonRow[] = Object.entries(world.teamSeasonRecords)
+    .flatMap(([teamId, recs]) => {
       const rec = recs.find(r => r.seasonNumber === seasonNumber);
-      return rec ? { ...rec, teamId } : null;
-    })
-    .filter(Boolean) as (typeof world.teamSeasonRecords[string][number] & { teamId: string })[];
+      return rec ? [{ ...rec, teamId }] : [];
+    });
 
   const l1 = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
   const l2 = seasonRecords.filter(r => r.leagueLevel === 2).sort((a, b) => a.leaguePosition - b.leaguePosition);
@@ -386,16 +388,16 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
       {/* Awards Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {bestAttack && (
-          <AwardBox emoji="⚽" label="最强火力" team={getTeamName(bestAttack.teamId, tb)} detail={`${bestAttack.leagueGF}球`} color={(tb[bestAttack.teamId] as any)?.color} />
+          <AwardBox emoji="⚽" label="最强火力" team={getTeamName(bestAttack.teamId, tb)} detail={`${bestAttack.leagueGF}球`} color={tb[bestAttack.teamId]?.color} />
         )}
         {bestDefense && (
-          <AwardBox emoji="🛡️" label="最佳防守" team={getTeamName(bestDefense.teamId, tb)} detail={`仅失${bestDefense.leagueGA}球`} color={(tb[bestDefense.teamId] as any)?.color} />
+          <AwardBox emoji="🛡️" label="最佳防守" team={getTeamName(bestDefense.teamId, tb)} detail={`仅失${bestDefense.leagueGA}球`} color={tb[bestDefense.teamId]?.color} />
         )}
         {mostWins && (
-          <AwardBox emoji="💪" label="最多胜场" team={getTeamName(mostWins.teamId, tb)} detail={`${mostWins.leagueWon}胜`} color={(tb[mostWins.teamId] as any)?.color} />
+          <AwardBox emoji="💪" label="最多胜场" team={getTeamName(mostWins.teamId, tb)} detail={`${mostWins.leagueWon}胜`} color={tb[mostWins.teamId]?.color} />
         )}
         {mostLosses && mostLosses.leagueLost > 0 && (
-          <AwardBox emoji="😢" label="最多败场" team={getTeamName(mostLosses.teamId, tb)} detail={`${mostLosses.leagueLost}负`} color={(tb[mostLosses.teamId] as any)?.color} />
+          <AwardBox emoji="😢" label="最多败场" team={getTeamName(mostLosses.teamId, tb)} detail={`${mostLosses.leagueLost}负`} color={tb[mostLosses.teamId]?.color} />
         )}
       </div>
 
@@ -464,7 +466,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
               <h4 className="text-[10px] text-green-400 font-semibold mb-1">⬆️ 升级球队</h4>
               {honor.promoted.map(p => (
                 <div key={p.teamId} className="flex items-center gap-1.5 text-xs text-slate-300 py-0.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: (tb[p.teamId] as any)?.color ?? '#666' }} />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[p.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${p.teamId}`} className="hover:text-blue-400">{getTeamName(p.teamId, tb)}</Link>
                   <span className="text-slate-500 text-[10px]">{p.from}→{p.to}级</span>
                 </div>
@@ -476,7 +478,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
               <h4 className="text-[10px] text-red-400 font-semibold mb-1">⬇️ 降级球队</h4>
               {honor.relegated.map(r => (
                 <div key={r.teamId} className="flex items-center gap-1.5 text-xs text-slate-300 py-0.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: (tb[r.teamId] as any)?.color ?? '#666' }} />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${r.teamId}`} className="hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
                   <span className="text-slate-500 text-[10px]">{r.from}→{r.to}级</span>
                 </div>
@@ -496,7 +498,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
               return (
                 <div key={b.teamId} className="flex items-center gap-2 text-xs">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isPos ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>{b.label}</span>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[b.teamId] as any)?.color ?? '#666' }} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[b.teamId]?.color ?? '#666' }} />
                   <span className="text-slate-300">{getTeamName(b.teamId, tb)}</span>
                   <span className="text-slate-600 text-[10px] truncate flex-1">{b.description}</span>
                 </div>
@@ -513,7 +515,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
           <div className="space-y-1">
             {honor.coachChanges.map((c, i) => (
               <div key={i} className="flex items-center gap-2 text-[11px] flex-wrap">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[c.teamId] as any)?.color ?? '#666' }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[c.teamId]?.color ?? '#666' }} />
                 <span className="text-slate-300">{getTeamName(c.teamId, tb)}</span>
                 <span className="text-red-400">{getCoachName(c.oldCoachId, world.coachBases)}</span>
                 <span className="text-slate-600">→</span>
@@ -535,12 +537,11 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
   // Build narrative episodes per season
   const episodes = honors.map(honor => {
     const seasonNumber = honor.seasonNumber;
-    const seasonRecords = Object.entries(world.teamSeasonRecords)
-      .map(([teamId, recs]) => {
+    const seasonRecords: SeasonRow[] = Object.entries(world.teamSeasonRecords)
+      .flatMap(([teamId, recs]) => {
         const rec = recs.find(r => r.seasonNumber === seasonNumber);
-        return rec ? { ...rec, teamId } : null;
-      })
-      .filter(Boolean) as any[];
+        return rec ? [{ ...rec, teamId }] : [];
+      });
     const l1 = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
     const champ = getTeamName(honor.league1Champion, tb);
     const runner = l1[1] ? getTeamName(l1[1].teamId, tb) : '';
@@ -598,7 +599,7 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
     return {
       seasonNumber,
       paragraph: sentences.join('，') + '。',
-      championColor: (tb[honor.league1Champion] as any)?.color ?? '#666',
+      championColor: tb[honor.league1Champion]?.color ?? '#666',
       isWcYear: !!honor.worldCupWinner,
     };
   });
@@ -635,7 +636,7 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
   );
 }
 
-function StandingsTable({ title, records, tb }: { title: string; records: any[]; tb: Record<string, any> }) {
+function StandingsTable({ title, records, tb }: { title: string; records: SeasonRow[]; tb: Record<string, TeamBase> }) {
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
       <div className="px-3 py-2 border-b border-slate-700/60">
@@ -645,7 +646,7 @@ function StandingsTable({ title, records, tb }: { title: string; records: any[];
         {records.map((r, i) => (
           <div key={r.teamId} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i === 0 ? 'bg-amber-900/10' : r.relegated ? 'bg-red-900/10' : r.promoted ? 'bg-green-900/10' : ''}`}>
             <span className={`w-4 text-center font-bold ${i === 0 ? 'text-amber-400' : r.relegated ? 'text-red-400' : r.promoted ? 'text-green-400' : 'text-slate-500'}`}>{i + 1}</span>
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[r.teamId] as any)?.color ?? '#666' }} />
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
             <Link to={`/team/${r.teamId}`} className="flex-1 truncate text-slate-200 hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
             <span className="text-slate-500 hidden sm:inline">{r.leagueWon}胜 {r.leagueDrawn}平 {r.leagueLost}负</span>
             <span className="text-slate-500 text-[10px]">{r.leagueGF}-{r.leagueGA}</span>
@@ -658,16 +659,16 @@ function StandingsTable({ title, records, tb }: { title: string; records: any[];
   );
 }
 
-function MemMatch({ m, tb }: { m: any; tb: Record<string, any> }) {
+function MemMatch({ m, tb }: { m: MatchHistoryEntry; tb: Record<string, TeamBase> }) {
   const homeName = getTeamName(m.homeId, tb);
   const awayName = getTeamName(m.awayId, tb);
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[m.homeId] as any)?.color ?? '#666' }} />
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.homeId]?.color ?? '#666' }} />
       <span className="flex-1 truncate text-slate-300 text-right">{homeName}</span>
       <span className="font-bold tabular-nums text-amber-400 px-2">{m.homeGoals}-{m.awayGoals}</span>
       <span className="flex-1 truncate text-slate-300">{awayName}</span>
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[m.awayId] as any)?.color ?? '#666' }} />
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.awayId]?.color ?? '#666' }} />
       <span className="text-[11px] sm:text-[9px] text-slate-600 ml-1">{m.comp}</span>
     </div>
   );
@@ -691,7 +692,7 @@ function AwardBox({ emoji, label, team, detail, color }: { emoji: string; label:
   );
 }
 
-function ChampCard({ label, team, runnerUp, tb, color }: { label: string; team: string; runnerUp?: string; tb: Record<string, any>; color: string }) {
+function ChampCard({ label, team, runnerUp, tb, color }: { label: string; team: string; runnerUp?: string; tb: Record<string, TeamBase>; color: string }) {
   if (!team || !tb[team]) return null;
   const colors: Record<string, string> = { amber: 'border-amber-700/40 bg-amber-900/15', blue: 'border-blue-700/40 bg-blue-900/15', emerald: 'border-emerald-700/40 bg-emerald-900/15', purple: 'border-purple-700/40 bg-purple-900/15', sky: 'border-sky-700/40 bg-sky-900/15' };
   return (

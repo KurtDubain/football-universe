@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName, getTierLabel, getTierColor } from '../utils/format';
 import SeasonReview from '../components/SeasonReview';
+import type { Achievement } from '../engine/achievements';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -21,7 +22,7 @@ export default function History() {
         teamId,
         name: getTeamName(teamId, world.teamBases),
         count: trophies.length,
-        color: (world.teamBases[teamId] as { color?: string })?.color ?? '#666',
+        color: world.teamBases[teamId]?.color ?? '#666',
       });
     }
   }
@@ -143,7 +144,7 @@ export default function History() {
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">成就殿堂</h3>
               <div className="flex flex-wrap gap-2">
-                {(world.achievements ?? []).map((a: any) => (
+                {(world.achievements ?? []).map((a: Achievement) => (
                   <div key={a.id} className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-3 py-2 text-xs">
                     <span className="text-amber-400 font-semibold">{a.title}</span>
                     <span className="text-slate-500 ml-1.5">S{a.seasonNumber}</span>
@@ -199,12 +200,12 @@ export default function History() {
 
           {/* Highlight records */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <RecordDetail emoji="🏆" title="最高赛季积分" team={funRecords.mostPoints.teamName} detail={`S${funRecords.mostPoints.seasonNumber} · ${funRecords.mostPoints.leaguePoints}分`} teamId={funRecords.mostPoints.teamId} color={(world.teamBases[funRecords.mostPoints.teamId] as any)?.color} />
-            <RecordDetail emoji="⚽" title="单赛季最多进球" team={funRecords.mostGoals.teamName} detail={`S${funRecords.mostGoals.seasonNumber} · ${funRecords.mostGoals.leagueGF}球`} teamId={funRecords.mostGoals.teamId} color={(world.teamBases[funRecords.mostGoals.teamId] as any)?.color} />
-            <RecordDetail emoji="🛡️" title="最佳防守赛季" team={funRecords.bestDefense.teamName} detail={`S${funRecords.bestDefense.seasonNumber} · 仅失${funRecords.bestDefense.leagueGA}球`} teamId={funRecords.bestDefense.teamId} color={(world.teamBases[funRecords.bestDefense.teamId] as any)?.color} />
-            <RecordDetail emoji="💪" title="单赛季最多胜场" team={funRecords.mostWins.teamName} detail={`S${funRecords.mostWins.seasonNumber} · ${funRecords.mostWins.leagueWon}胜`} teamId={funRecords.mostWins.teamId} color={(world.teamBases[funRecords.mostWins.teamId] as any)?.color} />
-            <RecordDetail emoji="😢" title="最低赛季积分" team={funRecords.fewestPoints.teamName} detail={`S${funRecords.fewestPoints.seasonNumber} · ${funRecords.fewestPoints.leaguePoints}分`} teamId={funRecords.fewestPoints.teamId} color={(world.teamBases[funRecords.fewestPoints.teamId] as any)?.color} />
-            <RecordDetail emoji="💀" title="单赛季最多败场" team={funRecords.mostLosses.teamName} detail={`S${funRecords.mostLosses.seasonNumber} · ${funRecords.mostLosses.leagueLost}负`} teamId={funRecords.mostLosses.teamId} color={(world.teamBases[funRecords.mostLosses.teamId] as any)?.color} />
+            <RecordDetail emoji="🏆" title="最高赛季积分" team={funRecords.mostPoints.teamName} detail={`S${funRecords.mostPoints.seasonNumber} · ${funRecords.mostPoints.leaguePoints}分`} teamId={funRecords.mostPoints.teamId} color={world.teamBases[funRecords.mostPoints.teamId]?.color} />
+            <RecordDetail emoji="⚽" title="单赛季最多进球" team={funRecords.mostGoals.teamName} detail={`S${funRecords.mostGoals.seasonNumber} · ${funRecords.mostGoals.leagueGF}球`} teamId={funRecords.mostGoals.teamId} color={world.teamBases[funRecords.mostGoals.teamId]?.color} />
+            <RecordDetail emoji="🛡️" title="最佳防守赛季" team={funRecords.bestDefense.teamName} detail={`S${funRecords.bestDefense.seasonNumber} · 仅失${funRecords.bestDefense.leagueGA}球`} teamId={funRecords.bestDefense.teamId} color={world.teamBases[funRecords.bestDefense.teamId]?.color} />
+            <RecordDetail emoji="💪" title="单赛季最多胜场" team={funRecords.mostWins.teamName} detail={`S${funRecords.mostWins.seasonNumber} · ${funRecords.mostWins.leagueWon}胜`} teamId={funRecords.mostWins.teamId} color={world.teamBases[funRecords.mostWins.teamId]?.color} />
+            <RecordDetail emoji="😢" title="最低赛季积分" team={funRecords.fewestPoints.teamName} detail={`S${funRecords.fewestPoints.seasonNumber} · ${funRecords.fewestPoints.leaguePoints}分`} teamId={funRecords.fewestPoints.teamId} color={world.teamBases[funRecords.fewestPoints.teamId]?.color} />
+            <RecordDetail emoji="💀" title="单赛季最多败场" team={funRecords.mostLosses.teamName} detail={`S${funRecords.mostLosses.seasonNumber} · ${funRecords.mostLosses.leagueLost}负`} teamId={funRecords.mostLosses.teamId} color={world.teamBases[funRecords.mostLosses.teamId]?.color} />
           </div>
 
           {/* Special records */}

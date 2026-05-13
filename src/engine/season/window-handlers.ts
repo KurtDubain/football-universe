@@ -391,13 +391,8 @@ export function handleWorldCupGroup(
   ).length;
   const groupRound = completedWCGroupWindows + 1;
 
-  const cupFixtures = getSuperCupGroupFixtures(
-    // WorldCupState has the same group structure; reuse by extracting fixtures manually
-    { groups: worldCup.groups } as any,
-    groupRound,
-  );
-
-  // Actually use the world cup group fixtures directly
+  // World cup groups have the same shape as super cup groups, but we extract
+  // fixtures directly from worldCup.groups below — no need to massage state.
   const wcGroupFixtures: CupFixture[] = [];
   for (const group of worldCup.groups) {
     for (const fixture of group.fixtures) {

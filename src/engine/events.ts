@@ -1,6 +1,9 @@
 import { TeamBase } from '../types/team';
 import { SeededRNG } from './match/rng';
 
+/** Numeric attributes on TeamBase that buff/event effects can mutate. */
+export type TeamNumericField = 'overall' | 'attack' | 'defense' | 'midfield' | 'depth' | 'reputation' | 'stability';
+
 export interface SeasonEvent {
   id: string;
   type: 'injury' | 'wonderkid' | 'investment' | 'fan_trouble' | 'form_boost';
@@ -8,7 +11,8 @@ export interface SeasonEvent {
   title: string;
   description: string;
   effect: {
-    field: 'overall' | 'attack' | 'defense' | 'midfield' | 'depth' | 'reputation' | 'morale';
+    /** 'morale' is delegated to teamState; the rest mutate teamBase numerics. */
+    field: TeamNumericField | 'morale';
     delta: number;
   };
   duration: number; // windows remaining
@@ -111,7 +115,9 @@ export function applyEventEffect(
     return bases;
   }
 
-  (base as any)[event.effect.field] = Math.max(25, Math.min(99, ((base as any)[event.effect.field] ?? 50) + d));
+  // After narrowing out 'morale', `field` is a TeamNumericField.
+  const field: TeamNumericField = event.effect.field;
+  base[field] = Math.max(25, Math.min(99, (base[field] ?? 50) + d));
   bases[event.teamId] = base;
   return bases;
 }

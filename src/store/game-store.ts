@@ -347,7 +347,31 @@ export const useGameStore = create<GameStore>()(
     {
       name: 'football-universe-save',
       version: 6,
+      /**
+       * Migrates a persisted save from any older version up to the current
+       * schema (v6). Each `if (version < N)` block applies one forward step.
+       *
+       * SAFETY CONTRACT:
+       * - Input shape is `unknown`. We narrow once to a `Partial<GameStore>`
+       *   shape with the relevant `world` / favorite fields exposed. This is
+       *   the load-bearing cast — without runtime validation (zod/valibot is
+       *   out of scope), an arbitrarily-malformed input could in principle
+       *   slip through. In practice persisted state is produced by zustand's
+       *   own `partialize` so the top-level keys are stable.
+       * - Each migration step backfills missing fields and is idempotent:
+       *   running the chain on already-migrated state is a no-op.
+       * - The final `as GameStore` is satisfied by the migration steps having
+       *   produced every required `world.*` field (or carried the old one
+       *   forward); zustand will then merge with current store defaults for
+       *   any non-persisted fields.
+       *
+       * If you bump `version`, append a new `if (version < N)` block that
+       * fills in any newly-required fields with sensible defaults.
+       */
       migrate: (persistedState: unknown, version: number): GameStore => {
+        // SAFETY: zustand persists via `partialize`, so the runtime shape
+        // matches `Partial<GameStore>` modulo the historical world fields
+        // each migration step touches.
         const state = persistedState as Partial<GameStore> & { world?: GameWorld | null; favoriteTeamId?: string | null; favoriteTeamIds?: string[] };
         // v1 → v2: backfill player.name for existing saves
         if (version < 2 && state?.world?.squads && state.world.teamBases) {
@@ -396,6 +420,9 @@ export const useGameStore = create<GameStore>()(
             }
           }
         }
+        // SAFETY: by this point all migration steps above have backfilled the
+        // fields required by current GameStore; non-persisted fields (action
+        // closures) are merged in by zustand at runtime.
         return state as GameStore;
       },
       partialize: (state) => ({

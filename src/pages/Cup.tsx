@@ -70,7 +70,7 @@ export default function Cup() {
   };
 
   const close = () => { setSelectedFixture(null); setSelectedResult(null); };
-  const tb = world.teamBases as Record<string, TeamBase>;
+  const tb = world.teamBases;
   const ts = world.teamStates;
 
   return (
