@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import Layout from './Layout';
 import Dashboard from '../pages/Dashboard';
@@ -16,11 +16,14 @@ import Players from '../pages/Players';
 import PlayerDetail from '../pages/PlayerDetail';
 import Settings from '../pages/Settings';
 import Welcome from '../pages/Welcome';
+import TeamEditor from '../pages/TeamEditor';
 
 export default function App() {
   const initialized = useGameStore((s) => s.initialized);
+  const location = useLocation();
 
   if (!initialized) {
+    if (location.pathname === '/team-editor') return <TeamEditor />;
     return <Welcome />;
   }
 
@@ -40,6 +43,7 @@ export default function App() {
         <Route path="/history" element={<History />} />
         <Route path="/chronicle" element={<Chronicle />} />
         <Route path="/compare" element={<Compare />} />
+        <Route path="/team-editor" element={<TeamEditor />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

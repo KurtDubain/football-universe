@@ -118,10 +118,16 @@ export default function Welcome() {
           )}
 
           {/* CTA */}
-          <button onClick={handleStart} disabled={starting}
-            className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-600 disabled:cursor-not-allowed text-white text-base font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-900/40 press-scale">
-            {starting ? '正在构建宇宙...' : '🚀 开始新游戏'}
-          </button>
+          <div className="space-y-2">
+            <button onClick={handleStart} disabled={starting}
+              className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-600 disabled:cursor-not-allowed text-white text-base font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-blue-900/40 press-scale">
+              {starting ? '正在构建宇宙...' : '🚀 开始新游戏'}
+            </button>
+            <a href="/team-editor"
+              className="block w-full px-6 py-2 text-center text-xs text-slate-500 hover:text-slate-300 cursor-pointer transition-colors">
+              🛠️ 自定义球队 →
+            </a>
+          </div>
         </section>
 
         {/* Footer */}
