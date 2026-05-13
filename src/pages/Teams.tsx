@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import TeamBadge from '../components/TeamBadge';
+import TrophyBreakdown from '../components/TrophyBreakdown';
 import {
   getTierLabel,
   getTierColor,
@@ -290,6 +291,7 @@ function TeamCard({
     ? getCoachName(state.currentCoachId, world.coachBases)
     : '无教练';
   const formBadges = formatForm(state.recentForm.slice(-3));
+  const trophies = world.teamTrophies[base.id] ?? [];
 
   const moraleDot =
     state.morale > 60
@@ -359,6 +361,13 @@ function TeamCard({
             </div>
           )}
         </div>
+
+        {/* Trophy breakdown — only if any */}
+        {trophies.length > 0 && (
+          <div className="mt-1.5">
+            <TrophyBreakdown trophies={trophies} />
+          </div>
+        )}
       </div>
 
       {/* Far right: league badge */}

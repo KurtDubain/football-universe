@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getCoachStyleLabel, getTrophyLabel } from '../utils/format';
-import type { CoachBase } from '../types/coach';
+import { getCoachStyleLabel } from '../utils/format';
+import TrophyBreakdown from '../components/TrophyBreakdown';
 
 type SortKey = 'rating' | 'name' | 'trophies' | 'pressure';
 type FilterTab = 'all' | 'employed' | 'unemployed';
@@ -136,13 +136,16 @@ export default function Coaches() {
                     ) : (
                       <span>待业中{state?.unemployedSince != null ? ` (自S${state.unemployedSince})` : ''}</span>
                     )}
-                    {trophies.length > 0 && (
-                      <span className="text-amber-500">{trophies.length} 座奖杯</span>
-                    )}
                     {career.length > 1 && (
                       <span>执教 {career.length} 队</span>
                     )}
                   </div>
+                  {/* Trophy breakdown — only if any */}
+                  {trophies.length > 0 && (
+                    <div className="mt-1.5">
+                      <TrophyBreakdown trophies={trophies} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Buffs mini-display */}
