@@ -7,11 +7,43 @@ interface Props {
 }
 
 const ACHIEVEMENT_EMOJI: Record<string, string> = {
+  // Statistical
   unbeaten: '🛡️',
   dominant: '👑',
   centurion: '💯',
-  promotion_streak: '🚀',
   goal_machine: '⚽',
+  iron_wall: '🧱',
+  avalanche: '🔥',
+  massacre: '💥',
+  // First-time
+  promotion_streak: '🚀',
+  first_promotion: '⬆️',
+  first_relegation: '⬇️',
+  first_league_title: '🏆',
+  first_cup: '🥇',
+  first_super_cup: '⭐',
+  first_world_cup: '🌍',
+  // Dynasty
+  back_to_back: '👑',
+  three_peat: '👑',
+  five_peat: '🏛️',
+  cup_dynasty: '🏆',
+  // Multi-crown
+  double_crown: '🏆',
+  triple_crown: '🏆',
+  quadruple: '🏆',
+  // Underdog
+  underdog_promo_to_top: '🌱',
+  rookie_champion: '⚡',
+  comeback: '🔥',
+  // Heartbreak
+  almost_perfect: '😢',
+  rock_bottom: '💔',
+  no_wins: '😭',
+  // Long-term
+  survivor_5: '🌲',
+  collector_3: '🎖️',
+  legend_team: '🌟',
 };
 
 export default function AchievementToast({ achievement, onDismiss }: Props) {
