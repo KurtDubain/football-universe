@@ -37,10 +37,11 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
     [result.events, maxMin]
   );
 
-  // Tick
+  // Tick — slowed down for broadcast-style pacing
+  // At 1x: 280ms per game minute → ~25s for 90 mins (was 10.8s, too fast)
   useEffect(() => {
     if (paused || finished) return;
-    const interval = Math.max(25, 120 / speed);
+    const interval = Math.max(60, 280 / speed);
     const timer = window.setInterval(() => {
       setMinute(prev => {
         const next = prev + 1;
@@ -49,7 +50,7 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
         if (next === 45 && !htShow) {
           setPaused(true);
           setHtShow(true);
-          setTimeout(() => { setPaused(false); }, 1500);
+          setTimeout(() => { setPaused(false); }, 2000);
         }
         return next;
       });
