@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="0.5" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="0.5" stop-color="#f1f5f9"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="600" cy="315" rx="500" ry="400" fill="url(#glow)"/>
+
+  <!-- Pitch lines decoration -->
+  <g stroke="#334155" stroke-width="2" opacity="0.4" fill="none">
+    <circle cx="600" cy="315" r="100"/>
+    <line x1="100" y1="315" x2="1100" y2="315"/>
+    <rect x="50" y="200" width="120" height="230"/>
+    <rect x="1030" y="200" width="120" height="230"/>
+  </g>
+
+  <!-- Soccer ball icon -->
+  <g transform="translate(600, 200)">
+    <circle cx="0" cy="0" r="48" fill="#f1f5f9" stroke="#0f172a" stroke-width="3"/>
+    <polygon points="0,-30 26,-9 16,21 -16,21 -26,-9" fill="#0f172a"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="350" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="80" font-weight="900" fill="url(#title)">
+    足球联赛宇宙
+  </text>
+
+  <!-- Subtitle EN -->
+  <text x="600" y="410" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="34" font-weight="600" fill="#94a3b8">
+    Football Universe Simulator
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="475" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="22" fill="#cbd5e1">
+    32 球队 · 3 级联赛 · 4 项杯赛 · 无限赛季
+  </text>
+  <text x="600" y="510" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="20" fill="#64748b" font-style="italic">
+    No controls. No tactics. Just fate.
+  </text>
+
+  <!-- URL/Footer -->
+  <text x="600" y="585" text-anchor="middle" font-family="monospace" font-size="20" fill="#475569">
+    football-universe-ebon.vercel.app
+  </text>
+</svg>
