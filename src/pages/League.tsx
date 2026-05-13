@@ -6,6 +6,7 @@ import type { StandingEntry } from '../types/league';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
   formatForm,
@@ -565,11 +566,13 @@ export default function League() {
                             world.teamStates[fixture.homeTeamId];
                           const awayState =
                             world.teamStates[fixture.awayTeamId];
-                          const homeCoach = homeState?.currentCoachId
-                            ? world.coachBases[homeState.currentCoachId] ?? null
+                          const homeCoachId = getTeamCoachId(world.coachStates, fixture.homeTeamId);
+                          const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
+                          const homeCoach = homeCoachId
+                            ? world.coachBases[homeCoachId] ?? null
                             : null;
-                          const awayCoach = awayState?.currentCoachId
-                            ? world.coachBases[awayState.currentCoachId] ?? null
+                          const awayCoach = awayCoachId
+                            ? world.coachBases[awayCoachId] ?? null
                             : null;
 
                           if (

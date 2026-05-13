@@ -217,7 +217,6 @@ export function createInitialTeamStates(teams: TeamBase[]): Record<string, TeamS
       momentum: 0,
       squadHealth: 92,
       coachPressure: 5,
-      currentCoachId: null,
       recentForm: [],
     };
   }

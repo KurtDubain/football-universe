@@ -19,6 +19,7 @@ import { appendWorldCupWindows } from './calendar-builder';
 import { BALANCE } from '../../config/balance';
 import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
+import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow, applyTransferIdMap } from '../transfers/transfer-window';
 import { applyAnnualRevaluation } from '../economy/market-value';
@@ -111,8 +112,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     );
     teamTrophies[teamId] = [...(teamTrophies[teamId] ?? []), ...trophies];
 
-    // Also attribute trophies to the coach
-    const coachId = teamState.currentCoachId;
+    // Also attribute trophies to the coach (derived from coachStates).
+    const coachId = getTeamCoachId(coachStates, teamId);
     if (coachId && trophies.length > 0) {
       coachTrophies[coachId] = [...(coachTrophies[coachId] ?? []), ...trophies];
 
@@ -500,7 +501,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       cupResult,
       superCupResult,
       worldCupResult,
-      coachId: teamState.currentCoachId ?? '',
+      // Coach is derived from LOCAL coachStates so any earlier season-end
+      // logic that swapped the coach for this team is reflected here.
+      coachId: getTeamCoachId(coachStates, teamId) ?? '',
       teamOverall: world.teamBases[teamId]?.overall ?? 0,
       promoted: teamState.leagueLevel < foundLevel,
       relegated: teamState.leagueLevel > foundLevel,
@@ -514,7 +517,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // All writes target the LOCAL coachStates / teamStates / coachCareers /
   // coachChangesThisSeason — never world.X[id].
   for (const teamId of getAllTeamIds(teamStates)) {
-    const coachId = teamStates[teamId]?.currentCoachId;
+    const coachId = getTeamCoachId(coachStates, teamId);
     if (!coachId) continue;
     const coach = world.coachBases[coachId];
     if (!coach || coach.rating < 78) continue; // only elite coaches do this
@@ -537,7 +540,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
     coachStates[coachId] = { ...coachStates[coachId], ...firingResult.firedCoachUpdate };
     coachStates[firingResult.newCoachId] = { ...coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
-    teamStates[teamId] = { ...teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+    teamStates[teamId] = { ...teamStates[teamId], coachPressure: 5 };
 
     const careerList = [...(coachCareers[coachId] ?? [])];
     if (careerList.length > 0) {
@@ -562,10 +565,10 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // ── Coach contract expiry ──────────────────────────────────
-  // Reads `currentCoachId` and `contractEnd` from LOCAL teamStates/coachStates
-  // so changes from the voluntary-departure loop above are picked up here.
+  // Reads `currentTeamId` and `contractEnd` from LOCAL coachStates so
+  // changes from the voluntary-departure loop above are picked up here.
   for (const teamId of getAllTeamIds(teamStates)) {
-    const coachId = teamStates[teamId]?.currentCoachId;
+    const coachId = getTeamCoachId(coachStates, teamId);
     if (!coachId) continue;
     const coachState = coachStates[coachId];
     if (!coachState?.contractEnd || coachState.contractEnd > seasonNumber) continue;
@@ -601,7 +604,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       } else {
         coachStates[firingResult.newCoachId] = { id: firingResult.newCoachId, currentTeamId: teamId, isUnemployed: false, unemployedSince: null, contractEnd: seasonNumber + rng.nextInt(2, 4) };
       }
-      teamStates[teamId] = { ...teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+      teamStates[teamId] = { ...teamStates[teamId], coachPressure: 5 };
 
       const careerList = [...(coachCareers[coachId] ?? [])];
       if (careerList.length > 0) {
@@ -944,9 +947,9 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
     const teamTrophies = { ...updatedWorld.teamTrophies };
     teamTrophies[wcWinnerId] = [...(teamTrophies[wcWinnerId] ?? []), { type: 'world_cup' as const, seasonNumber: sn }];
 
-    // Add to coach trophies
+    // Add to coach trophies — derive coach for the WC winner from coachStates.
     const coachTrophies = { ...updatedWorld.coachTrophies };
-    const winnerCoachId = updatedWorld.teamStates[wcWinnerId]?.currentCoachId;
+    const winnerCoachId = getTeamCoachId(updatedWorld.coachStates, wcWinnerId);
     if (winnerCoachId) {
       coachTrophies[winnerCoachId] = [...(coachTrophies[winnerCoachId] ?? []), { type: 'world_cup' as const, seasonNumber: sn }];
     }

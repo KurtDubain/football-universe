@@ -5,6 +5,7 @@ import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import MatchDetailModal from '../components/MatchDetailModal';
 import { isDerby, getDerbyName } from '../config/derbies';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
   getWindowTypeColor,
@@ -171,8 +172,10 @@ export default function Calendar() {
                         const awayState = world.teamStates[fixture.awayTeamId];
                         if (!homeTeam || !awayTeam || !homeState || !awayState) return null;
 
-                        const homeCoach = homeState.currentCoachId ? world.coachBases[homeState.currentCoachId] ?? null : null;
-                        const awayCoach = awayState.currentCoachId ? world.coachBases[awayState.currentCoachId] ?? null : null;
+                        const homeCoachId = getTeamCoachId(world.coachStates, fixture.homeTeamId);
+                        const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
+                        const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
+                        const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
                         const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
 
                         const calDerby = isDerby(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) ? getDerbyName(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) : null;

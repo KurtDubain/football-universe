@@ -1,4 +1,5 @@
 import { GameWorld } from './season-manager';
+import { getTeamCoachId } from '../coaches/coach-lookup';
 
 export interface StorylineCard {
   teamId: string;
@@ -121,8 +122,9 @@ export function generateStorylineCards(
 
     // ── Coach pressure ─────────────────────────────────────────
     if (state.coachPressure >= 70) {
-      const coachName = state.currentCoachId
-        ? world.coachBases[state.currentCoachId]?.name ?? '主帅'
+      const stateCoachId = getTeamCoachId(world.coachStates, teamId);
+      const coachName = stateCoachId
+        ? world.coachBases[stateCoachId]?.name ?? '主帅'
         : '主帅';
       cards.push({
         teamId,

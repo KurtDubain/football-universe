@@ -26,6 +26,7 @@ import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
 import { enforceStorageLimits } from './storage-limits';
+import { buildTeamCoachMap } from '../coaches/coach-lookup';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -155,11 +156,10 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   // 4. Coach states
   const coachStates = createInitialCoachStates(defaultCoaches, defaultCoachAssignments);
 
-  // 5. Apply coach assignments to team states
+  // 5. Apply coach assignments — coachStates is the single source of truth
+  //    for who coaches whom, so we only write to that side. Team → coach is
+  //    derived via `getTeamCoachId` (see src/engine/coaches/coach-lookup.ts).
   for (const [teamId, coachId] of Object.entries(defaultCoachAssignments)) {
-    if (teamStates[teamId]) {
-      teamStates[teamId] = { ...teamStates[teamId], currentCoachId: coachId };
-    }
     if (coachStates[coachId]) {
       coachStates[coachId] = { ...coachStates[coachId], currentTeamId: teamId, isUnemployed: false };
     }
@@ -398,6 +398,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   const prevSeason = world.seasonState?.seasonNumber ?? 0;
   const newMatchHistory = [...(world.matchHistory ?? [])];
   if (world.seasonState?.calendar) {
+    // Build a teamId → coachId map once for this season's archive pass
+    // (cheaper than walking coachStates per result).
+    const teamCoachMap = buildTeamCoachMap(world.coachStates);
     for (const w of world.seasonState.calendar) {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
@@ -410,8 +413,8 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
           comp: r.competitionName,
           et: r.extraTime || undefined,
           pen: r.penalties ? `${r.penaltyHome}-${r.penaltyAway}` : undefined,
-          homeCoachId: world.teamStates[r.homeTeamId]?.currentCoachId ?? undefined,
-          awayCoachId: world.teamStates[r.awayTeamId]?.currentCoachId ?? undefined,
+          homeCoachId: teamCoachMap.get(r.homeTeamId),
+          awayCoachId: teamCoachMap.get(r.awayTeamId),
         });
       }
     }

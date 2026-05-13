@@ -5,6 +5,7 @@ import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase, TeamState } from '../types/team';
 import type { CoachBase } from '../types/coach';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
   getTeamShortName,
@@ -38,12 +39,10 @@ export default function MatchDetailModal({
   const awayTeam = world.teamBases[fixture.awayTeamId];
   const homeState = world.teamStates[fixture.homeTeamId];
   const awayState = world.teamStates[fixture.awayTeamId];
-  const homeCoach = homeState?.currentCoachId
-    ? world.coachBases[homeState.currentCoachId] ?? null
-    : null;
-  const awayCoach = awayState?.currentCoachId
-    ? world.coachBases[awayState.currentCoachId] ?? null
-    : null;
+  const homeCoachId = getTeamCoachId(world.coachStates, fixture.homeTeamId);
+  const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
+  const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
+  const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
 
   if (!homeTeam || !awayTeam) return null;
 

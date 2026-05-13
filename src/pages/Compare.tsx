@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName, formatForm } from '../utils/format';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import TeamBadge from '../components/TeamBadge';
 import type { TeamBase, TeamState } from '../types/team';
 
@@ -124,12 +125,15 @@ export default function Compare() {
         </select>
       </div>
 
-      {a && b && aState && bState && (
+      {a && b && aState && bState && (() => {
+        const aCoachId = getTeamCoachId(world.coachStates, a.id);
+        const bCoachId = getTeamCoachId(world.coachStates, b.id);
+        return (
         <>
           {/* Header cards */}
           <div className="grid grid-cols-2 gap-3">
-            <TeamHeader base={a} state={aState} coachName={aState.currentCoachId ? getCoachName(aState.currentCoachId, world.coachBases) : '无'} />
-            <TeamHeader base={b} state={bState} coachName={bState.currentCoachId ? getCoachName(bState.currentCoachId, world.coachBases) : '无'} />
+            <TeamHeader base={a} state={aState} coachName={aCoachId ? getCoachName(aCoachId, world.coachBases) : '无'} />
+            <TeamHeader base={b} state={bState} coachName={bCoachId ? getCoachName(bCoachId, world.coachBases) : '无'} />
           </div>
 
           {/* Attribute comparison bars */}
@@ -244,7 +248,8 @@ export default function Compare() {
             <div className="text-center text-xs text-slate-500 py-4">本赛季暂无交手记录</div>
           )}
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

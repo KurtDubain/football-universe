@@ -36,7 +36,6 @@ function makeState(id: string): TeamState {
     momentum: 0,
     squadHealth: 90,
     coachPressure: 10,
-    currentCoachId: null,
     recentForm: [],
   };
 }

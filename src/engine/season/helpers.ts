@@ -3,6 +3,7 @@ import type { MatchResult, MatchFixture } from '../../types/match';
 import type { SimulationContext } from '../match/simulator';
 import type { SeededRNG } from '../match/rng';
 import type { GameWorld } from './season-manager';
+import { getTeamCoachId } from '../coaches/coach-lookup';
 
 export function buildSimulationContext(
   fixture: MatchFixture,
@@ -13,8 +14,8 @@ export function buildSimulationContext(
   const awayTeam = world.teamBases[fixture.awayTeamId];
   const homeState = world.teamStates[fixture.homeTeamId];
   const awayState = world.teamStates[fixture.awayTeamId];
-  const homeCoachId = homeState.currentCoachId;
-  const awayCoachId = awayState.currentCoachId;
+  const homeCoachId = getTeamCoachId(world.coachStates, fixture.homeTeamId);
+  const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
   const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
   const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
 

@@ -10,6 +10,7 @@ import {
   formatForm,
   getLeagueName,
 } from '../utils/format';
+import { buildTeamCoachMap } from '../engine/coaches/coach-lookup';
 import type { TeamTier, TeamBase, TeamState } from '../types/team';
 
 type ViewMode = 'tier' | 'league' | 'region';
@@ -20,6 +21,13 @@ const LEAGUE_ORDER: (1 | 2 | 3)[] = [1, 2, 3];
 export default function Teams() {
   const world = useGameStore((s) => s.world);
   const [viewMode, setViewMode] = useState<ViewMode>('tier');
+
+  // Memo a single teamId → coachId map per render so each TeamCard does an
+  // O(1) lookup instead of walking coachStates O(N) times.
+  const teamCoachMap = useMemo(
+    () => (world ? buildTeamCoachMap(world.coachStates) : new Map<string, string>()),
+    [world?.coachStates],
+  );
 
   const allTeams = useMemo(() => {
     if (!world) return [];
@@ -139,6 +147,7 @@ export default function Teams() {
                 count={teams.length}
                 teams={teams}
                 world={world}
+                teamCoachMap={teamCoachMap}
               />
             );
           })
@@ -154,6 +163,7 @@ export default function Teams() {
                 count={teams.length}
                 teams={teams}
                 world={world}
+                teamCoachMap={teamCoachMap}
               />
             );
           })
@@ -167,6 +177,7 @@ export default function Teams() {
                 count={teams.length}
                 teams={teams}
                 world={world}
+                teamCoachMap={teamCoachMap}
               />
             );
           })}
@@ -182,12 +193,14 @@ function TierGroup({
   count,
   teams,
   world,
+  teamCoachMap,
 }: {
   label: string;
   colorClass: string;
   count: number;
   teams: { base: TeamBase; state: TeamState }[];
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+  teamCoachMap: Map<string, string>;
 }) {
   return (
     <div>
@@ -197,7 +210,7 @@ function TierGroup({
       </div>
       <div className="space-y-2">
         {teams.map((t) => (
-          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} />
+          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} coachId={teamCoachMap.get(t.base.id) ?? null} />
         ))}
       </div>
     </div>
@@ -210,12 +223,14 @@ function LeagueGroup({
   count,
   teams,
   world,
+  teamCoachMap,
 }: {
   label: string;
   level: number;
   count: number;
   teams: { base: TeamBase; state: TeamState }[];
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+  teamCoachMap: Map<string, string>;
 }) {
   const bgColor =
     level === 1
@@ -232,7 +247,7 @@ function LeagueGroup({
       </div>
       <div className="space-y-2">
         {teams.map((t) => (
-          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} />
+          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} coachId={teamCoachMap.get(t.base.id) ?? null} />
         ))}
       </div>
     </div>
@@ -250,11 +265,13 @@ function RegionGroup({
   count,
   teams,
   world,
+  teamCoachMap,
 }: {
   continent: string;
   count: number;
   teams: { base: TeamBase; state: TeamState }[];
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+  teamCoachMap: Map<string, string>;
 }) {
   const colorClass = CONTINENT_COLORS[continent] ?? 'bg-slate-700/50 text-slate-300';
   const subRegions = new Set(teams.map(t => t.base.region?.split('+')[1] ?? ''));
@@ -267,7 +284,7 @@ function RegionGroup({
       </div>
       <div className="space-y-2">
         {teams.map((t) => (
-          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} />
+          <TeamCard key={t.base.id} base={t.base} state={t.state} world={world} coachId={teamCoachMap.get(t.base.id) ?? null} />
         ))}
       </div>
     </div>
@@ -280,15 +297,18 @@ function TeamCard({
   base,
   state,
   world,
+  coachId,
 }: {
   base: TeamBase;
   state: TeamState;
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+  /** Pre-resolved current coach id (from buildTeamCoachMap), null if unassigned. */
+  coachId: string | null;
 }) {
   const tierLabel = getTierLabel(base.tier);
   const tierColor = getTierColor(base.tier);
-  const coachName = state.currentCoachId
-    ? getCoachName(state.currentCoachId, world.coachBases)
+  const coachName = coachId
+    ? getCoachName(coachId, world.coachBases)
     : '无教练';
   const formBadges = formatForm(state.recentForm.slice(-3));
   const trophies = world.teamTrophies[base.id] ?? [];

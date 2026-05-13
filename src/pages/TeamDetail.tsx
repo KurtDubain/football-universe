@@ -7,6 +7,7 @@ import {
   getTrophyLabel,
   formatForm,
 } from '../utils/format';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 
@@ -27,7 +28,8 @@ export default function TeamDetail() {
 
   const trophies = world.teamTrophies[id] ?? [];
   const records = world.teamSeasonRecords[id] ?? [];
-  const coachId = state.currentCoachId;
+  // Coach is derived from coachStates (single source of truth post-v7).
+  const coachId = getTeamCoachId(world.coachStates, id);
 
   return (
     <div className="max-w-4xl space-y-5">

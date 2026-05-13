@@ -1,4 +1,5 @@
 import { GameWorld, MatchHistoryEntry } from '../season/season-manager';
+import { buildTeamCoachMap } from './coach-lookup';
 
 export interface CoachRivalry {
   opponentCoachId: string;
@@ -19,8 +20,9 @@ export interface CoachRivalry {
  *
  * Sources:
  * - world.matchHistory entries with homeCoachId / awayCoachId set
- * - Plus current season's calendar matches where teamStates currentCoachId
- *   gives a best-effort approximation
+ * - Plus current season's calendar matches where the current coachStates
+ *   give a best-effort approximation (derived via buildTeamCoachMap, since
+ *   teamStates no longer carries currentCoachId after the v6 → v7 refactor)
  *
  * Returns top N rivalries sorted by meetings desc.
  */
@@ -57,14 +59,16 @@ export function computeCoachRivalries(
     processEntry(entry);
   }
 
-  // Also pick up current-season completed matches (using current coach assignments)
+  // Also pick up current-season completed matches (using current coach assignments).
+  // Build the teamId → coachId map once for the whole pass.
   if (world.seasonState?.calendar) {
     const currentSeason = world.seasonState.seasonNumber;
+    const teamCoachMap = buildTeamCoachMap(world.coachStates);
     for (const w of world.seasonState.calendar) {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
-        const homeCoach = world.teamStates[r.homeTeamId]?.currentCoachId;
-        const awayCoach = world.teamStates[r.awayTeamId]?.currentCoachId;
+        const homeCoach = teamCoachMap.get(r.homeTeamId);
+        const awayCoach = teamCoachMap.get(r.awayTeamId);
         if (!homeCoach || !awayCoach) continue;
         processEntry({
           season: currentSeason,

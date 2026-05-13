@@ -7,6 +7,7 @@ import { SeededRNG } from '../match/rng';
 import { applyRestRecovery } from '../state-updater';
 import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
+import { getTeamCoachId } from '../coaches/coach-lookup';
 import { maybeGenerateEvent, applyEventEffect, SeasonEvent } from '../events';
 import {
   getAllTeamIds, createNewsId, isUpset,
@@ -59,7 +60,10 @@ export function runPostMatchProcessing(
   for (const teamId of teamsPlayed) {
     const state = teamStates[teamId];
     const teamBase = world.teamBases[teamId];
-    const coachId = state.currentCoachId;
+    // Read coachStates from LOCAL — we may have just reassigned a coach in a
+    // prior loop iteration (cup elimination → fire chain), and need to see
+    // that change here.
+    const coachId = getTeamCoachId(coachStates, teamId);
     if (!coachId) continue;
 
     // Find this team's match results (may have multiple in one window)
@@ -134,11 +138,12 @@ export function runPostMatchProcessing(
         };
       }
 
-      // Update team state
+      // Reset pressure for the new coach. The coach assignment itself lives
+      // on coachStates[newCoachId].currentTeamId — set above by the spread of
+      // firingResult.newCoachUpdate (or the caretaker init).
       teamStates[teamId] = {
         ...teamStates[teamId],
-        currentCoachId: firingResult.newCoachId,
-        coachPressure: 10, // Reset pressure for new coach
+        coachPressure: 10,
       };
 
       // Update careers

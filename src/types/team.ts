@@ -27,7 +27,10 @@ export interface TeamState {
   momentum: number;     // -10 to +10, default 0
   squadHealth: number;  // 0-100, default 85
   coachPressure: number; // 0-100, default 10
-  currentCoachId: string | null;
+  // NOTE: `currentCoachId` was removed in v7 in favour of a derived lookup.
+  // The single source of truth is now `coachStates[coachId].currentTeamId`.
+  // Use `getTeamCoachId(coachStates, teamId)` from
+  // `src/engine/coaches/coach-lookup.ts` to resolve "who coaches team X?".
   recentForm: ('W' | 'D' | 'L')[];  // last 5 results
 }
 

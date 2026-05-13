@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
+import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
 import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
@@ -234,8 +235,8 @@ export const useGameStore = create<GameStore>()(
         const { world, favoriteTeamIds } = get();
         // Allow firing coach for any favorited team
         if (!world || !favoriteTeamIds.includes(teamId)) return;
-        const state = world.teamStates[teamId];
-        const coachId = state?.currentCoachId;
+        // Coach is derived from coachStates (single source of truth post-v7).
+        const coachId = getTeamCoachId(world.coachStates, teamId);
         if (!coachId) return;
         const teamBase = world.teamBases[teamId];
         const rng = new SeededRNG(world.rngState);
@@ -252,8 +253,10 @@ export const useGameStore = create<GameStore>()(
           coachStates[result.newCoachId] = { id: result.newCoachId, currentTeamId: teamId, isUnemployed: false, unemployedSince: null };
         }
 
+        // teamStates only carries pressure now — the coach assignment lives on
+        // coachStates[result.newCoachId].currentTeamId (set above).
         const teamStates = { ...world.teamStates };
-        teamStates[teamId] = { ...teamStates[teamId], currentCoachId: result.newCoachId, coachPressure: 10 };
+        teamStates[teamId] = { ...teamStates[teamId], coachPressure: 10 };
 
         const coachCareers = { ...world.coachCareers };
         const firedCareer = [...(coachCareers[coachId] ?? [])];
@@ -346,10 +349,10 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 6,
+      version: 7,
       /**
        * Migrates a persisted save from any older version up to the current
-       * schema (v6). Each `if (version < N)` block applies one forward step.
+       * schema (v7). Each `if (version < N)` block applies one forward step.
        *
        * SAFETY CONTRACT:
        * - Input shape is `unknown`. We narrow once to a `Partial<GameStore>`
@@ -417,6 +420,19 @@ export const useGameStore = create<GameStore>()(
               if (typeof p.marketValue !== 'number') {
                 p.marketValue = computeInitialMarketValue(p);
               }
+            }
+          }
+        }
+        // v6 → v7: drop teamStates[*].currentCoachId — coachStates[*].currentTeamId
+        // is now the single source of truth for coach assignments. Old saves
+        // already maintain coachStates.currentTeamId in lockstep with the
+        // removed teamState field, so we just need to delete the redundant
+        // copy. Use bracket-delete with a typed-any to avoid leaking the
+        // dead field into the current TeamState surface.
+        if (version < 7 && state?.world?.teamStates) {
+          for (const ts of Object.values(state.world.teamStates)) {
+            if (ts && typeof ts === 'object' && 'currentCoachId' in ts) {
+              delete (ts as { currentCoachId?: string | null }).currentCoachId;
             }
           }
         }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
@@ -14,6 +14,7 @@ import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
+import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -134,6 +135,15 @@ export default function Dashboard() {
     : null;
   const hasSeasonReview = lastCompletedSeason !== null;
 
+  // teamId → coachId map for the current coach assignments. Used by the
+  // favorite-team cards (top of dashboard) and any per-fixture lookups
+  // further down. Memoised so the whole render does N=1 walks instead of
+  // recomputing on every team card.
+  const teamCoachMap = useMemo(
+    () => buildTeamCoachMap(world.coachStates),
+    [world.coachStates],
+  );
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'matchday', label: '比赛日' },
     { key: 'results', label: '战报' },
@@ -193,7 +203,10 @@ export default function Dashboard() {
             const posEntry = standings.find(s => s.teamId === tid);
             const pos = posEntry ? standings.indexOf(posEntry) + 1 : '-';
             const pts = posEntry?.points ?? 0;
-            const coachName = favState.currentCoachId ? getCoachName(favState.currentCoachId, world.coachBases) : '无';
+            const coachName = (() => {
+              const cid = teamCoachMap.get(tid);
+              return cid ? getCoachName(cid, world.coachBases) : '无';
+            })();
             const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === tid || f.awayTeamId === tid);
             const opponentId = nextFixture ? (nextFixture.homeTeamId === tid ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
 
@@ -564,7 +577,8 @@ function generateWindowTips(
 
     // Coach under pressure
     if (hs && hs.coachPressure > 55) {
-      const coach = hs.currentCoachId ? world.coachBases[hs.currentCoachId] : null;
+      const homeCoachId = getTeamCoachId(world.coachStates, f.homeTeamId);
+      const coach = homeCoachId ? world.coachBases[homeCoachId] : null;
       const key = `pressure-${f.homeTeamId}`;
       if (!seen.has(key) && coach) {
         tips.push({
@@ -880,12 +894,10 @@ function FixtureCard({
 
   if (!homeTeam || !awayTeam || !homeState || !awayState) return null;
 
-  const homeCoach = homeState.currentCoachId
-    ? world.coachBases[homeState.currentCoachId] ?? null
-    : null;
-  const awayCoach = awayState.currentCoachId
-    ? world.coachBases[awayState.currentCoachId] ?? null
-    : null;
+  const homeCoachId = getTeamCoachId(world.coachStates, fixture.homeTeamId);
+  const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
+  const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
+  const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
 
   const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
 
