@@ -1,5 +1,20 @@
 import { useEffect, useRef, useMemo } from 'react';
 import type { MatchEvent } from '../types/match';
+import { lerp, seededRand } from './pitch-canvas/math';
+import { generateSequence } from './pitch-canvas/sequence';
+import {
+  spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
+  updateAndCullParticles, renderParticles,
+} from './pitch-canvas/particles';
+import {
+  getBaseSlot, computeBallPosition, computeOverrideTarget, resolvePhasePoints, updatePlayerPositions,
+} from './pitch-canvas/physics';
+import {
+  drawPitch, drawHalftime, drawPlayer, drawBall,
+  drawGoalCelebration, applyCameraShake, applyWhiteFlash,
+  GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES,
+} from './pitch-canvas/renderer';
+import { BASE_FORMATION, type Particle, type PassPhase, type PlayerState } from './pitch-canvas/types';
 
 interface Props {
   minute: number;
@@ -13,136 +28,9 @@ interface Props {
   halftime: boolean;
 }
 
-// 4-4-2 formation positions (normalized 0-1, x is depth, y is width)
-const BASE_FORMATION = [
-  { x: 0.07, y: 0.5, role: 'GK' as Role },
-  { x: 0.22, y: 0.13, role: 'DF' as Role }, { x: 0.20, y: 0.37, role: 'DF' as Role },
-  { x: 0.20, y: 0.63, role: 'DF' as Role }, { x: 0.22, y: 0.87, role: 'DF' as Role },
-  { x: 0.38, y: 0.15, role: 'MF' as Role }, { x: 0.35, y: 0.40, role: 'MF' as Role },
-  { x: 0.35, y: 0.60, role: 'MF' as Role }, { x: 0.38, y: 0.85, role: 'MF' as Role },
-  { x: 0.50, y: 0.35, role: 'FW' as Role }, { x: 0.50, y: 0.65, role: 'FW' as Role },
-];
-
-type Role = 'GK' | 'DF' | 'MF' | 'FW';
-
-// ── Math helpers ──────────────────────────────────────────────
-function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
-function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
-function easeInOutQuad(t: number) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
-function dist(ax: number, ay: number, bx: number, by: number) {
-  return Math.hypot(bx - ax, by - ay);
-}
-function seededRand(seed: number) { return ((Math.sin(seed * 9301 + 49297) % 1) + 1) % 1; }
-
-// Parse "#RRGGBB" or "#RGB" → "r,g,b" for use in rgba() strings.
-// Falls back to neutral gold (250,204,21) for non-hex inputs (named colors, rgb(), etc.)
-function hexToRgbStr(hex: string): string {
-  const h = (hex ?? '').replace('#', '');
-  if (!/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(h)) return '250,204,21';
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  return `${r},${g},${b}`;
-}
-
-// ── Pass sequence types ──────────────────────────────────────
-interface PassPhase {
-  passerIdx: number;
-  receiverIdx: number;
-  attackingHome: boolean;
-  duration: number;
-  hold: number;
-  arc: number;
-  intercepted: boolean; // pass gets stolen halfway through
-}
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  rotation: number;
-  angularVel: number;
-  life: number;
-  maxLife: number;
-  color: string;
-  size: number;
-  initialSize: number;
-  gravity: number;
-  drag: number;        // velocity decay per frame (0 = none, 0.05 = strong)
-  shape: 'circle' | 'rect' | 'streak';
-  bounces: number;     // remaining bounces off the floor
-  bounceY: number;     // floor y in canvas pixels
-  blend: 'normal' | 'add'; // additive blend for sparks/glow
-}
-
-function newParticle(p: Partial<Particle> & Pick<Particle, 'x' | 'y' | 'vx' | 'vy' | 'color'>): Particle {
-  const size = p.size ?? 1.5;
-  const life = p.life ?? 60;
-  return {
-    rotation: 0,
-    angularVel: 0,
-    maxLife: life,
-    initialSize: size,
-    gravity: 0.05,
-    drag: 0.015,
-    shape: 'circle',
-    bounces: 0,
-    bounceY: 9999,
-    blend: 'normal',
-    size,
-    life,
-    ...p,
-  };
-}
-
-/**
- * Generate a possession sequence with realistic flow and occasional interceptions.
- */
-function generateSequence(seed: number): { phases: PassPhase[]; endsInShot: boolean } {
-  const r = (n: number) => seededRand(seed * 7 + n);
-  const isHome = r(0) > 0.5;
-  const playStyle = r(1);
-  const endsInShot = r(2) < 0.30;
-  const willIntercept = !endsInShot && r(3) < 0.18; // pass gets stolen
-
-  let route: number[];
-  if (playStyle < 0.18) {
-    route = isHome ? [0, 2, 6, 9, 10] : [0, 3, 7, 10, 9];
-  } else if (playStyle < 0.36) {
-    route = isHome ? [3, 7, 10] : [2, 6, 9];
-  } else if (playStyle < 0.54) {
-    route = isHome ? [1, 5, 8, 9] : [4, 8, 5, 10];
-  } else if (playStyle < 0.72) {
-    route = isHome ? [6, 7, 5, 9] : [7, 6, 8, 10];
-  } else if (playStyle < 0.88) {
-    route = isHome ? [3, 2, 6, 5, 7] : [2, 3, 7, 6, 8];
-  } else {
-    // Long ball forward
-    route = isHome ? [0, 9] : [0, 10];
-  }
-
-  const phases: PassPhase[] = [];
-  for (let i = 0; i < route.length - 1; i++) {
-    const distance = Math.abs(route[i + 1] - route[i]);
-    const longBall = distance >= 4 || r(i + 5) < 0.15;
-    const isLastPass = i === route.length - 2;
-    phases.push({
-      passerIdx: route[i],
-      receiverIdx: route[i + 1],
-      attackingHome: isHome,
-      duration: longBall ? 70 + r(i + 10) * 25 : 42 + r(i + 11) * 20,
-      hold: isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
-      arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
-      intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
-    });
-  }
-  return { phases, endsInShot };
-}
-
 export default function PitchCanvas(props: Props) {
   const { minute, homeColor, awayColor, homeTeamId, flashEvent, allEvents, halftime } = props;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const ballPos = useRef({ x: 0.5, y: 0.5 });
@@ -157,7 +45,7 @@ export default function PitchCanvas(props: Props) {
   const lastFlashEventRef = useRef<MatchEvent | null>(null); // de-dup mount-time flashEvent
 
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
-  const playerPosRef = useRef<Array<{ x: number; y: number; vx: number; vy: number; sprintT: number }>>(
+  const playerPosRef = useRef<PlayerState[]>(
     Array.from({ length: 22 }, (_, i) => {
       const base = BASE_FORMATION[i % 11];
       const isHome = i < 11;
@@ -218,10 +106,10 @@ export default function PitchCanvas(props: Props) {
     const W = canvas.width, H = canvas.height;
     const P = 10;
     const fw = W - P * 2;
-    goalCelebFrame.current = 110;
-    cameraShakeRef.current = 28;
-    cameraShakeMax.current = 28;
-    flashWhiteRef.current = 12;
+    goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
+    cameraShakeRef.current = CAMERA_SHAKE_MAX_FRAMES;
+    cameraShakeMax.current = CAMERA_SHAKE_MAX_FRAMES;
+    flashWhiteRef.current = FLASH_MAX_FRAMES;
     const evIsHome = flashEvent.teamId === homeTeamId;
     const goalColor = evIsHome ? homeColor : awayColor;
     goalCelebColor.current = goalColor;
@@ -229,86 +117,7 @@ export default function PitchCanvas(props: Props) {
     const goalX = P + (evIsHome ? 0.97 : 0.03) * fw;
     const goalY = H / 2;
     const floor = H - P; // particles bounce off pitch edge
-
-    // ── Wave 1: chunky team-colored disc burst (radial, normal blend) ─
-    for (let i = 0; i < 18; i++) {
-      const angle = (i / 18) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
-      const speed = 2.5 + Math.random() * 3.5;
-      particlesRef.current.push(newParticle({
-        x: goalX, y: goalY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.2,
-        color: goalColor,
-        size: 2 + Math.random() * 1.8,
-        life: 60 + Math.random() * 30,
-        gravity: 0.12,
-        drag: 0.025,
-        bounces: 1,
-        bounceY: floor,
-        shape: 'circle',
-      }));
-    }
-
-    // ── Wave 2: bright streaks (additive, fast) ────────────────────────
-    for (let i = 0; i < 14; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 4 + Math.random() * 4;
-      particlesRef.current.push(newParticle({
-        x: goalX + (Math.random() - 0.5) * 6,
-        y: goalY + (Math.random() - 0.5) * 6,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.8,
-        color: '#fff8c0',
-        size: 1.4 + Math.random() * 1.2,
-        life: 22 + Math.random() * 14,
-        gravity: 0.06,
-        drag: 0.04,
-        shape: 'streak',
-        blend: 'add',
-      }));
-    }
-
-    // ── Wave 3: glow puff (single bright additive disc that fades) ────
-    for (let i = 0; i < 5; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      particlesRef.current.push(newParticle({
-        x: goalX + Math.cos(angle) * 4,
-        y: goalY + Math.sin(angle) * 4,
-        vx: Math.cos(angle) * 0.6,
-        vy: Math.sin(angle) * 0.6,
-        color: '#ffe680',
-        size: 6 + Math.random() * 3,
-        life: 18 + Math.random() * 8,
-        gravity: 0,
-        drag: 0.05,
-        shape: 'circle',
-        blend: 'add',
-      }));
-    }
-
-    // ── Wave 4: confetti rain (tumbling rectangles from ABOVE) ────────
-    const confettiPalette = [goalColor, '#fbbf24', '#f87171', '#60a5fa', '#34d399', '#ffffff'];
-    for (let i = 0; i < 32; i++) {
-      const startX = goalX + (Math.random() - 0.5) * 140;
-      // Spawn just above the canvas; cull threshold is y < -60, so all of
-      // these survive the first frame and visibly drop in.
-      const startY = -5 - Math.random() * 18;
-      particlesRef.current.push(newParticle({
-        x: startX, y: startY,
-        vx: (Math.random() - 0.5) * 1.8,
-        vy: 1.2 + Math.random() * 1.5,
-        color: confettiPalette[i % confettiPalette.length],
-        size: 1.6 + Math.random() * 1.4,
-        life: 130 + Math.random() * 50,
-        gravity: 0.06,
-        drag: 0.012,
-        rotation: Math.random() * Math.PI * 2,
-        angularVel: (Math.random() - 0.5) * 0.35,
-        shape: 'rect',
-        bounces: 1, // one soft bounce off the floor for satisfying landings
-        bounceY: floor + 6,
-      }));
-    }
+    particlesRef.current.push(...spawnGoalBurst(goalX, goalY, goalColor, floor));
   }, [flashEvent, homeTeamId, homeColor, awayColor]);
 
   // Main rAF loop — starts once on mount, reads from liveRef. No restarts.
@@ -320,85 +129,6 @@ export default function PitchCanvas(props: Props) {
     const P = 10;
     const fw = W - P * 2, fh = H - P * 2;
 
-    function spawnTackleSparks(cx: number, cy: number) {
-      // Streaky impact lines
-      for (let i = 0; i < 5; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 2.5 + Math.random() * 2.5;
-        particlesRef.current.push(newParticle({
-          x: cx, y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 0.4,
-          color: '#fff8c0',
-          size: 1.2 + Math.random() * 0.6,
-          life: 14 + Math.random() * 8,
-          shape: 'streak',
-          blend: 'add',
-          gravity: 0.05,
-          drag: 0.06,
-        }));
-      }
-      // Tiny dust dots
-      for (let i = 0; i < 6; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 1 + Math.random() * 1.5;
-        particlesRef.current.push(newParticle({
-          x: cx, y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 0.6,
-          color: '#cccccc',
-          size: 0.6 + Math.random() * 0.5,
-          life: 18 + Math.random() * 10,
-          gravity: 0.18,
-          drag: 0.04,
-        }));
-      }
-    }
-
-    function spawnGrassKick(cx: number, cy: number, dx: number, dy: number) {
-      // Grass chunks fly opposite to ball direction in a fan
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = dx / len, ny = dy / len;
-      // Tangent for fan spread
-      const tx = -ny, ty = nx;
-      for (let i = 0; i < 5; i++) {
-        const fan = (Math.random() - 0.5) * 0.8;
-        const back = 0.4 + Math.random() * 0.7;
-        particlesRef.current.push(newParticle({
-          x: cx, y: cy + 1.5,
-          vx: -nx * back + tx * fan,
-          vy: -ny * back + ty * fan - 0.4,
-          color: '#5a7a3e',
-          size: 0.7 + Math.random() * 0.6,
-          life: 14 + Math.random() * 8,
-          gravity: 0.22,
-          drag: 0.05,
-        }));
-      }
-      // Two soft dust puffs (additive)
-      for (let i = 0; i < 2; i++) {
-        particlesRef.current.push(newParticle({
-          x: cx + (Math.random() - 0.5) * 4,
-          y: cy + 1,
-          vx: (Math.random() - 0.5) * 0.4,
-          vy: -0.3 - Math.random() * 0.3,
-          color: '#dcd0a8',
-          size: 3 + Math.random() * 2,
-          life: 14 + Math.random() * 6,
-          gravity: 0,
-          drag: 0.08,
-          blend: 'add',
-        }));
-      }
-    }
-
-    function getBaseSlot(formIdx: number, isHomeTeam: boolean): { x: number; y: number; role: Role } {
-      const base = BASE_FORMATION[formIdx];
-      const s = isHomeTeam ? shiftRef.current : -shiftRef.current;
-      const bx = isHomeTeam ? base.x + s : 1 - base.x - s;
-      return { x: clamp(bx, 0.03, 0.97), y: base.y, role: base.role };
-    }
-
     // Bootstrap sequence if empty
     if (sequenceRef.current.length === 0) {
       sequenceSeedRef.current = liveRef.current.minute * 137 + frameRef.current;
@@ -408,10 +138,9 @@ export default function PitchCanvas(props: Props) {
       phaseFrameRef.current = 0;
       phaseStateRef.current = 'passing';
       interceptedRef.current = false;
-      const firstPhase = sequenceRef.current[0];
-      const passerSlot = getBaseSlot(firstPhase.passerIdx, firstPhase.attackingHome);
-      ballSourceRef.current = { x: P + passerSlot.x * fw, y: P + passerSlot.y * fh };
-      ballPos.current = { ...ballSourceRef.current };
+      const { source } = resolvePhasePoints(sequenceRef.current[0], shiftRef.current, P, fw, fh);
+      ballSourceRef.current = source;
+      ballPos.current = { ...source };
     }
 
     function render() {
@@ -419,84 +148,17 @@ export default function PitchCanvas(props: Props) {
       const f = frameRef.current;
       // Read live props from ref (no closure capture → no rAF restart on prop change)
       const live = liveRef.current;
-      const minute = live.minute;
-      const homeColor = live.homeColor;
-      const awayColor = live.awayColor;
-      const homeTeamId = live.homeTeamId;
-      const allEvents = live.allEvents;
-      const halftime = live.halftime;
-      const targetShift = live.targetShift;
+      const { minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift } = live;
 
-      // Camera shake — attenuated sine wave (kinetic, not seizure-like)
-      let camOffX = 0, camOffY = 0;
-      if (cameraShakeRef.current > 0) {
-        const t = 1 - cameraShakeRef.current / cameraShakeMax.current;
-        const decay = Math.exp(-t * 3); // exponential falloff
-        const phase = (cameraShakeMax.current - cameraShakeRef.current) * 0.85;
-        camOffX = Math.sin(phase) * 5 * decay;
-        camOffY = Math.cos(phase * 1.3) * 3.2 * decay;
-        cameraShakeRef.current--;
-      }
-
-      ctx.save();
-      ctx.translate(camOffX, camOffY);
-      ctx.clearRect(-camOffX, -camOffY, W, H);
+      // Camera shake — saves ctx, translates, clears. Caller must restore() at end of frame.
+      applyCameraShake(ctx, cameraShakeRef, cameraShakeMax, W, H);
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
-      // ── Grass with subtle gradient ──
-      ctx.fillStyle = '#1a472a';
-      ctx.fillRect(0, 0, W, H);
-      const sw = fw / 12;
-      for (let i = 0; i < 12; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#1d5231' : '#1a472a';
-        ctx.fillRect(P + i * sw, P, sw, fh);
-      }
-      // Subtle vignette
-      const vignette = ctx.createRadialGradient(W / 2, H / 2, fh * 0.3, W / 2, H / 2, fh * 0.9);
-      vignette.addColorStop(0, 'rgba(0,0,0,0)');
-      vignette.addColorStop(1, 'rgba(0,0,0,0.25)');
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, W, H);
-
-      // ── Pitch lines ──
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(P, P, fw, fh);
-      ctx.beginPath(); ctx.moveTo(W / 2, P); ctx.lineTo(W / 2, H - P); ctx.stroke();
-      ctx.beginPath(); ctx.arc(W / 2, H / 2, fh * 0.16, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(W / 2, H / 2, 2, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
-      const paW = fw * 0.14, paH = fh * 0.52, paY = (H - paH) / 2;
-      ctx.strokeRect(P, paY, paW, paH);
-      ctx.strokeRect(W - P - paW, paY, paW, paH);
-      const gaW = fw * 0.05, gaH = fh * 0.26, gaY = (H - gaH) / 2;
-      ctx.strokeRect(P, gaY, gaW, gaH);
-      ctx.strokeRect(W - P - gaW, gaY, gaW, gaH);
-      ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-      const gH = fh * 0.14, gY = (H - gH) / 2;
-      ctx.strokeRect(P - 6, gY, 6, gH);
-      ctx.strokeRect(W - P, gY, 6, gH);
-      ctx.lineWidth = 0.4; ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-      for (let i = 0; i < 5; i++) {
-        const ny = gY + i * gH / 4;
-        ctx.beginPath(); ctx.moveTo(P - 6, ny); ctx.lineTo(P, ny); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(W - P, ny); ctx.lineTo(W - P + 6, ny); ctx.stroke();
-      }
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.beginPath(); ctx.arc(P + fw * 0.1, H / 2, 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(W - P - fw * 0.1, H / 2, 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      for (const [cx, cy, sa, ea] of [[P, P, 0, Math.PI / 2], [W - P, P, Math.PI / 2, Math.PI], [P, H - P, -Math.PI / 2, 0], [W - P, H - P, Math.PI, Math.PI * 1.5]] as const) {
-        ctx.beginPath(); ctx.arc(cx, cy, 8, sa, ea); ctx.stroke();
-      }
+      drawPitch(ctx, W, H, P, fw, fh);
 
       if (halftime) {
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText('中场休息', W / 2, H / 2 - 4);
-        ctx.font = '11px sans-serif'; ctx.fillStyle = '#94a3b8';
-        ctx.fillText('HALF TIME', W / 2, H / 2 + 14);
+        drawHalftime(ctx, W, H);
         ctx.restore();
         raf = requestAnimationFrame(render);
         return;
@@ -513,16 +175,14 @@ export default function PitchCanvas(props: Props) {
         phaseFrameRef.current = 0;
         phaseStateRef.current = 'passing';
         interceptedRef.current = false;
-        const first = sequenceRef.current[0];
-        const passerSlot = getBaseSlot(first.passerIdx, first.attackingHome);
-        ballSourceRef.current = { x: P + passerSlot.x * fw, y: P + passerSlot.y * fh };
+        ballSourceRef.current = resolvePhasePoints(sequenceRef.current[0], shiftRef.current, P, fw, fh).source;
       } else {
         phaseFrameRef.current++;
         if (phaseStateRef.current === 'passing') {
           // Check for interception mid-pass
           if (phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
             interceptedRef.current = true;
-            spawnTackleSparks(ballPos.current.x, ballPos.current.y);
+            particlesRef.current.push(...spawnTackleSparks(ballPos.current.x, ballPos.current.y));
             cameraShakeRef.current = Math.max(cameraShakeRef.current, 8);
             // Keep `cameraShakeMax` in sync so the attenuated sine still has
             // proper amplitude — otherwise a tackle right after a goal
@@ -535,7 +195,7 @@ export default function PitchCanvas(props: Props) {
             phaseStateRef.current = 'holding';
             phaseFrameRef.current = 0;
             // Ball arrival = grass kick effect
-            spawnGrassKick(ballPos.current.x, ballPos.current.y, 0, 1);
+            particlesRef.current.push(...spawnGrassKick(ballPos.current.x, ballPos.current.y, 0, 1));
           }
         } else if (phaseStateRef.current === 'holding' && phaseFrameRef.current >= phase.hold) {
           phaseIdxRef.current++;
@@ -543,61 +203,39 @@ export default function PitchCanvas(props: Props) {
           phaseStateRef.current = 'passing';
           const newPhase = sequenceRef.current[phaseIdxRef.current];
           if (newPhase) {
-            const passerSlot = getBaseSlot(newPhase.passerIdx, newPhase.attackingHome);
-            ballSourceRef.current = { x: P + passerSlot.x * fw, y: P + passerSlot.y * fh };
+            const { source, dx, dy } = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
+            ballSourceRef.current = source;
             // Grass kick on pass start
-            const recvSlot = getBaseSlot(newPhase.receiverIdx, newPhase.attackingHome);
-            const dx = recvSlot.x - passerSlot.x, dy = recvSlot.y - passerSlot.y;
-            spawnGrassKick(ballSourceRef.current.x, ballSourceRef.current.y, dx, dy);
+            particlesRef.current.push(...spawnGrassKick(source.x, source.y, dx, dy));
           }
         }
       }
 
       const currentPhase = sequenceRef.current[phaseIdxRef.current] ?? sequenceRef.current[sequenceRef.current.length - 1];
       const isAttHome = currentPhase.attackingHome;
-      const receiverSlot = getBaseSlot(currentPhase.receiverIdx, isAttHome);
+      const receiverSlot = getBaseSlot(currentPhase.receiverIdx, isAttHome, shiftRef.current);
       const targetX = P + receiverSlot.x * fw;
       const targetY = P + receiverSlot.y * fh;
 
-      // Special events override target
-      const nearEvent = allEvents.find(e => Math.abs(e.minute - minute) <= 1);
-      let overrideTarget: { x: number; y: number } | null = null;
-      if (nearEvent) {
-        const evIsHome = nearEvent.teamId === homeTeamId;
-        if (nearEvent.type === 'goal' || nearEvent.type === 'penalty_goal') {
-          overrideTarget = {
-            x: P + (evIsHome ? 0.97 : 0.03) * fw,
-            y: P + (0.42 + seededRand(minute * 7) * 0.16) * fh,
-          };
-        } else if (nearEvent.type === 'save') {
-          overrideTarget = {
-            x: P + (evIsHome ? 0.94 : 0.06) * fw,
-            y: P + (0.4 + seededRand(minute * 11) * 0.2) * fh,
-          };
-        }
-      }
-
+      // Special events override target (in pixel coords)
+      const overrideTarget = computeOverrideTarget(allEvents, minute, homeTeamId, P, fw, fh);
       const finalTargetX = overrideTarget?.x ?? targetX;
       const finalTargetY = overrideTarget?.y ?? targetY;
 
-      let bx: number, by: number;
-      if (phaseStateRef.current === 'passing') {
-        const t = Math.min(1, phaseFrameRef.current / currentPhase.duration);
-        const eased = easeInOutQuad(t);
-        bx = lerp(ballSourceRef.current.x, finalTargetX, eased);
-        by = lerp(ballSourceRef.current.y, finalTargetY, eased);
-        ballArcLiftRef.current = Math.sin(t * Math.PI) * currentPhase.arc * 22;
-        by -= ballArcLiftRef.current;
-        // Ball spin proportional to speed
-        ballSpinRef.current += 0.4 + currentPhase.arc * 0.3;
-      } else {
-        // Holding — ball gently drifts near holder, with foot tap micro-motion
-        const microJ = Math.sin(f * 0.18) * 0.5;
-        bx = finalTargetX + microJ;
-        by = finalTargetY + Math.cos(f * 0.18) * 0.3;
-        ballArcLiftRef.current = 0;
-        ballSpinRef.current += 0.05;
-      }
+      // Compute ball position
+      const ballResult = computeBallPosition({
+        passing: phaseStateRef.current === 'passing',
+        phaseFrame: phaseFrameRef.current,
+        duration: currentPhase.duration,
+        arc: currentPhase.arc,
+        source: ballSourceRef.current,
+        target: { x: finalTargetX, y: finalTargetY },
+        frame: f,
+      });
+      const bx = ballResult.bx;
+      const by = ballResult.by;
+      ballArcLiftRef.current = ballResult.arcLift;
+      ballSpinRef.current += ballResult.spinDelta;
 
       ballPos.current.x = bx;
       ballPos.current.y = by;
@@ -614,242 +252,38 @@ export default function PitchCanvas(props: Props) {
       const ballHolderTeamSide: 'home' | 'away' = isAttHome ? 'home' : 'away';
       const ballHolderIdx = phaseStateRef.current === 'holding' ? currentPhase.receiverIdx : currentPhase.passerIdx;
 
-      // Normalize ball position to 0-1 for AI calcs
+      // Normalize ball + override to 0-1 for AI calcs
       const ballNX = (bx - P) / fw;
       const ballNY = (by - P) / fh;
+      const overrideTargetN = overrideTarget
+        ? { x: (overrideTarget.x - P) / fw, y: (overrideTarget.y - P) / fh }
+        : null;
 
-      for (let i = 0; i < 22; i++) {
-        const isHomeTeam = i < 11;
-        const formIdx = i % 11;
-        const isHolder = (isHomeTeam ? ballHolderTeamSide === 'home' : ballHolderTeamSide === 'away') && formIdx === ballHolderIdx;
-        const isReceiver = (isHomeTeam ? ballHolderTeamSide === 'home' : ballHolderTeamSide === 'away')
-          && formIdx === currentPhase.receiverIdx
-          && phaseStateRef.current === 'passing';
-        const teamHasBall = (isHomeTeam && isAttHome) || (!isHomeTeam && !isAttHome);
-
-        const slot = getBaseSlot(formIdx, isHomeTeam);
-        let targetX_n = slot.x;
-        let targetY_n = slot.y;
-
-        // ── Tactical adjustments ──
-        if (isHolder) {
-          // Ball holder moves slightly with ball
-          targetX_n = ballNX;
-          targetY_n = ballNY + 0.01;
-        } else if (isReceiver) {
-          // Receiver runs to meet incoming pass — move toward where ball will be
-          const meetingT = 0.7;
-          targetX_n = lerp(slot.x, ballNX, meetingT);
-          targetY_n = lerp(slot.y, ballNY, meetingT);
-        } else if (teamHasBall) {
-          // Team in possession: shift toward attacking direction
-          const attackDir = isHomeTeam ? 1 : -1;
-          const advance = 0.04 + (slot.role === 'FW' ? 0.05 : slot.role === 'MF' ? 0.03 : slot.role === 'DF' ? 0.015 : 0);
-          targetX_n = slot.x + advance * attackDir;
-          // Wide players adjust based on ball lateral position
-          if (Math.abs(slot.y - 0.5) > 0.25) {
-            // Slight pinch toward middle if ball is central
-            const ballSide = ballNY < 0.5 ? -1 : 1;
-            const slotSide = slot.y < 0.5 ? -1 : 1;
-            if (ballSide !== slotSide) {
-              targetY_n = slot.y + (0.5 - slot.y) * 0.15; // pinch in
-            }
-          }
-        } else {
-          // Defending team: closest 2 defenders pressure ball, others compress toward ball side
-          const defenderDist = dist(slot.x, slot.y, ballNX, ballNY);
-          if (defenderDist < 0.18 && slot.role !== 'GK') {
-            // Press ball — move toward holder
-            const pressT = 0.55;
-            targetX_n = lerp(slot.x, ballNX, pressT);
-            targetY_n = lerp(slot.y, ballNY, pressT);
-            playerPosRef.current[i].sprintT = 1;
-          } else if (slot.role !== 'GK') {
-            // Compress — drift slightly toward ball lateral position
-            const lateralPull = 0.08;
-            targetY_n = lerp(slot.y, ballNY, lateralPull);
-            // Defensive line drops if ball is in own half
-            const ownHalf = isHomeTeam ? ballNX < 0.5 : ballNX > 0.5;
-            if (ownHalf) {
-              const drop = isHomeTeam ? -0.025 : 0.025;
-              targetX_n = slot.x + drop;
-            }
-          }
-          // GK tracks ball laterally, narrow range
-          if (slot.role === 'GK') {
-            targetY_n = clamp(0.5 + (ballNY - 0.5) * 0.3, 0.42, 0.58);
-          }
-        }
-
-        // Goal scoring event — attackers swarm toward goal
-        if (overrideTarget && teamHasBall && slot.role === 'FW' && !isHolder) {
-          targetX_n = (overrideTarget.x - P) / fw + (Math.random() - 0.5) * 0.04;
-          targetY_n = (overrideTarget.y - P) / fh + (Math.random() - 0.5) * 0.06;
-        }
-
-        targetX_n = clamp(targetX_n, 0.03, 0.97);
-        targetY_n = clamp(targetY_n, 0.05, 0.95);
-
-        // Smooth approach — sprinters accelerate faster
-        const p = playerPosRef.current[i];
-        const sprintBoost = 1 + p.sprintT * 0.6;
-        const ax = (targetX_n - p.x) * 0.06 * sprintBoost;
-        const ay = (targetY_n - p.y) * 0.06 * sprintBoost;
-        p.vx = p.vx * 0.7 + ax;
-        p.vy = p.vy * 0.7 + ay;
-        p.x += p.vx;
-        p.y += p.vy;
-        p.sprintT *= 0.95; // sprint decays
-      }
+      updatePlayerPositions(
+        playerPosRef.current,
+        ballNX, ballNY,
+        ballHolderTeamSide,
+        ballHolderIdx,
+        currentPhase,
+        phaseStateRef.current,
+        overrideTargetN,
+        shiftRef.current,
+      );
 
       // ── Draw players ──
-      function drawPlayer(p: { x: number; y: number; vx: number; vy: number; sprintT: number }, color: string, num: number, hasBall: boolean) {
-        const px = P + p.x * fw;
-        const py = P + p.y * fh;
-        const speed = Math.hypot(p.vx, p.vy);
-        const isMoving = speed > 0.003;
-
-        // Motion trail when sprinting
-        if (isMoving && speed > 0.006) {
-          const dirX = p.vx / speed;
-          const dirY = p.vy / speed;
-          for (let t = 1; t <= 3; t++) {
-            const tx = px - dirX * t * 5 * fw * 0.012;
-            const ty = py - dirY * t * 5 * fh * 0.022;
-            ctx.beginPath(); ctx.arc(tx, ty, 5 - t * 0.8, 0, Math.PI * 2);
-            ctx.fillStyle = color;
-            ctx.globalAlpha = 0.18 - t * 0.04;
-            ctx.fill();
-          }
-          ctx.globalAlpha = 1;
-        }
-
-        // Soft shadow
-        ctx.beginPath(); ctx.ellipse(px, py + 5, 5, 1.8, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
-
-        // Ball-holder ring
-        if (hasBall) {
-          const pulse = 1 + Math.sin(f * 0.18) * 0.15;
-          ctx.beginPath(); ctx.arc(px, py, 9 * pulse, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.3; ctx.stroke();
-        }
-
-        // Body
-        ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8; ctx.stroke();
-
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText(String(num), px, py + 2.2);
-      }
-
-      // Draw home team
       for (let i = 0; i < 11; i++) {
         const hasBall = isAttHome && i === ballHolderIdx;
-        drawPlayer(playerPosRef.current[i], homeColor, i === 0 ? 1 : i + 1, hasBall);
+        drawPlayer(ctx, playerPosRef.current[i], homeColor, i === 0 ? 1 : i + 1, hasBall, P, fw, fh, f);
       }
-      // Draw away team
       for (let i = 11; i < 22; i++) {
         const formIdx = i - 11;
         const hasBall = !isAttHome && formIdx === ballHolderIdx;
-        drawPlayer(playerPosRef.current[i], awayColor, formIdx === 0 ? 1 : formIdx + 1, hasBall);
+        drawPlayer(ctx, playerPosRef.current[i], awayColor, formIdx === 0 ? 1 : formIdx + 1, hasBall, P, fw, fh, f);
       }
 
       // ── Particles update + draw ──
-      // Pass 1: physics — update all live particles, drop dead ones.
-      // Hard cap at 350 so a long burst can't accumulate unbounded.
-      const livePtcls: Particle[] = [];
-      for (const ptcl of particlesRef.current) {
-        ptcl.life--;
-        if (ptcl.life <= 0) continue;
-        // Air drag (per-frame velocity decay)
-        ptcl.vx *= (1 - ptcl.drag);
-        ptcl.vy *= (1 - ptcl.drag);
-        ptcl.vy += ptcl.gravity;
-        ptcl.x += ptcl.vx;
-        ptcl.y += ptcl.vy;
-        ptcl.rotation += ptcl.angularVel;
-        // Floor bounce
-        if (ptcl.bounces > 0 && ptcl.y >= ptcl.bounceY && ptcl.vy > 0) {
-          ptcl.y = ptcl.bounceY;
-          ptcl.vy = -ptcl.vy * 0.45;
-          ptcl.vx *= 0.55;
-          ptcl.angularVel *= 0.6;
-          ptcl.bounces--;
-        }
-        // Cull: off-screen far below or above (relaxed for rain-from-above confetti)
-        if (ptcl.y > H + 30 || ptcl.y < -60) continue;
-        livePtcls.push(ptcl);
-      }
-      // Bound at 350 — keep youngest if exceeded
-      particlesRef.current = livePtcls.length > 350 ? livePtcls.slice(-350) : livePtcls;
-
-      // Render order: normal-blend first, then additive on top so glow stacks visibly.
-      // Stable sort by blend (one numeric pass — cheap).
-      particlesRef.current.sort((a, b) =>
-        (a.blend === 'add' ? 1 : 0) - (b.blend === 'add' ? 1 : 0),
-      );
-
-      // Pass 2: render — batch by blend mode for far fewer state changes.
-      // Normal-blend particles first (so additive ones stack ON TOP and glow).
-      let currentBlend: GlobalCompositeOperation = 'source-over';
-      for (const ptcl of particlesRef.current) {
-        const a = Math.min(1, (ptcl.life / ptcl.maxLife) * 1.15);
-        const wantBlend: GlobalCompositeOperation = ptcl.blend === 'add' ? 'lighter' : 'source-over';
-        if (wantBlend !== currentBlend) {
-          ctx.globalCompositeOperation = wantBlend;
-          currentBlend = wantBlend;
-        }
-        // Size shrinks as it fades (more lifelike than constant size)
-        const sizeMul = ptcl.shape === 'rect' ? 1 : 0.5 + a * 0.5;
-        const sz = ptcl.initialSize * sizeMul;
-
-        ctx.globalAlpha = a;
-        if (ptcl.shape === 'rect') {
-          // Tumbling confetti rectangle
-          ctx.save();
-          ctx.translate(ptcl.x, ptcl.y);
-          ctx.rotate(ptcl.rotation);
-          // Width changes with rotation to fake foreshortening
-          const wScale = Math.abs(Math.cos(ptcl.rotation));
-          ctx.fillStyle = ptcl.color;
-          ctx.fillRect(-sz * 1.3 * wScale - 0.3, -sz * 0.45, sz * 2.6 * wScale + 0.6, sz * 0.9);
-          ctx.restore();
-        } else if (ptcl.shape === 'streak') {
-          // Streak: short line trailing the velocity vector
-          const speed = Math.hypot(ptcl.vx, ptcl.vy);
-          if (speed > 0.001) {
-            const trailLen = Math.min(14, speed * 2.2);
-            const dirX = ptcl.vx / speed, dirY = ptcl.vy / speed;
-            const tailX = ptcl.x - dirX * trailLen;
-            const tailY = ptcl.y - dirY * trailLen;
-            const grad = ctx.createLinearGradient(tailX, tailY, ptcl.x, ptcl.y);
-            grad.addColorStop(0, 'rgba(255,255,255,0)');
-            grad.addColorStop(1, ptcl.color);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = sz;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(tailX, tailY);
-            ctx.lineTo(ptcl.x, ptcl.y);
-            ctx.stroke();
-          }
-          // Bright head
-          ctx.beginPath();
-          ctx.arc(ptcl.x, ptcl.y, sz * 0.6, 0, Math.PI * 2);
-          ctx.fillStyle = ptcl.color;
-          ctx.fill();
-        } else {
-          ctx.beginPath();
-          ctx.arc(ptcl.x, ptcl.y, sz, 0, Math.PI * 2);
-          ctx.fillStyle = ptcl.color;
-          ctx.fill();
-        }
-      }
-      // Reset state
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
+      particlesRef.current = updateAndCullParticles(particlesRef.current, H);
+      renderParticles(ctx, particlesRef.current);
 
       // ── Ball trail ──
       const bHist = ballHistory.current;
@@ -863,117 +297,32 @@ export default function PitchCanvas(props: Props) {
       // ── Goal celebration ring + net ripple (tinted with team color) ──
       if (goalCelebFrame.current > 0) {
         goalCelebFrame.current--;
-        const t = 1 - goalCelebFrame.current / 110;
-        const teamRgb = hexToRgbStr(goalCelebColor.current);
-        const goldRgb = '250,204,21';
         // Position ring at the goal mouth, not where the ball is now.
         // Use the snapshotted side from when the goal fired — `nearEvent` may
         // become undefined mid-celebration (window outlasts ±1min event lookup).
         const isRightGoal = goalCelebRightSide.current;
         const ringX = isRightGoal ? W - P - 4 : P + 4;
         const ringY = H / 2;
-
-        // Use additive blend so rings glow brightly over the pitch
-        ctx.globalCompositeOperation = 'lighter';
-
-        // Multi-ring expanding — alternate gold + team color
-        for (let k = 0; k < 3; k++) {
-          const ringT = (t + k * 0.18) % 1;
-          if (ringT > 0.95) continue;
-          const gr = 8 + ringT * 80;
-          const ga = (1 - ringT) * 0.55;
-          const ringRgb = k % 2 === 0 ? goldRgb : teamRgb;
-          ctx.beginPath(); ctx.arc(ringX, ringY, gr, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${ringRgb},${ga})`;
-          ctx.lineWidth = 2 - ringT * 1.2;
-          ctx.stroke();
-        }
-
-        // Center glow — gold-to-team-color radial
-        const ga = (1 - t) * 0.65;
-        const gr = 16 + t * 32;
-        const grad = ctx.createRadialGradient(ringX, ringY, 2, ringX, ringY, gr);
-        grad.addColorStop(0, `rgba(${goldRgb},${ga})`);
-        grad.addColorStop(0.6, `rgba(${teamRgb},${ga * 0.5})`);
-        grad.addColorStop(1, `rgba(${teamRgb},0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(ringX, ringY, gr, 0, Math.PI * 2); ctx.fill();
-
-        ctx.globalCompositeOperation = 'source-over';
-
-        // Net ripple — horizontal threads + vertical wires for actual net look
-        const netX = isRightGoal ? W - P : P;
-        const dir = isRightGoal ? 1 : -1;
-        const rippleA = (1 - t) * 0.85;
-        ctx.strokeStyle = `rgba(${goldRgb},${rippleA})`;
-        ctx.lineWidth = 0.8;
-        // Horizontal threads (wavy)
-        for (let i = 0; i < 7; i++) {
-          const ny = gY + i * gH / 6 + Math.sin(t * 9 + i * 0.7) * 2;
-          ctx.beginPath();
-          ctx.moveTo(netX, ny);
-          ctx.lineTo(netX + dir * 6, ny);
-          ctx.stroke();
-        }
-        // Vertical wires
-        for (let i = 0; i < 4; i++) {
-          const nxOff = (i / 3) * 6 * dir;
-          ctx.beginPath();
-          ctx.moveTo(netX + nxOff, gY);
-          ctx.lineTo(netX + nxOff, gY + gH);
-          ctx.stroke();
-        }
-
-        // Ball glow during celebration
-        const ballGlowR = 12 + Math.sin(f * 0.3) * 3;
-        ctx.globalCompositeOperation = 'lighter';
-        const ballGrad = ctx.createRadialGradient(bx, by, 2, bx, by, ballGlowR);
-        ballGrad.addColorStop(0, `rgba(255,235,160,${(1 - t) * 0.6})`);
-        ballGrad.addColorStop(1, 'rgba(255,235,160,0)');
-        ctx.fillStyle = ballGrad;
-        ctx.beginPath(); ctx.arc(bx, by, ballGlowR, 0, Math.PI * 2); ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
+        const gH = fh * 0.14;
+        const gY = (H - gH) / 2;
+        drawGoalCelebration(
+          ctx, goalCelebFrame.current,
+          ringX, ringY,
+          goalCelebColor.current,
+          gY, gH,
+          isRightGoal,
+          W, P,
+          bx, by,
+          f,
+        );
       }
 
-      // ── Ball ──
-      const shadowOffset = ballArcLiftRef.current * 0.5;
-      const shadowSpread = 1 + ballArcLiftRef.current * 0.05;
-      ctx.beginPath();
-      ctx.ellipse(bx + shadowOffset * 0.3, by + 4 + ballArcLiftRef.current * 0.6, 4 / shadowSpread, 1.5 / shadowSpread, 0, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(0,0,0,${0.3 / shadowSpread})`; ctx.fill();
-      // Ball with pentagon panel rotation
-      ctx.save();
-      ctx.translate(bx, by);
-      ctx.rotate(ballSpinRef.current * 0.15);
-      ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.5; ctx.stroke();
-      // Pentagonal panel detail
-      ctx.fillStyle = '#1f2937';
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-        const r = 1.4;
-        const x = Math.cos(a) * r;
-        const y = Math.sin(a) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath(); ctx.arc(-0.8, -0.8, 1.1, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
-      ctx.restore();
+      drawBall(ctx, bx, by, ballArcLiftRef.current, ballSpinRef.current);
 
       ctx.restore();
 
-      // ── White flash on goal ──
-      if (flashWhiteRef.current > 0) {
-        const fa = flashWhiteRef.current / 12;
-        ctx.fillStyle = `rgba(255,255,255,${fa * 0.45})`;
-        ctx.fillRect(0, 0, W, H);
-        flashWhiteRef.current--;
-      }
+      // ── White flash on goal (drawn on top of everything, no shake) ──
+      applyWhiteFlash(ctx, flashWhiteRef, W, H);
 
       raf = requestAnimationFrame(render);
     }
