@@ -25,10 +25,31 @@ import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
  * Handle end-of-season processing: honors, trophies, records, and prep next season.
+ *
+ * Strictly immutable wrt the input `world` — all changes are accumulated into a
+ * patch (a set of locals shadowing world fields) and merged at the very end.
+ * Never write `world.X = ...`; write to the local with the same name and put
+ * it on the patch object.
  */
 export function handleSeasonEnd(world: GameWorld): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
+
+  // ── Patch locals (shadow world fields; merged into patch at return) ──
+  // These start as fresh shallow copies so per-key writes inside this
+  // function never reach the input world. Reads MUST come from these locals
+  // (not from `world.X`) once we've started writing to them.
+  const coachCareers = { ...world.coachCareers };
+  const coachStates = { ...world.coachStates };
+  const coachChangesThisSeason = [...world.coachChangesThisSeason];
+  // teamStates is `let` because the season-end reset block reassigns entries
+  // (it builds a fresh entry via applySeasonEndReset). The Record reference
+  // itself is also reused for the team-growth/decline pass below.
+  let teamStates = { ...world.teamStates };
+  let playerAwardsHistory = world.playerAwardsHistory;
+  let transferHistory = world.transferHistory;
+  let playerStats = world.playerStats;
+  let squads = world.squads;
 
   // Determine champions
   const league1Champion = world.league1Standings[0]?.teamId ?? '';
@@ -44,8 +65,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   };
   const actualPromoted: { teamId: string; from: number; to: number }[] = [];
   const actualRelegated: { teamId: string; from: number; to: number }[] = [];
-  for (const teamId of getAllTeamIds(world.teamStates)) {
-    const currentLevel = world.teamStates[teamId].leagueLevel;
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const currentLevel = teamStates[teamId].leagueLevel;
     let playedLevel = currentLevel;
     for (const [lvStr, st] of Object.entries(proRelStandings)) {
       if (st.some(s => s.teamId === teamId && s.played > 0)) {
@@ -68,15 +89,15 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     worldCupWinner,
     actualPromoted,
     actualRelegated,
-    world.coachChangesThisSeason,
+    coachChangesThisSeason,
   );
   const honorHistory = [...world.honorHistory, honor];
 
   // Generate trophies for all teams
   const teamTrophies = { ...world.teamTrophies };
   const coachTrophies = { ...world.coachTrophies };
-  for (const teamId of getAllTeamIds(world.teamStates)) {
-    const teamState = world.teamStates[teamId];
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const teamState = teamStates[teamId];
     const trophies = generateTeamTrophies(
       teamId,
       seasonNumber,
@@ -95,8 +116,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     if (coachId && trophies.length > 0) {
       coachTrophies[coachId] = [...(coachTrophies[coachId] ?? []), ...trophies];
 
-      // Update coach career entry with trophies
-      const careerList = [...(world.coachCareers[coachId] ?? [])];
+      // Update coach career entry with trophies — write to local, NOT world.
+      const careerList = [...(coachCareers[coachId] ?? [])];
       const lastEntry = careerList[careerList.length - 1];
       if (lastEntry && lastEntry.toSeason === null) {
         careerList[careerList.length - 1] = {
@@ -104,7 +125,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
           trophies: [...lastEntry.trophies, ...trophies],
         };
       }
-      world.coachCareers[coachId] = careerList;
+      coachCareers[coachId] = careerList;
     }
   }
 
@@ -179,7 +200,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const cupFinalists = [leagueCupWinner, superCupWinner].filter(Boolean);
   for (const fId of cupFinalists) {
     if (!fId) continue;
-    const teamState = world.teamStates[fId];
+    const teamState = teamStates[fId];
     if (teamState && teamState.leagueLevel >= 2) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `underdog-${fId}`),
@@ -192,15 +213,16 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
   // ── Season summary news ──
 
-  // Top scorer
-  const allPlayerStats = Object.values(world.playerStats);
+  // Top scorer — read from LOCAL playerStats (still equals world.playerStats
+  // at this point, but we use the local for consistency with the patch convention).
+  const allPlayerStats = Object.values(playerStats);
   const topScorer = allPlayerStats.reduce<PlayerSeasonStats | null>(
     (best, s) => (s.goals > (best?.goals ?? 0) ? s : best),
     null,
   );
   if (topScorer && topScorer.goals > 0) {
     const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
-    const playerName = world.squads[topScorer.teamId]?.find(p => p.id === topScorer.playerId)?.name
+    const playerName = squads[topScorer.teamId]?.find(p => p.id === topScorer.playerId)?.name
       ?? `${topScorer.playerId.split('-').pop()}号`;
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'scorer'),
@@ -233,10 +255,12 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // ── Individual player awards (颁奖典礼) ──────────────────────
+  // Pass LOCAL playerStats / squads — these still equal world.X here, but the
+  // patch convention is to read from locals once they exist.
   const seasonAwards = computeSeasonAwards(
     seasonNumber,
-    world.playerStats,
-    world.squads,
+    playerStats,
+    squads,
     world.teamBases,
     world.league1Standings,
   );
@@ -251,15 +275,15 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
   // Append to history (will be saved with world below)
   if (seasonAwards.length > 0) {
-    world.playerAwardsHistory = [...(world.playerAwardsHistory ?? []), ...seasonAwards];
-  } else if (!world.playerAwardsHistory) {
-    world.playerAwardsHistory = [];
+    playerAwardsHistory = [...(playerAwardsHistory ?? []), ...seasonAwards];
+  } else if (!playerAwardsHistory) {
+    playerAwardsHistory = [];
   }
 
   // ── Transfer window ──────────────────────────────────────────
   const transferResult = processTransferWindow(world, rng);
   if (transferResult.transfers.length > 0) {
-    world.squads = transferResult.squads;
+    squads = transferResult.squads;
 
     // Rewrite all stale playerId references (playerStats keys, awards, prior
     // transfer entries) so links from /history, /chronicle and SeasonReview
@@ -267,10 +291,14 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // transfers — they already use the new IDs and would be incorrectly
     // re-mapped if a new id happens to collide with an old key (e.g., when a
     // transferred-up player and the swap-down player share a shirt number).
-    const rewritten = applyTransferIdMap(world, transferResult.idMap);
-    world.playerStats = rewritten.playerStats;
-    world.playerAwardsHistory = rewritten.playerAwardsHistory;
-    world.transferHistory = [...rewritten.transferHistory, ...transferResult.transfers];
+    //
+    // Pass an inline view of the world that has the LATEST playerAwardsHistory
+    // (we may have just appended this season's awards above) so the rewrite
+    // sees the freshest data without our touching world directly.
+    const rewritten = applyTransferIdMap({ ...world, playerAwardsHistory }, transferResult.idMap);
+    playerStats = rewritten.playerStats;
+    playerAwardsHistory = rewritten.playerAwardsHistory;
+    transferHistory = [...rewritten.transferHistory, ...transferResult.transfers];
 
     // Top 3 transfers as news
     const topTransfers = transferResult.transfers
@@ -293,15 +321,18 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         description: `本赛季转会窗口共有${total}名球员易主，详情查看转会页面。`,
       });
     }
-  } else if (!world.transferHistory) {
-    world.transferHistory = [];
+  } else if (!transferHistory) {
+    transferHistory = [];
   }
 
   // ── Annual market value revaluation ──────────────────────────
-  // Mutates squad in place (also bumps each player's age)
+  // Mutates squad in place (also bumps each player's age). Pass the LOCAL
+  // squads/playerStats — when transfers happened, these are fresh records;
+  // when they didn't, they reference the same Player objects as world.squads
+  // and the in-place mutation persists into the new world via the spread.
   applyAnnualRevaluation(
-    world.squads,
-    world.playerStats,
+    squads,
+    playerStats,
     new Set(actualPromoted.map((p) => p.teamId)),
     league1Champion || null,
   );
@@ -326,13 +357,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     });
   }
 
-  // Coach changes summary
-  if (world.coachChangesThisSeason.length > 0) {
+  // Coach changes summary (uses the count BEFORE season-end logic adds more)
+  if (coachChangesThisSeason.length > 0) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'coach-summary'),
       seasonNumber, windowIndex, type: 'coach_fired',
-      title: `本赛季共有 ${world.coachChangesThisSeason.length} 次换帅`,
-      description: world.coachChangesThisSeason.map(c => `${world.teamBases[c.teamId]?.name}`).join('、') + ' 更换了教练。',
+      title: `本赛季共有 ${coachChangesThisSeason.length} 次换帅`,
+      description: coachChangesThisSeason.map(c => `${world.teamBases[c.teamId]?.name}`).join('、') + ' 更换了教练。',
     });
   }
 
@@ -344,8 +375,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     3: world.league3Standings,
   };
 
-  for (const teamId of getAllTeamIds(world.teamStates)) {
-    const teamState = world.teamStates[teamId];
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const teamState = teamStates[teamId];
     // Find this team's standings entry — search ALL leagues since leagueLevel
     // may have changed due to promotion/relegation
     let entry: StandingEntry | undefined;
@@ -479,9 +510,11 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // ── Coach voluntary departure (急流勇退) ─────────────────────
-  // Top coaches who just won a major trophy have a small chance of leaving
-  for (const teamId of getAllTeamIds(world.teamStates)) {
-    const coachId = world.teamStates[teamId]?.currentCoachId;
+  // Top coaches who just won a major trophy have a small chance of leaving.
+  // All writes target the LOCAL coachStates / teamStates / coachCareers /
+  // coachChangesThisSeason — never world.X[id].
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const coachId = teamStates[teamId]?.currentCoachId;
     if (!coachId) continue;
     const coach = world.coachBases[coachId];
     if (!coach || coach.rating < 78) continue; // only elite coaches do this
@@ -493,23 +526,25 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // 8% chance per major trophy won
     if (rng.next() >= 0.08) continue;
 
-    // Coach voluntarily leaves
-    const allCoachData = Object.entries(world.coachStates).map(([id, cs]) => ({
+    // Coach voluntarily leaves — read from LOCAL coachStates so iterations
+    // earlier in this loop are visible (the new hire from the previous team
+    // appears here as a candidate to consider).
+    const allCoachData = Object.entries(coachStates).map(([id, cs]) => ({
       base: world.coachBases[id], state: cs,
     })).filter(c => c.base != null);
 
     const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
 
-    world.coachStates[coachId] = { ...world.coachStates[coachId], ...firingResult.firedCoachUpdate };
-    world.coachStates[firingResult.newCoachId] = { ...world.coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
-    world.teamStates[teamId] = { ...world.teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+    coachStates[coachId] = { ...coachStates[coachId], ...firingResult.firedCoachUpdate };
+    coachStates[firingResult.newCoachId] = { ...coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
+    teamStates[teamId] = { ...teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
 
-    const careerList = [...(world.coachCareers[coachId] ?? [])];
+    const careerList = [...(coachCareers[coachId] ?? [])];
     if (careerList.length > 0) {
       careerList[careerList.length - 1] = { ...careerList[careerList.length - 1], toSeason: seasonNumber, fired: false };
     }
-    world.coachCareers[coachId] = careerList;
-    world.coachCareers[firingResult.newCoachId] = [...(world.coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
+    coachCareers[coachId] = careerList;
+    coachCareers[firingResult.newCoachId] = [...(coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
 
     const coachName = coach.name;
     const newCoachName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
@@ -520,21 +555,23 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       description: `${coachName}在率队夺冠后选择急流勇退，留下一段传奇执教生涯。${newCoachName}将接过教鞭。`,
     });
 
-    world.coachChangesThisSeason.push({
+    coachChangesThisSeason.push({
       teamId, oldCoachId: coachId, newCoachId: firingResult.newCoachId,
       reason: '功成身退',
     });
   }
 
   // ── Coach contract expiry ──────────────────────────────────
-  for (const teamId of getAllTeamIds(world.teamStates)) {
-    const coachId = world.teamStates[teamId]?.currentCoachId;
+  // Reads `currentCoachId` and `contractEnd` from LOCAL teamStates/coachStates
+  // so changes from the voluntary-departure loop above are picked up here.
+  for (const teamId of getAllTeamIds(teamStates)) {
+    const coachId = teamStates[teamId]?.currentCoachId;
     if (!coachId) continue;
-    const coachState = world.coachStates[coachId];
+    const coachState = coachStates[coachId];
     if (!coachState?.contractEnd || coachState.contractEnd > seasonNumber) continue;
 
     // Contract expired — decide renewal
-    const standings = allStandings[world.teamStates[teamId].leagueLevel] ?? [];
+    const standings = allStandings[teamStates[teamId].leagueLevel] ?? [];
     const pos = standings.findIndex(s => s.teamId === teamId) + 1;
     const total = standings.length;
     const ratio = total > 0 ? pos / total : 1;
@@ -544,7 +581,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
 
     if (rng.next() < renewChance) {
       const extension = wonTrophy ? rng.nextInt(2, 3) : rng.nextInt(1, 2);
-      world.coachStates[coachId] = { ...world.coachStates[coachId], contractEnd: seasonNumber + extension };
+      coachStates[coachId] = { ...coachStates[coachId], contractEnd: seasonNumber + extension };
       const coachName = world.coachBases[coachId]?.name ?? coachId;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `renew-${coachId}`),
@@ -553,25 +590,25 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         description: `${coachName}续签了一份${extension}年的新合同。`,
       });
     } else {
-      const allCoachData = Object.entries(world.coachStates).map(([id, cs]) => ({
+      const allCoachData = Object.entries(coachStates).map(([id, cs]) => ({
         base: world.coachBases[id], state: cs,
       })).filter(c => c.base != null);
       const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
 
-      world.coachStates[coachId] = { ...world.coachStates[coachId], ...firingResult.firedCoachUpdate };
-      if (world.coachStates[firingResult.newCoachId]) {
-        world.coachStates[firingResult.newCoachId] = { ...world.coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
+      coachStates[coachId] = { ...coachStates[coachId], ...firingResult.firedCoachUpdate };
+      if (coachStates[firingResult.newCoachId]) {
+        coachStates[firingResult.newCoachId] = { ...coachStates[firingResult.newCoachId], ...firingResult.newCoachUpdate };
       } else {
-        world.coachStates[firingResult.newCoachId] = { id: firingResult.newCoachId, currentTeamId: teamId, isUnemployed: false, unemployedSince: null, contractEnd: seasonNumber + rng.nextInt(2, 4) };
+        coachStates[firingResult.newCoachId] = { id: firingResult.newCoachId, currentTeamId: teamId, isUnemployed: false, unemployedSince: null, contractEnd: seasonNumber + rng.nextInt(2, 4) };
       }
-      world.teamStates[teamId] = { ...world.teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
+      teamStates[teamId] = { ...teamStates[teamId], currentCoachId: firingResult.newCoachId, coachPressure: 5 };
 
-      const careerList = [...(world.coachCareers[coachId] ?? [])];
+      const careerList = [...(coachCareers[coachId] ?? [])];
       if (careerList.length > 0) {
         careerList[careerList.length - 1] = { ...careerList[careerList.length - 1], toSeason: seasonNumber, fired: false };
       }
-      world.coachCareers[coachId] = careerList;
-      world.coachCareers[firingResult.newCoachId] = [...(world.coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
+      coachCareers[coachId] = careerList;
+      coachCareers[firingResult.newCoachId] = [...(coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
 
       const coachName = world.coachBases[coachId]?.name ?? coachId;
       const newName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
@@ -581,13 +618,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         title: `${coachName} 合同到期离开${world.teamBases[teamId]?.name}`,
         description: `${coachName}合同到期后未能续约，${newName}接任。`,
       });
-      world.coachChangesThisSeason.push({ teamId, oldCoachId: coachId, newCoachId: firingResult.newCoachId, reason: '合同到期' });
+      coachChangesThisSeason.push({ teamId, oldCoachId: coachId, newCoachId: firingResult.newCoachId, reason: '合同到期' });
     }
   }
 
   // ── Check achievements ──────────────────────────────────────
   let achievements = [...(world.achievements ?? [])];
-  for (const teamId of getAllTeamIds(world.teamStates)) {
+  for (const teamId of getAllTeamIds(teamStates)) {
     const records = teamSeasonRecords[teamId] ?? [];
     const currentRecord = records[records.length - 1];
     if (!currentRecord) continue;
@@ -605,8 +642,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
   }
 
-  // Apply season-end reset to team states
-  let teamStates = { ...world.teamStates };
+  // Apply season-end reset to team states. teamStates is already a local
+  // (initialized at the top of the function) so we keep writing into it
+  // rather than spinning a fresh copy here.
   for (const teamId of getAllTeamIds(teamStates)) {
     const state = teamStates[teamId];
     const standings = allStandings[state.leagueLevel] ?? [];
@@ -773,17 +811,27 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     prediction = { ...prediction, settled: true, correctCount: correct };
   }
 
+  // Final patch — apply ALL accumulated locals over `world` in one spread.
+  // No `world.X = ...` mutation has happened above; every change went through
+  // a local of the same name.
   const updatedWorld: GameWorld = {
     ...world,
     seasonState,
     teamBases,
     teamStates,
+    coachStates,
+    coachCareers,
+    coachChangesThisSeason,
     teamTrophies,
     coachTrophies,
     teamSeasonRecords,
     honorHistory,
     achievements,
     prediction,
+    squads,
+    playerStats,
+    playerAwardsHistory,
+    transferHistory,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

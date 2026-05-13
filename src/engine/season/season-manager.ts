@@ -38,6 +38,23 @@ export interface NewsItem {
   description: string;
 }
 
+/**
+ * GameWorld is treated as IMMUTABLE throughout engine functions.
+ * Engine functions take a world, return a new world. They never mutate
+ * the input. This is required for React/zustand reactivity and for
+ * predictable testing. If you need to update a field, build a patch
+ * and return `{ ...world, ...patch }`.
+ *
+ * For nested records (e.g. `coachCareers[coachId] = entries`), build a
+ * fresh record once at the top of the function — `const coachCareers =
+ * { ...world.coachCareers }` — then write to that local. Never write
+ * to `world.coachCareers[id]` directly: that mutates the input.
+ *
+ * Some siblings (`post-match.ts`, `window-handlers.ts`) accept fresh
+ * copies of world fields as PARAMETERS and mutate those locally — that
+ * is acceptable because the caller is expected to pass copies (and to
+ * propagate the returned references back into the new world).
+ */
 export interface GameWorld {
   seasonState: SeasonState;
   teamBases: Record<string, TeamBase>;
