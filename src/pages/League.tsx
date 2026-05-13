@@ -338,24 +338,48 @@ export default function League() {
                             const played = entry.played;
                             const remaining = totalRounds - played;
                             if (remaining <= 0 || played < 3) return null;
-                            const maxPts = entry.points + remaining * 3;
-                            const leaderPts = standings[0]?.points ?? 0;
-                            const relegZone = config?.directRelegation ?? 2;
-                            const relegIdx = standings.length - relegZone;
-                            const safeTeamPts = standings[relegIdx - 1]?.points ?? 0;
                             const myIdx = standings.indexOf(entry);
+                            const leaderPts = standings[0]?.points ?? 0;
+                            const leaderMaxPts = leaderPts;
+                            const myMaxPts = entry.points + remaining * 3;
+                            const relegZone = config?.directRelegation ?? 2;
+                            const playoffZone = config?.playoffRelegation ?? 1;
+                            const relegIdx = standings.length - relegZone - playoffZone;
 
-                            if (myIdx <= 2) {
-                              const gap = entry.points - (standings[1]?.points ?? 0);
+                            // Champion probability
+                            if (myIdx === 0) {
                               const secondMax = (standings[1]?.points ?? 0) + remaining * 3;
                               if (entry.points > secondMax) return <span className="text-[9px] text-amber-400 font-bold">冠 ✓</span>;
-                              const pct = Math.min(95, Math.max(5, 50 + gap * 3));
-                              if (myIdx === 0 && pct > 30) return <span className="text-[9px] text-emerald-400">{pct}%冠</span>;
+                              const gap = entry.points - (standings[1]?.points ?? 0);
+                              const pct = Math.min(95, Math.max(10, 50 + gap * 3));
+                              return <span className="text-[9px] text-emerald-400">{pct}%冠</span>;
                             }
+                            // Title contender (can still mathematically catch leader)
+                            if (myMaxPts >= leaderPts && myIdx <= 3) {
+                              const gap = leaderPts - entry.points;
+                              const pct = Math.max(5, Math.min(45, 40 - gap * 3));
+                              return <span className="text-[9px] text-blue-400">{pct}%冠</span>;
+                            }
+                            // Relegation danger
                             if (myIdx >= relegIdx) {
-                              const gap = (standings[relegIdx - 1]?.points ?? 0) - entry.points;
-                              const pct = Math.min(90, Math.max(10, 50 + gap * 4));
+                              const safePos = relegIdx - 1;
+                              const safePts = standings[safePos]?.points ?? 0;
+                              const gap = safePts - entry.points;
+                              const pct = Math.min(90, Math.max(10, 40 + gap * 5));
                               return <span className="text-[9px] text-red-400">{pct}%降</span>;
+                            }
+                            // Safe but could still drop
+                            if (myIdx >= relegIdx - 2) {
+                              const bottomPts = standings[relegIdx]?.points ?? 0;
+                              const gap = entry.points - bottomPts;
+                              if (gap <= remaining * 2) {
+                                return <span className="text-[9px] text-amber-400/60">有风险</span>;
+                              }
+                            }
+                            // Mathematically safe
+                            const bottomMaxPts = (standings[standings.length - 1]?.points ?? 0) + remaining * 3;
+                            if (entry.points > bottomMaxPts && myIdx < relegIdx - 2) {
+                              return <span className="text-[9px] text-slate-600">安全</span>;
                             }
                             return null;
                           })()}

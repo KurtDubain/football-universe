@@ -176,23 +176,43 @@ export default function TeamDetail() {
 
       {/* Trophies */}
       <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-        <h3 className="text-sm font-semibold text-slate-200 mb-2">
-          奖杯 ({trophies.length})
+        <h3 className="text-sm font-semibold text-slate-200 mb-3">
+          奖杯柜 ({trophies.length})
         </h3>
         {trophies.length === 0 ? (
           <p className="text-sm text-slate-500">暂无奖杯</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {trophies.map((t, i) => (
-              <span
-                key={i}
-                className="text-xs bg-amber-900/50 text-amber-300 px-2 py-1 rounded"
-              >
-                {getTrophyLabel(t.type)} (S{t.seasonNumber})
-              </span>
-            ))}
-          </div>
-        )}
+        ) : (() => {
+          const grouped: Record<string, number[]> = {};
+          for (const t of trophies) {
+            if (!grouped[t.type]) grouped[t.type] = [];
+            grouped[t.type].push(t.seasonNumber);
+          }
+          const typeOrder = ['league1', 'league2', 'league3', 'league_cup', 'super_cup', 'world_cup'];
+          const typeLabels: Record<string, string> = { league1: '顶级联赛', league2: '甲级联赛', league3: '乙级联赛', league_cup: '联赛杯', super_cup: '超级杯', world_cup: '环球冠军杯' };
+          const typeColors: Record<string, string> = { league1: 'text-amber-400', league2: 'text-blue-400', league3: 'text-emerald-400', league_cup: 'text-amber-300', super_cup: 'text-purple-400', world_cup: 'text-sky-400' };
+          const sortedTypes = Object.keys(grouped).sort((a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b));
+
+          return (
+            <div className="space-y-2">
+              {sortedTypes.map(type => {
+                const seasons = grouped[type].sort((a, b) => a - b);
+                return (
+                  <div key={type} className="flex items-center gap-3 bg-slate-700/20 rounded-lg px-3 py-2">
+                    <div className="w-20 shrink-0">
+                      <div className={`text-xs font-semibold ${typeColors[type] ?? 'text-slate-300'}`}>{typeLabels[type] ?? type}</div>
+                      <div className="text-lg font-black text-slate-100">{seasons.length}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 flex-1">
+                      {seasons.map(s => (
+                        <span key={s} className="text-[10px] bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">S{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Season records */}
