@@ -21,6 +21,7 @@ import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
 import { leagueConfigs, superCupConfig } from '../../config/competitions';
 import { BALANCE } from '../../config/balance';
+import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
@@ -69,6 +70,7 @@ export interface GameWorld {
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
   matchHistory: MatchHistoryEntry[];
   seasonBuffsHistory: { season: number; buffs: SeasonBuff[] }[];
+  gameMode?: import('../../types/game-mode').GameMode;
 }
 
 export interface MatchHistoryEntry {
@@ -94,15 +96,20 @@ export interface SeasonBuff {
 /**
  * Initialize a fresh game world from a seed.
  */
-export function initializeGameWorld(seed: number): GameWorld {
-  // 1. Team bases
+export function initializeGameWorld(seed: number, options?: { gameMode?: GameMode; customTeams?: TeamBase[] }): GameWorld {
+  // 1. Team bases — apply custom teams or game mode overrides
+  const baseTeams = options?.customTeams && options.customTeams.length === 32
+    ? options.customTeams
+    : defaultTeams;
+  const modeConfig = options?.gameMode ? getGameModeConfig(options.gameMode) : null;
+  const finalTeams = modeConfig?.applyTeamOverrides ? modeConfig.applyTeamOverrides(baseTeams) : baseTeams;
   const teamBases: Record<string, TeamBase> = {};
-  for (const team of defaultTeams) {
+  for (const team of finalTeams) {
     teamBases[team.id] = team;
   }
 
   // 2. Team states
-  const teamStates = createInitialTeamStates(defaultTeams);
+  const teamStates = createInitialTeamStates(finalTeams);
 
   // 3. Coach bases
   const coachBases: Record<string, CoachBase> = {};
@@ -182,6 +189,7 @@ export function initializeGameWorld(seed: number): GameWorld {
     bets: [],
     matchHistory: [],
     seasonBuffsHistory: [],
+    gameMode: options?.gameMode ?? 'free',
   };
 
   // Initialize empty trophies / records for every team

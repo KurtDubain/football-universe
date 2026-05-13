@@ -18,7 +18,7 @@ interface GameStore {
 
   dismissAchievement: () => void;
 
-  newGame: (seed?: number) => void;
+  newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => void;
   advanceWindow: () => void;
   batchAdvance: (count: number) => void;
   advanceUntil: (type: 'cup' | 'season_end') => void;
@@ -49,9 +49,9 @@ export const useGameStore = create<GameStore>()(
         set(s => ({ newAchievements: s.newAchievements.slice(1) }));
       },
 
-      newGame: (seed?: number) => {
+      newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => {
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
-        const world = initializeGameWorld(actualSeed);
+        const world = initializeGameWorld(actualSeed, options);
         set({ world, initialized: true, lastResults: [], lastNews: [] });
       },
 
