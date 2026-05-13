@@ -657,11 +657,11 @@ function TeamTrendChart({ records, color }: { records: { seasonNumber: number; l
 }
 
 function FireCoachButton({ teamId, coachId, teamName }: { teamId: string; coachId: string; teamName: string }) {
-  const favoriteTeamId = useGameStore(s => s.favoriteTeamId);
+  const favoriteTeamIds = useGameStore(s => s.favoriteTeamIds);
   const fireCoach = useGameStore(s => s.fireCoach);
   const [confirming, setConfirming] = useState(false);
 
-  if (favoriteTeamId !== teamId) return null;
+  if (!favoriteTeamIds.includes(teamId)) return null;
 
   if (confirming) {
     return (

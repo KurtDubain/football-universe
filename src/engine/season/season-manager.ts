@@ -72,6 +72,7 @@ export interface GameWorld {
   seasonBuffsHistory: { season: number; buffs: SeasonBuff[] }[];
   playerAwardsHistory: import('../../types/award').PlayerAward[];
   transferHistory: import('../../types/transfer').TransferRecord[];
+  memorableMatches: import('../../types/memorable').MemorableMatchEntry[];
   gameMode?: import('../../types/game-mode').GameMode;
 }
 
@@ -92,6 +93,17 @@ export interface SeasonBuff {
   label: string;
   description: string;
   effects: { field: string; delta: number }[];
+}
+
+const MEMORABLE_CAP = 30;
+function appendMemorableMatches(
+  prev: import('../../types/memorable').MemorableMatchEntry[] | undefined,
+  newOnes: import('../../types/memorable').MemorableMatchEntry[],
+): import('../../types/memorable').MemorableMatchEntry[] {
+  if (!newOnes || newOnes.length === 0) return prev ?? [];
+  const combined = [...(prev ?? []), ...newOnes];
+  // Keep most recent CAP entries (drop oldest)
+  return combined.length > MEMORABLE_CAP ? combined.slice(-MEMORABLE_CAP) : combined;
 }
 // ── Main public functions ────────────────────────────────────────
 
@@ -193,6 +205,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     seasonBuffsHistory: [],
     playerAwardsHistory: [],
     transferHistory: [],
+    memorableMatches: [],
     gameMode: options?.gameMode ?? 'free',
   };
 
@@ -630,6 +643,7 @@ export function executeCurrentWindow(world: GameWorld): {
     playerStats: updatedPlayerStats,
     activeEvents: postMatch.activeEvents,
     newsLog: [...world.newsLog, ...windowResult.news, ...postMatch.news],
+    memorableMatches: appendMemorableMatches(world.memorableMatches, postMatch.memorableMatches),
     rngState: rng.getState(),
   };
 

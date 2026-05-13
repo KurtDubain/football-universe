@@ -14,7 +14,12 @@ interface GameStore {
   lastResults: MatchResult[];
   lastNews: NewsItem[];
   isAdvancing: boolean;
+  /** Single-team selection — kept for backward compatibility. Prefer `favoriteTeamIds`. */
   favoriteTeamId: string | null;
+  /** Multi-favorite list (up to 3 teams). */
+  favoriteTeamIds: string[];
+  /** Transient set of fixtures the user starred for auto-live (cleared on advance). */
+  starredFixtureIds: string[];
   newAchievements: Achievement[];
 
   dismissAchievement: () => void;
@@ -23,10 +28,17 @@ interface GameStore {
   advanceWindow: () => void;
   batchAdvance: (count: number) => void;
   advanceUntil: (type: 'cup' | 'season_end') => void;
+  /** Sets the legacy primary favorite. */
   setFavoriteTeam: (teamId: string | null) => void;
+  /** Sets the entire favorites list (max 3 entries). */
+  setFavoriteTeams: (ids: string[]) => void;
+  /** Toggle a team's membership in the favorites list. */
+  toggleFavoriteTeam: (teamId: string) => void;
   setPrediction: (champion: string, relegated: string) => void;
   useGodHand: (teamId: string, type: 'boost' | 'nerf') => void;
   fireCoach: (teamId: string) => void;
+  toggleStarFixture: (fixtureId: string) => void;
+  clearStarredFixtures: () => void;
   placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => void;
   resetGame: () => void;
   getCurrentWindow: () => CalendarWindow | null;
@@ -44,6 +56,8 @@ export const useGameStore = create<GameStore>()(
       lastNews: [],
       isAdvancing: false,
       favoriteTeamId: null,
+      favoriteTeamIds: [],
+      starredFixtureIds: [],
       newAchievements: [],
 
       dismissAchievement: () => {
@@ -144,7 +158,35 @@ export const useGameStore = create<GameStore>()(
       },
 
       setFavoriteTeam: (teamId: string | null) => {
-        set({ favoriteTeamId: teamId });
+        // Keep legacy single field in sync; also reflect in array.
+        if (teamId === null) {
+          set({ favoriteTeamId: null, favoriteTeamIds: [] });
+        } else {
+          const cur = get().favoriteTeamIds;
+          const next = cur.includes(teamId) ? cur : [teamId, ...cur].slice(0, 3);
+          set({ favoriteTeamId: teamId, favoriteTeamIds: next });
+        }
+      },
+
+      setFavoriteTeams: (ids: string[]) => {
+        const trimmed = ids.slice(0, 3);
+        set({ favoriteTeamIds: trimmed, favoriteTeamId: trimmed[0] ?? null });
+      },
+
+      toggleFavoriteTeam: (teamId: string) => {
+        const cur = get().favoriteTeamIds;
+        let next: string[];
+        if (cur.includes(teamId)) {
+          next = cur.filter((id) => id !== teamId);
+        } else {
+          if (cur.length >= 3) {
+            // Drop the oldest (last) to make room
+            next = [teamId, ...cur.slice(0, 2)];
+          } else {
+            next = [teamId, ...cur];
+          }
+        }
+        set({ favoriteTeamIds: next, favoriteTeamId: next[0] ?? null });
       },
 
       setPrediction: (champion: string, relegated: string) => {
@@ -184,8 +226,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       fireCoach: (teamId: string) => {
-        const { world, favoriteTeamId } = get();
-        if (!world || teamId !== favoriteTeamId) return;
+        const { world, favoriteTeamIds } = get();
+        // Allow firing coach for any favorited team
+        if (!world || !favoriteTeamIds.includes(teamId)) return;
         const state = world.teamStates[teamId];
         const coachId = state?.currentCoachId;
         if (!coachId) return;
@@ -244,8 +287,21 @@ export const useGameStore = create<GameStore>()(
         set({ world: { ...world, coins: (world.coins ?? 1000) - amount, bets } });
       },
 
+      toggleStarFixture: (fixtureId: string) => {
+        const cur = get().starredFixtureIds;
+        if (cur.includes(fixtureId)) {
+          set({ starredFixtureIds: cur.filter((id) => id !== fixtureId) });
+        } else {
+          set({ starredFixtureIds: [...cur, fixtureId] });
+        }
+      },
+
+      clearStarredFixtures: () => {
+        set({ starredFixtureIds: [] });
+      },
+
       resetGame: () => {
-        set({ world: null, initialized: false, lastResults: [], lastNews: [], favoriteTeamId: null });
+        set({ world: null, initialized: false, lastResults: [], lastNews: [], favoriteTeamId: null, favoriteTeamIds: [] });
       },
 
       getCurrentWindow: () => {
@@ -285,9 +341,9 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 3,
+      version: 5,
       migrate: (persistedState: unknown, version: number): GameStore => {
-        const state = persistedState as Partial<GameStore> & { world?: GameWorld | null };
+        const state = persistedState as Partial<GameStore> & { world?: GameWorld | null; favoriteTeamId?: string | null; favoriteTeamIds?: string[] };
         // v1 → v2: backfill player.name for existing saves
         if (version < 2 && state?.world?.squads && state.world.teamBases) {
           const teamBases = state.world.teamBases;
@@ -310,6 +366,16 @@ export const useGameStore = create<GameStore>()(
           if (!Array.isArray(state.world.playerAwardsHistory)) state.world.playerAwardsHistory = [];
           if (!Array.isArray(state.world.transferHistory)) state.world.transferHistory = [];
         }
+        // v3 → v4: migrate favoriteTeamId → favoriteTeamIds
+        if (version < 4) {
+          if (!Array.isArray(state.favoriteTeamIds)) {
+            state.favoriteTeamIds = state.favoriteTeamId ? [state.favoriteTeamId] : [];
+          }
+        }
+        // v4 → v5: ensure memorableMatches exists
+        if (version < 5 && state?.world) {
+          if (!Array.isArray(state.world.memorableMatches)) state.world.memorableMatches = [];
+        }
         return state as GameStore;
       },
       partialize: (state) => ({
@@ -318,6 +384,7 @@ export const useGameStore = create<GameStore>()(
         lastResults: state.lastResults,
         lastNews: state.lastNews,
         favoriteTeamId: state.favoriteTeamId,
+        favoriteTeamIds: state.favoriteTeamIds,
       }),
     }
   )

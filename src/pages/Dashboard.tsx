@@ -10,6 +10,8 @@ import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebr
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
+import { pickFocusMatches } from '../engine/season/match-importance';
+import { generateStorylineCards } from '../engine/season/storyline-cards';
 import {
   getTeamName,
   getWindowTypeLabel,
@@ -35,7 +37,7 @@ export default function Dashboard() {
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
-  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
 
   const [activeTab, setActiveTab] = useState<TabKey>('matchday');
   const prevResultsLen = useRef(0);
@@ -45,15 +47,25 @@ export default function Dashboard() {
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
   const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
   const [liveResult, setLiveResult] = useState<MatchResult | null>(null);
+  const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
+  const clearStarredFixtures = useGameStore((s) => s.clearStarredFixtures);
 
   // Auto-switch to results tab + trigger live/celebration after advancing
   useEffect(() => {
     if (lastResults.length > 0 && prevResultsLen.current === 0) {
-      // Check if there's a final result — trigger live view
+      // Priority 1: starred fixture in this batch → auto-live the first one
+      const starredHit = starredFixtureIds.length > 0
+        ? lastResults.find((r) => starredFixtureIds.includes(r.fixtureId))
+        : undefined;
+      // Priority 2: cup final
       const finalResult = lastResults.find(r =>
         r.roundLabel === 'Final' || r.roundLabel === '决赛'
       );
-      if (finalResult) {
+      if (starredHit) {
+        setLiveResult(starredHit);
+        // Clear starred (one-shot per advance)
+        clearStarredFixtures();
+      } else if (finalResult) {
         setLiveResult(finalResult);
       } else {
         setActiveTab('results');
@@ -63,7 +75,7 @@ export default function Dashboard() {
       const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
       if (prevWindow) {
         const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
-        if (celeb && !finalResult) setCelebrationType(celeb);
+        if (celeb && !finalResult && !starredHit) setCelebrationType(celeb);
       }
     }
     prevResultsLen.current = lastResults.length;
@@ -163,38 +175,64 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ═══════ Favorite Team Card ═══════ */}
-      {favoriteTeamId && world.teamBases[favoriteTeamId] && (() => {
-        const fav = world.teamBases[favoriteTeamId];
-        const favState = world.teamStates[favoriteTeamId];
-        if (!favState) return null;
-        const standings = favState.leagueLevel === 1 ? world.league1Standings : favState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
-        const posEntry = standings.find(s => s.teamId === favoriteTeamId);
-        const pos = posEntry ? standings.indexOf(posEntry) + 1 : '-';
-        const pts = posEntry?.points ?? 0;
-        const coachName = favState.currentCoachId ? getCoachName(favState.currentCoachId, world.coachBases) : '无';
-        const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === favoriteTeamId || f.awayTeamId === favoriteTeamId);
-        const opponentId = nextFixture ? (nextFixture.homeTeamId === favoriteTeamId ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
+      {/* ═══════ Favorite Team Cards (up to 3) ═══════ */}
+      {favoriteTeamIds.length > 0 && (
+        <div className="space-y-1.5 mt-1">
+          {favoriteTeamIds.map((tid) => {
+            const fav = world.teamBases[tid];
+            const favState = world.teamStates[tid];
+            if (!fav || !favState) return null;
+            const standings = favState.leagueLevel === 1 ? world.league1Standings : favState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
+            const posEntry = standings.find(s => s.teamId === tid);
+            const pos = posEntry ? standings.indexOf(posEntry) + 1 : '-';
+            const pts = posEntry?.points ?? 0;
+            const coachName = favState.currentCoachId ? getCoachName(favState.currentCoachId, world.coachBases) : '无';
+            const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === tid || f.awayTeamId === tid);
+            const opponentId = nextFixture ? (nextFixture.homeTeamId === tid ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
 
-        return (
-          <div className="flex items-center gap-3 bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2 mt-1">
-            <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
-            <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto text-xs">
-              <Link to={`/team/${favoriteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400 shrink-0">{fav.name}</Link>
-              <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
-              <span className="text-slate-600 shrink-0">{coachName}</span>
-              <div className="flex gap-0.5 shrink-0">
-                {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
-                  <span key={i} className={`w-4 h-4 rounded text-[11px] sm:text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
-                ))}
+            return (
+              <div key={tid} className="flex items-center gap-3 bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
+                <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
+                <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto text-xs">
+                  <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 shrink-0">{fav.name}</Link>
+                  <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
+                  <span className="text-slate-600 shrink-0">{coachName}</span>
+                  <div className="flex gap-0.5 shrink-0">
+                    {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
+                      <span key={i} className={`w-4 h-4 rounded text-[11px] sm:text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
+                    ))}
+                  </div>
+                  {opponentId && (
+                    <span className="text-slate-500 shrink-0">
+                      下场: vs <span className="text-slate-300">{getTeamName(opponentId, world.teamBases)}</span>
+                      {nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}
+                    </span>
+                  )}
+                </div>
               </div>
-              {opponentId && (
-                <span className="text-slate-500 shrink-0">
-                  下场: vs <span className="text-slate-300">{getTeamName(opponentId, world.teamBases)}</span>
-                  {nextFixture?.homeTeamId === favoriteTeamId ? ' (主)' : ' (客)'}
-                </span>
-              )}
-            </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ═══════ Storyline cards for favorites ═══════ */}
+      {favoriteTeamIds.length > 0 && (() => {
+        const cards = generateStorylineCards(world, favoriteTeamIds);
+        if (cards.length === 0) return null;
+        return (
+          <div className="space-y-1.5 mt-1">
+            {cards.map((c, i) => (
+              <div
+                key={`${c.teamId}-${c.type}-${i}`}
+                className="bg-gradient-to-r from-purple-900/15 via-slate-800/80 to-slate-800/40 rounded-lg border border-purple-700/30 px-3 py-2"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-base">{c.emoji}</span>
+                  <span className="text-xs font-semibold text-purple-300">{c.title}</span>
+                </div>
+                <p className="text-[11px] text-slate-400 ml-7">{c.body}</p>
+              </div>
+            ))}
           </div>
         );
       })()}
@@ -294,6 +332,10 @@ function MatchdayTab({
   currentWindow: ReturnType<ReturnType<typeof useGameStore.getState>['getCurrentWindow']>;
   onFixtureClick: (f: MatchFixture) => void;
 }) {
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
+  const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
+
   if (!currentWindow) {
     return (
       <div className="text-center py-12">
@@ -310,6 +352,10 @@ function MatchdayTab({
       </div>
     );
   }
+
+  // Compute focus matches (top 1-2)
+  const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2);
+  const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
 
   // Group fixtures by competition
   const groups: { label: string; color: string; fixtures: MatchFixture[] }[] = [];
@@ -340,6 +386,53 @@ function MatchdayTab({
 
   return (
     <div className="space-y-5">
+      {/* Focus matches banner */}
+      {focusMatches.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-700/30 p-3">
+          <h3 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
+            <span>🔥</span><span>本轮焦点战</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {focusMatches.map(({ fixture, importance }) => {
+              const ht = world.teamBases[fixture.homeTeamId];
+              const at = world.teamBases[fixture.awayTeamId];
+              if (!ht || !at) return null;
+              const isStarred = starredFixtureIds.includes(fixture.id);
+              return (
+                <div
+                  key={fixture.id}
+                  className="bg-slate-900/40 rounded-lg border border-amber-800/30 p-2 hover:border-amber-600/60 transition-colors cursor-pointer"
+                  onClick={() => onFixtureClick(fixture)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1 flex-1 min-w-0 text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ht.color }} />
+                      <span className="font-semibold text-slate-100 truncate">{ht.shortName}</span>
+                      <span className="text-slate-500 mx-0.5">vs</span>
+                      <span className="font-semibold text-slate-100 truncate">{at.shortName}</span>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: at.color }} />
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+                      className={`text-base shrink-0 ml-1 transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
+                      title={isStarred ? '已加星 (推进时自动直播)' : '加星 — 推进时自动直播'}
+                    >
+                      {isStarred ? '★' : '☆'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {importance.reasons.slice(0, 3).map((r, i) => (
+                      <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/30 text-amber-300">{r}</span>
+                    ))}
+                    <span className="text-[9px] text-slate-600 ml-auto">{fixture.competitionName} · {fixture.roundLabel}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Context tips banner */}
       {windowTips.length > 0 && (
         <div className="space-y-1.5">
@@ -768,6 +861,10 @@ function FixtureCard({
   world: GameWorld;
   onClick: () => void;
 }) {
+  const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
+  const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
+  const isStarred = starredFixtureIds.includes(fixture.id);
+
   const homeTeam = world.teamBases[fixture.homeTeamId];
   const awayTeam = world.teamBases[fixture.awayTeamId];
   const homeState = world.teamStates[fixture.homeTeamId];
@@ -793,14 +890,23 @@ function FixtureCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-slate-800 rounded-lg border p-2 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group hover-lift ${
+      className={`bg-slate-800 rounded-lg border p-2 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group hover-lift relative ${
         hasGlow ? 'border-amber-600/50 animate-glow-pulse' : 'border-slate-700'
       }`}
       style={hasGlow ? { color: '#f59e0b' } : undefined}
     >
+      {/* Star button — top-right corner */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+        className={`absolute top-1 right-1 text-xs transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-700 hover:text-amber-400 opacity-0 group-hover:opacity-100'}`}
+        title={isStarred ? '已加星' : '加星 — 推进时自动直播'}
+      >
+        {isStarred ? '★' : '☆'}
+      </button>
+
       {/* Tags */}
       {tags.length > 0 && (
-        <div className="flex gap-1 mb-1">
+        <div className="flex gap-1 mb-1 pr-5">
           {tags.map((t, i) => (
             <span key={i} className={`text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
           ))}

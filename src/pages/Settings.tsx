@@ -10,8 +10,9 @@ import { BALANCE } from '../config/balance';
 export default function Settings() {
   const { i18n } = useTranslation();
   const world = useGameStore((s) => s.world);
-  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
-  const setFavoriteTeam = useGameStore((s) => s.setFavoriteTeam);
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const setFavoriteTeams = useGameStore((s) => s.setFavoriteTeams);
+  const toggleFavoriteTeam = useGameStore((s) => s.toggleFavoriteTeam);
   const resetGame = useGameStore((s) => s.resetGame);
   const [showConfirm, setShowConfirm] = useState(false);
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
@@ -105,25 +106,78 @@ export default function Settings() {
         <p className="text-[10px] text-slate-500 mt-2">部分内容（球队名称、新闻文案）暂时仅支持中文</p>
       </div>
 
-      {/* Favorite team */}
+      {/* Favorite teams (up to 3) */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">关注球队</h3>
-        <div className="flex items-center gap-3">
-          {favoriteTeamId && world.teamBases[favoriteTeamId] && (
-            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: (world.teamBases[favoriteTeamId] as any)?.color ?? '#666' }} />
-          )}
-          <select
-            value={favoriteTeamId ?? ''}
-            onChange={(e) => setFavoriteTeam(e.target.value || null)}
-            className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
-          >
-            <option value="">不关注</option>
-            {defaultTeams.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">关注球队</h3>
+          <span className="text-[10px] text-slate-500">已选 {favoriteTeamIds.length}/3</span>
         </div>
-        <p className="text-[10px] text-slate-500 mt-2">关注球队的比赛会有特殊高亮标识</p>
+
+        {/* Selected slots */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {[0, 1, 2].map((slot) => {
+            const tid = favoriteTeamIds[slot];
+            const team = tid ? world.teamBases[tid] : null;
+            return (
+              <div
+                key={slot}
+                className={`rounded-lg border-2 border-dashed p-2 text-center ${
+                  team ? 'border-blue-500/40 bg-blue-900/10' : 'border-slate-700 bg-slate-900/30'
+                }`}
+              >
+                {team ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: (team as { color?: string }).color ?? '#666' }} />
+                    <div className="text-xs text-slate-100 font-medium truncate max-w-full">{team.name}</div>
+                    <button
+                      onClick={() => toggleFavoriteTeam(tid)}
+                      className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer"
+                    >
+                      取消
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-600 py-3">空槽位</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Picker dropdown */}
+        <select
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            if (favoriteTeamIds.includes(v)) {
+              toggleFavoriteTeam(v);
+            } else {
+              toggleFavoriteTeam(v);
+            }
+            // Reset select
+            e.target.value = '';
+          }}
+          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+        >
+          <option value="">+ 添加 / 切换关注球队</option>
+          {defaultTeams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {favoriteTeamIds.includes(t.id) ? '✓ ' : ''}
+              {t.name}
+            </option>
+          ))}
+        </select>
+
+        {favoriteTeamIds.length > 0 && (
+          <button
+            onClick={() => setFavoriteTeams([])}
+            className="text-[10px] text-slate-500 hover:text-red-400 mt-2 cursor-pointer"
+          >
+            清空全部关注
+          </button>
+        )}
+        <p className="text-[10px] text-slate-500 mt-2">关注球队的比赛会有特殊高亮，仪表盘显示卡片，可手动解雇教练</p>
       </div>
 
       {/* Game info */}

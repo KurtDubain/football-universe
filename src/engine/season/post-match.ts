@@ -24,6 +24,7 @@ export interface PostMatchResult {
   coachChanges: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];
   activeEvents: SeasonEvent[];
   news: NewsItem[];
+  memorableMatches: import('../../types/memorable').MemorableMatchEntry[];
 }
 
 // ── Orchestration function ──────────────────────────────────────
@@ -374,6 +375,68 @@ export function runPostMatchProcessing(
     });
   }
 
+  // ── Memorable match detection ─────────────────────────────────
+  const memorableMatches: import('../../types/memorable').MemorableMatchEntry[] = [];
+  for (const result of results) {
+    const totalH = result.homeGoals + (result.etHomeGoals ?? 0);
+    const totalA = result.awayGoals + (result.etAwayGoals ?? 0);
+    const totalGoals = totalH + totalA;
+    const diff = Math.abs(totalH - totalA);
+    const isFinal = result.roundLabel === 'Final' || result.roundLabel.includes('决赛');
+
+    let memType: import('../../types/memorable').MemorableType | null = null;
+    let label = '';
+
+    if (result.penalties && isFinal) {
+      memType = 'shootout';
+      label = '决赛点球大战';
+    } else if (diff >= 4) {
+      memType = 'blowout';
+      label = `${totalH}:${totalA} 大屠杀`;
+    } else if (totalGoals >= 6) {
+      memType = 'goalfest';
+      label = `进球大战 ${totalH}:${totalA}`;
+    } else {
+      // Last-minute decider
+      const lateGoals = result.events.filter((e) =>
+        (e.type === 'goal' || e.type === 'penalty_goal') && e.minute >= 88,
+      );
+      if (lateGoals.length > 0 && diff === 1 && !isFinal) {
+        memType = 'last_minute';
+        label = `${lateGoals[lateGoals.length - 1].minute}'绝杀`;
+      }
+      // Upset (only check league + cup KO matches)
+      if (!memType) {
+        const homeBase = world.teamBases[result.homeTeamId];
+        const awayBase = world.teamBases[result.awayTeamId];
+        if (homeBase && awayBase) {
+          const ovrDiff = Math.abs(homeBase.overall - awayBase.overall);
+          if (ovrDiff >= 15) {
+            const homeWon = totalH > totalA;
+            const awayWon = totalA > totalH;
+            const weakerTeamWon =
+              (homeWon && homeBase.overall < awayBase.overall) ||
+              (awayWon && awayBase.overall < homeBase.overall);
+            if (weakerTeamWon) {
+              memType = 'upset';
+              label = '世纪冷门';
+            }
+          }
+        }
+      }
+    }
+
+    if (memType) {
+      memorableMatches.push({
+        season: seasonNumber,
+        windowIndex,
+        type: memType,
+        label,
+        result,
+      });
+    }
+  }
+
   return {
     teamStates,
     teamBases: teamBasesUpdated,
@@ -382,5 +445,6 @@ export function runPostMatchProcessing(
     coachChanges,
     activeEvents,
     news,
+    memorableMatches,
   };
 }

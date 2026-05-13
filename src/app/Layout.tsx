@@ -55,7 +55,7 @@ export default function Layout({ children }: LayoutProps) {
   const advanceUntil = useGameStore((s) => s.advanceUntil);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const resetGame = useGameStore((s) => s.resetGame);
-  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
@@ -91,21 +91,30 @@ export default function Layout({ children }: LayoutProps) {
         <span className="text-[10px] text-slate-600 mt-0.5 block">{completedWindows}/{calendarLen}</span>
       </div>
 
-      {/* Favorite team */}
-      {favoriteTeamId && world?.teamBases[favoriteTeamId] && (
-        <div className="px-4 py-2 border-b border-slate-700/60">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: world.teamBases[favoriteTeamId]?.color ?? '#666' }} />
-            <NavLink to={`/team/${favoriteTeamId}`} className="text-xs text-slate-200 hover:text-blue-400 truncate font-medium">
-              {getTeamName(favoriteTeamId, world.teamBases)}
-            </NavLink>
-          </div>
-          {world.teamStates[favoriteTeamId] && (
-            <div className="flex gap-2 mt-1 text-[10px] text-slate-500">
-              <span>士气 {world.teamStates[favoriteTeamId].morale}</span>
-              <span>势头 {world.teamStates[favoriteTeamId].momentum > 0 ? '+' : ''}{world.teamStates[favoriteTeamId].momentum}</span>
-            </div>
-          )}
+      {/* Favorite teams (up to 3) */}
+      {favoriteTeamIds.length > 0 && world && (
+        <div className="px-4 py-2 border-b border-slate-700/60 space-y-1.5">
+          {favoriteTeamIds.map((tid) => {
+            const team = world.teamBases[tid];
+            const ts = world.teamStates[tid];
+            if (!team) return null;
+            return (
+              <div key={tid}>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color ?? '#666' }} />
+                  <NavLink to={`/team/${tid}`} className="text-xs text-slate-200 hover:text-blue-400 truncate font-medium">
+                    {getTeamName(tid, world.teamBases)}
+                  </NavLink>
+                </div>
+                {ts && (
+                  <div className="flex gap-2 mt-0.5 text-[10px] text-slate-500">
+                    <span>士气 {ts.morale}</span>
+                    <span>势头 {ts.momentum > 0 ? '+' : ''}{ts.momentum}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -193,6 +202,19 @@ export default function Layout({ children }: LayoutProps) {
             }
           >
             转会窗口
+          </NavLink>
+          <NavLink
+            to="/memorable"
+            onClick={() => setMobileNavOpen(false)}
+            className={({ isActive }) =>
+              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                isActive
+                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
+              }`
+            }
+          >
+            经典战役
           </NavLink>
         </div>
       </nav>
