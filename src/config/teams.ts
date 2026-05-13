@@ -181,10 +181,10 @@ export const defaultTeams: TeamBase[] = [
     region: '南洲+台湾',
   },
   {
-    id: 'suwon', name: '水原三星', shortName: '三星', color: '#034EA2',
+    id: 'mori_sailor', name: '毛利水手', shortName: '水手', color: '#0288D1',
     tier: 'underdog', overall: 45, attack: 42, midfield: 44, defense: 50,
     stability: 52, depth: 40, reputation: 48, initialLeagueLevel: 3, expectation: 2,
-    region: '大陆+南朝鲜',
+    region: '东洲+本州',
   },
   {
     id: 'bj_oppo', name: '北京欧珀', shortName: '欧珀', color: '#7B1FA2',

@@ -562,7 +562,7 @@ export const defaultCoachAssignments: Record<string, string> = {
   yongfu: 'coach_hao_wei',
   ty_taiping: 'coach_chen_yang',
   taipei_dome: 'coach_dyche',
-  suwon: 'coach_yan_dinghao',
+  mori_sailor: 'coach_yan_dinghao',
   bj_oppo: 'coach_wang_baoshan',
   nissan_fc: 'coach_jankovic',
   tsmc_fc: 'coach_li_tie',
