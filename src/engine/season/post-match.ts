@@ -192,54 +192,88 @@ export function runPostMatchProcessing(
       const winnerIsHome = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
       const winner = winnerIsHome ? homeTeam : awayTeam;
       const loser = winnerIsHome ? awayTeam : homeTeam;
+      const totalH = result.homeGoals + (result.etHomeGoals ?? 0);
+      const totalA = result.awayGoals + (result.etAwayGoals ?? 0);
+      const score = `${totalH}-${totalA}`;
+      const titles = [
+        `爆冷！${winner.name} ${score} 击败 ${loser.name}`,
+        `冷门！${loser.name}阴沟翻船，不敌${winner.name}`,
+        `${winner.name}上演以弱胜强的好戏，${score}掀翻${loser.name}！`,
+        `谁能想到？${winner.name}让${loser.name}颜面尽失`,
+        `本轮最大冷门：${winner.name}完胜${loser.name}`,
+      ];
+      const descs = [
+        `实力${winner.overall}的${winner.name}令人信服地击败了实力${loser.overall}的${loser.name}，爆冷指数拉满。`,
+        `${loser.name}被认为是这场比赛的绝对热门，但${winner.name}用实际行动证明了一切皆有可能。`,
+        `${winner.name}毫不畏惧强敌，以${score}的比分书写了属于自己的传奇篇章。`,
+      ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `upset-${result.fixtureId}`),
-        seasonNumber,
-        windowIndex,
-        type: 'upset',
-        title: `爆冷! ${winner.name} 击败 ${loser.name}`,
-        description: `${winner.name} (综合实力 ${winner.overall}) 爆冷击败了 ${loser.name} (综合实力 ${loser.overall}).`,
+        seasonNumber, windowIndex, type: 'upset',
+        title: rng.pick(titles),
+        description: rng.pick(descs),
       });
     }
   }
 
-  // ── Streak news (win/loss streaks) ──────────────────────────────
+  // ── Streak news ──────────────────────────────────────
   for (const teamId of teamsPlayed) {
     const state = teamStates[teamId];
     const form = state.recentForm;
     if (form.length < 3) continue;
     const teamName = world.teamBases[teamId]?.name ?? teamId;
 
-    // Check win streak (3+)
     const winStreak = countTrailingResult(form, 'W');
     if (winStreak >= 3) {
+      const titles = [
+        `势不可挡！${teamName}已取得${winStreak}连胜`,
+        `${teamName}${winStreak}连胜，状态火热谁能阻挡？`,
+        `连战连捷！${teamName}气势如虹拿下${winStreak}连胜`,
+        `${teamName}近期表现强势，${winStreak}场比赛全部获胜`,
+      ];
+      const descs = [
+        `${teamName}近期状态爆棚，${winStreak}连胜让所有对手都感到恐惧。`,
+        `势如破竹的${teamName}已经连续${winStreak}场取得胜利，争冠路上不容小觑。`,
+        `${teamName}在最近${winStreak}场比赛中表现得无懈可击。`,
+      ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `streak-w-${teamId}`),
         seasonNumber, windowIndex, type: 'streak',
-        title: `${teamName} ${winStreak}连胜！`,
-        description: `${teamName}近期状态火热，已经取得${winStreak}连胜。`,
+        title: rng.pick(titles), description: rng.pick(descs),
       });
     }
 
-    // Check loss streak (3+)
     const lossStreak = countTrailingResult(form, 'L');
     if (lossStreak >= 3) {
+      const titles = [
+        `${teamName}深陷泥潭，遭遇${lossStreak}连败`,
+        `至暗时刻！${teamName}已连输${lossStreak}场`,
+        `${teamName}${lossStreak}连败，主帅压力骤增`,
+        `何时是头？${teamName}连续${lossStreak}场颗粒无收`,
+      ];
+      const descs = [
+        `${teamName}正在经历赛季最黑暗的时期，${lossStreak}连败让球队士气跌入谷底。`,
+        `连续${lossStreak}场失利让${teamName}的赛季前景蒙上阴影，教练席上风声鹤唳。`,
+      ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `streak-l-${teamId}`),
         seasonNumber, windowIndex, type: 'streak',
-        title: `${teamName} 遭遇${lossStreak}连败`,
-        description: `${teamName}深陷低谷，已经连续${lossStreak}场不胜。`,
+        title: rng.pick(titles), description: rng.pick(descs),
       });
     }
 
-    // Check unbeaten streak (5+)
     const unbeaten = countTrailingNotResult(form, 'L');
     if (unbeaten >= 5) {
+      const titles = [
+        `${teamName}${unbeaten}场不败，铁血意志！`,
+        `坚如磐石！${teamName}已经${unbeaten}场不败`,
+        `${teamName}保持${unbeaten}场不败金身，谁能终结？`,
+      ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `streak-u-${teamId}`),
         seasonNumber, windowIndex, type: 'streak',
-        title: `${teamName} ${unbeaten}场不败`,
-        description: `${teamName}保持了${unbeaten}场不败的优异战绩。`,
+        title: rng.pick(titles),
+        description: `${teamName}在最近${unbeaten}场比赛中保持不败，展现了强大的竞争力。`,
       });
     }
   }

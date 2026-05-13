@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useRef, useCallback, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
@@ -58,6 +58,13 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
+  const [showFloatingBtn, setShowFloatingBtn] = useState(() => {
+    try { return localStorage.getItem('floating-btn') === '1'; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('floating-btn', showFloatingBtn ? '1' : '0'); } catch {}
+  }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;
@@ -262,6 +269,8 @@ export default function Layout({ children }: LayoutProps) {
                 <div className="border-t border-slate-700 my-0.5" />
                 <button onClick={() => { advanceUntil('cup'); setShowFastMenu(false); }} className="w-full px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进到杯赛</button>
                 <button onClick={() => { advanceUntil('season_end'); setShowFastMenu(false); }} className="w-full px-3 py-1.5 text-xs text-amber-400 hover:bg-slate-700 text-left cursor-pointer">快进到赛季末</button>
+                <div className="border-t border-slate-700 my-0.5" />
+                <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="w-full px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-700 text-left cursor-pointer">{showFloatingBtn ? '隐藏悬浮按钮' : '显示悬浮按钮'}</button>
               </div>
             )}
           </div>
@@ -275,6 +284,61 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* Floating advance button */}
+      {showFloatingBtn && <FloatingAdvanceButton />}
+    </div>
+  );
+}
+
+function FloatingAdvanceButton() {
+  const advanceWindow = useGameStore(s => s.advanceWindow);
+  const isAdvancing = useGameStore(s => s.isAdvancing);
+  const getCurrentWindow = useGameStore(s => s.getCurrentWindow);
+  const currentWindow = getCurrentWindow();
+
+  const [pos, setPos] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 120 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
+  const didMove = useRef(false);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    setDragging(true);
+    didMove.current = false;
+    dragStart.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [pos]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didMove.current = true;
+    setPos({
+      x: Math.max(0, Math.min(window.innerWidth - 56, dragStart.current.px + dx)),
+      y: Math.max(0, Math.min(window.innerHeight - 56, dragStart.current.py + dy)),
+    });
+  }, [dragging]);
+
+  const onPointerUp = useCallback(() => {
+    setDragging(false);
+    if (!didMove.current && currentWindow && !isAdvancing) {
+      advanceWindow();
+    }
+  }, [currentWindow, isAdvancing, advanceWindow]);
+
+  const bgColor = currentWindow ? getWindowTypeColor(currentWindow.type).replace('bg-', '') : 'slate-600';
+
+  return (
+    <div
+      className={`fixed z-[100] w-14 h-14 rounded-full shadow-lg flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none touch-none transition-shadow ${isAdvancing ? 'opacity-50' : 'hover:shadow-xl'}`}
+      style={{ left: pos.x, top: pos.y, backgroundColor: `var(--color-${bgColor}, #475569)` }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <span className="text-white text-xs font-bold">{isAdvancing ? '...' : '推进'}</span>
+      {currentWindow && <span className="text-white/60 text-[8px] leading-none mt-0.5">{getWindowTypeLabel(currentWindow.type).slice(0, 3)}</span>}
     </div>
   );
 }

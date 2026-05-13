@@ -45,10 +45,66 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="text-center py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30">
-        <h2 className="text-2xl font-black text-slate-100">第{seasonNumber}赛季 回顾</h2>
-        <p className="text-xs text-slate-500 mt-1">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
+      {/* Narrative Header */}
+      <div className="py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30 px-4 sm:px-6">
+        <h2 className="text-2xl font-black text-slate-100 text-center">第{seasonNumber}赛季 回顾</h2>
+        <p className="text-xs text-slate-500 mt-1 text-center">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
+        {l1Records.length > 0 && (() => {
+          const champ = getTeamName(honor.league1Champion, tb);
+          const runner = l1Records[1] ? getTeamName(l1Records[1].teamId, tb) : '';
+          const champRec = l1Records[0];
+          const runnerRec = l1Records[1];
+          const gap = champRec && runnerRec ? champRec.leaguePoints - runnerRec.leaguePoints : 0;
+          const scorer = scorers[0];
+          const scorerNum = scorer?.playerId.split('-').pop();
+          const scorerTeam = scorer ? getTeamName(scorer.teamId, tb) : '';
+
+          const sentences: string[] = [];
+
+          if (gap >= 10) {
+            sentences.push(`本赛季毫无悬念，${champ}以${gap}分的断崖式优势横扫联赛，将所有对手远远甩在身后。`);
+          } else if (gap <= 3 && gap >= 0 && runner) {
+            sentences.push(`一个赛季的漫长征途最终在${champ}和${runner}之间的巅峰对决中走到终章。${champ}仅凭${gap}分的微弱优势惊险捧杯，过程跌宕起伏。`);
+          } else {
+            sentences.push(`经过${champRec?.leaguePlayed ?? 30}轮激烈角逐，${champ}以${champRec?.leaguePoints}分的成绩加冕赛季王者。`);
+          }
+
+          if (scorer && scorer.goals >= 15) {
+            sentences.push(`${scorerTeam}的${scorerNum}号以${scorer.goals}球的惊人数据独霸射手榜，成为万千球迷心中的英雄。`);
+          } else if (scorer && scorer.goals > 0) {
+            sentences.push(`射手榜上，${scorerTeam}${scorerNum}号以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
+          }
+
+          if (bestDefense && bestDefense.leagueGA <= 15) {
+            sentences.push(`防守端，${getTeamName(bestDefense.teamId, tb)}铸就钢铁防线，全赛季仅失${bestDefense.leagueGA}球，令对手闻风丧胆。`);
+          }
+
+          if (honor.coachChanges.length >= 4) {
+            sentences.push(`教练席上风波不断，全赛季${honor.coachChanges.length}次换帅让人目不暇接。`);
+          }
+
+          const cupWins = [honor.leagueCupWinner, honor.superCupWinner, honor.worldCupWinner].filter(Boolean);
+          const uniqueCupTeams = new Set(cupWins);
+          if (uniqueCupTeams.size === 1 && cupWins.length >= 2 && cupWins[0] === honor.league1Champion) {
+            sentences.push(`${champ}不仅称霸联赛，更横扫杯赛赛场，成就令人艳羡的多冠伟业。`);
+          }
+
+          if (honor.promoted.length > 0) {
+            const promoNames = honor.promoted.map(p => getTeamName(p.teamId, tb)).join('和');
+            sentences.push(`${promoNames}凭借出色表现成功升级，新的征程就此开启。`);
+          }
+
+          if (honor.relegated.length > 0) {
+            const relegNames = honor.relegated.map(r => getTeamName(r.teamId, tb)).join('和');
+            sentences.push(`而${relegNames}则未能抵挡降级的命运，挥别了这个级别的舞台。`);
+          }
+
+          return (
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3 text-center max-w-2xl mx-auto italic">
+              {sentences.slice(0, 4).join('')}
+            </p>
+          );
+        })()}
       </div>
 
       {/* Champions grid */}
