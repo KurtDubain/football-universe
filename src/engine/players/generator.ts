@@ -5,6 +5,16 @@ import { pickPlayerName } from '../../config/player-names';
 import { computeInitialMarketValue } from '../economy/market-value';
 
 /**
+ * Format a uuid from a monotonic counter. The shape `p-<n>` is opaque to
+ * everything except the migration; consumers just compare strings. The
+ * counter is owned by GameWorld.nextPlayerUuidCounter so it survives across
+ * sessions and any future generator calls (e.g. youth promotions).
+ */
+export function formatPlayerUuid(counter: number): string {
+  return `p-${counter}`;
+}
+
+/**
  * Generate 22 players for a team.
  * Squad composition: 3 GK, 7 DF, 7 MF, 5 FW = 22
  *
@@ -16,8 +26,12 @@ import { computeInitialMarketValue } from '../economy/market-value';
  * - For a weak team (overall 45), players range from 30-55
  * - Each team has 2-3 "star" players who are significantly above average
  * - goalScoring: high for FW (60-100), medium for MF (20-50), low for DF/GK (0-15)
+ *
+ * `nextUuid` is a counter object — it's mutated in place so the caller can
+ * track how many uuids have been allocated across the whole `generateAllSquads`
+ * pass and persist the next free value on GameWorld.
  */
-export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
+export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value: number }): Player[] {
   // Define squad positions
   const positions: PlayerPosition[] = [
     'GK', 'GK', 'GK',
@@ -122,7 +136,7 @@ export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
     // Age: stars are 25-30 (peak), others 19-34 (uniform)
     const age = isStar ? rng.nextInt(24, 30) : rng.nextInt(19, 34);
     const newPlayer: Player = {
-      id: `${team.id}-${number}`,
+      uuid: formatPlayerUuid(nextUuid.value++),
       teamId: team.id,
       name: playerName,
       number,
@@ -152,15 +166,19 @@ export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
 
 /**
  * Generate squads for all teams.
+ *
+ * Returns the squads plus the next free uuid counter so the caller can
+ * persist it on GameWorld for any future player creation.
  */
 export function generateAllSquads(
   teams: TeamBase[],
   seed: number,
-): Record<string, Player[]> {
+): { squads: Record<string, Player[]>; nextPlayerUuidCounter: number } {
   const rng = new SeededRNG(seed);
   const squads: Record<string, Player[]> = {};
+  const nextUuid = { value: 0 };
   for (const team of teams) {
-    squads[team.id] = generateSquad(team, rng);
+    squads[team.id] = generateSquad(team, rng, nextUuid);
   }
-  return squads;
+  return { squads, nextPlayerUuidCounter: nextUuid.value };
 }

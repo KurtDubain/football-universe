@@ -349,10 +349,10 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 7,
+      version: 8,
       /**
        * Migrates a persisted save from any older version up to the current
-       * schema (v7). Each `if (version < N)` block applies one forward step.
+       * schema (v8). Each `if (version < N)` block applies one forward step.
        *
        * SAFETY CONTRACT:
        * - Input shape is `unknown`. We narrow once to a `Partial<GameStore>`
@@ -433,6 +433,123 @@ export const useGameStore = create<GameStore>()(
           for (const ts of Object.values(state.world.teamStates)) {
             if (ts && typeof ts === 'object' && 'currentCoachId' in ts) {
               delete (ts as { currentCoachId?: string | null }).currentCoachId;
+            }
+          }
+        }
+        // v7 → v8: assign each player a stable `uuid` and rewrite every
+        // foreign-key reference (playerStats keys, awards.playerId,
+        // transferHistory.playerId, MatchEvent.playerId in stored
+        // calendar/memorable results) so they hold the new uuid value.
+        // Without this step, a v7 save loaded by v8 code would key
+        // playerStats by the old "${teamId}-${number}" string while new
+        // engine reads expect a uuid → all stats would silently drop.
+        //
+        // Strategy: build an oldId → uuid map from squads, mutate Player
+        // objects in place to add `uuid` and drop the legacy `id` field,
+        // then walk every foreign-key holder and substitute. The pass is
+        // O(players + stats + awards + transfers + storedEvents) which is
+        // roughly hundreds of items per save — fine for a one-shot
+        // migration. The calendar/memorable walks feel heavy because
+        // events are nested 3 levels deep, but they're necessary: any
+        // playerId left as a legacy string would render as a dead link
+        // in PlayerDetail (the player can't be located by uuid).
+        if (version < 8 && state?.world?.squads) {
+          // ── Type narrowing for the legacy persisted shape ──
+          // Pre-v8 Player had `id` (no `uuid`). We treat it as an opaque
+          // record with both possibly-present so we can read `id` and
+          // write `uuid` without a hard cast. Casts go via `unknown` since
+          // the current Player type and the legacy one don't overlap by
+          // structural typing alone.
+          type LegacyPlayer = {
+            id?: string;
+            uuid?: string;
+            teamId?: string;
+            number?: number;
+          };
+          const idMap = new Map<string, string>();
+          let counter = 0;
+          for (const squad of Object.values(state.world.squads)) {
+            if (!Array.isArray(squad)) continue;
+            for (const raw of squad) {
+              const p = raw as unknown as LegacyPlayer;
+              const oldId = typeof p.id === 'string'
+                ? p.id
+                : (typeof p.teamId === 'string' && typeof p.number === 'number'
+                  ? `${p.teamId}-${p.number}`
+                  : null);
+              const uuid = `p-${counter++}`;
+              p.uuid = uuid;
+              if (oldId !== null) idMap.set(oldId, uuid);
+              // Drop the legacy id field — new engine code never reads it.
+              if ('id' in p) delete p.id;
+            }
+          }
+          (state.world as { nextPlayerUuidCounter?: number }).nextPlayerUuidCounter = counter;
+
+          // Rewrite playerStats: keys AND playerId values. We rebuild the
+          // record from scratch instead of mutating in place so any newly-
+          // unreachable key (player not in squads anymore) is dropped.
+          if (state.world.playerStats && typeof state.world.playerStats === 'object') {
+            type LegacyStat = { playerId?: string; teamId?: string; goals?: number; assists?: number; yellowCards?: number; redCards?: number; appearances?: number };
+            const oldStats = state.world.playerStats as unknown as Record<string, LegacyStat>;
+            const newStats: Record<string, LegacyStat> = {};
+            for (const [oldKey, stat] of Object.entries(oldStats)) {
+              const uuid = idMap.get(oldKey) ?? (typeof stat?.playerId === 'string' ? idMap.get(stat.playerId) : undefined);
+              if (!uuid) continue; // orphaned stat — drop it
+              newStats[uuid] = { ...stat, playerId: uuid };
+            }
+            (state.world as unknown as { playerStats: Record<string, LegacyStat> }).playerStats = newStats;
+          }
+
+          // Rewrite awards
+          if (Array.isArray(state.world.playerAwardsHistory)) {
+            for (const a of state.world.playerAwardsHistory as { playerId?: string }[]) {
+              if (typeof a?.playerId === 'string') {
+                const uuid = idMap.get(a.playerId);
+                if (uuid) a.playerId = uuid;
+              }
+            }
+          }
+
+          // Rewrite transferHistory
+          if (Array.isArray(state.world.transferHistory)) {
+            for (const t of state.world.transferHistory as { playerId?: string }[]) {
+              if (typeof t?.playerId === 'string') {
+                const uuid = idMap.get(t.playerId);
+                if (uuid) t.playerId = uuid;
+              }
+            }
+          }
+
+          // Rewrite MatchEvent.playerId in calendar.completed.results — these
+          // are the only stored events outside of memorableMatches.
+          const cal = state.world.seasonState?.calendar;
+          if (Array.isArray(cal)) {
+            for (const w of cal) {
+              if (!w?.results || !Array.isArray(w.results)) continue;
+              for (const r of w.results) {
+                if (!Array.isArray(r?.events)) continue;
+                for (const e of r.events as { playerId?: string }[]) {
+                  if (typeof e?.playerId === 'string') {
+                    const uuid = idMap.get(e.playerId);
+                    if (uuid) e.playerId = uuid;
+                  }
+                }
+              }
+            }
+          }
+
+          // memorableMatches[*].result.events
+          if (Array.isArray(state.world.memorableMatches)) {
+            for (const m of state.world.memorableMatches as { result?: { events?: { playerId?: string }[] } }[]) {
+              const events = m?.result?.events;
+              if (!Array.isArray(events)) continue;
+              for (const e of events) {
+                if (typeof e?.playerId === 'string') {
+                  const uuid = idMap.get(e.playerId);
+                  if (uuid) e.playerId = uuid;
+                }
+              }
             }
           }
         }

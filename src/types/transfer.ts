@@ -8,6 +8,7 @@ export type TransferType = 'transfer' | 'free' | 'loan';
 export interface TransferRecord {
   season: number;
   windowIndex: number; // when the transfer was processed (typically last window)
+  /** Holds a Player.uuid value (stable across transfers). */
   playerId: string;
   playerName: string;
   playerNumber: number;

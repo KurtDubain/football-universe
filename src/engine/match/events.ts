@@ -136,8 +136,8 @@ function pickGoalScorer(squad: Player[], rng: SeededRNG): Player {
   );
 }
 
-function pickAssistProvider(squad: Player[], scorerId: string, rng: SeededRNG): Player {
-  const candidates = squad.filter(p => p.id !== scorerId);
+function pickAssistProvider(squad: Player[], scorerUuid: string, rng: SeededRNG): Player {
+  const candidates = squad.filter(p => p.uuid !== scorerUuid);
   if (candidates.length === 0) return squad[0];
   return pickPlayer(
     candidates,
@@ -302,7 +302,7 @@ export function generateMatchEvents(
       let playerName: string | undefined;
       if (squad) {
         const scorer = pickGoalScorer(squad, rng);
-        playerId = scorer.id;
+        playerId = scorer.uuid;
         playerNumber = scorer.number;
         playerName = scorer.name;
       }
@@ -324,7 +324,7 @@ export function generateMatchEvents(
           minute,
           type: 'assist',
           teamId,
-          playerId: assister.id,
+          playerId: assister.uuid,
           playerNumber: assister.number,
           playerName: assister.name,
           description: `${assister.name ?? assister.number + '号'} 送出助攻`,
@@ -357,7 +357,7 @@ export function generateMatchEvents(
     let playerName: string | undefined;
     if (squad) {
       const player = pickCardPlayer(squad, rng);
-      playerId = player.id;
+      playerId = player.uuid;
       playerNumber = player.number;
       playerName = player.name;
     }
@@ -386,7 +386,7 @@ export function generateMatchEvents(
     let playerName: string | undefined;
     if (squad) {
       const player = pickCardPlayer(squad, rng);
-      playerId = player.id;
+      playerId = player.uuid;
       playerNumber = player.number;
       playerName = player.name;
     }
@@ -417,7 +417,7 @@ export function generateMatchEvents(
     let playerName: string | undefined;
     if (squad) {
       const gk = pickGoalkeeper(squad);
-      playerId = gk.id;
+      playerId = gk.uuid;
       playerNumber = gk.number;
       playerName = gk.name;
     }
@@ -447,7 +447,7 @@ export function generateMatchEvents(
     let playerName: string | undefined;
     if (squad) {
       const player = pickMissPlayer(squad, rng);
-      playerId = player.id;
+      playerId = player.uuid;
       playerNumber = player.number;
       playerName = player.name;
     }
@@ -490,7 +490,7 @@ export function generateMatchEvents(
           outfield.length > 0
             ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
             : homeShooterSquad[0];
-        homeShooterPlayerId = shooter.id;
+        homeShooterPlayerId = shooter.uuid;
         homeShooterNumber = shooter.number;
         homeShooterName = shooter.name;
       }
@@ -532,7 +532,7 @@ export function generateMatchEvents(
           outfield.length > 0
             ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
             : awayShooterSquad[0];
-        awayShooterPlayerId = shooter.id;
+        awayShooterPlayerId = shooter.uuid;
         awayShooterNumber = shooter.number;
         awayShooterName = shooter.name;
       }

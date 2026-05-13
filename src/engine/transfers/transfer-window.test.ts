@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { processTransferWindow, applyTransferIdMap } from './transfer-window';
+import { processTransferWindow } from './transfer-window';
 import { GameWorld } from '../season/season-manager';
 import { SeededRNG } from '../match/rng';
 import { Player, PlayerSeasonStats, PlayerPosition } from '../../types/player';
@@ -27,14 +27,20 @@ function makeTeam(id: string, overall: number): TeamBase {
   };
 }
 
+let __uuidCounter = 1000;
+function nextUuid(): string {
+  return `p-${__uuidCounter++}`;
+}
+
 function makePlayer(
   teamId: string,
   number: number,
   position: PlayerPosition,
   rating: number,
+  uuid: string = nextUuid(),
 ): Player {
   return {
-    id: `${teamId}-${number}`,
+    uuid,
     teamId,
     name: `${teamId}-P${number}`,
     number,
@@ -46,9 +52,9 @@ function makePlayer(
   };
 }
 
-function makeStat(playerId: string, teamId: string, goals = 0): PlayerSeasonStats {
+function makeStat(playerUuid: string, teamId: string, goals = 0): PlayerSeasonStats {
   return {
-    playerId,
+    playerId: playerUuid,
     teamId,
     goals,
     assists: 0,
@@ -63,7 +69,13 @@ function makeStat(playerId: string, teamId: string, goals = 0): PlayerSeasonStat
  *  - One elite team (overall 90) with 4 forwards rated 85, 80, 75, 70
  *  - One non-elite team (overall 65) with 4 forwards rated 78, 72, 68, 60
  *  - The non-elite top scorer (10 goals, rating 78) is a transfer candidate
+ *
+ * We pin uuids so tests can assert "this exact player kept this exact uuid"
+ * after the swap.
  */
+const CANDIDATE_UUID = 'p-cand';
+const SWAP_OUT_UUID = 'p-swapout';
+
 function buildWorld(): GameWorld {
   const elite = makeTeam('elite', 90);
   const weak = makeTeam('weak', 65);
@@ -72,23 +84,24 @@ function buildWorld(): GameWorld {
     makePlayer('elite', 9, 'FW', 85),
     makePlayer('elite', 10, 'FW', 80),
     makePlayer('elite', 11, 'FW', 75),
-    makePlayer('elite', 17, 'FW', 70),
+    makePlayer('elite', 17, 'FW', 70, SWAP_OUT_UUID), // <- swap-out (weakest FW)
     makePlayer('elite', 1, 'GK', 88),
   ];
   const weakSquad: Player[] = [
-    makePlayer('weak', 9, 'FW', 78), // <- candidate (10 goals)
+    makePlayer('weak', 9, 'FW', 78, CANDIDATE_UUID), // <- candidate (10 goals)
     makePlayer('weak', 10, 'FW', 72),
     makePlayer('weak', 11, 'FW', 68),
     makePlayer('weak', 17, 'FW', 60),
     makePlayer('weak', 1, 'GK', 65),
   ];
 
-  const candidateId = 'weak-9';
+  const eliteScorerUuid = eliteSquad[0].uuid;
+  const otherWeakUuid = weakSquad[1].uuid;
 
   const playerStats: Record<string, PlayerSeasonStats> = {
-    [candidateId]: makeStat(candidateId, 'weak', 10),
-    'weak-10': makeStat('weak-10', 'weak', 3),
-    'elite-9': makeStat('elite-9', 'elite', 8),
+    [CANDIDATE_UUID]: makeStat(CANDIDATE_UUID, 'weak', 10),
+    [otherWeakUuid]: makeStat(otherWeakUuid, 'weak', 3),
+    [eliteScorerUuid]: makeStat(eliteScorerUuid, 'elite', 8),
   };
 
   return {
@@ -118,6 +131,7 @@ function buildWorld(): GameWorld {
     coachChangesThisSeason: [],
     squads: { elite: eliteSquad, weak: weakSquad },
     playerStats,
+    nextPlayerUuidCounter: __uuidCounter,
     activeEvents: [],
     achievements: [],
     newsLog: [],
@@ -136,33 +150,60 @@ function buildWorld(): GameWorld {
   };
 }
 
-describe('processTransferWindow', () => {
-  it('returns idMap with old → new ID mappings when a transfer fires', () => {
-    const world = buildWorld();
-    // Try seeds until poaching fires (30% chance per shortlisted candidate)
-    let result = processTransferWindow(world, new SeededRNG(0));
-    let seed = 0;
-    while (result.idMap.size === 0 && seed < 50) {
-      seed++;
-      result = processTransferWindow(world, new SeededRNG(seed));
-    }
-    expect(result.idMap.size).toBeGreaterThanOrEqual(2);
+/**
+ * Find a seed that produces at least one transfer for a given world. The
+ * 30%-per-candidate roll means most seeds DO fire one swap, but occasional
+ * unlucky strings need probing — we cap at 50 attempts which is more than
+ * enough in practice.
+ */
+function seedWithTransfer(world: GameWorld): ReturnType<typeof processTransferWindow> {
+  for (let s = 0; s < 50; s++) {
+    const r = processTransferWindow(world, new SeededRNG(s));
+    if (r.transfers.length > 0) return r;
+  }
+  throw new Error('No seed produced a transfer in 50 tries');
+}
 
-    // For each (oldId → newId) mapping, the new id should not equal the old id.
-    for (const [oldId, newId] of result.idMap.entries()) {
-      expect(newId).not.toBe(oldId);
-      expect(typeof newId).toBe('string');
-    }
+describe('processTransferWindow (uuid-stable)', () => {
+  it('preserves the candidate uuid across the swap (no ID rewrite needed)', () => {
+    const world = buildWorld();
+    const result = seedWithTransfer(world);
+
+    // The candidate uuid is still present somewhere in the squads — at the
+    // BUYER team (elite), not the seller. Same for swap-out at the seller.
+    const allUuids = Object.values(result.squads).flatMap(sq => sq.map(p => p.uuid));
+    expect(allUuids).toContain(CANDIDATE_UUID);
+    expect(allUuids).toContain(SWAP_OUT_UUID);
+
+    const candidateNow = result.squads['elite'].find(p => p.uuid === CANDIDATE_UUID);
+    expect(candidateNow).toBeDefined();
+    expect(candidateNow!.teamId).toBe('elite');
+    // Number may be remapped if 9 was taken — but the player object exists.
+
+    const swappedDown = result.squads['weak'].find(p => p.uuid === SWAP_OUT_UUID);
+    expect(swappedDown).toBeDefined();
+    expect(swappedDown!.teamId).toBe('weak');
+  });
+
+  it('returns playerStats with the same uuid keys (only teamId values updated)', () => {
+    const world = buildWorld();
+    const result = seedWithTransfer(world);
+
+    // Keys are unchanged — uuids never mutate
+    expect(Object.keys(result.playerStats).sort())
+      .toEqual(Object.keys(world.playerStats).sort());
+
+    // The candidate's stat row is still keyed by the same uuid, but
+    // `teamId` now reflects the new club so future-season top-scorer rolls
+    // attribute correctly.
+    expect(result.playerStats[CANDIDATE_UUID].teamId).toBe('elite');
+    // playerId field on the stat itself unchanged
+    expect(result.playerStats[CANDIDATE_UUID].playerId).toBe(CANDIDATE_UUID);
   });
 
   it('preserves position composition (swap-out position == incoming position)', () => {
     const world = buildWorld();
-    let result = processTransferWindow(world, new SeededRNG(0));
-    let seed = 0;
-    while (result.idMap.size === 0 && seed < 50) {
-      seed++;
-      result = processTransferWindow(world, new SeededRNG(seed));
-    }
+    const result = seedWithTransfer(world);
 
     // Find the transfers and assert positions match
     const incoming = result.transfers.find((t) => t.toTeamId === 'elite');
@@ -192,7 +233,6 @@ describe('processTransferWindow', () => {
     // Run lots of seeds — none should produce a transfer
     for (let s = 0; s < 30; s++) {
       const r = processTransferWindow(world, new SeededRNG(s));
-      expect(r.idMap.size).toBe(0);
       expect(r.transfers).toHaveLength(0);
     }
   });
@@ -201,59 +241,26 @@ describe('processTransferWindow', () => {
     const world = buildWorld();
     world.teamBases['elite'] = makeTeam('elite', 75); // no longer elite
     const r = processTransferWindow(world, new SeededRNG(0));
-    expect(r.idMap.size).toBe(0);
     expect(r.transfers).toHaveLength(0);
-  });
-});
-
-describe('applyTransferIdMap', () => {
-  it('rewrites playerStats keys, awards.playerId, transferHistory.playerId', () => {
-    const world = buildWorld();
-    world.playerAwardsHistory = [
-      {
-        season: 1,
-        type: 'mvp',
-        playerId: 'weak-9',
-        playerName: 'X',
-        playerNumber: 9,
-        teamId: 'weak',
-        teamName: 'weak',
-        statValue: 10,
-        statLabel: '10球',
-      },
-    ];
-    world.transferHistory = [
-      {
-        season: 0,
-        windowIndex: 0,
-        playerId: 'weak-9',
-        playerName: 'X',
-        playerNumber: 9,
-        position: 'FW',
-        fromTeamId: 'weak',
-        fromTeamName: 'weak',
-        toTeamId: 'elite',
-        toTeamName: 'elite',
-        type: 'transfer',
-        reason: 'test',
-      },
-    ];
-
-    const idMap = new Map([['weak-9', 'elite-22']]);
-    const out = applyTransferIdMap(world, idMap);
-
-    expect(out.playerStats['elite-22']).toBeDefined();
-    expect(out.playerStats['elite-22'].playerId).toBe('elite-22');
-    expect(out.playerStats['weak-9']).toBeUndefined();
-    expect(out.playerAwardsHistory[0].playerId).toBe('elite-22');
-    expect(out.transferHistory[0].playerId).toBe('elite-22');
+    // playerStats reference preserved when no transfers (no rebuild)
+    expect(r.playerStats).toBe(world.playerStats);
   });
 
-  it('returns world references unchanged when idMap is empty', () => {
+  it('emits TransferRecord.playerId as the player uuid (stable across history)', () => {
     const world = buildWorld();
-    const out = applyTransferIdMap(world, new Map());
-    expect(out.playerStats).toBe(world.playerStats);
-    expect(out.playerAwardsHistory).toBe(world.playerAwardsHistory);
-    expect(out.transferHistory).toBe(world.transferHistory);
+    const result = seedWithTransfer(world);
+
+    // Both records (incoming + outgoing) carry uuids — these should match
+    // the players' uuids both BEFORE and AFTER the swap. (No "${teamId}-${number}"
+    // strings — the playerId field now holds the stable uuid value.)
+    const incoming = result.transfers.find(t => t.toTeamId === 'elite');
+    const outgoing = result.transfers.find(t => t.toTeamId === 'weak');
+    expect(incoming?.playerId).toBe(CANDIDATE_UUID);
+    expect(outgoing?.playerId).toBe(SWAP_OUT_UUID);
+
+    // Sanity: the uuid does NOT encode teamId-number, so the candidate's
+    // record's playerId is unaffected by the team/number change.
+    expect(incoming?.toTeamId).toBe('elite');
+    expect(incoming?.fromTeamId).toBe('weak');
   });
 });

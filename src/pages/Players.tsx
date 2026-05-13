@@ -29,16 +29,16 @@ const rankBadge = (rank: number) => {
 
 function findPlayer(
   squads: Record<string, Player[]>,
-  playerId: string,
+  playerUuid: string,
 ): Player | undefined {
-  // Player id format: "teamId-number" — split at last '-'
-  const lastDash = playerId.lastIndexOf('-');
-  if (lastDash === -1) return undefined;
-  const teamId = playerId.substring(0, lastDash);
-  const number = parseInt(playerId.substring(lastDash + 1), 10);
-  const squad = squads[teamId];
-  if (!squad) return undefined;
-  return squad.find((p) => p.number === number);
+  // playerUuid is a stable Player.uuid (post-v8). Walk every squad — the
+  // search is O(players) but the active squad list is < 1000 entries so
+  // this is cheap and avoids needing a separate uuid → player index.
+  for (const squad of Object.values(squads)) {
+    const found = squad.find((p) => p.uuid === playerUuid);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 export default function Players() {

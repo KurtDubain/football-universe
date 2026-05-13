@@ -690,8 +690,9 @@ function OverviewTab({ world }: { world: GameWorld }) {
   );
   let topScorerText = '暂无';
   if (topScorer && topScorer.goals > 0) {
-    const parts = topScorer.playerId.split('-');
-    const num = parts[parts.length - 1];
+    // playerId is now a uuid; resolve through squads to get the shirt number.
+    const tsPlayer = world.squads[topScorer.teamId]?.find(p => p.uuid === topScorer.playerId);
+    const num = tsPlayer?.number ?? '';
     topScorerText = `${getTeamName(topScorer.teamId, world.teamBases)} ${num}号 (${topScorer.goals}球)`;
   }
 

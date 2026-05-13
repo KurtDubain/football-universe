@@ -144,13 +144,13 @@ function searchPlayers(world: GameWorld, f: PlayerFilters): PlayerSearchResult[]
       if (f.maxAge !== undefined && (player.age ?? 25) > f.maxAge) continue;
       if (f.minMarketValue !== undefined && (player.marketValue ?? 0) < f.minMarketValue) continue;
 
-      const stats = world.playerStats[player.id];
+      const stats = world.playerStats[player.uuid];
       if (f.minGoals !== undefined && (stats?.goals ?? 0) < f.minGoals) continue;
       if (f.minAssists !== undefined && (stats?.assists ?? 0) < f.minAssists) continue;
 
       const teamName = world.teamBases[teamId]?.name ?? teamId;
       results.push({
-        playerId: player.id,
+        playerId: player.uuid,
         playerName: player.name ?? `${player.number}号`,
         teamId,
         teamName,

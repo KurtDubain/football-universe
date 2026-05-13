@@ -297,16 +297,28 @@ export function runPostMatchProcessing(
     }
     for (const [playerId, count] of playerGoals) {
       if (count >= 3) {
-        const parts = playerId.split('-');
-        const num = parts[parts.length - 1];
-        const teamId = parts.slice(0, -1).join('-');
+        // playerId is a Player.uuid — walk all squads to find the player
+        // and their team. Falls back gracefully if the player just changed
+        // clubs in the same window (rare).
+        let teamId = '';
+        let playerName = '';
+        let num = '';
+        for (const [tid, sq] of Object.entries(world.squads)) {
+          const p = sq.find((pp) => pp.uuid === playerId);
+          if (p) {
+            teamId = tid;
+            playerName = p.name ?? `${p.number}号`;
+            num = String(p.number);
+            break;
+          }
+        }
+        if (!teamId) continue; // player vanished mid-window — skip the news
         const teamName = world.teamBases[teamId]?.name ?? teamId;
-        const playerName = world.squads[teamId]?.find(p => p.id === playerId)?.name ?? `${num}号`;
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `hattrick-${playerId}`),
           seasonNumber, windowIndex, type: 'match_result',
           title: `帽子戏法! ${teamName} ${playerName}独进${count}球`,
-          description: `${teamName}的${playerName}上演帽子戏法，独中${count}元。`,
+          description: `${teamName}的${playerName}上演帽子戏法，独中${count}元${num ? `（${num}号）` : ''}。`,
         });
       }
     }

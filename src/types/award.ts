@@ -12,6 +12,7 @@ export type PlayerAwardType =
 export interface PlayerAward {
   season: number;
   type: PlayerAwardType;
+  /** Holds a Player.uuid value (stable across transfers). */
   playerId: string;
   playerName: string;
   playerNumber: number;

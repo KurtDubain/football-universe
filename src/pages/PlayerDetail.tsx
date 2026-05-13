@@ -1,35 +1,52 @@
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName } from '../utils/format';
 import { formatMarketValue } from '../engine/economy/market-value';
+import type { Player } from '../types/player';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = { GK: 'bg-amber-900/40 text-amber-400', DF: 'bg-blue-900/40 text-blue-400', MF: 'bg-green-900/40 text-green-400', FW: 'bg-red-900/40 text-red-400' };
 
+/**
+ * Walk every squad to find a player by uuid. Returns the player and their
+ * current team id (which may differ from any historical association — the
+ * uuid is stable but teamId is not).
+ */
+function findPlayerByUuid(
+  squads: Record<string, Player[]>,
+  uuid: string,
+): { player: Player; teamId: string } | null {
+  for (const [teamId, squad] of Object.entries(squads)) {
+    const player = squad.find((p) => p.uuid === uuid);
+    if (player) return { player, teamId };
+  }
+  return null;
+}
+
 export default function PlayerDetail() {
-  const { id } = useParams<{ id: string }>();
+  // The route param is named `id` for legacy URL compatibility, but the
+  // value is now a Player.uuid. Old `${teamId}-${number}` URLs from
+  // bookmarks before v8 will return "未找到" — that's expected.
+  const { id: uuid } = useParams<{ id: string }>();
   const world = useGameStore((s) => s.world);
 
-  if (!world || !id) return <div className="text-slate-400">正在加载...</div>;
+  if (!world || !uuid) return <div className="text-slate-400">正在加载...</div>;
 
-  const parts = id.split('-');
-  const number = parseInt(parts[parts.length - 1]);
-  const teamId = parts.slice(0, -1).join('-');
+  const found = findPlayerByUuid(world.squads, uuid);
+  const player = found?.player;
+  const teamId = found?.teamId;
+  const team = teamId ? world.teamBases[teamId] : undefined;
+  const stats = world.playerStats[uuid];
 
-  const squad = world.squads[teamId];
-  const player = squad?.find(p => p.id === id);
-  const team = world.teamBases[teamId];
-  const stats = world.playerStats[id];
-
-  if (!player || !team) return <div className="text-slate-400">未找到球员: {id}</div>;
-
-  // Position ranking among all players of same position
+  // Position ranking among all players of same position. We must call hooks
+  // unconditionally — guard with optional chaining inside instead of an
+  // early return above the hooks.
   const posRanking = useMemo(() => {
+    if (!player) return { rank: 0, total: 0 };
     const allSamePos = Object.values(world.playerStats).filter(s => {
       const pId = s.playerId;
-      for (const [, sq] of Object.entries(world.squads)) {
-        const p = sq.find(pp => pp.id === pId);
+      for (const sq of Object.values(world.squads)) {
+        const p = sq.find(pp => pp.uuid === pId);
         if (p && p.position === player.position) return true;
       }
       return false;
@@ -38,20 +55,9 @@ export default function PlayerDetail() {
       if (player.position === 'FW' || player.position === 'MF') return (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists);
       return b.appearances - a.appearances;
     });
-    const rank = sorted.findIndex(s => s.playerId === id) + 1;
+    const rank = sorted.findIndex(s => s.playerId === uuid) + 1;
     return { rank, total: sorted.length };
-  }, [world.playerStats, world.squads, player.position, id]);
-
-  // Efficiency
-  const appearances = stats?.appearances ?? 0;
-  const goals = stats?.goals ?? 0;
-  const assists = stats?.assists ?? 0;
-  const goalsPerApp = appearances > 0 ? (goals / appearances).toFixed(2) : '0';
-  const assistsPerApp = appearances > 0 ? (assists / appearances).toFixed(2) : '0';
-
-  // Team contribution
-  const teamTotalGoals = Object.values(world.playerStats).filter(s => s.teamId === teamId).reduce((sum, s) => sum + s.goals, 0);
-  const contribution = teamTotalGoals > 0 ? Math.round((goals / teamTotalGoals) * 100) : 0;
+  }, [world.playerStats, world.squads, player, uuid]);
 
   // Recent match highlights (goals scored by this player from calendar)
   const highlights = useMemo(() => {
@@ -60,14 +66,14 @@ export default function PlayerDetail() {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
         for (const e of r.events) {
-          if (e.playerId === id && (e.type === 'goal' || e.type === 'penalty_goal')) {
+          if (e.playerId === uuid && (e.type === 'goal' || e.type === 'penalty_goal')) {
             hl.push({ window: w.label, minute: e.minute, desc: e.description });
           }
         }
       }
     }
     return hl.slice(-8);
-  }, [world.seasonState.calendar, id]);
+  }, [world.seasonState.calendar, uuid]);
 
   // Key match metrics (computed from calendar events)
   const keyMetrics = useMemo(() => {
@@ -77,7 +83,7 @@ export default function PlayerDetail() {
     for (const w of world.seasonState.calendar) {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
-        const myGoals = r.events.filter(e => e.playerId === id && (e.type === 'goal' || e.type === 'penalty_goal'));
+        const myGoals = r.events.filter(e => e.playerId === uuid && (e.type === 'goal' || e.type === 'penalty_goal'));
         if (myGoals.length === 0) continue;
         // Hat trick (3+ goals in single match)
         if (myGoals.length >= 3) hatTricks++;
@@ -97,7 +103,22 @@ export default function PlayerDetail() {
       }
     }
     return { finalGoals, lateGoals, hatTricks };
-  }, [world.seasonState.calendar, id]);
+  }, [world.seasonState.calendar, uuid]);
+
+  if (!player || !team || !teamId) {
+    return <div className="text-slate-400">未找到球员: {uuid}</div>;
+  }
+
+  // Efficiency
+  const appearances = stats?.appearances ?? 0;
+  const goals = stats?.goals ?? 0;
+  const assists = stats?.assists ?? 0;
+  const goalsPerApp = appearances > 0 ? (goals / appearances).toFixed(2) : '0';
+  const assistsPerApp = appearances > 0 ? (assists / appearances).toFixed(2) : '0';
+
+  // Team contribution
+  const teamTotalGoals = Object.values(world.playerStats).filter(s => s.teamId === teamId).reduce((sum, s) => sum + s.goals, 0);
+  const contribution = teamTotalGoals > 0 ? Math.round((goals / teamTotalGoals) * 100) : 0;
 
   return (
     <div className="max-w-2xl space-y-5">

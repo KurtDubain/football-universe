@@ -60,7 +60,7 @@ export function applyAnnualRevaluation(
       const newAge = (p.age ?? 25) + 1;
       p.age = newAge;
 
-      const stats = playerStats[p.id];
+      const stats = playerStats[p.uuid];
       let newValue = p.marketValue ?? computeInitialMarketValue(p);
 
       // Performance bonus

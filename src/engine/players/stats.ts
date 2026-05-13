@@ -3,6 +3,7 @@ import { MatchResult } from '../../types/match';
 
 /**
  * Create initial empty stats for all players in all squads.
+ * Stats are keyed by `Player.uuid`, which is stable across transfers.
  */
 export function createInitialPlayerStats(
   squads: Record<string, Player[]>,
@@ -10,8 +11,8 @@ export function createInitialPlayerStats(
   const stats: Record<string, PlayerSeasonStats> = {};
   for (const [teamId, players] of Object.entries(squads)) {
     for (const p of players) {
-      stats[p.id] = {
-        playerId: p.id,
+      stats[p.uuid] = {
+        playerId: p.uuid,
         teamId,
         goals: 0,
         assists: 0,
@@ -47,12 +48,12 @@ export function updatePlayerStatsFromResults(
     };
 
     for (const p of pickMatchday(homeSquad)) {
-      if (!stats[p.id]) continue;
-      stats[p.id] = { ...stats[p.id], appearances: stats[p.id].appearances + 1 };
+      if (!stats[p.uuid]) continue;
+      stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
     }
     for (const p of pickMatchday(awaySquad)) {
-      if (!stats[p.id]) continue;
-      stats[p.id] = { ...stats[p.id], appearances: stats[p.id].appearances + 1 };
+      if (!stats[p.uuid]) continue;
+      stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
     }
 
     // Process events

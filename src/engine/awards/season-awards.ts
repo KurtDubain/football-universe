@@ -23,8 +23,10 @@ export function computeSeasonAwards(
   const allStats = Object.values(playerStats);
   if (allStats.length === 0) return awards;
 
-  const findPlayer = (playerId: string, teamId: string): Player | undefined =>
-    squads[teamId]?.find((p) => p.id === playerId);
+  // playerId is a stable Player.uuid, not the legacy `${teamId}-${number}`
+  // string. We still need the teamId to find the right squad to scan.
+  const findPlayer = (playerUuid: string, teamId: string): Player | undefined =>
+    squads[teamId]?.find((p) => p.uuid === playerUuid);
 
   const buildAward = (
     type: PlayerAward['type'],
@@ -105,7 +107,7 @@ export function computeSeasonAwards(
     let bestApps = 0;
     let bestRating = 0;
     for (const d of defenders) {
-      const stat = playerStats[d.id];
+      const stat = playerStats[d.uuid];
       if (!stat) continue;
       const apps = stat.appearances;
       if (apps > bestApps || (apps === bestApps && d.rating > bestRating)) {
@@ -115,7 +117,7 @@ export function computeSeasonAwards(
       }
     }
     if (best && bestApps >= bestDefenseTeam.played * 0.6) {
-      const stat = playerStats[best.id];
+      const stat = playerStats[best.uuid];
       const award = buildAward(
         'best_defender',
         stat,

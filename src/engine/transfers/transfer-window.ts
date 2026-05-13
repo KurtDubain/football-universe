@@ -1,5 +1,5 @@
 import { GameWorld } from '../season/season-manager';
-import { Player } from '../../types/player';
+import { Player, PlayerSeasonStats } from '../../types/player';
 import { TransferRecord } from '../../types/transfer';
 import { SeededRNG } from '../match/rng';
 
@@ -13,8 +13,18 @@ import { SeededRNG } from '../match/rng';
  * - Swap: candidate moves to elite team; the WEAKEST player AT THE SAME POSITION
  *   from that elite team moves down to fill the slot. This preserves squad
  *   composition (3 GK / 7 DF / 7 MF / 5 FW) over many seasons.
- * - Returns an `idMap` of {oldId → newId} so callers can rewrite playerStats,
- *   playerAwardsHistory and transferHistory keys to follow the players.
+ *
+ * Because each Player carries a stable `uuid` that survives the swap, the
+ * existing playerStats / playerAwardsHistory / transferHistory keys (all of
+ * which hold uuid values) continue to resolve correctly. There is no
+ * post-process ID rewrite — that's the whole point of the uuid refactor.
+ *
+ * The only field on PlayerSeasonStats that needs touching is `teamId`: the
+ * just-poached scorer's stats now belong to a different team. We rebuild a
+ * fresh record (with refreshed teamIds) so the immediate season-end
+ * top-scorer / award news attributes them to the new club. If no transfers
+ * fire we return the input record unchanged so the caller can preserve
+ * reference equality.
  */
 export function processTransferWindow(
   world: GameWorld,
@@ -22,10 +32,9 @@ export function processTransferWindow(
 ): {
   squads: Record<string, Player[]>;
   transfers: TransferRecord[];
-  idMap: Map<string, string>;
+  playerStats: Record<string, PlayerSeasonStats>;
 } {
   const transfers: TransferRecord[] = [];
-  const idMap = new Map<string, string>();
   const squads: Record<string, Player[]> = { ...world.squads };
   // Make per-team mutable copies as we modify them
   for (const tid of Object.keys(squads)) {
@@ -37,17 +46,17 @@ export function processTransferWindow(
     .filter((t) => t.overall >= 82)
     .map((t) => t.id);
   if (eliteTeamIds.length === 0) {
-    return { squads, transfers, idMap };
+    return { squads, transfers, playerStats: world.playerStats };
   }
 
   // Identify transfer candidates: top scorers from non-elite teams
-  type Candidate = { playerId: string; teamId: string; goals: number };
+  type Candidate = { playerUuid: string; teamId: string; goals: number };
   const candidates: Candidate[] = [];
   for (const stat of Object.values(world.playerStats)) {
     const team = world.teamBases[stat.teamId];
     if (!team || team.overall >= 80) continue; // skip elite/strong
     if (stat.goals < 6) continue;
-    candidates.push({ playerId: stat.playerId, teamId: stat.teamId, goals: stat.goals });
+    candidates.push({ playerUuid: stat.playerId, teamId: stat.teamId, goals: stat.goals });
   }
   // Sort by goals desc, take top ~12 across leagues
   candidates.sort((a, b) => b.goals - a.goals);
@@ -69,7 +78,7 @@ export function processTransferWindow(
     const toSquad = squads[buyerId];
     if (!fromSquad || !toSquad) continue;
 
-    const incomingPlayer = fromSquad.find((p) => p.id === cand.playerId);
+    const incomingPlayer = fromSquad.find((p) => p.uuid === cand.playerUuid);
     if (!incomingPlayer) continue;
 
     // Pick the weakest player AT THE SAME POSITION from the buyer team — this
@@ -83,9 +92,10 @@ export function processTransferWindow(
     // the candidate — no realistic transfer there.
     if (swapOut.rating >= incomingPlayer.rating) continue;
 
-    // Compute new shirt numbers (try to keep, otherwise pick lowest free)
-    const buyerNumbersUsed = new Set(toSquad.filter((p) => p.id !== swapOut.id).map((p) => p.number));
-    const sellerNumbersUsed = new Set(fromSquad.filter((p) => p.id !== incomingPlayer.id).map((p) => p.number));
+    // Compute new shirt numbers (try to keep, otherwise pick lowest free).
+    // We compare by uuid because the player objects are about to swap teams.
+    const buyerNumbersUsed = new Set(toSquad.filter((p) => p.uuid !== swapOut.uuid).map((p) => p.number));
+    const sellerNumbersUsed = new Set(fromSquad.filter((p) => p.uuid !== incomingPlayer.uuid).map((p) => p.number));
 
     function pickFreeNumber(used: Set<number>, preferred: number): number {
       if (!used.has(preferred)) return preferred;
@@ -98,29 +108,26 @@ export function processTransferWindow(
     const incomingNumber = pickFreeNumber(buyerNumbersUsed, incomingPlayer.number);
     const outgoingNumber = pickFreeNumber(sellerNumbersUsed, swapOut.number);
 
+    // Build NEW Player objects — only teamId + number change, uuid is
+    // preserved. We don't mutate the original objects so any other reference
+    // holders (in case immutability matters elsewhere) keep their snapshot.
     const movedToElite: Player = {
       ...incomingPlayer,
       teamId: buyerId,
       number: incomingNumber,
-      id: `${buyerId}-${incomingNumber}`,
     };
     const movedToWeak: Player = {
       ...swapOut,
       teamId: cand.teamId,
       number: outgoingNumber,
-      id: `${cand.teamId}-${outgoingNumber}`,
     };
 
-    // Track ID rewrites so callers can update playerStats / awards / etc.
-    idMap.set(incomingPlayer.id, movedToElite.id);
-    idMap.set(swapOut.id, movedToWeak.id);
-
-    // Apply swap
+    // Apply swap (replace the old object with the new one in each squad).
     squads[cand.teamId] = fromSquad
-      .filter((p) => p.id !== incomingPlayer.id)
+      .filter((p) => p.uuid !== incomingPlayer.uuid)
       .concat(movedToWeak);
     squads[buyerId] = toSquad
-      .filter((p) => p.id !== swapOut.id)
+      .filter((p) => p.uuid !== swapOut.uuid)
       .concat(movedToElite);
 
     const fromTeam = world.teamBases[cand.teamId];
@@ -132,7 +139,7 @@ export function processTransferWindow(
     transfers.push({
       season: seasonNumber,
       windowIndex,
-      playerId: movedToElite.id, // NEW id — link will resolve to current location
+      playerId: incomingPlayer.uuid,
       playerName: incomingPlayer.name ?? `${incomingPlayer.number}号`,
       playerNumber: incomingNumber,
       position: incomingPlayer.position,
@@ -149,7 +156,7 @@ export function processTransferWindow(
     transfers.push({
       season: seasonNumber,
       windowIndex,
-      playerId: movedToWeak.id, // NEW id
+      playerId: swapOut.uuid,
       playerName: swapOut.name ?? `${swapOut.number}号`,
       playerNumber: outgoingNumber,
       position: swapOut.position,
@@ -162,53 +169,28 @@ export function processTransferWindow(
     });
   }
 
-  return { squads, transfers, idMap };
-}
-
-/**
- * Rewrite playerId references throughout the world after a transfer window.
- * Mutates: playerStats keys, playerAwardsHistory[*].playerId, transferHistory[*].playerId.
- *
- * Returns the new playerStats record (callers should reassign).
- * Other arrays are mutated in place but a new world spread is recommended.
- */
-export function applyTransferIdMap(
-  world: GameWorld,
-  idMap: Map<string, string>,
-): {
-  playerStats: typeof world.playerStats;
-  playerAwardsHistory: typeof world.playerAwardsHistory;
-  transferHistory: typeof world.transferHistory;
-} {
-  if (idMap.size === 0) {
-    return {
-      playerStats: world.playerStats,
-      playerAwardsHistory: world.playerAwardsHistory,
-      transferHistory: world.transferHistory,
-    };
+  // No transfers — preserve referential equality so React/zustand selectors
+  // that subscribed on `world.playerStats` don't re-render unnecessarily.
+  if (transfers.length === 0) {
+    return { squads, transfers, playerStats: world.playerStats };
   }
 
-  // Rewrite playerStats keys. Build a fresh record so React/zustand reactivity fires.
-  const newStats: typeof world.playerStats = {};
-  for (const [pid, stat] of Object.entries(world.playerStats)) {
-    const newId = idMap.get(pid) ?? pid;
-    newStats[newId] = { ...stat, playerId: newId };
+  // Refresh stat.teamId for any uuid whose owning team changed. The keys
+  // (uuids) themselves never change — that's the whole guarantee of the
+  // uuid refactor.
+  const uuidToTeam = new Map<string, string>();
+  for (const [tid, sq] of Object.entries(squads)) {
+    for (const p of sq) uuidToTeam.set(p.uuid, tid);
+  }
+  const updatedStats: Record<string, PlayerSeasonStats> = {};
+  for (const [uuid, stat] of Object.entries(world.playerStats)) {
+    const newTeam = uuidToTeam.get(uuid);
+    if (newTeam && newTeam !== stat.teamId) {
+      updatedStats[uuid] = { ...stat, teamId: newTeam };
+    } else {
+      updatedStats[uuid] = stat;
+    }
   }
 
-  // Rewrite awards
-  const newAwards = (world.playerAwardsHistory ?? []).map((a) =>
-    idMap.has(a.playerId) ? { ...a, playerId: idMap.get(a.playerId)! } : a,
-  );
-
-  // Rewrite transferHistory (entries created BEFORE this window may reference old IDs)
-  const newTransfers = (world.transferHistory ?? []).map((t) =>
-    idMap.has(t.playerId) ? { ...t, playerId: idMap.get(t.playerId)! } : t,
-  );
-
-  return {
-    playerStats: newStats,
-    playerAwardsHistory: newAwards,
-    transferHistory: newTransfers,
-  };
+  return { squads, transfers, playerStats: updatedStats };
 }
-

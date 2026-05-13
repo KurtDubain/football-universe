@@ -24,6 +24,12 @@ function makeTeam(id: string, overall: number): TeamBase {
   };
 }
 
+/**
+ * In tests we still derive the uuid from `${teamId}-${number}` so each
+ * fixture line stays as a single source of truth. Real saves use
+ * `p-<counter>` from the generator, but the function under test only cares
+ * about uuid uniqueness, not its shape.
+ */
 function makePlayer(
   teamId: string,
   number: number,
@@ -31,7 +37,7 @@ function makePlayer(
   rating = 80,
 ): Player {
   return {
-    id: `${teamId}-${number}`,
+    uuid: `${teamId}-${number}`,
     teamId,
     name: `${teamId}-${number}`,
     number,
@@ -44,14 +50,14 @@ function makePlayer(
 }
 
 function makeStat(
-  id: string,
+  uuid: string,
   teamId: string,
   goals: number,
   assists = 0,
   apps = 30,
 ): PlayerSeasonStats {
   return {
-    playerId: id,
+    playerId: uuid,
     teamId,
     goals,
     assists,

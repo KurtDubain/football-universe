@@ -21,7 +21,7 @@ import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
-import { processTransferWindow, applyTransferIdMap } from '../transfers/transfer-window';
+import { processTransferWindow } from '../transfers/transfer-window';
 import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
@@ -223,8 +223,12 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   );
   if (topScorer && topScorer.goals > 0) {
     const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
-    const playerName = squads[topScorer.teamId]?.find(p => p.id === topScorer.playerId)?.name
-      ?? `${topScorer.playerId.split('-').pop()}号`;
+    // topScorer.playerId holds a uuid; locate the player by walking the
+    // owner's squad. Fall back to a generic "##号" label only if the player
+    // isn't found (e.g. a stale stat after a same-season club fold).
+    const scorerPlayer = squads[topScorer.teamId]?.find(p => p.uuid === topScorer.playerId);
+    const playerName = scorerPlayer?.name
+      ?? (scorerPlayer ? `${scorerPlayer.number}号` : '射手王');
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'scorer'),
       seasonNumber, windowIndex, type: 'trophy',
@@ -282,24 +286,17 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
 
   // ── Transfer window ──────────────────────────────────────────
+  // Player UUIDs are stable across transfers, so playerStats keys, awards,
+  // and prior transferHistory entries continue to resolve without any
+  // post-process rewrite. The only thing that needs touching is each
+  // affected stat entry's `teamId` (so this season's freshly-attributed
+  // top-scorer / awards news points to the new club) — processTransferWindow
+  // returns the refreshed playerStats record.
   const transferResult = processTransferWindow(world, rng);
   if (transferResult.transfers.length > 0) {
     squads = transferResult.squads;
-
-    // Rewrite all stale playerId references (playerStats keys, awards, prior
-    // transfer entries) so links from /history, /chronicle and SeasonReview
-    // resolve to the player's CURRENT squad slot. Run BEFORE appending the new
-    // transfers — they already use the new IDs and would be incorrectly
-    // re-mapped if a new id happens to collide with an old key (e.g., when a
-    // transferred-up player and the swap-down player share a shirt number).
-    //
-    // Pass an inline view of the world that has the LATEST playerAwardsHistory
-    // (we may have just appended this season's awards above) so the rewrite
-    // sees the freshest data without our touching world directly.
-    const rewritten = applyTransferIdMap({ ...world, playerAwardsHistory }, transferResult.idMap);
-    playerStats = rewritten.playerStats;
-    playerAwardsHistory = rewritten.playerAwardsHistory;
-    transferHistory = [...rewritten.transferHistory, ...transferResult.transfers];
+    playerStats = transferResult.playerStats;
+    transferHistory = [...(transferHistory ?? []), ...transferResult.transfers];
 
     // Top 3 transfers as news
     const topTransfers = transferResult.transfers

@@ -57,7 +57,10 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           const runnerRec = l1Records[1];
           const gap = champRec && runnerRec ? champRec.leaguePoints - runnerRec.leaguePoints : 0;
           const scorer = scorers[0];
-          const scorerNum = scorer?.playerId.split('-').pop();
+          // playerId is now a uuid — fetch the actual player to get the
+          // shirt number (legacy code parsed it out of the id string).
+          const scorerPlayer = scorer ? world.squads[scorer.teamId]?.find(p => p.uuid === scorer.playerId) : undefined;
+          const scorerNum = scorerPlayer?.number ?? '';
           const scorerTeam = scorer ? getTeamName(scorer.teamId, tb) : '';
 
           const sentences: string[] = [];
@@ -225,9 +228,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {scorers.length > 0 && (() => {
           const king = scorers[0];
-          const kingNum = king.playerId.split('-').pop();
+          const kingPlayer = world.squads[king.teamId]?.find(p => p.uuid === king.playerId);
+          const kingNum = kingPlayer?.number ?? '';
           const kingTeam = tb[king.teamId];
-          const kingPlayer = world.squads[king.teamId]?.find(p => p.id === king.playerId);
           const kingName = kingPlayer?.name ?? `${kingNum}号`;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -246,8 +249,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               {scorers.length > 1 && (
                 <div className="p-2 space-y-0.5">
                   {scorers.slice(1).map((s, i) => {
-                    const p = world.squads[s.teamId]?.find(pp => pp.id === s.playerId);
-                    const nm = p?.name ?? `${s.playerId.split('-').pop()}号`;
+                    const p = world.squads[s.teamId]?.find(pp => pp.uuid === s.playerId);
+                    const nm = p?.name ?? (p ? `${p.number}号` : '球员');
                     return (
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
@@ -265,9 +268,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
         {assisters.length > 0 && (() => {
           const king = assisters[0];
-          const kingNum = king.playerId.split('-').pop();
+          const kingPlayer = world.squads[king.teamId]?.find(p => p.uuid === king.playerId);
+          const kingNum = kingPlayer?.number ?? '';
           const kingTeam = tb[king.teamId];
-          const kingPlayer = world.squads[king.teamId]?.find(p => p.id === king.playerId);
           const kingName = kingPlayer?.name ?? `${kingNum}号`;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -286,8 +289,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               {assisters.length > 1 && (
                 <div className="p-2 space-y-0.5">
                   {assisters.slice(1).map((s, i) => {
-                    const p = world.squads[s.teamId]?.find(pp => pp.id === s.playerId);
-                    const nm = p?.name ?? `${s.playerId.split('-').pop()}号`;
+                    const p = world.squads[s.teamId]?.find(pp => pp.uuid === s.playerId);
+                    const nm = p?.name ?? (p ? `${p.number}号` : '球员');
                     return (
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
@@ -321,7 +324,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             }, new Map<string, typeof scorers[0]>());
             const mvp = [...allStats.values()].sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists))[0];
             if (!mvp) return null;
-            const num = mvp.playerId.split('-').pop();
+            const mvpPlayer = world.squads[mvp.teamId]?.find(p => p.uuid === mvp.playerId);
+            const num = mvpPlayer?.number ?? '';
             return (
               <AwardCard emoji="🏆" title="赛季MVP" value={`${getTeamName(mvp.teamId, tb)} ${num}号`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
             );
@@ -346,7 +350,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           {scorers.length > 0 && (() => {
             const nonEliteScorer = scorers.find(s => (tb[s.teamId]?.overall ?? 99) < 75);
             if (!nonEliteScorer) return null;
-            const num = nonEliteScorer.playerId.split('-').pop();
+            const player = world.squads[nonEliteScorer.teamId]?.find(p => p.uuid === nonEliteScorer.playerId);
+            const num = player?.number ?? '';
             return (
               <AwardCard emoji="⭐" title="最佳新星" value={`${getTeamName(nonEliteScorer.teamId, tb)} ${num}号`} sub={`${nonEliteScorer.goals}球`} />
             );

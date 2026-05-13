@@ -460,7 +460,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
 
     // Top 3 rated in squad get star
     const sorted = [...squad].sort((a, b) => b.rating - a.rating);
-    const stars = new Set(sorted.slice(0, 3).map((p) => p.id));
+    const stars = new Set(sorted.slice(0, 3).map((p) => p.uuid));
 
     return { grouped: g, starIds: stars };
   }, [world, teamId]);
@@ -494,23 +494,23 @@ function SquadRoster({ teamId }: { teamId: string }) {
 
               {/* Player rows */}
               {players.map((player) => {
-                const stats = world.playerStats[player.id];
-                const isStar = starIds.has(player.id);
+                const stats = world.playerStats[player.uuid];
+                const isStar = starIds.has(player.uuid);
 
                 return (
                   <div
-                    key={player.id}
+                    key={player.uuid}
                     className="flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors"
                   >
                     {/* Number badge — clickable */}
-                    <Link to={`/player/${player.id}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors">
+                    <Link to={`/player/${player.uuid}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors">
                       <span className="text-xs font-bold text-slate-200">
                         {player.number}
                       </span>
                     </Link>
 
                     {/* Name */}
-                    <Link to={`/player/${player.id}`} className="text-sm text-slate-200 hover:text-blue-300 truncate w-16 sm:w-24 shrink-0">
+                    <Link to={`/player/${player.uuid}`} className="text-sm text-slate-200 hover:text-blue-300 truncate w-16 sm:w-24 shrink-0">
                       {player.name ?? `${player.number}号`}
                     </Link>
 

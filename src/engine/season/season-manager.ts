@@ -76,6 +76,13 @@ export interface GameWorld {
   coachChangesThisSeason: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];
   squads: Record<string, Player[]>;
   playerStats: Record<string, PlayerSeasonStats>;
+  /**
+   * Monotonic counter for assigning new Player.uuid values. Persisted on the
+   * world so future generator calls (e.g. youth promotions) can keep handing
+   * out unique uuids without colliding with existing ones. Bumped by the
+   * v8 migration so legacy saves get a sane starting point too.
+   */
+  nextPlayerUuidCounter: number;
   activeEvents: import('../events').SeasonEvent[];
   achievements: Achievement[];
   newsLog: NewsItem[];
@@ -188,7 +195,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   const rng = new SeededRNG(seed);
 
   // 8. Generate squads (permanent, once)
-  const squads = generateAllSquads(defaultTeams, seed + 7777);
+  const { squads, nextPlayerUuidCounter } = generateAllSquads(defaultTeams, seed + 7777);
   const playerStats = createInitialPlayerStats(squads);
 
   // Build an initial world (partial) so initializeNewSeason can fill it out
@@ -212,6 +219,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     coachChangesThisSeason: [],
     squads,
     playerStats,
+    nextPlayerUuidCounter,
     activeEvents: [],
     achievements: [],
     newsLog: [],
