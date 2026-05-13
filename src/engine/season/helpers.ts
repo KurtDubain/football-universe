@@ -78,7 +78,7 @@ export function countTrailingNotResult(form: ('W'|'D'|'L')[], exclude: 'W'|'D'|'
 }
 
 export function cnRoundLabel(name: string): string {
-  const map: Record<string, string> = { R32: '第一轮止步', R16: '第二轮止步', QF: '八强', SF: '四强', Final: '决赛' };
+  const map: Record<string, string> = { R32: '32强', R16: '16强', QF: '八强', SF: '四强', Final: '决赛' };
   return map[name] ?? name;
 }
 

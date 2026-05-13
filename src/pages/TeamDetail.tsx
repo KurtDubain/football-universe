@@ -275,21 +275,21 @@ export default function TeamDetail() {
                       <td className="px-2 py-1.5 text-center text-slate-100 font-bold">{rec.leaguePoints}</td>
                       <td className="hidden sm:table-cell px-2 py-1.5 text-center">
                         {rec.cupResult && (
-                          <span className={`text-[9px] px-1 rounded ${rec.cupResult === '冠军' ? 'bg-amber-900/50 text-amber-300' : rec.cupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.cupResult, 'amber')}`}>
                             {rec.cupResult}
                           </span>
                         )}
                       </td>
                       <td className="hidden sm:table-cell px-2 py-1.5 text-center">
                         {rec.superCupResult && (
-                          <span className={`text-[9px] px-1 rounded ${rec.superCupResult === '冠军' ? 'bg-purple-900/50 text-purple-300' : rec.superCupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.superCupResult, 'purple')}`}>
                             {rec.superCupResult}
                           </span>
                         )}
                       </td>
                       <td className="hidden md:table-cell px-2 py-1.5 text-center">
                         {rec.worldCupResult && (
-                          <span className={`text-[9px] px-1 rounded ${rec.worldCupResult === '冠军' ? 'bg-sky-900/50 text-sky-300' : rec.worldCupResult === '亚军' ? 'bg-slate-700 text-slate-300' : 'text-slate-500'}`}>
+                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.worldCupResult, 'sky')}`}>
                             {rec.worldCupResult}
                           </span>
                         )}
@@ -330,6 +330,29 @@ export default function TeamDetail() {
       <SquadRoster teamId={id} />
     </div>
   );
+}
+
+// ── Cup result chip styling ──────────────────────────────
+//   冠军 → champion color (per-cup)
+//   亚军 → silver
+//   四强 → bronze (made the semi-finals)
+//   八强 → faint bronze
+//   16强 / 32强 → muted gray (made knockouts)
+//   小组赛淘汰 → very muted (didn't make knockouts)
+//   参赛中 → blue (still alive)
+function cupResultStyle(label: string, championColor: 'amber' | 'purple' | 'sky'): string {
+  if (label === '冠军') {
+    return championColor === 'amber' ? 'bg-amber-900/50 text-amber-300'
+      : championColor === 'purple' ? 'bg-purple-900/50 text-purple-300'
+      : 'bg-sky-900/50 text-sky-300';
+  }
+  if (label === '亚军') return 'bg-slate-600/40 text-slate-200';
+  if (label === '四强') return 'bg-orange-900/40 text-orange-300';
+  if (label === '八强') return 'bg-amber-950/50 text-amber-400/80';
+  if (label === '16强' || label === '32强') return 'bg-slate-700/40 text-slate-400';
+  if (label === '小组赛淘汰') return 'text-slate-500';
+  if (label === '参赛中') return 'bg-blue-900/40 text-blue-300';
+  return 'text-slate-500';
 }
 
 // ── Attribute bar ──────────────────────────────────────────

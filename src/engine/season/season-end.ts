@@ -363,6 +363,25 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     let superCupResult: string | undefined;
     let worldCupResult: string | undefined;
 
+    // Walk knockout rounds from latest to earliest, return the team's
+    // elimination round name (or null if they're still alive / not in knockouts).
+    function findEliminationRound(rounds: CupFixture[][] | { fixtures: CupFixture[]; completed: boolean; roundName: string }[]): string | null {
+      const arr = rounds as { fixtures: CupFixture[]; completed: boolean; roundName: string }[];
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const r = arr[i];
+        const playerFixture = r.fixtures.find(
+          (f) => f.homeTeamId === teamId || f.awayTeamId === teamId,
+        );
+        if (!playerFixture) continue;
+        if (!r.completed) return null; // still in progress
+        // If they won this round, no further round means they advanced but
+        // weren't placed yet — treat as "in progress" to be safe.
+        if (playerFixture.winnerId === teamId) return null;
+        return r.roundName;
+      }
+      return null;
+    }
+
     // League cup
     if (teamId === leagueCupWinner) cupResult = '冠军';
     else {
@@ -385,15 +404,26 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // Super cup
     if (teamId === superCupWinner) superCupResult = '冠军';
     else {
-      const scFinal = world.superCup.knockoutRounds.at(-1);
-      if (scFinal?.fixtures[0] && (scFinal.fixtures[0].homeTeamId === teamId || scFinal.fixtures[0].awayTeamId === teamId)) {
-        superCupResult = '亚军';
-      } else if (world.superCup.groups.some(g => g.teamIds.includes(teamId))) {
-        if (world.superCup.groupStageCompleted) {
-          const inKnockout = world.superCup.knockoutRounds.some(r => r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId));
-          superCupResult = inKnockout ? '淘汰赛' : '小组赛出局';
+      const inGroup = world.superCup.groups.some(g => g.teamIds.includes(teamId));
+      if (inGroup) {
+        const scFinal = world.superCup.knockoutRounds.at(-1);
+        const inFinal = scFinal && scFinal.fixtures[0]
+          && (scFinal.fixtures[0].homeTeamId === teamId || scFinal.fixtures[0].awayTeamId === teamId);
+        if (inFinal && scFinal.completed) {
+          superCupResult = '亚军';
         } else {
-          superCupResult = '参赛中';
+          const elimRound = findEliminationRound(world.superCup.knockoutRounds);
+          if (elimRound) {
+            superCupResult = cnRoundLabel(elimRound);
+          } else if (world.superCup.groupStageCompleted) {
+            const inAnyKO = world.superCup.knockoutRounds.some(r =>
+              r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
+            );
+            // In knockouts but elimination round not yet final → still alive
+            superCupResult = inAnyKO ? '参赛中' : '小组赛淘汰';
+          } else {
+            superCupResult = '参赛中';
+          }
         }
       }
     }
@@ -401,16 +431,24 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // World cup
     if (world.worldCup) {
       if (teamId === worldCupWinner) worldCupResult = '冠军';
-      else if (world.worldCup.knockoutRounds.at(-1)?.fixtures[0] &&
-        (world.worldCup.knockoutRounds.at(-1)!.fixtures[0].homeTeamId === teamId ||
-         world.worldCup.knockoutRounds.at(-1)!.fixtures[0].awayTeamId === teamId)) {
-        worldCupResult = '亚军';
-      } else if (world.worldCup.participantIds.includes(teamId)) {
-        const inKnockout = world.worldCup.knockoutRounds.some(r => r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId));
-        if (world.worldCup.completed) {
-          worldCupResult = inKnockout ? '淘汰赛' : '小组赛出局';
+      else if (world.worldCup.participantIds.includes(teamId)) {
+        const wcFinal = world.worldCup.knockoutRounds.at(-1);
+        const inFinal = wcFinal && wcFinal.fixtures[0]
+          && (wcFinal.fixtures[0].homeTeamId === teamId || wcFinal.fixtures[0].awayTeamId === teamId);
+        if (inFinal && wcFinal.completed) {
+          worldCupResult = '亚军';
         } else {
-          worldCupResult = '参赛中';
+          const elimRound = findEliminationRound(world.worldCup.knockoutRounds);
+          if (elimRound) {
+            worldCupResult = cnRoundLabel(elimRound);
+          } else if (world.worldCup.completed) {
+            const inAnyKO = world.worldCup.knockoutRounds.some(r =>
+              r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
+            );
+            worldCupResult = inAnyKO ? '参赛中' : '小组赛淘汰';
+          } else {
+            worldCupResult = '参赛中';
+          }
         }
       }
     }
