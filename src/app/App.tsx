@@ -17,6 +17,7 @@ import PlayerDetail from '../pages/PlayerDetail';
 import Settings from '../pages/Settings';
 import Welcome from '../pages/Welcome';
 import TeamEditor from '../pages/TeamEditor';
+import Transfers from '../pages/Transfers';
 
 export default function App() {
   const initialized = useGameStore((s) => s.initialized);
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/coach/:id" element={<CoachDetail />} />
         <Route path="/history" element={<History />} />
         <Route path="/chronicle" element={<Chronicle />} />
+        <Route path="/transfers" element={<Transfers />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/team-editor" element={<TeamEditor />} />
         <Route path="/settings" element={<Settings />} />

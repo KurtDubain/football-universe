@@ -3,6 +3,7 @@ import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord } from '../types/team';
 import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
 import { getTopScorers, getTopAssists } from '../engine/players/stats';
+import { AWARD_META } from '../engine/awards/season-awards';
 
 interface Props {
   world: GameWorld;
@@ -187,12 +188,47 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         <StatCard label="换帅次数" value={`${honor.coachChanges.length}次`} sub={honor.coachChanges.length > 0 ? honor.coachChanges.map(c => tb[c.teamId]?.name).slice(0, 2).join('、') : '无'} />
       </div>
 
+      {/* Player awards (颁奖典礼) */}
+      {(() => {
+        const awards = (world.playerAwardsHistory ?? []).filter(a => a.season === seasonNumber);
+        if (awards.length === 0) return null;
+        return (
+          <div className="bg-gradient-to-br from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-800/30 p-4">
+            <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-1.5">
+              <span>🏆</span><span>颁奖典礼</span>
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {awards.map(a => {
+                const meta = AWARD_META[a.type];
+                return (
+                  <Link
+                    key={a.type}
+                    to={`/player/${a.playerId}`}
+                    className="bg-slate-900/40 rounded-lg border border-slate-700/40 p-2.5 hover:border-amber-600/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-base">{meta.emoji}</span>
+                      <span className={`text-[10px] font-semibold ${meta.color}`}>{meta.label}</span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-100 truncate">{a.playerName}</div>
+                    <div className="text-[10px] text-slate-400 truncate">{a.teamName}</div>
+                    <div className={`text-[10px] mt-0.5 font-semibold ${meta.color}`}>{a.statLabel}</div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Top scorer + assist provider */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {scorers.length > 0 && (() => {
           const king = scorers[0];
           const kingNum = king.playerId.split('-').pop();
           const kingTeam = tb[king.teamId];
+          const kingPlayer = world.squads[king.teamId]?.find(p => p.id === king.playerId);
+          const kingName = kingPlayer?.name ?? `${kingNum}号`;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
@@ -202,21 +238,25 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                   </Link>
                   <div>
                     <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
-                    <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
+                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingName}</Link>
                     <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
                   </div>
                 </div>
               </div>
               {scorers.length > 1 && (
                 <div className="p-2 space-y-0.5">
-                  {scorers.slice(1).map((s, i) => (
-                    <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
-                      <span className="w-4 text-center text-slate-500">{i + 2}</span>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                      <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {s.playerId.split('-').pop()}号</span>
-                      <span className="text-slate-200 font-bold">{s.goals}球</span>
-                    </div>
-                  ))}
+                  {scorers.slice(1).map((s, i) => {
+                    const p = world.squads[s.teamId]?.find(pp => pp.id === s.playerId);
+                    const nm = p?.name ?? `${s.playerId.split('-').pop()}号`;
+                    return (
+                      <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
+                        <span className="w-4 text-center text-slate-500">{i + 2}</span>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
+                        <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {nm}</span>
+                        <span className="text-slate-200 font-bold">{s.goals}球</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -227,6 +267,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           const king = assisters[0];
           const kingNum = king.playerId.split('-').pop();
           const kingTeam = tb[king.teamId];
+          const kingPlayer = world.squads[king.teamId]?.find(p => p.id === king.playerId);
+          const kingName = kingPlayer?.name ?? `${kingNum}号`;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-emerald-900/20 to-slate-800 border-b border-slate-700/50">
@@ -236,21 +278,25 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                   </Link>
                   <div>
                     <div className="text-[10px] text-emerald-400 font-semibold">赛季助攻王</div>
-                    <Link to={`/team/${king.teamId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingNum}号</Link>
+                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingName}</Link>
                     <div className="text-xs text-emerald-400 font-bold">{king.assists}助 {king.goals > 0 ? `${king.goals}球` : ''}</div>
                   </div>
                 </div>
               </div>
               {assisters.length > 1 && (
                 <div className="p-2 space-y-0.5">
-                  {assisters.slice(1).map((s, i) => (
-                    <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
-                      <span className="w-4 text-center text-slate-500">{i + 2}</span>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                      <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {s.playerId.split('-').pop()}号</span>
-                      <span className="text-slate-200 font-bold">{s.assists}助</span>
-                    </div>
-                  ))}
+                  {assisters.slice(1).map((s, i) => {
+                    const p = world.squads[s.teamId]?.find(pp => pp.id === s.playerId);
+                    const nm = p?.name ?? `${s.playerId.split('-').pop()}号`;
+                    return (
+                      <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
+                        <span className="w-4 text-center text-slate-500">{i + 2}</span>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
+                        <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {nm}</span>
+                        <span className="text-slate-200 font-bold">{s.assists}助</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

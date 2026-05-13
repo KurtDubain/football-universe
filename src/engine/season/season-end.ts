@@ -19,6 +19,8 @@ import { appendWorldCupWindows } from './calendar-builder';
 import { BALANCE } from '../../config/balance';
 import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
+import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
+import { processTransferWindow } from '../transfers/transfer-window';
 
 /**
  * Handle end-of-season processing: honors, trophies, records, and prep next season.
@@ -193,14 +195,14 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const allPlayerStats = Object.values(world.playerStats);
   const topScorer = allPlayerStats.reduce((best, s) => s.goals > (best?.goals ?? 0) ? s : best, null as { goals: number; playerId: string; teamId: string } | null);
   if (topScorer && topScorer.goals > 0) {
-    const parts = topScorer.playerId.split('-');
-    const num = parts[parts.length - 1];
     const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
+    const playerName = world.squads[topScorer.teamId]?.find(p => p.id === topScorer.playerId)?.name
+      ?? `${topScorer.playerId.split('-').pop()}号`;
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'scorer'),
       seasonNumber, windowIndex, type: 'trophy',
-      title: `赛季射手王: ${teamName} ${num}号 (${topScorer.goals}球)`,
-      description: `${teamName}的${num}号球员以${topScorer.goals}粒进球荣获本赛季射手王。`,
+      title: `赛季射手王: ${teamName} ${playerName} (${topScorer.goals}球)`,
+      description: `${teamName}的${playerName}以${topScorer.goals}粒进球荣获本赛季射手王。`,
     });
   }
 
@@ -224,6 +226,61 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       title: `火力最猛: ${world.teamBases[bestAttack.teamId]?.name} (${bestAttack.goalsFor}球)`,
       description: `${world.teamBases[bestAttack.teamId]?.name}以${bestAttack.goalsFor}粒进球成为顶级联赛最强火力。`,
     });
+  }
+
+  // ── Individual player awards (颁奖典礼) ──────────────────────
+  const seasonAwards = computeSeasonAwards(
+    seasonNumber,
+    world.playerStats,
+    world.squads,
+    world.teamBases,
+    world.league1Standings,
+  );
+  for (const award of seasonAwards) {
+    const meta = AWARD_META[award.type];
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `award-${award.type}`),
+      seasonNumber, windowIndex, type: 'trophy',
+      title: `${meta.emoji} ${meta.label}: ${award.teamName} ${award.playerName}`,
+      description: `${award.playerName}（${award.teamName}）荣膺本赛季${meta.label}，${award.statLabel}。`,
+    });
+  }
+  // Append to history (will be saved with world below)
+  if (seasonAwards.length > 0) {
+    world.playerAwardsHistory = [...(world.playerAwardsHistory ?? []), ...seasonAwards];
+  } else if (!world.playerAwardsHistory) {
+    world.playerAwardsHistory = [];
+  }
+
+  // ── Transfer window ──────────────────────────────────────────
+  const transferResult = processTransferWindow(world, rng);
+  if (transferResult.transfers.length > 0) {
+    world.squads = transferResult.squads;
+    world.transferHistory = [...(world.transferHistory ?? []), ...transferResult.transfers];
+
+    // Top 3 transfers as news
+    const topTransfers = transferResult.transfers
+      .filter((t) => t.type === 'transfer')
+      .slice(0, 3);
+    for (const t of topTransfers) {
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `transfer-${t.playerId}`),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `🔄 转会: ${t.playerName} 加盟 ${t.toTeamName}`,
+        description: `${t.playerName}从${t.fromTeamName}转会至${t.toTeamName}${t.fee ? `，转会费约€${t.fee}M` : ''}。${t.reason}。`,
+      });
+    }
+    if (transferResult.transfers.filter((t) => t.type === 'transfer').length > 3) {
+      const total = transferResult.transfers.filter((t) => t.type === 'transfer').length;
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, 'transfer-summary'),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `转会窗口: 共完成 ${total} 笔转会`,
+        description: `本赛季转会窗口共有${total}名球员易主，详情查看转会页面。`,
+      });
+    }
+  } else if (!world.transferHistory) {
+    world.transferHistory = [];
   }
 
   // Promoted teams

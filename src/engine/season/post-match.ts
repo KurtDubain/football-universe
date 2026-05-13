@@ -295,11 +295,12 @@ export function runPostMatchProcessing(
         const num = parts[parts.length - 1];
         const teamId = parts.slice(0, -1).join('-');
         const teamName = world.teamBases[teamId]?.name ?? teamId;
+        const playerName = world.squads[teamId]?.find(p => p.id === playerId)?.name ?? `${num}号`;
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `hattrick-${playerId}`),
           seasonNumber, windowIndex, type: 'match_result',
-          title: `帽子戏法! ${teamName} ${num}号独进${count}球`,
-          description: `${teamName}的${num}号球员上演帽子戏法，独中${count}元。`,
+          title: `帽子戏法! ${teamName} ${playerName}独进${count}球`,
+          description: `${teamName}的${playerName}上演帽子戏法，独中${count}元。`,
         });
       }
     }
@@ -313,11 +314,11 @@ export function runPostMatchProcessing(
       if (diff <= 1) {
         const scorer = lateGoals[lateGoals.length - 1];
         const teamName = world.teamBases[scorer.teamId]?.name ?? scorer.teamId;
-        const numStr = scorer.playerNumber ? `${scorer.playerNumber}号` : '';
+        const scorerLabel = scorer.playerName ?? (scorer.playerNumber ? `${scorer.playerNumber}号` : '');
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `latedrama-${result.fixtureId}`),
           seasonNumber, windowIndex, type: 'match_result',
-          title: `绝杀! ${teamName} ${numStr}补时建功`,
+          title: `绝杀! ${teamName} ${scorerLabel}补时建功`,
           description: `${teamName}在第${scorer.minute}分钟打入关键进球，上演绝杀好戏！`,
         });
       }

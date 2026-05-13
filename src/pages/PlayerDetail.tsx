@@ -107,12 +107,13 @@ export default function PlayerDetail() {
             {player.number}
           </div>
           <div className="flex-1">
-            <h2 className="text-xl font-bold text-slate-100">{player.number}号球员</h2>
+            <h2 className="text-xl font-bold text-slate-100">{player.name ?? `${player.number}号球员`}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <Link to={`/team/${teamId}`} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: team.color }} />
                 {team.name}
               </Link>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-mono">#{player.number}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${posColor[player.position] ?? ''}`}>
                 {posLabel[player.position] ?? player.position}
               </span>

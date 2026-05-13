@@ -101,8 +101,22 @@ export default function Players() {
         </td>
 
         {/* Number */}
-        <td className="px-2 py-2 text-center text-sm text-slate-300 font-mono">
+        <td className="px-2 py-2 text-center text-sm text-slate-300 font-mono hidden sm:table-cell">
           {player ? `${player.number}号` : '-'}
+        </td>
+
+        {/* Name */}
+        <td className="px-2 py-2">
+          {player ? (
+            <Link
+              to={`/player/${stat.playerId}`}
+              className="text-sm text-slate-200 hover:text-blue-300 truncate block max-w-[100px] sm:max-w-none"
+            >
+              {player.name ?? `${player.number}号`}
+            </Link>
+          ) : (
+            <span className="text-sm text-slate-500">-</span>
+          )}
         </td>
 
         {/* Team */}
@@ -217,7 +231,8 @@ export default function Players() {
             <thead>
               <tr className="text-xs text-slate-400 border-b border-slate-700">
                 <th className="px-1 sm:px-2 py-2 text-center w-10">#</th>
-                <th className="px-2 py-2.5 text-center">号码</th>
+                <th className="px-2 py-2.5 text-center hidden sm:table-cell">号码</th>
+                <th className="px-2 py-2.5 text-left">球员</th>
                 <th className="px-2 py-2.5 text-left">球队</th>
                 <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                   位置
@@ -249,7 +264,7 @@ export default function Players() {
               {currentData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-10 text-center text-sm text-slate-500"
                   >
                     暂无数据

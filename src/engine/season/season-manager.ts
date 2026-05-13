@@ -70,6 +70,8 @@ export interface GameWorld {
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
   matchHistory: MatchHistoryEntry[];
   seasonBuffsHistory: { season: number; buffs: SeasonBuff[] }[];
+  playerAwardsHistory: import('../../types/award').PlayerAward[];
+  transferHistory: import('../../types/transfer').TransferRecord[];
   gameMode?: import('../../types/game-mode').GameMode;
 }
 
@@ -189,6 +191,8 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     bets: [],
     matchHistory: [],
     seasonBuffsHistory: [],
+    playerAwardsHistory: [],
+    transferHistory: [],
     gameMode: options?.gameMode ?? 'free',
   };
 

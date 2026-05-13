@@ -6,6 +6,7 @@ import { SeededRNG } from '../engine/match/rng';
 import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
+import { pickPlayerName } from '../config/player-names';
 
 interface GameStore {
   world: GameWorld | null;
@@ -284,7 +285,33 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 1,
+      version: 3,
+      migrate: (persistedState: unknown, version: number): GameStore => {
+        const state = persistedState as Partial<GameStore> & { world?: GameWorld | null };
+        // v1 → v2: backfill player.name for existing saves
+        if (version < 2 && state?.world?.squads && state.world.teamBases) {
+          const teamBases = state.world.teamBases;
+          for (const [teamId, squad] of Object.entries(state.world.squads)) {
+            if (!Array.isArray(squad)) continue;
+            const region = teamBases[teamId]?.region ?? '大陆+其他';
+            const used = new Set<string>();
+            for (const p of squad) {
+              if (!p.name) {
+                // Use Math.random for migration (one-time, acceptable to be non-deterministic)
+                p.name = pickPlayerName(region, used, <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]);
+              } else {
+                used.add(p.name);
+              }
+            }
+          }
+        }
+        // v2 → v3: ensure playerAwardsHistory & transferHistory exist
+        if (version < 3 && state?.world) {
+          if (!Array.isArray(state.world.playerAwardsHistory)) state.world.playerAwardsHistory = [];
+          if (!Array.isArray(state.world.transferHistory)) state.world.transferHistory = [];
+        }
+        return state as GameStore;
+      },
       partialize: (state) => ({
         world: state.world,
         initialized: state.initialized,

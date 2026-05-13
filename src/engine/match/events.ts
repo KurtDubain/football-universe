@@ -185,12 +185,16 @@ function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
 }
 
 /**
- * Format a description with optional player number prefix.
+ * Format a description with optional player name + number prefix.
  */
 function formatDescription(
   description: string,
   playerNumber?: number,
+  playerName?: string,
 ): string {
+  if (playerName) {
+    return `${playerName} ${description}`;
+  }
   if (playerNumber !== undefined) {
     return `${playerNumber}号 ${description}`;
   }
@@ -295,10 +299,12 @@ export function generateMatchEvents(
       // Pick a scorer if squad is available
       let playerId: string | undefined;
       let playerNumber: number | undefined;
+      let playerName: string | undefined;
       if (squad) {
         const scorer = pickGoalScorer(squad, rng);
         playerId = scorer.id;
         playerNumber = scorer.number;
+        playerName = scorer.name;
       }
 
       events.push({
@@ -307,7 +313,8 @@ export function generateMatchEvents(
         teamId,
         playerId,
         playerNumber,
-        description: formatDescription(description, playerNumber),
+        playerName,
+        description: formatDescription(description, playerNumber, playerName),
       });
 
       // ~70% of non-penalty goals have an assist
@@ -319,7 +326,8 @@ export function generateMatchEvents(
           teamId,
           playerId: assister.id,
           playerNumber: assister.number,
-          description: `${assister.number}号 送出助攻`,
+          playerName: assister.name,
+          description: `${assister.name ?? assister.number + '号'} 送出助攻`,
         });
       }
     }
@@ -346,10 +354,12 @@ export function generateMatchEvents(
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
+    let playerName: string | undefined;
     if (squad) {
       const player = pickCardPlayer(squad, rng);
       playerId = player.id;
       playerNumber = player.number;
+      playerName = player.name;
     }
 
     events.push({
@@ -358,7 +368,8 @@ export function generateMatchEvents(
       teamId,
       playerId,
       playerNumber,
-      description: formatDescription(description, playerNumber),
+      playerName,
+      description: formatDescription(description, playerNumber, playerName),
     });
   }
 
@@ -372,10 +383,12 @@ export function generateMatchEvents(
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
+    let playerName: string | undefined;
     if (squad) {
       const player = pickCardPlayer(squad, rng);
       playerId = player.id;
       playerNumber = player.number;
+      playerName = player.name;
     }
 
     events.push({
@@ -384,7 +397,8 @@ export function generateMatchEvents(
       teamId,
       playerId,
       playerNumber,
-      description: formatDescription(description, playerNumber),
+      playerName,
+      description: formatDescription(description, playerNumber, playerName),
     });
   }
 
@@ -400,10 +414,12 @@ export function generateMatchEvents(
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
+    let playerName: string | undefined;
     if (squad) {
       const gk = pickGoalkeeper(squad);
       playerId = gk.id;
       playerNumber = gk.number;
+      playerName = gk.name;
     }
 
     events.push({
@@ -412,7 +428,8 @@ export function generateMatchEvents(
       teamId,
       playerId,
       playerNumber,
-      description: formatDescription(description, playerNumber),
+      playerName,
+      description: formatDescription(description, playerNumber, playerName),
     });
   }
 
@@ -427,10 +444,12 @@ export function generateMatchEvents(
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
+    let playerName: string | undefined;
     if (squad) {
       const player = pickMissPlayer(squad, rng);
       playerId = player.id;
       playerNumber = player.number;
+      playerName = player.name;
     }
 
     events.push({
@@ -439,7 +458,8 @@ export function generateMatchEvents(
       teamId,
       playerId,
       playerNumber,
-      description: formatDescription(description, playerNumber),
+      playerName,
+      description: formatDescription(description, playerNumber, playerName),
     });
   }
 
@@ -462,6 +482,7 @@ export function generateMatchEvents(
       const homeShooterSquad = homeSquad;
       let homeShooterPlayerId: string | undefined;
       let homeShooterNumber: number | undefined;
+      let homeShooterName: string | undefined;
       if (homeShooterSquad) {
         // Pick from outfield players for shootout
         const outfield = homeShooterSquad.filter((p) => p.position !== 'GK');
@@ -471,6 +492,7 @@ export function generateMatchEvents(
             : homeShooterSquad[0];
         homeShooterPlayerId = shooter.id;
         homeShooterNumber = shooter.number;
+        homeShooterName = shooter.name;
       }
 
       if (homeRemaining > 0) {
@@ -481,7 +503,8 @@ export function generateMatchEvents(
           teamId: homeTeamId,
           playerId: homeShooterPlayerId,
           playerNumber: homeShooterNumber,
-          description: formatDescription(desc, homeShooterNumber),
+          playerName: homeShooterName,
+          description: formatDescription(desc, homeShooterNumber, homeShooterName),
         });
         homeRemaining--;
       } else {
@@ -492,7 +515,8 @@ export function generateMatchEvents(
           teamId: homeTeamId,
           playerId: homeShooterPlayerId,
           playerNumber: homeShooterNumber,
-          description: formatDescription(desc, homeShooterNumber),
+          playerName: homeShooterName,
+          description: formatDescription(desc, homeShooterNumber, homeShooterName),
         });
       }
       penMinute++;
@@ -501,6 +525,7 @@ export function generateMatchEvents(
       const awayShooterSquad = awaySquad;
       let awayShooterPlayerId: string | undefined;
       let awayShooterNumber: number | undefined;
+      let awayShooterName: string | undefined;
       if (awayShooterSquad) {
         const outfield = awayShooterSquad.filter((p) => p.position !== 'GK');
         const shooter =
@@ -509,6 +534,7 @@ export function generateMatchEvents(
             : awayShooterSquad[0];
         awayShooterPlayerId = shooter.id;
         awayShooterNumber = shooter.number;
+        awayShooterName = shooter.name;
       }
 
       if (awayRemaining > 0) {
@@ -519,7 +545,8 @@ export function generateMatchEvents(
           teamId: awayTeamId,
           playerId: awayShooterPlayerId,
           playerNumber: awayShooterNumber,
-          description: formatDescription(desc, awayShooterNumber),
+          playerName: awayShooterName,
+          description: formatDescription(desc, awayShooterNumber, awayShooterName),
         });
         awayRemaining--;
       } else {
@@ -530,7 +557,8 @@ export function generateMatchEvents(
           teamId: awayTeamId,
           playerId: awayShooterPlayerId,
           playerNumber: awayShooterNumber,
-          description: formatDescription(desc, awayShooterNumber),
+          playerName: awayShooterName,
+          description: formatDescription(desc, awayShooterNumber, awayShooterName),
         });
       }
       penMinute++;

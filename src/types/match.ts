@@ -17,6 +17,7 @@ export interface MatchEvent {
   teamId: string;
   playerId?: string;   // e.g. "real_madrid-7"
   playerNumber?: number;
+  playerName?: string; // assigned player name for display
   description: string;
 }
 

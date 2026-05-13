@@ -1,6 +1,7 @@
 import { Player, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
+import { pickPlayerName } from '../../config/player-names';
 
 /**
  * Generate 22 players for a team.
@@ -43,6 +44,8 @@ export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
   }
 
   const players: Player[] = [];
+  const usedNames = new Set<string>();
+  const region = team.region ?? '大陆+其他';
 
   // Determine star player indices (2-3 stars)
   const starCount = rng.nextInt(2, 3);
@@ -117,6 +120,7 @@ export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
     players.push({
       id: `${team.id}-${number}`,
       teamId: team.id,
+      name: pickPlayerName(region, usedNames, (arr) => rng.pick(arr)),
       number,
       position: pos,
       rating,

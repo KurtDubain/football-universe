@@ -181,6 +181,19 @@ export default function Layout({ children }: LayoutProps) {
           >
             编年史
           </NavLink>
+          <NavLink
+            to="/transfers"
+            onClick={() => setMobileNavOpen(false)}
+            className={({ isActive }) =>
+              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                isActive
+                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
+              }`
+            }
+          >
+            转会窗口
+          </NavLink>
         </div>
       </nav>
 

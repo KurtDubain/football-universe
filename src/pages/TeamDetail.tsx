@@ -484,6 +484,11 @@ function SquadRoster({ teamId }: { teamId: string }) {
                       </span>
                     </Link>
 
+                    {/* Name */}
+                    <Link to={`/player/${player.id}`} className="text-sm text-slate-200 hover:text-blue-300 truncate w-16 sm:w-24 shrink-0">
+                      {player.name ?? `${player.number}号`}
+                    </Link>
+
                     {/* Position + star */}
                     <div className="flex items-center gap-1 w-10 shrink-0">
                       <span className={`text-[10px] font-medium ${posBgColor[player.position]} px-1 py-0.5 rounded`}>

@@ -184,7 +184,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
             .slice(0, 3)
             .map((e, i) => (
               <span key={i}>
-                {e.minute}'{e.playerNumber ? ` ${e.playerNumber}号` : ''}
+                {e.minute}'{e.playerName ? ` ${e.playerName}` : (e.playerNumber ? ` ${e.playerNumber}号` : '')}
               </span>
             ))}
         </div>
