@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
+import AchievementToast from '../components/AchievementToast';
 import { AmbientGlow } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 
@@ -190,7 +191,7 @@ export default function Layout({ children }: LayoutProps) {
         >
           重置游戏
         </button>
-        <p className="text-[9px] text-slate-600 text-center">v{APP_VERSION} · by KurtDubain</p>
+        <p className="text-[11px] sm:text-[9px] text-slate-600 text-center">v{APP_VERSION} · by KurtDubain</p>
       </div>
     </>
   );
@@ -300,6 +301,9 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Floating advance button */}
       {showFloatingBtn && <FloatingAdvanceButton />}
+
+      {/* Achievement toast */}
+      <AchievementToastContainer />
     </div>
   );
 }
@@ -351,7 +355,14 @@ function FloatingAdvanceButton() {
       onPointerUp={onPointerUp}
     >
       <span className="text-white text-xs font-bold">{isAdvancing ? '...' : '推进'}</span>
-      {currentWindow && <span className="text-white/60 text-[8px] leading-none mt-0.5">{getWindowTypeLabel(currentWindow.type).slice(0, 3)}</span>}
+      {currentWindow && <span className="text-white/60 text-[10px] sm:text-[8px] leading-none mt-0.5">{getWindowTypeLabel(currentWindow.type).slice(0, 3)}</span>}
     </div>
   );
+}
+
+function AchievementToastContainer() {
+  const newAchievements = useGameStore(s => s.newAchievements);
+  const dismissAchievement = useGameStore(s => s.dismissAchievement);
+  if (newAchievements.length === 0) return null;
+  return <AchievementToast achievement={newAchievements[0]} onDismiss={dismissAchievement} />;
 }

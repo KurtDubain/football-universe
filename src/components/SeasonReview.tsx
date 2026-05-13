@@ -471,7 +471,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                     <div className={`text-xs font-bold ${isDominant ? 'text-amber-400' : 'text-slate-300'}`}>{name}</div>
                     <div className="text-[10px] text-slate-500 mt-1">{data.wins}胜 {data.draws}平 {data.losses}负</div>
                     <div className="text-[10px] text-slate-500">{data.goals}球</div>
-                    {isDominant && <div className="text-[9px] text-amber-400 mt-1">本季最强</div>}
+                    {isDominant && <div className="text-[11px] sm:text-[9px] text-amber-400 mt-1">本季最强</div>}
                   </div>
                 );
               })}

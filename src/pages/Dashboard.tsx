@@ -185,7 +185,7 @@ export default function Dashboard() {
               <span className="text-slate-600 shrink-0">{coachName}</span>
               <div className="flex gap-0.5 shrink-0">
                 {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
-                  <span key={i} className={`w-4 h-4 rounded text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
+                  <span key={i} className={`w-4 h-4 rounded text-[11px] sm:text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
                 ))}
               </div>
               {opponentId && (
@@ -729,7 +729,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
                       <td className="text-center px-1 py-1.5">
                         <div className="flex gap-0.5 justify-center">
                           {formatForm(entry.form.slice(-3)).map((f, fi) => (
-                            <span key={fi} className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[9px] font-bold text-white ${f.color}`}>{f.label}</span>
+                            <span key={fi} className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[11px] sm:text-[9px] font-bold text-white ${f.color}`}>{f.label}</span>
                           ))}
                         </div>
                       </td>
@@ -802,7 +802,7 @@ function FixtureCard({
       {tags.length > 0 && (
         <div className="flex gap-1 mb-1">
           {tags.map((t, i) => (
-            <span key={i} className={`text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
+            <span key={i} className={`text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
           ))}
         </div>
       )}
@@ -812,14 +812,14 @@ function FixtureCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
-            <span className="text-[9px] text-slate-500">{homeTeam.overall}</span>
+            <span className="text-[11px] sm:text-[9px] text-slate-500">{homeTeam.overall}</span>
           </div>
         </div>
         <span className="text-[10px] font-bold text-slate-600 px-1.5 shrink-0">VS</span>
         {/* Away */}
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center gap-1 justify-end">
-            <span className="text-[9px] text-slate-500">{awayTeam.overall}</span>
+            <span className="text-[11px] sm:text-[9px] text-slate-500">{awayTeam.overall}</span>
             <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
           </div>
         </div>
@@ -831,7 +831,7 @@ function FixtureCard({
         <div className="bg-slate-400" style={{ width: `${pred.drawPct}%` }} />
         <div className="bg-red-500" style={{ width: `${pred.awayWinPct}%` }} />
       </div>
-      <div className="flex justify-between text-[9px] mt-0.5 text-slate-500">
+      <div className="flex justify-between text-[11px] sm:text-[9px] mt-0.5 text-slate-500">
         <span className="text-green-400">{pred.homeWinPct}%</span>
         <span className="truncate px-1">{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
@@ -1002,7 +1002,7 @@ function BettingPanel({ world, fixtures }: { world: GameWorld; fixtures: MatchFi
           );
         })}
       </div>
-      <p className="text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于OVR差距 · 推进后自动结算</p>
+      <p className="text-[11px] sm:text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于OVR差距 · 推进后自动结算</p>
     </div>
   );
 }

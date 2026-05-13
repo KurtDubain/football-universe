@@ -148,8 +148,8 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
               <span className="text-xs text-slate-500 w-8 shrink-0">S{c.season}</span>
               <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
               <span className="text-sm text-slate-200 font-medium flex-1">{c.name}</span>
-              {c.cups >= 2 && <span className="text-[9px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded">{c.cups}冠</span>}
-              {c.worldCup && <span className="text-[9px] bg-sky-900/40 text-sky-400 px-1.5 py-0.5 rounded">WC</span>}
+              {c.cups >= 2 && <span className="text-[11px] sm:text-[9px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded">{c.cups}冠</span>}
+              {c.worldCup && <span className="text-[11px] sm:text-[9px] bg-sky-900/40 text-sky-400 px-1.5 py-0.5 rounded">WC</span>}
               <span className="text-slate-600 text-xs">→</span>
             </button>
           ))}
@@ -668,7 +668,7 @@ function MemMatch({ m, tb }: { m: any; tb: Record<string, any> }) {
       <span className="font-bold tabular-nums text-amber-400 px-2">{m.homeGoals}-{m.awayGoals}</span>
       <span className="flex-1 truncate text-slate-300">{awayName}</span>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (tb[m.awayId] as any)?.color ?? '#666' }} />
-      <span className="text-[9px] text-slate-600 ml-1">{m.comp}</span>
+      <span className="text-[11px] sm:text-[9px] text-slate-600 ml-1">{m.comp}</span>
     </div>
   );
 }
@@ -698,11 +698,11 @@ function ChampCard({ label, team, runnerUp, tb, color }: { label: string; team: 
     <div className={`rounded-lg border p-2.5 ${colors[color] ?? colors.amber}`}>
       <div className="text-[10px] text-slate-500">{label}</div>
       <div className="flex items-center gap-1.5 mt-1">
-        <span className="w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: tb[team]?.color ?? '#666' }}>{tb[team]?.shortName?.charAt(0)}</span>
+        <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] sm:text-[8px] font-bold text-white" style={{ backgroundColor: tb[team]?.color ?? '#666' }}>{tb[team]?.shortName?.charAt(0)}</span>
         <Link to={`/team/${team}`} className="text-xs font-semibold text-slate-200 hover:text-blue-400 truncate">{getTeamName(team, tb)}</Link>
       </div>
       {runnerUp && tb[runnerUp] && (
-        <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-500">
+        <div className="flex items-center gap-1 mt-1 text-[11px] sm:text-[9px] text-slate-500">
           <span>亚</span>
           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[runnerUp]?.color ?? '#666' }} />
           <span className="truncate">{getTeamName(runnerUp, tb)}</span>

@@ -30,9 +30,9 @@ function TeamTag({ teamId, ts, tb }: { teamId: string; ts: Record<string, TeamSt
   const t = lv ? levelTag[lv] : null;
   return (
     <span className="flex gap-0.5 shrink-0">
-      {t && <span className={`text-[8px] px-1 py-0 rounded font-medium ${t.cls}`}>{t.text}</span>}
-      {tier && <span className={`text-[8px] px-1 py-0 rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
-      {region && <span className="text-[8px] px-1 py-0 rounded bg-slate-700/50 text-slate-500">{region}</span>}
+      {t && <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium ${t.cls}`}>{t.text}</span>}
+      {tier && <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
+      {region && <span className="text-[10px] sm:text-[8px] px-1 py-0 rounded bg-slate-700/50 text-slate-500">{region}</span>}
     </span>
   );
 }
@@ -465,7 +465,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
       }`}
     >
       {derbyName && (
-        <div className="text-[8px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
+        <div className="text-[10px] sm:text-[8px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
       )}
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
@@ -495,7 +495,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
 
       {/* Two-legged detail line */}
       {mr.twoLegged && (
-        <div className="px-2 py-1 border-t border-slate-700/40 text-[9px] text-slate-500 rounded-b-lg bg-slate-700/10">
+        <div className="px-2 py-1 border-t border-slate-700/40 text-[11px] sm:text-[9px] text-slate-500 rounded-b-lg bg-slate-700/10">
           {tie.leg1?.result && tie.leg2?.result ? (
             <span>
               首回合 {tie.leg1.result.home}-{tie.leg1.result.away}
@@ -524,7 +524,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
 
       {/* Single-leg ET/Pen indicator */}
       {!mr.twoLegged && tie.leg1?.result && (tie.leg1.result.penalties || tie.leg1.result.extraTime) && (
-        <div className="text-center text-[9px] text-amber-400 pb-1">
+        <div className="text-center text-[11px] sm:text-[9px] text-amber-400 pb-1">
           {tie.leg1.result.penalties ? `点球 ${tie.leg1.result.penHome}-${tie.leg1.result.penAway}` : '加时'}
         </div>
       )}
@@ -579,7 +579,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
         </tbody>
       </table>
       {/* Qualification line */}
-      <div className="px-3 py-1 border-t border-slate-700/50 text-[9px] text-slate-600">
+      <div className="px-3 py-1 border-t border-slate-700/50 text-[11px] sm:text-[9px] text-slate-600">
         前2名晋级 (绿色高亮)
       </div>
       {group.fixtures.length > 0 && (

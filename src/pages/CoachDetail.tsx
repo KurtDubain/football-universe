@@ -182,6 +182,80 @@ export default function CoachDetail() {
         </div>
       )}
 
+      {/* Tactical Analytics */}
+      {career.length > 0 && (() => {
+        const totalSeasons = career.reduce((s, c) => s + ((c.toSeason ?? world.seasonState.seasonNumber) - c.fromSeason + 1), 0);
+        const teamCount = new Set(career.map(c => c.teamId)).size;
+        const avgTenure = teamCount > 0 ? (totalSeasons / teamCount).toFixed(1) : '0';
+        const firedCount = career.filter(c => c.fired).length;
+        const completedTenures = career.filter(c => c.toSeason !== null).length;
+        const fireRate = completedTenures > 0 ? Math.round((firedCount / completedTenures) * 100) : 0;
+
+        // Trophy preference
+        const trophyByType: Record<string, number> = {};
+        for (const t of trophies) {
+          trophyByType[t.type] = (trophyByType[t.type] ?? 0) + 1;
+        }
+        const leagueTrophies = (trophyByType['league1'] ?? 0) + (trophyByType['league2'] ?? 0) + (trophyByType['league3'] ?? 0);
+        const cupTrophies = (trophyByType['league_cup'] ?? 0) + (trophyByType['super_cup'] ?? 0) + (trophyByType['world_cup'] ?? 0);
+        let preference = '执教经历尚浅';
+        if (trophies.length >= 3) {
+          if (cupTrophies > leagueTrophies * 1.5) preference = '杯赛专精';
+          else if (leagueTrophies > cupTrophies * 1.5) preference = '联赛之王';
+          else preference = '全能型';
+        } else if (trophies.length >= 1) {
+          preference = '初露锋芒';
+        }
+
+        // Stints with team OVR change
+        const stintImpacts = career.filter(c => c.toSeason !== null).map(c => {
+          const recs = (world.teamSeasonRecords[c.teamId] ?? []).filter(r => r.seasonNumber >= c.fromSeason && r.seasonNumber <= (c.toSeason ?? c.fromSeason));
+          if (recs.length < 2) return null;
+          const ovrStart = recs[0].teamOverall ?? 0;
+          const ovrEnd = recs[recs.length - 1].teamOverall ?? 0;
+          return { teamName: c.teamName, delta: ovrEnd - ovrStart };
+        }).filter(Boolean) as { teamName: string; delta: number }[];
+
+        return (
+          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">执教分析</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <div className="text-center">
+                <div className={`text-base font-bold ${preference === '杯赛专精' ? 'text-purple-400' : preference === '联赛之王' ? 'text-amber-400' : preference === '全能型' ? 'text-emerald-400' : 'text-slate-400'}`}>{preference}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">赛事偏好</div>
+              </div>
+              <div className="text-center">
+                <div className="text-base font-bold text-slate-200">{avgTenure}季</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">单队平均执教</div>
+              </div>
+              <div className="text-center">
+                <div className={`text-base font-bold ${fireRate > 60 ? 'text-red-400' : fireRate > 30 ? 'text-orange-400' : 'text-emerald-400'}`}>{fireRate}%</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">解雇率</div>
+              </div>
+              <div className="text-center">
+                <div className="text-base font-bold text-slate-200">{leagueTrophies}/{cupTrophies}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">联赛/杯赛</div>
+              </div>
+            </div>
+            {stintImpacts.length > 0 && (
+              <div className="border-t border-slate-700/40 pt-3">
+                <div className="text-[10px] text-slate-500 mb-2">球队OVR带队变化</div>
+                <div className="space-y-1">
+                  {stintImpacts.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-300 flex-1 truncate">{s.teamName}</span>
+                      <span className={`font-bold tabular-nums ${s.delta > 0 ? 'text-emerald-400' : s.delta < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                        {s.delta > 0 ? `+${s.delta}` : s.delta} OVR
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Career history */}
       {career.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">

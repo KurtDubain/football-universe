@@ -5,6 +5,7 @@ import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { SeededRNG } from '../engine/match/rng';
 import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
+import type { Achievement } from '../engine/achievements';
 
 interface GameStore {
   world: GameWorld | null;
@@ -13,6 +14,9 @@ interface GameStore {
   lastNews: NewsItem[];
   isAdvancing: boolean;
   favoriteTeamId: string | null;
+  newAchievements: Achievement[];
+
+  dismissAchievement: () => void;
 
   newGame: (seed?: number) => void;
   advanceWindow: () => void;
@@ -39,6 +43,11 @@ export const useGameStore = create<GameStore>()(
       lastNews: [],
       isAdvancing: false,
       favoriteTeamId: null,
+      newAchievements: [],
+
+      dismissAchievement: () => {
+        set(s => ({ newAchievements: s.newAchievements.slice(1) }));
+      },
 
       newGame: (seed?: number) => {
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
@@ -66,7 +75,12 @@ export const useGameStore = create<GameStore>()(
             }
           }
           const updatedWorld = { ...result.world, coins, bets: [] as typeof result.world.bets };
-          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false });
+
+          // Detect new achievements (compare against pre-advance state)
+          const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
+          const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
+
+          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false, newAchievements: [...get().newAchievements, ...newAch] });
           if (updatedWorld.seasonState.completed || updatedWorld.newsLog.length > 300) {
             get().trimStorage();
           }

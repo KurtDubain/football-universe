@@ -139,11 +139,11 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
       {/* Tags row — compact */}
       {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
         <div className="flex gap-1 mb-1 flex-wrap">
-          {derbyName && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
-          {isUpset && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
-          {isHighScoring && <span className="text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
+          {derbyName && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
+          {isUpset && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
+          {isHighScoring && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
           {r.competitionType !== 'league' && (
-            <span className="text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
+            <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
           )}
         </div>
       )}
@@ -164,7 +164,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
             {totalAway}
           </span>
           {r.extraTime && (
-            <span className="text-[8px] text-amber-400 ml-0.5">
+            <span className="text-[10px] sm:text-[8px] text-amber-400 ml-0.5">
               {r.penalties ? `P` : '加时'}
             </span>
           )}
@@ -178,7 +178,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
 
       {/* Key goal events — only for key matches, max 3 */}
       {isKeyMatch && r.events.length > 0 && (
-        <div className="mt-1 flex gap-1.5 text-[9px] text-slate-500 overflow-hidden">
+        <div className="mt-1 flex gap-1.5 text-[11px] sm:text-[9px] text-slate-500 overflow-hidden">
           {r.events
             .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
             .slice(0, 3)
@@ -195,7 +195,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
         <div className="mt-1 pt-1 border-t border-slate-700/30">
           <span
             onClick={(e) => { e.stopPropagation(); onLiveView(); }}
-            className="text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
+            className="text-[11px] sm:text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
           >
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-breathe" />
             观看直播回放

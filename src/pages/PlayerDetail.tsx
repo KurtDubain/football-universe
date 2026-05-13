@@ -68,6 +68,36 @@ export default function PlayerDetail() {
     return hl.slice(-8);
   }, [world.seasonState.calendar, id]);
 
+  // Key match metrics (computed from calendar events)
+  const keyMetrics = useMemo(() => {
+    let finalGoals = 0;
+    let lateGoals = 0;
+    let hatTricks = 0;
+    for (const w of world.seasonState.calendar) {
+      if (!w.completed || !w.results) continue;
+      for (const r of w.results) {
+        const myGoals = r.events.filter(e => e.playerId === id && (e.type === 'goal' || e.type === 'penalty_goal'));
+        if (myGoals.length === 0) continue;
+        // Hat trick (3+ goals in single match)
+        if (myGoals.length >= 3) hatTricks++;
+        // Final goals (in cup finals)
+        const isFinal = (r.competitionType === 'super_cup' || r.competitionType === 'world_cup' || r.competitionType === 'league_cup')
+          && (r.roundLabel === 'Final' || r.roundLabel.includes('决赛'));
+        if (isFinal) finalGoals += myGoals.length;
+        // Late drama goals (>=85 min in close match: diff <= 1 at the time)
+        const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
+        const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
+        const isClose = Math.abs(totalH - totalA) <= 1;
+        if (isClose) {
+          for (const g of myGoals) {
+            if (g.minute >= 85) lateGoals++;
+          }
+        }
+      }
+    }
+    return { finalGoals, lateGoals, hatTricks };
+  }, [world.seasonState.calendar, id]);
+
   return (
     <div className="max-w-2xl space-y-5">
       {/* Header */}
@@ -118,6 +148,30 @@ export default function PlayerDetail() {
           <div className="text-[10px] text-slate-500">球队进球占比</div>
         </div>
       </div>
+
+      {/* Key Match Metrics */}
+      {(keyMetrics.finalGoals > 0 || keyMetrics.lateGoals > 0 || keyMetrics.hatTricks > 0) && (
+        <div className="bg-gradient-to-r from-amber-900/15 to-slate-800 rounded-xl border border-amber-700/30 p-3">
+          <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">关键先生</h3>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="text-center">
+              <div className="text-2xl">🎯</div>
+              <div className="text-base font-bold text-amber-300">{keyMetrics.finalGoals}</div>
+              <div className="text-[10px] text-slate-500">决赛进球</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl">⚡</div>
+              <div className="text-base font-bold text-amber-300">{keyMetrics.lateGoals}</div>
+              <div className="text-[10px] text-slate-500">绝杀进球</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl">🎩</div>
+              <div className="text-base font-bold text-amber-300">{keyMetrics.hatTricks}</div>
+              <div className="text-[10px] text-slate-500">帽子戏法</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Attributes */}
       <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
