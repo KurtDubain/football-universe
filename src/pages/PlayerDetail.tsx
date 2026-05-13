@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName } from '../utils/format';
+import { formatMarketValue } from '../engine/economy/market-value';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = { GK: 'bg-amber-900/40 text-amber-400', DF: 'bg-blue-900/40 text-blue-400', MF: 'bg-green-900/40 text-green-400', FW: 'bg-red-900/40 text-red-400' };
@@ -118,6 +119,12 @@ export default function PlayerDetail() {
                 {posLabel[player.position] ?? player.position}
               </span>
               <span className="text-xs text-slate-500">能力 {player.rating}</span>
+              {player.age !== undefined && (
+                <span className="text-xs text-slate-500">{player.age}岁</span>
+              )}
+              {player.marketValue !== undefined && player.marketValue > 0 && (
+                <span className="text-xs text-emerald-400 font-semibold">市值 {formatMarketValue(player.marketValue)}</span>
+              )}
               {posRanking.rank > 0 && (
                 <span className="text-[10px] text-slate-500">同位置第{posRanking.rank}/{posRanking.total}</span>
               )}

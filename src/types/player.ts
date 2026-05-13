@@ -8,6 +8,8 @@ export interface Player {
   position: PlayerPosition;
   rating: number;      // 40-99
   goalScoring: number; // 0-100, chance weight for being picked as scorer
+  marketValue: number; // in millions, e.g. 85 for €85M
+  age: number;         // simulated age, increments each season
 }
 
 export interface PlayerSeasonStats {

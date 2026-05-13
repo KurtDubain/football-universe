@@ -85,6 +85,9 @@ export interface MatchHistoryEntry {
   comp: string;
   et?: boolean;
   pen?: string;
+  /** Snapshot of who was coaching at end of season (best-effort). */
+  homeCoachId?: string;
+  awayCoachId?: string;
 }
 
 export interface SeasonBuff {
@@ -389,6 +392,8 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
           comp: r.competitionName,
           et: r.extraTime || undefined,
           pen: r.penalties ? `${r.penaltyHome}-${r.penaltyAway}` : undefined,
+          homeCoachId: world.teamStates[r.homeTeamId]?.currentCoachId ?? undefined,
+          awayCoachId: world.teamStates[r.awayTeamId]?.currentCoachId ?? undefined,
         });
       }
     }

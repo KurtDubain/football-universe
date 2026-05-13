@@ -2,6 +2,7 @@ import { Player, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { pickPlayerName } from '../../config/player-names';
+import { computeInitialMarketValue } from '../economy/market-value';
 
 /**
  * Generate 22 players for a team.
@@ -117,15 +118,22 @@ export function generateSquad(team: TeamBase, rng: SeededRNG): Player[] {
       number = pickNumber();
     }
 
-    players.push({
+    const playerName = pickPlayerName(region, usedNames, (arr) => rng.pick(arr));
+    // Age: stars are 25-30 (peak), others 19-34 (uniform)
+    const age = isStar ? rng.nextInt(24, 30) : rng.nextInt(19, 34);
+    const newPlayer: Player = {
       id: `${team.id}-${number}`,
       teamId: team.id,
-      name: pickPlayerName(region, usedNames, (arr) => rng.pick(arr)),
+      name: playerName,
       number,
       position: pos,
       rating,
       goalScoring,
-    });
+      age,
+      marketValue: 0, // computed below after object exists
+    };
+    newPlayer.marketValue = computeInitialMarketValue(newPlayer);
+    players.push(newPlayer);
   }
 
   // Sort by position order then number

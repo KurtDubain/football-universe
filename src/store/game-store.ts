@@ -7,6 +7,7 @@ import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { pickPlayerName } from '../config/player-names';
+import { computeInitialMarketValue } from '../engine/economy/market-value';
 
 interface GameStore {
   world: GameWorld | null;
@@ -341,7 +342,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown, version: number): GameStore => {
         const state = persistedState as Partial<GameStore> & { world?: GameWorld | null; favoriteTeamId?: string | null; favoriteTeamIds?: string[] };
         // v1 → v2: backfill player.name for existing saves
@@ -375,6 +376,21 @@ export const useGameStore = create<GameStore>()(
         // v4 → v5: ensure memorableMatches exists
         if (version < 5 && state?.world) {
           if (!Array.isArray(state.world.memorableMatches)) state.world.memorableMatches = [];
+        }
+        // v5 → v6: backfill marketValue + age for existing players
+        if (version < 6 && state?.world?.squads) {
+          for (const squad of Object.values(state.world.squads)) {
+            if (!Array.isArray(squad)) continue;
+            for (const p of squad) {
+              if (typeof p.age !== 'number') {
+                // Random age 19-32, biased toward 24-28
+                p.age = 19 + Math.floor(Math.random() * 14);
+              }
+              if (typeof p.marketValue !== 'number') {
+                p.marketValue = computeInitialMarketValue(p);
+              }
+            }
+          }
         }
         return state as GameStore;
       },

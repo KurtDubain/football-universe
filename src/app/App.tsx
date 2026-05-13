@@ -19,6 +19,7 @@ import Welcome from '../pages/Welcome';
 import TeamEditor from '../pages/TeamEditor';
 import Transfers from '../pages/Transfers';
 import MemorableMatches from '../pages/MemorableMatches';
+import AdvancedSearch from '../pages/AdvancedSearch';
 
 export default function App() {
   const initialized = useGameStore((s) => s.initialized);
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/chronicle" element={<Chronicle />} />
         <Route path="/transfers" element={<Transfers />} />
         <Route path="/memorable" element={<MemorableMatches />} />
+        <Route path="/search" element={<AdvancedSearch />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/team-editor" element={<TeamEditor />} />
         <Route path="/settings" element={<Settings />} />

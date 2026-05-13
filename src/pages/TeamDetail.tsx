@@ -516,6 +516,11 @@ function SquadRoster({ teamId }: { teamId: string }) {
 
                     {/* Season stats */}
                     <div className="flex items-center gap-2 sm:gap-3 text-[11px] shrink-0">
+                      {player.marketValue !== undefined && player.marketValue > 0 && (
+                        <span className="text-emerald-400 hidden sm:inline">
+                          €{player.marketValue >= 10 ? Math.round(player.marketValue) : player.marketValue.toFixed(1)}M
+                        </span>
+                      )}
                       {stats && stats.appearances > 0 ? (
                         <>
                           <span className="text-slate-400 hidden sm:inline">

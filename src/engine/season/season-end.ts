@@ -21,6 +21,7 @@ import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
+import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
  * Handle end-of-season processing: honors, trophies, records, and prep next season.
@@ -282,6 +283,15 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   } else if (!world.transferHistory) {
     world.transferHistory = [];
   }
+
+  // ── Annual market value revaluation ──────────────────────────
+  // Mutates squad in place (also bumps each player's age)
+  applyAnnualRevaluation(
+    world.squads,
+    world.playerStats,
+    new Set(actualPromoted.map((p) => p.teamId)),
+    league1Champion || null,
+  );
 
   // Promoted teams
   for (const p of actualPromoted) {
