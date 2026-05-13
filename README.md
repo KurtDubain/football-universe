@@ -53,22 +53,25 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 
 ## Screenshots | 截图
 
-> 📸 截图待补充（建议自行体验：[Live Demo](https://football-universe-ebon.vercel.app/)）
-
-<!-- 截图加入后取消注释:
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" width="45%" alt="Dashboard" />
-  <img src="docs/screenshots/league.png" width="45%" alt="League standings" />
+  <img src="docs/screenshots/01-welcome.jpg" width="48%" alt="Welcome / 欢迎页" />
+  <img src="docs/screenshots/03-dashboard-midseason.jpg" width="48%" alt="Dashboard mid-season / 比赛日 + 成就解锁" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/cup-bracket.png" width="45%" alt="Cup bracket" />
-  <img src="docs/screenshots/match-live.png" width="45%" alt="Match live broadcast" />
+  <img src="docs/screenshots/04-league.jpg" width="48%" alt="League standings / 联赛积分榜（含冠军概率）" />
+  <img src="docs/screenshots/05-cup-bracket.jpg" width="48%" alt="Cup bracket / 联赛杯对阵" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/season-review.png" width="45%" alt="Season review" />
-  <img src="docs/screenshots/chronicle.png" width="45%" alt="Multi-season chronicle" />
+  <img src="docs/screenshots/06-super-cup.jpg" width="48%" alt="Super cup groups / 超级杯小组赛" />
+  <img src="docs/screenshots/07-teams.jpg" width="48%" alt="Teams center / 球队中心" />
 </p>
--->
+<p align="center">
+  <img src="docs/screenshots/08-history.jpg" width="48%" alt="History / 历史荣誉" />
+  <img src="docs/screenshots/09-chronicle.jpg" width="48%" alt="Chronicle / 编年史" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/10-mobile.jpg" width="240" alt="Mobile responsive / 移动端适配" />
+</p>
 
 ---
 
