@@ -114,7 +114,7 @@ export const defaultTeams: TeamBase[] = [
     id: 'cs_dragon', name: '常山龙', shortName: '常山', color: '#4E342E',
     tier: 'mid', overall: 66, attack: 68, midfield: 66, defense: 64,
     stability: 66, depth: 62, reputation: 65, initialLeagueLevel: 2, expectation: 3,
-    region: '大陆+石家庄',
+    region: '大陆+河北',
   },
   {
     id: 'red_sun', name: '红太阳', shortName: '朝鲜', color: '#D50000',
