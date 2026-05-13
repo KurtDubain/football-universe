@@ -136,6 +136,16 @@ pnpm build    # 生产构建
 
 ---
 
+## Testing | 测试
+
+```bash
+pnpm test         # 跑一次（CI 用）
+pnpm test:watch   # 监听模式（开发用）
+pnpm test:ui      # Vitest UI（浏览器面板）
+```
+
+---
+
 ## Tech Stack | 技术栈
 
 | Layer | Tech |
