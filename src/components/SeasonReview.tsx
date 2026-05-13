@@ -75,6 +75,15 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             sentences.push(`射手榜上，${scorerTeam}${scorerNum}号以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
           }
 
+          // Buff-driven storyline
+          const championBuff = buffs.find(b => b.teamId === honor.league1Champion);
+          if (championBuff) {
+            const isPos = championBuff.effects.some(e => e.delta > 0);
+            sentences.push(isPos
+              ? `回望赛季初的「${championBuff.label}」剧情，似乎正是${champ}走向冠军的关键序章。`
+              : `而${champ}更是克服了赛季初「${championBuff.label}」的不利剧情，展现了真正的冠军底蕴。`);
+          }
+
           if (bestDefense && bestDefense.leagueGA <= 15) {
             sentences.push(`防守端，${getTeamName(bestDefense.teamId, tb)}铸就钢铁防线，全赛季仅失${bestDefense.leagueGA}球，令对手闻风丧胆。`);
           }

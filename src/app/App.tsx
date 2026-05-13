@@ -10,6 +10,7 @@ import TeamDetail from '../pages/TeamDetail';
 import CoachDetail from '../pages/CoachDetail';
 import History from '../pages/History';
 import Compare from '../pages/Compare';
+import Chronicle from '../pages/Chronicle';
 import Teams from '../pages/Teams';
 import Players from '../pages/Players';
 import PlayerDetail from '../pages/PlayerDetail';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/team/:id" element={<TeamDetail />} />
         <Route path="/coach/:id" element={<CoachDetail />} />
         <Route path="/history" element={<History />} />
+        <Route path="/chronicle" element={<Chronicle />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />

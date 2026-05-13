@@ -68,6 +68,7 @@ export interface GameWorld {
   coins: number;
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
   matchHistory: MatchHistoryEntry[];
+  seasonBuffsHistory: { season: number; buffs: SeasonBuff[] }[];
 }
 
 export interface MatchHistoryEntry {
@@ -180,6 +181,7 @@ export function initializeGameWorld(seed: number): GameWorld {
     coins: 1000,
     bets: [],
     matchHistory: [],
+    seasonBuffsHistory: [],
   };
 
   // Initialize empty trophies / records for every team
@@ -367,6 +369,12 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     }
   }
 
+  // Archive previous season's buffs
+  const newBuffsHistory = [...(world.seasonBuffsHistory ?? [])];
+  if (prevSeason > 0 && (world.seasonBuffs ?? []).length > 0) {
+    newBuffsHistory.push({ season: prevSeason, buffs: world.seasonBuffs ?? [] });
+  }
+
   return {
     ...world,
     teamBases: buffedTeamBases,
@@ -386,6 +394,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     prediction: undefined,
     godHandUsed: false,
     matchHistory: newMatchHistory,
+    seasonBuffsHistory: newBuffsHistory,
   };
 }
 
