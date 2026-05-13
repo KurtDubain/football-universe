@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/game-store';
 import { getTeamName } from '../utils/format';
 import { defaultTeams } from '../config/teams';
 import { APP_VERSION } from '../version';
+import { setLanguage } from '../i18n';
 import { BALANCE } from '../config/balance';
 
 export default function Settings() {
+  const { i18n } = useTranslation();
   const world = useGameStore((s) => s.world);
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const setFavoriteTeam = useGameStore((s) => s.setFavoriteTeam);
@@ -85,6 +88,22 @@ export default function Settings() {
   return (
     <div className="max-w-2xl space-y-5">
       <h2 className="text-xl font-bold text-slate-100">设置</h2>
+
+      {/* Language switcher */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">语言 / Language</h3>
+        <div className="flex gap-2">
+          <button onClick={() => setLanguage('zh')}
+            className={`flex-1 px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors ${i18n.language === 'zh' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'}`}>
+            🇨🇳 中文
+          </button>
+          <button onClick={() => setLanguage('en')}
+            className={`flex-1 px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors ${i18n.language === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'}`}>
+            🇺🇸 English
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-500 mt-2">部分内容（球队名称、新闻文案）暂时仅支持中文</p>
+      </div>
 
       {/* Favorite team */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
