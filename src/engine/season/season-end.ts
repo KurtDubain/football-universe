@@ -25,6 +25,25 @@ import { processTransferWindow } from '../transfers/transfer-window';
 import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
+ * Walk knockout rounds from latest to earliest, return the round in which
+ * `teamId` was eliminated. Returns null if the team is still alive (won
+ * their latest round or that round is not yet completed) or never appeared.
+ */
+function findTeamEliminationRound(rounds: CupRound[], teamId: string): string | null {
+  for (let i = rounds.length - 1; i >= 0; i--) {
+    const r = rounds[i];
+    const playerFixture = r.fixtures.find(
+      (f) => f.homeTeamId === teamId || f.awayTeamId === teamId,
+    );
+    if (!playerFixture) continue;
+    if (!r.completed) return null;
+    if (playerFixture.winnerId === teamId) return null;
+    return r.roundName;
+  }
+  return null;
+}
+
+/**
  * Handle end-of-season processing: honors, trophies, records, and prep next season.
  *
  * Strictly immutable wrt the input `world` — all changes are accumulated into a
@@ -395,24 +414,6 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     let superCupResult: string | undefined;
     let worldCupResult: string | undefined;
 
-    // Walk knockout rounds from latest to earliest, return the team's
-    // elimination round name (or null if they're still alive / not in knockouts).
-    function findEliminationRound(rounds: CupRound[]): string | null {
-      for (let i = rounds.length - 1; i >= 0; i--) {
-        const r = rounds[i];
-        const playerFixture = r.fixtures.find(
-          (f) => f.homeTeamId === teamId || f.awayTeamId === teamId,
-        );
-        if (!playerFixture) continue;
-        if (!r.completed) return null; // still in progress
-        // If they won this round, no further round means they advanced but
-        // weren't placed yet — treat as "in progress" to be safe.
-        if (playerFixture.winnerId === teamId) return null;
-        return r.roundName;
-      }
-      return null;
-    }
-
     // League cup
     if (teamId === leagueCupWinner) cupResult = '冠军';
     else {
@@ -443,14 +444,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         if (inFinal && scFinal.completed) {
           superCupResult = '亚军';
         } else {
-          const elimRound = findEliminationRound(world.superCup.knockoutRounds);
+          const elimRound = findTeamEliminationRound(world.superCup.knockoutRounds, teamId);
           if (elimRound) {
             superCupResult = cnRoundLabel(elimRound);
           } else if (world.superCup.groupStageCompleted) {
             const inAnyKO = world.superCup.knockoutRounds.some(r =>
               r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
             );
-            // In knockouts but elimination round not yet final → still alive
             superCupResult = inAnyKO ? '参赛中' : '小组赛淘汰';
           } else {
             superCupResult = '参赛中';
@@ -469,7 +469,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         if (inFinal && wcFinal.completed) {
           worldCupResult = '亚军';
         } else {
-          const elimRound = findEliminationRound(world.worldCup.knockoutRounds);
+          const elimRound = findTeamEliminationRound(world.worldCup.knockoutRounds, teamId);
           if (elimRound) {
             worldCupResult = cnRoundLabel(elimRound);
           } else if (world.worldCup.completed) {
@@ -951,7 +951,10 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
       coachTrophies[winnerCoachId] = [...(coachTrophies[winnerCoachId] ?? []), { type: 'world_cup' as const, seasonNumber: sn }];
     }
 
-    // Patch team season records with WC results
+    // Patch team season records with WC results.
+    // This runs AFTER the WC final, so we can give every team an exact
+    // round label (16强 / 八强 / 四强 / 决赛 / 小组赛淘汰) — matching the
+    // detail level we give super cup / league cup in handleSeasonEnd.
     const teamSeasonRecords = { ...updatedWorld.teamSeasonRecords };
     for (const teamId of getAllTeamIds(updatedWorld.teamStates)) {
       const recs = teamSeasonRecords[teamId];
@@ -959,12 +962,22 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
       const lastRec = recs[recs.length - 1];
       if (lastRec.seasonNumber !== sn) continue;
       let wcResult = '';
-      if (teamId === wcWinnerId) wcResult = '冠军';
-      else if (teamId === wcRunnerUp) wcResult = '亚军';
-      else if (updatedWorld.worldCup!.participantIds?.includes(teamId)) {
-        const inSF = updatedWorld.worldCup!.knockoutRounds.find(r => r.roundName === 'SF')
-          ?.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId);
-        wcResult = inSF ? '四强' : '参赛';
+      if (teamId === wcWinnerId) {
+        wcResult = '冠军';
+      } else if (teamId === wcRunnerUp) {
+        wcResult = '亚军';
+      } else if (updatedWorld.worldCup!.participantIds?.includes(teamId)) {
+        const elimRound = findTeamEliminationRound(updatedWorld.worldCup!.knockoutRounds, teamId);
+        if (elimRound) {
+          wcResult = cnRoundLabel(elimRound);
+        } else {
+          // Was a participant but never appeared in any knockout round
+          // → eliminated in group stage
+          const inAnyKO = updatedWorld.worldCup!.knockoutRounds.some(r =>
+            r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
+          );
+          wcResult = inAnyKO ? '参赛' : '小组赛淘汰';
+        }
       }
       if (wcResult) {
         const updated = [...recs];
