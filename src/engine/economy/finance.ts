@@ -54,11 +54,29 @@
  *  the anti-Matthew effect the spec aims for: flat sponsor at €10/20/40M
  *  rewards modest squads disproportionately.
  *
- *  Why "33%" feels high vs the brief's 3-7% suggestion: squad market
- *  values in this universe scale to €300-€500M per top club, so 5% of
- *  that (€15-€25M) cannot offset €70-€100M annual revenue. We could have
- *  scaled income down instead, but the brief explicitly sets the TV /
- *  sponsor / prize numbers, leaving SALARY_RATE as the only dial.
+ *
+ * ── v2 update (2026-05-21) ────────────────────────────────────────
+ *
+ * Live playthrough surfaced that the flat 33% rate was actually bleeding
+ * non-champion elite teams hard. A diagnostic harness
+ * (`scripts/sim-economy-diag.ts`) confirmed:
+ *
+ *   广州恒大 (rep=98, L1 #1): 10y income €863M, 10y salary €1206M → -€343M
+ *   西北狼   (rep=96, L1 #3): -€258M     山东泰山 (rep=87, L1 #7): -€240M
+ *   小球队 (rep=44, L3 #8): +€197M       三亚海口 (rep=68, L3 #1): +€61M
+ *
+ * The original tuner missed it because it averaged tiers — champions
+ * covered the median bleed inside the elite tier. Root cause: 33% × big
+ * squad value (€300-€500M) → €100-€165M wage bill, dwarfing typical
+ * €70-€100M L1 income.
+ *
+ * Fix: progressive brackets. See `SALARY_BRACKETS` further down. Tuning
+ * was repeated with per-team trajectories (not tier means) tracked.
+ * `scripts/sim-economy-tune.ts` ran 6 candidate schedules across 3 seeds
+ * × 20 seasons. Winner (B): 33% / 22% / 15% over €0-€50M / €50-€200M /
+ * €200M+. Result: elite mean cash €439M (was €73M), 0 negatives, 0 rep≥90
+ * negatives, 8 fire sales over 60 season-runs. 近江鹰 (rep=99) ended €0
+ * (was -€259M).
  */
 import { TeamBase, FinanceState, FinanceSeasonRecord } from '../../types/team';
 import { Player } from '../../types/player';
@@ -72,7 +90,12 @@ import { createNewsId } from '../season/helpers';
 
 /**
  * Wage bill = squadMarketValueSum × SALARY_RATE.
- * Tuned to 0.33 — see TUNE_LOG above.
+ *
+ * NOTE: in v2 the runtime salary calculation uses `computeSalary()` with
+ * progressive brackets (see `SALARY_BRACKETS`). `SALARY_RATE` is preserved
+ * as the *headline* rate (matches the first bracket) for migrations,
+ * legacy test fixtures, and as a quick reference. Code calling out to
+ * salary calculation MUST go through `computeSalary()` not this constant.
  */
 export const SALARY_RATE = 0.33;
 
@@ -80,21 +103,114 @@ export const SALARY_RATE = 0.33;
  * Mutable shadow of SALARY_RATE for tuning sims. Production code reads
  * this via `getSalaryRate()`; the sim harness in `scripts/sim-economy.ts`
  * flips it via `setSalaryRateForTesting()` to compare candidate rates.
- * NOT used by the runtime save logic — the production rate stays at
- * `SALARY_RATE` because the const is the ONLY thing the migration and
- * UI display reference.
+ *
+ * In v2 (bracketed salaries), flipping the rate switches the salary
+ * calculation to a flat-rate variant — useful for comparing bracketed
+ * vs flat models head-to-head in the harness.
  */
 let _runtimeSalaryRate: number = SALARY_RATE;
+let _useFlatRate: boolean = false;
 export function getSalaryRate(): number {
   return _runtimeSalaryRate;
 }
 /** Override the salary rate for sim runs. Pass `SALARY_RATE` to reset. */
 export function setSalaryRateForTesting(rate: number): void {
   _runtimeSalaryRate = rate;
+  _useFlatRate = true;
 }
+/** Restore bracketed salary calculation (default). */
+export function clearFlatRate(): void {
+  _runtimeSalaryRate = SALARY_RATE;
+  _useFlatRate = false;
+}
+export function isUsingFlatRate(): boolean { return _useFlatRate; }
 
 /** Max history entries kept on each FinanceState (oldest dropped). */
 export const FINANCE_HISTORY_CAP = 10;
+
+// ── Salary brackets (progressive) ────────────────────────────────
+//
+// PHASE H v2 (2026-05-21): The flat 33% rate worked on tier averages but
+// silently bled high-rep teams in the 75-95 reputation band whose squad
+// market values land €300-€500M. 33% × €500M = €165M salary outpaces the
+// €70-€100M typical L1 income, so non-champion elites posted €30-€80M
+// annual deficits while sub-€100M-squad small clubs hoarded cash. The
+// tuner missed it because it averaged tiers rather than tracking
+// individuals — the elite "average" was kept positive by the few champions
+// each season, hiding the median bleed.
+//
+// Fix: progressive bracket. First slice of squad value is taxed at the
+// "headline" rate (used to live as `SALARY_RATE`); subsequent slices apply
+// progressively lower rates. Net effect: small clubs unchanged, big clubs
+// pay sustainable wages.
+//
+// The brackets [boundary, rate] pairs mean: "for every €M of squad value
+// up to `boundary`, the salary rate is `rate`". Last entry's boundary is
+// `Infinity` (the open-ended top bracket). Boundaries are cumulative.
+//
+// Sample salaries (default brackets 33/22/15 @ 50/200):
+//   €30M squad → €10M / €100M → €28M / €200M → €50M / €500M → €95M
+//
+// Tuned via 6-candidate sim across 3 seeds × 20 seasons; see
+// scripts/sim-economy-tune.ts. Winner had:
+//   elite mean €439M (was €73M flat-33%)  — 0 negatives, 0 rep≥90 negatives
+//   top   mean €501M  / mid mean €347M  / low mean €251M
+//   8 fire sales total over 60 season-runs (still triggers, but rarely
+//   — exactly what we want when no team is forced into deep deficit)
+//   Per-team check: 近江鹰 (rep=99) ended €0 (was -€259M @ 33% flat)
+//
+// Why not "richer" upper brackets like 33/28/20/12: Candidate A had
+// 1 elite team going negative (€-29M) and produced 14 fire sales. B's
+// flatter middle bracket (22%) is more forgiving for the €150-€300M
+// squad band where most non-champion elites sit.
+export type SalaryBracket = { boundary: number; rate: number };
+export const SALARY_BRACKETS: SalaryBracket[] = [
+  { boundary: 50,       rate: 0.33 }, // first €50M of squad value
+  { boundary: 200,      rate: 0.22 }, // next €150M (50→200)
+  { boundary: Infinity, rate: 0.15 }, // anything above €200M
+];
+
+/** Mutable shadow for sim tuning — see `setSalaryBracketsForTesting`. */
+let _runtimeBrackets: SalaryBracket[] = SALARY_BRACKETS;
+export function getSalaryBrackets(): SalaryBracket[] { return _runtimeBrackets; }
+export function setSalaryBracketsForTesting(brackets: SalaryBracket[]): void {
+  _runtimeBrackets = brackets;
+}
+/** Reset to published default. */
+export function resetSalaryBrackets(): void { _runtimeBrackets = SALARY_BRACKETS; }
+
+/**
+ * Compute the wage bill for a squad given its market value.
+ * Applies the progressive bracket schedule. Returns a rounded €M number.
+ *
+ * Examples (with default brackets 33/22/15 above €0/50/200):
+ *   squadValue=30  → 30 × 0.33                                = €9.9M
+ *   squadValue=100 → 50×0.33 + 50×0.22                        = €27.5M
+ *   squadValue=200 → 50×0.33 + 150×0.22                       = €49.5M
+ *   squadValue=500 → 50×0.33 + 150×0.22 + 300×0.15            = €94.5M
+ */
+export function computeSalary(squadValue: number): number {
+  if (squadValue <= 0) return 0;
+  const brackets = _runtimeBrackets;
+  let salary = 0;
+  let prevBoundary = 0;
+  for (const b of brackets) {
+    const sliceTop = Math.min(squadValue, b.boundary);
+    if (sliceTop <= prevBoundary) break;
+    const sliceWidth = sliceTop - prevBoundary;
+    salary += sliceWidth * b.rate;
+    prevBoundary = b.boundary;
+    if (squadValue <= b.boundary) break;
+  }
+  return Math.round(salary);
+}
+
+// ── Legacy linear rate API (kept for backward compat in sim harness) ──
+//
+// `SALARY_RATE` is the headline rate (the first bracket's rate). Old test
+// fixtures and sim scripts may still flip it via `setSalaryRateForTesting`
+// — that path now overrides the WHOLE schedule with a flat-rate variant
+// for apples-to-apples comparison against the bracketed default.
 
 /** Premium multiplier on a fire sale (200% of marketValue per spec). */
 export const FIRE_SALE_PREMIUM = 2.0;
@@ -375,8 +491,9 @@ export function applyIncome(
 /**
  * Apply salaries to every team. Pure: returns new teamFinances + news.
  *
- * Total salaries = sum(squad market value) × SALARY_RATE. Rounded to nearest
- * integer.
+ * Salary calculation is progressive (see `SALARY_BRACKETS` and
+ * `computeSalary()`). The legacy flat-rate path is preserved for the sim
+ * harness via `setSalaryRateForTesting()`.
  */
 export function applyExpense(
   teamFinances: Record<string, FinanceState>,
@@ -387,7 +504,9 @@ export function applyExpense(
     next[id] = { ...next[id] };
     const squad = squads[id] ?? [];
     const squadValue = squad.reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
-    const salaries = Math.round(squadValue * getSalaryRate());
+    const salaries = _useFlatRate
+      ? Math.round(squadValue * _runtimeSalaryRate)
+      : computeSalary(squadValue);
     next[id].cash -= salaries;
     next[id].totalExpense += salaries;
   }

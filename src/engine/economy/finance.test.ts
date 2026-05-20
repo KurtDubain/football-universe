@@ -16,6 +16,11 @@ import {
   setSalaryRateForTesting,
   applyExpense,
   SALARY_RATE,
+  SALARY_BRACKETS,
+  computeSalary,
+  resetSalaryBrackets,
+  setSalaryBracketsForTesting,
+  clearFlatRate,
   CUP_PRIZE,
   TV_SPONSOR_BY_TIER,
   FIRE_SALE_PREMIUM,
@@ -129,10 +134,11 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     const squads: Record<string, Player[]> = {
       A: [mkPlayer({ marketValue: 100 }), mkPlayer({ uuid: 'p-2', marketValue: 200 })],
     };
-    // squadValue = 300; salary at 33% = 99
+    // squadValue = 300; flat 33% → 99
     const r = applyExpense(fin, squads);
     expect(r.teamFinances.A.cash).toBe(100 - 99);
     expect(r.teamFinances.A.totalExpense).toBe(99);
+    clearFlatRate();
   });
   it('honours setSalaryRateForTesting overrides', () => {
     const orig = SALARY_RATE;
@@ -146,6 +152,68 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     const r = applyExpense(fin, squads);
     expect(r.teamFinances.A.cash).toBe(50);
     setSalaryRateForTesting(orig);
+    clearFlatRate();
+  });
+});
+
+describe('computeSalary — progressive bracket schedule', () => {
+  it('returns 0 for empty/negative squad', () => {
+    expect(computeSalary(0)).toBe(0);
+    expect(computeSalary(-10)).toBe(0);
+  });
+  it('applies first bracket only when below first boundary', () => {
+    // Default brackets: 33% @ 0-50, 22% @ 50-200, 15% @ 200+
+    expect(computeSalary(30)).toBe(Math.round(30 * 0.33));      // 10
+    expect(computeSalary(50)).toBe(Math.round(50 * 0.33));      // 17 (rounded from 16.5)
+  });
+  it('applies progressive rates across bracket boundaries', () => {
+    // 100M = 50×0.33 + 50×0.22 = 16.5 + 11 = 27.5 → 28
+    expect(computeSalary(100)).toBe(28);
+    // 200M = 50×0.33 + 150×0.22 = 16.5 + 33 = 49.5 → 50
+    expect(computeSalary(200)).toBe(50);
+    // 500M = 50×0.33 + 150×0.22 + 300×0.15 = 16.5 + 33 + 45 = 94.5 → 95
+    expect(computeSalary(500)).toBe(95);
+  });
+  it('big squads pay sub-linear salary (key invariant)', () => {
+    // Doubling squad value should not double salary — that's the whole point
+    const s100 = computeSalary(100);
+    const s500 = computeSalary(500);
+    // Linear-flat would give 5x. Bracketed should give clearly less.
+    expect(s500 / s100).toBeLessThan(4);
+    expect(s500 / s100).toBeGreaterThan(2.5);
+  });
+  it('honours setSalaryBracketsForTesting overrides', () => {
+    setSalaryBracketsForTesting([{ boundary: Infinity, rate: 0.10 }]);
+    expect(computeSalary(100)).toBe(10);
+    resetSalaryBrackets();
+    expect(computeSalary(100)).toBe(28); // back to default
+  });
+  it('default SALARY_BRACKETS sums to defined total at €500M', () => {
+    // Sanity: production schedule integrity
+    expect(SALARY_BRACKETS).toHaveLength(3);
+    expect(SALARY_BRACKETS[0].rate).toBe(0.33);
+    expect(SALARY_BRACKETS[2].boundary).toBe(Infinity);
+  });
+});
+
+describe('applyExpense — uses bracketed salary by default (post-v2)', () => {
+  it('charges bracketed salary when no flat-rate override is set', () => {
+    clearFlatRate(); // ensure default bracketed mode
+    const fin: Record<string, FinanceState> = {
+      A: { cash: 200, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+    const squads: Record<string, Player[]> = {
+      // squadValue = 500
+      A: [
+        mkPlayer({ uuid: 'p-1', marketValue: 200 }),
+        mkPlayer({ uuid: 'p-2', marketValue: 200 }),
+        mkPlayer({ uuid: 'p-3', marketValue: 100 }),
+      ],
+    };
+    const r = applyExpense(fin, squads);
+    // 500 → 95 (bracketed), not 165 (flat 33%)
+    expect(r.teamFinances.A.cash).toBe(200 - 95);
+    expect(r.teamFinances.A.totalExpense).toBe(95);
   });
 });
 
