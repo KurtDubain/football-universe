@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
-import type { Player } from '../types/player';
+import type { Player, PlayerRetirement, PlayerSeasonStats } from '../types/player';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = { GK: 'bg-amber-900/40 text-amber-400', DF: 'bg-blue-900/40 text-blue-400', MF: 'bg-green-900/40 text-green-400', FW: 'bg-red-900/40 text-red-400' };
@@ -118,6 +118,14 @@ export default function PlayerDetail() {
   }, [world.seasonState.calendar, uuid]);
 
   if (!player || !team || !teamId) {
+    // The uuid isn't on any active squad. Before falling back to the
+    // generic "未找到" dead-end, check the retirement archive — old links
+    // to retired players should land on a graceful "已退役" view that
+    // points the user toward the legends page.
+    const retired = world.retirementHistory?.find((r) => r.uuid === uuid);
+    if (retired) {
+      return <RetiredPlayerView retired={retired} world={world} stats={stats} />;
+    }
     return <div className="text-slate-400">未找到球员: {uuid}</div>;
   }
 
@@ -278,6 +286,78 @@ function AttrBar({ label, value, max, color }: { label: string; value: number; m
       <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color ?? 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fallback view rendered when a uuid resolves to no active squad slot but
+ * does appear in `world.retirementHistory`. Old bookmarks / award links to
+ * a player who has since hung up their boots stay non-broken — they land
+ * here with an "已退役" badge and a pointer at the hall-of-fame page where
+ * the full archive lives.
+ *
+ * Career stats come from `world.playerStats` because the retirement engine
+ * intentionally preserves the stats record even after the player leaves
+ * `world.squads` (see comment on `PlayerRetirement` in types/player.ts).
+ */
+function RetiredPlayerView({
+  retired,
+  world,
+  stats,
+}: {
+  retired: PlayerRetirement;
+  world: ReturnType<typeof useGameStore.getState>['world'];
+  stats: PlayerSeasonStats | undefined;
+}) {
+  const team = world?.teamBases[retired.teamId];
+  const careerGoals = retired.careerGoals ?? stats?.goals ?? 0;
+  const trophyCount = retired.careerTrophies?.length ?? 0;
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-xl border border-slate-700/60 p-5">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40 font-medium">
+            🏛️ 已退役
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">
+            {posLabel[retired.position] ?? retired.position}
+          </span>
+          <Link
+            to="/legends"
+            className="text-[10px] text-blue-400 hover:text-blue-300 ml-auto"
+          >
+            查看名人堂条目 →
+          </Link>
+        </div>
+        <h2 className="text-xl font-bold text-slate-100">{retired.name}</h2>
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-slate-400">
+          <span>前</span>
+          {team ? (
+            <Link
+              to={`/team/${retired.teamId}`}
+              className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: team.color }} />
+              {team.name}
+            </Link>
+          ) : (
+            <span>{retired.teamName}</span>
+          )}
+          <span className="text-slate-500">退役 S{retired.seasonRetired} · {retired.age}岁 · 巅峰 {retired.peakRating}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <StatBox label="生涯进球" value={careerGoals} color="text-amber-400" />
+        <StatBox label="巅峰能力" value={retired.peakRating} color="text-amber-300" />
+        <StatBox label="冠军" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
+      </div>
+
+      <p className="text-[11px] text-slate-500 text-center">
+        本页面为退役球员的精简档案。完整档案与生涯轨迹请查看
+        <Link to="/legends" className="text-blue-400 hover:text-blue-300 mx-1">传奇名人堂</Link>。
+      </p>
     </div>
   );
 }
