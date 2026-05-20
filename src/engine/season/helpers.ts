@@ -22,7 +22,8 @@ export function buildSimulationContext(
   const isKnockout = fixture.competitionType === 'league_cup'
     || fixture.competitionType === 'relegation_playoff'
     || fixture.competitionType === 'world_cup'
-    || fixture.competitionType === 'super_cup';
+    || fixture.competitionType === 'super_cup'
+    || fixture.competitionType === 'continental_cup';
 
   const pickMatchday = (squad: import('../../types/player').Player[] | undefined) => {
     if (!squad || squad.length <= 14) return squad;

@@ -26,6 +26,7 @@ const CUP_COMPETITIONS: Set<CompetitionType> = new Set([
   'super_cup_group',
   'world_cup',
   'world_cup_group',
+  'continental_cup',
 ]);
 
 /**

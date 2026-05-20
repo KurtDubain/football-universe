@@ -47,7 +47,7 @@ function buildWorld(overrides: Partial<GameWorld>): GameWorld {
     coins: 0,
     bets: [],
     seasonBuffsHistory: [],
-    memorableMatches: [],
+    memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null },
     retirementHistory: [],
     coachCandidatePool: [],
   };

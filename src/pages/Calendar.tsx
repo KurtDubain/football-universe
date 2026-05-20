@@ -64,7 +64,7 @@ export default function Calendar() {
 
       {/* Type legend */}
       <div className="flex flex-wrap gap-2 mb-4 text-xs">
-        {(['league', 'league_cup', 'super_cup_group', 'super_cup', 'relegation_playoff', 'season_end'] as const).map(type => (
+        {(['league', 'league_cup', 'super_cup_group', 'super_cup', 'continental_cup', 'relegation_playoff', 'season_end'] as const).map(type => (
           <span key={type} className={`px-2 py-0.5 rounded text-white/80 ${getWindowTypeColor(type)}`}>
             {getWindowTypeLabel(type)}
           </span>

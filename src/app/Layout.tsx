@@ -47,6 +47,18 @@ const navSections = [
   },
 ];
 
+/**
+ * Continental cup navigation entries — visible only in odd seasons when the
+ * corresponding cup state is non-null. Each entry hides naturally when the
+ * cup didn't run for that region this season (e.g. shrinking after a
+ * mid-game team migration).
+ */
+const continentalCupNavItems: { to: string; label: string; key: 'mainland_cup' | 'southern_cup' | 'eastern_cup' }[] = [
+  { to: '/cup/mainland_cup', label: '大陆杯', key: 'mainland_cup' },
+  { to: '/cup/southern_cup', label: '南洲杯', key: 'southern_cup' },
+  { to: '/cup/eastern_cup',  label: '东洲杯', key: 'eastern_cup' },
+];
+
 export default function Layout({ children }: LayoutProps) {
   const world = useGameStore((s) => s.world);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
@@ -161,6 +173,36 @@ export default function Layout({ children }: LayoutProps) {
             </NavLink>
           </div>
         )}
+
+        {/* Continental cups — odd seasons only, only render the regions that
+            actually have a cup running this season. */}
+        {(() => {
+          const cc = world?.continentalCups;
+          if (!cc) return null;
+          const visible = continentalCupNavItems.filter(item => cc[item.key]);
+          if (visible.length === 0) return null;
+          return (
+            <div className="mb-1">
+              <div className="px-4 py-1.5 text-[10px] font-semibold text-orange-500 uppercase tracking-wider">洲际杯</div>
+              {visible.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileNavOpen(false)}
+                  className={({ isActive }) =>
+                    `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                      isActive
+                        ? 'bg-orange-600/90 text-white font-medium shadow-sm'
+                        : 'text-orange-300 hover:bg-orange-900/30 hover:text-orange-200'
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          );
+        })()}
 
         <div className="mb-1">
           <div className="px-4 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">记录</div>

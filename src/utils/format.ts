@@ -31,6 +31,7 @@ export function getWindowTypeColor(type: WindowType): string {
     case 'super_cup_group': return 'bg-purple-600';
     case 'world_cup':
     case 'world_cup_group': return 'bg-sky-600';
+    case 'continental_cup': return 'bg-orange-600';
     case 'relegation_playoff': return 'bg-red-600';
     case 'season_end': return 'bg-slate-600';
     case 'pre_season': return 'bg-slate-500';
@@ -46,6 +47,7 @@ export function getWindowTypeLabel(type: WindowType): string {
     case 'super_cup_group': return '超级杯小组赛';
     case 'world_cup': return '环球冠军杯';
     case 'world_cup_group': return '环球冠军杯小组赛';
+    case 'continental_cup': return '洲际杯';
     case 'relegation_playoff': return '保级附加赛';
     case 'season_end': return '赛季结算';
     case 'pre_season': return '赛季前';
@@ -70,6 +72,9 @@ export function getTrophyLabel(type: string): string {
     case 'league_cup': return '联赛杯冠军';
     case 'super_cup': return '超级杯冠军';
     case 'world_cup': return '环球冠军杯冠军';
+    case 'mainland_cup': return '大陆杯冠军';
+    case 'southern_cup': return '南洲杯冠军';
+    case 'eastern_cup': return '东洲杯冠军';
     default: return type;
   }
 }

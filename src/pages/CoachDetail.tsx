@@ -198,7 +198,8 @@ export default function CoachDetail() {
           trophyByType[t.type] = (trophyByType[t.type] ?? 0) + 1;
         }
         const leagueTrophies = (trophyByType['league1'] ?? 0) + (trophyByType['league2'] ?? 0) + (trophyByType['league3'] ?? 0);
-        const cupTrophies = (trophyByType['league_cup'] ?? 0) + (trophyByType['super_cup'] ?? 0) + (trophyByType['world_cup'] ?? 0);
+        const cupTrophies = (trophyByType['league_cup'] ?? 0) + (trophyByType['super_cup'] ?? 0) + (trophyByType['world_cup'] ?? 0)
+          + (trophyByType['mainland_cup'] ?? 0) + (trophyByType['southern_cup'] ?? 0) + (trophyByType['eastern_cup'] ?? 0);
         let preference = '执教经历尚浅';
         if (trophies.length >= 3) {
           if (cupTrophies > leagueTrophies * 1.5) preference = '杯赛专精';

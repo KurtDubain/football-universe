@@ -1,6 +1,6 @@
 import { MatchFixture, MatchResult } from './match';
 
-export type WindowType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'relegation_playoff' | 'season_end' | 'world_cup' | 'world_cup_group' | 'pre_season';
+export type WindowType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'continental_cup' | 'relegation_playoff' | 'season_end' | 'world_cup' | 'world_cup_group' | 'pre_season';
 
 export interface CalendarWindow {
   id: number;

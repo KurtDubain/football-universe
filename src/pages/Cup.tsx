@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
-import type { CupState, SuperCupState, WorldCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
+import type { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -46,10 +46,17 @@ export default function Cup() {
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
+  const isContinental = type === 'mainland_cup' || type === 'southern_cup' || type === 'eastern_cup';
+
   const handleClick = (fix: CupFixture, compName: string) => {
+    const ct: MatchFixture['competitionType'] =
+      type === 'world_cup' ? 'world_cup'
+      : type === 'super_cup' ? 'super_cup'
+      : isContinental ? 'continental_cup'
+      : 'league_cup';
     const mf: MatchFixture = {
       id: fix.id, homeTeamId: fix.homeTeamId, awayTeamId: fix.awayTeamId,
-      competitionType: type === 'world_cup' ? 'world_cup' : type === 'super_cup' ? 'super_cup' : 'league_cup',
+      competitionType: ct,
       competitionName: compName, roundLabel: fix.roundName,
     };
     setSelectedFixture(mf);
@@ -73,6 +80,11 @@ export default function Cup() {
   const tb = world.teamBases;
   const ts = world.teamStates;
 
+  const continentalCup = type === 'mainland_cup' ? world.continentalCups?.mainland_cup
+    : type === 'southern_cup' ? world.continentalCups?.southern_cup
+    : type === 'eastern_cup' ? world.continentalCups?.eastern_cup
+    : null;
+
   return (
     <>
       {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} tb={tb} ts={ts} onClick={f => handleClick(f, '联赛杯')} />}
@@ -80,6 +92,10 @@ export default function Cup() {
       {type === 'world_cup' && (world.worldCup
         ? <WorldCupView cup={world.worldCup} tb={tb} ts={ts} onClick={f => handleClick(f, '环球冠军杯')} />
         : <div className="text-center py-12 text-slate-500">本赛季不是环球冠军杯年</div>
+      )}
+      {isContinental && (continentalCup
+        ? <ContinentalCupView cup={continentalCup} tb={tb} ts={ts} onClick={f => handleClick(f, continentalCup.name)} />
+        : <div className="text-center py-12 text-slate-500">本赛季不是洲际杯年</div>
       )}
       <MatchDetailModal isOpen={!!selectedFixture} onClose={close} fixture={selectedFixture ?? undefined} result={selectedResult ?? undefined} world={world} />
     </>
@@ -102,6 +118,35 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
         '参赛: 全部 32 支球队 (顶级16 + 甲级8 + 乙级8)',
         '赛制: 单场淘汰制，平局进入加时 + 点球',
         '轮次: 第一轮(32→16) → 第二轮(16→8) → 八强 → 四强 → 决赛',
+      ]} />
+      <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Continental Cup (大陆杯 / 南洲杯 / 东洲杯)
+// ══════════════════════════════════════════════════════════════
+
+function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
+  const teamCount = cup.region === '大陆' ? 16 : 8;
+  const headerAccent = cup.region === '大陆' ? 'text-orange-300'
+    : cup.region === '南洲' ? 'text-cyan-300'
+    : 'text-pink-300';
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 className={`text-xl font-bold ${headerAccent}`}>{cup.name}</h2>
+        <span className="text-xs text-slate-500">{cup.region}地区 · {teamCount}队</span>
+        {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
+      </div>
+      <RulesCard lines={[
+        `参赛: ${cup.region}地区 ${teamCount} 支强队 (按综合实力筛选)`,
+        '赛制: 单场淘汰制，平局进入加时 + 点球',
+        cup.region === '大陆'
+          ? '轮次: 第一轮(16→8) → 八强 → 四强 → 决赛'
+          : '轮次: 八强 → 四强 → 决赛',
+        '每两个赛季举办一次（奇数赛季）',
       ]} />
       <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
     </div>

@@ -189,9 +189,9 @@ export default function TeamDetail() {
             if (!grouped[t.type]) grouped[t.type] = [];
             grouped[t.type].push(t.seasonNumber);
           }
-          const typeOrder = ['league1', 'league2', 'league3', 'league_cup', 'super_cup', 'world_cup'];
-          const typeLabels: Record<string, string> = { league1: '顶级联赛', league2: '甲级联赛', league3: '乙级联赛', league_cup: '联赛杯', super_cup: '超级杯', world_cup: '环球冠军杯' };
-          const typeColors: Record<string, string> = { league1: 'text-amber-400', league2: 'text-blue-400', league3: 'text-emerald-400', league_cup: 'text-amber-300', super_cup: 'text-purple-400', world_cup: 'text-sky-400' };
+          const typeOrder = ['league1', 'league2', 'league3', 'league_cup', 'super_cup', 'world_cup', 'mainland_cup', 'southern_cup', 'eastern_cup'];
+          const typeLabels: Record<string, string> = { league1: '顶级联赛', league2: '甲级联赛', league3: '乙级联赛', league_cup: '联赛杯', super_cup: '超级杯', world_cup: '环球冠军杯', mainland_cup: '大陆杯', southern_cup: '南洲杯', eastern_cup: '东洲杯' };
+          const typeColors: Record<string, string> = { league1: 'text-amber-400', league2: 'text-blue-400', league3: 'text-emerald-400', league_cup: 'text-amber-300', super_cup: 'text-purple-400', world_cup: 'text-sky-400', mainland_cup: 'text-orange-300', southern_cup: 'text-cyan-300', eastern_cup: 'text-pink-300' };
           const sortedTypes = Object.keys(grouped).sort((a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b));
 
           return (
@@ -241,6 +241,7 @@ export default function TeamDetail() {
                   <th className="px-2 py-1.5 text-center">积分</th>
                   <th className="hidden sm:table-cell px-2 py-1.5 text-center">联杯</th>
                   <th className="hidden sm:table-cell px-2 py-1.5 text-center">超杯</th>
+                  <th className="hidden md:table-cell px-2 py-1.5 text-center">洲际杯</th>
                   <th className="hidden md:table-cell px-2 py-1.5 text-center">冠军杯</th>
                   <th className="px-2 py-1.5 text-left">教练</th>
                   <th className="px-2 py-1.5 text-center">备注</th>
@@ -254,6 +255,20 @@ export default function TeamDetail() {
                   if (honor?.leagueCupWinner === id) cupWins.push('联杯');
                   if (honor?.superCupWinner === id) cupWins.push('超杯');
                   if (honor?.worldCupWinner === id) cupWins.push('冠军杯');
+                  // Determine the team's region — drives which color the
+                  // continental cup chip uses for "champion" rendering. We
+                  // only use the region prefix; we don't care about the city.
+                  const teamRegion = base.region?.split('+')[0];
+                  const ccChampColor = teamRegion === '大陆' ? 'orange'
+                    : teamRegion === '南洲' ? 'cyan'
+                    : teamRegion === '东洲' ? 'pink'
+                    : 'orange';
+                  if (rec.continentalCupResult === '冠军') {
+                    cupWins.push(teamRegion === '大陆' ? '大陆杯'
+                      : teamRegion === '南洲' ? '南洲杯'
+                      : teamRegion === '东洲' ? '东洲杯'
+                      : '洲际杯');
+                  }
 
                   return (
                     <tr key={rec.seasonNumber} className={`border-t border-slate-700/50 ${isChamp ? 'bg-amber-900/10' : ''}`}>
@@ -288,6 +303,13 @@ export default function TeamDetail() {
                             {rec.superCupResult}
                           </span>
                         )}
+                      </td>
+                      <td className="hidden md:table-cell px-2 py-1.5 text-center">
+                        {rec.continentalCupResult ? (
+                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.continentalCupResult, ccChampColor)}`}>
+                            {rec.continentalCupResult}
+                          </span>
+                        ) : <span className="text-slate-700">—</span>}
                       </td>
                       <td className="hidden md:table-cell px-2 py-1.5 text-center">
                         {rec.worldCupResult && (
@@ -341,18 +363,25 @@ export default function TeamDetail() {
 //   八强 → faint bronze
 //   16强 / 32强 → muted gray (made knockouts)
 //   小组赛淘汰 → very muted (didn't make knockouts)
+//   未参加  → dim, leading dash-like rendering
 //   参赛中 → blue (still alive)
-function cupResultStyle(label: string, championColor: 'amber' | 'purple' | 'sky'): string {
+function cupResultStyle(label: string, championColor: 'amber' | 'purple' | 'sky' | 'orange' | 'cyan' | 'pink'): string {
   if (label === '冠军') {
-    return championColor === 'amber' ? 'bg-amber-900/50 text-amber-300'
-      : championColor === 'purple' ? 'bg-purple-900/50 text-purple-300'
-      : 'bg-sky-900/50 text-sky-300';
+    switch (championColor) {
+      case 'amber':  return 'bg-amber-900/50 text-amber-300';
+      case 'purple': return 'bg-purple-900/50 text-purple-300';
+      case 'sky':    return 'bg-sky-900/50 text-sky-300';
+      case 'orange': return 'bg-orange-900/50 text-orange-300';
+      case 'cyan':   return 'bg-cyan-900/50 text-cyan-300';
+      case 'pink':   return 'bg-pink-900/50 text-pink-300';
+    }
   }
   if (label === '亚军') return 'bg-slate-600/40 text-slate-200';
   if (label === '四强') return 'bg-orange-900/40 text-orange-300';
   if (label === '八强') return 'bg-amber-950/50 text-amber-400/80';
   if (label === '16强' || label === '32强') return 'bg-slate-700/40 text-slate-400';
   if (label === '小组赛淘汰') return 'text-slate-500';
+  if (label === '未参加') return 'text-slate-600';
   if (label === '参赛中') return 'bg-blue-900/40 text-blue-300';
   return 'text-slate-500';
 }

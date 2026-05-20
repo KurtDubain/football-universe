@@ -2,7 +2,7 @@ import { SeasonState } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState, CupFixture, CupRound } from '../../types/cup';
+import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupFixture, CupRound } from '../../types/cup';
 import { MatchResult } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats } from '../../types/player';
@@ -97,6 +97,12 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   const leagueCupWinner = world.leagueCup.winnerId ?? '';
   const superCupWinner = world.superCup.winnerId ?? '';
   const worldCupWinner = world.worldCup?.winnerId;
+  // Continental cup winners (Phase C). Each may be undefined either because
+  // the cup didn't run this season (even season) or it didn't complete.
+  const continentalCups = world.continentalCups ?? { mainland_cup: null, southern_cup: null, eastern_cup: null };
+  const mainlandCupWinner = continentalCups.mainland_cup?.completed ? continentalCups.mainland_cup.winnerId : undefined;
+  const southernCupWinner = continentalCups.southern_cup?.completed ? continentalCups.southern_cup.winnerId : undefined;
+  const easternCupWinner = continentalCups.eastern_cup?.completed ? continentalCups.eastern_cup.winnerId : undefined;
 
   // Promotion / relegation — derive ACTUAL movements from teamStates
   const proRelStandings: Record<number, StandingEntry[]> = {
@@ -148,6 +154,18 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       worldCupWinner,
       teamState.leagueLevel,
     );
+    // Continental cup trophies (Phase C) — attributed alongside league /
+    // domestic trophies. Each cup type has its own Trophy['type'] so the
+    // /history page and TrophyBreakdown can break them out per region.
+    if (teamId === mainlandCupWinner) {
+      trophies.push({ type: 'mainland_cup', seasonNumber });
+    }
+    if (teamId === southernCupWinner) {
+      trophies.push({ type: 'southern_cup', seasonNumber });
+    }
+    if (teamId === easternCupWinner) {
+      trophies.push({ type: 'eastern_cup', seasonNumber });
+    }
     teamTrophies[teamId] = [...(teamTrophies[teamId] ?? []), ...trophies];
 
     // Also attribute trophies to the coach (derived from coachStates).
@@ -203,6 +221,34 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       title: `${world.teamBases[superCupWinner]?.name} 夺得超级杯冠军!`,
       description: `${world.teamBases[superCupWinner]?.name} 赢得超级杯冠军荣耀。`,
     });
+  }
+
+  // Continental cup trophy news + runner-up news — only for cups that ran
+  // and completed this season.
+  for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
+    if (!cup || !cup.completed || !cup.winnerId) continue;
+    const winnerName = world.teamBases[cup.winnerId]?.name ?? cup.winnerId;
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `trophy-${cup.type}`),
+      seasonNumber, windowIndex, type: 'trophy',
+      title: `${winnerName} 夺得${cup.name}冠军！`,
+      description: `${winnerName} 在${cup.region}地区${cup.name}决赛中胜出，捧起冠军奖杯。`,
+    });
+    // Runner-up note (final loser)
+    const finalRound = cup.rounds.at(-1);
+    const finalFix = finalRound?.fixtures[0];
+    if (finalFix && finalRound?.completed) {
+      const runnerUp = finalFix.homeTeamId === cup.winnerId ? finalFix.awayTeamId : finalFix.homeTeamId;
+      const ruName = world.teamBases[runnerUp]?.name ?? runnerUp;
+      const homeScore = finalFix.result?.home ?? 0;
+      const awayScore = finalFix.result?.away ?? 0;
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `trophy-${cup.type}-ru`),
+        seasonNumber, windowIndex, type: 'trophy',
+        title: `${ruName} ${cup.name}决赛失利`,
+        description: `${ruName} 在${cup.name}决赛中以 ${finalFix.homeTeamId === runnerUp ? homeScore : awayScore}-${finalFix.homeTeamId === runnerUp ? awayScore : homeScore} 不敌 ${winnerName}，屈居亚军。`,
+      });
+    }
   }
 
   // ── Multi-crown detection ──
@@ -566,6 +612,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     let cupResult: string | undefined;
     let superCupResult: string | undefined;
     let worldCupResult: string | undefined;
+    let continentalCupResult: string | undefined;
 
     // League cup
     if (teamId === leagueCupWinner) cupResult = '冠军';
@@ -637,6 +684,46 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       }
     }
 
+    // Continental cup result — pick the cup matching this team's continent.
+    // If no cup ran for the team's region this season, leave undefined so
+    // the UI shows '—' / '未参加'. If the team is from a region with a cup
+    // but didn't qualify for the top-N selection, mark them as 未参加.
+    {
+      const teamRegion = world.teamBases[teamId]?.region?.split('+')[0];
+      const cup = teamRegion === '大陆' ? continentalCups.mainland_cup
+        : teamRegion === '南洲' ? continentalCups.southern_cup
+        : teamRegion === '东洲' ? continentalCups.eastern_cup
+        : null;
+      if (cup) {
+        if (teamId === cup.winnerId) {
+          continentalCupResult = '冠军';
+        } else {
+          // Was this team in the bracket at all?
+          const wasInBracket = cup.rounds.some(r =>
+            r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
+          );
+          if (!wasInBracket) {
+            continentalCupResult = '未参加';
+          } else {
+            // Final loser?
+            const finalRound = cup.rounds.at(-1);
+            const finalFix = finalRound?.fixtures[0];
+            const inFinal = finalFix && (finalFix.homeTeamId === teamId || finalFix.awayTeamId === teamId);
+            if (inFinal && finalRound?.completed && cup.winnerId && teamId !== cup.winnerId) {
+              continentalCupResult = '亚军';
+            } else {
+              const elimRound = findTeamEliminationRound(cup.rounds, teamId);
+              if (elimRound) {
+                continentalCupResult = cnRoundLabel(elimRound);
+              } else {
+                continentalCupResult = '参赛中';
+              }
+            }
+          }
+        }
+      }
+    }
+
     const record: SeasonRecord = {
       seasonNumber,
       leagueLevel: foundLevel,
@@ -651,6 +738,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       cupResult,
       superCupResult,
       worldCupResult,
+      continentalCupResult,
       // Coach is derived from LOCAL coachStates so any earlier season-end
       // logic that swapped the coach for this team is reflected here.
       coachId: getTeamCoachId(coachStates, teamId) ?? '',

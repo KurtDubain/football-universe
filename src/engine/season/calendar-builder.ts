@@ -9,11 +9,18 @@ export interface CalendarBuildInput {
   league3Fixtures: MatchFixture[][];  // 14 rounds
   leagueCupR1Fixtures: CupFixture[];
   superCupGroupRoundFixtures: CupFixture[][]; // 6 rounds of group fixtures
+  /**
+   * When true, append 4 continental_cup windows interleaved with league
+   * windows. The fixtures themselves are populated dynamically by the window
+   * handler at execution time (which inspects `world.continentalCups`); we
+   * just reserve the slots here.
+   */
+  includeContinentalCup?: boolean;
 }
 
 function cupFixturesToMatchFixtures(
   cupFixtures: CupFixture[],
-  competitionType: 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup_group',
+  competitionType: 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup_group' | 'continental_cup',
   competitionName: string,
 ): MatchFixture[] {
   return cupFixtures.map(f => ({
@@ -34,10 +41,14 @@ function cupFixturesToMatchFixtures(
  * - 5 league cup rounds inserted between league windows
  * - 6 super cup group rounds inserted between league windows
  * - Super cup knockout windows (QF L1, QF L2, SF L1, SF L2, Final) — fixtures TBD
+ * - 4 continental cup windows when `includeContinentalCup` (odd seasons) —
+ *   one for each round of the 大陆杯 (R16/QF/SF/Final), with the smaller
+ *   8-team cups joining from QF onward. Fixtures are populated dynamically
+ *   at execution time from `world.continentalCups`.
  * - Relegation playoff + season end
  */
 export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[] {
-  const { seasonNumber, league1Fixtures, league2Fixtures, league3Fixtures } = input;
+  const { seasonNumber, league1Fixtures, league2Fixtures, league3Fixtures, includeContinentalCup } = input;
   const windows: CalendarWindow[] = [];
   let windowId = 0;
 
@@ -47,6 +58,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   let lowR = 0;   // 0-13
   let scGroupR = 0; // 0-5 super cup group rounds
   let lcR = 0;    // 0-4 league cup rounds
+  let ccR = 0;    // 0-3 continental cup rounds (odd seasons only)
 
   // Helper to create a league window
   function addLeagueWindow() {
@@ -137,6 +149,29 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
     });
   }
 
+  /**
+   * Continental cup round window — round 1 plays only the 16-team mainland
+   * cup (R16). Rounds 2-4 play QF / SF / Final for all three cups in
+   * parallel. Fixtures are populated by the window handler at exec time
+   * since they depend on the live cup state.
+   */
+  function addContinentalCupWindow() {
+    if (!includeContinentalCup || ccR >= 4) return;
+    // 大陆杯 has 4 rounds (R16/QF/SF/Final); 南/东 have 3 rounds (QF/SF/Final).
+    // ccR=0 → only mainland_cup R16.  ccR>=1 → all three play their next round.
+    const labels = ['R16 / 首轮', 'QF / 八强', 'SF / 四强', 'Final / 决赛'];
+    windows.push({
+      id: windowId++,
+      type: 'continental_cup',
+      label: `洲际杯 ${labels[ccR]}`,
+      description: `第${seasonNumber}赛季 洲际杯${labels[ccR]}`,
+      fixtures: [],
+      completed: false,
+      results: [],
+    });
+    ccR++;
+  }
+
   // === Build the calendar ===
 
   // W0: League R1 (all tiers)
@@ -160,6 +195,9 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W6: League R5 (all tiers)
   addLeagueWindow(); // topR5 + midR3 + lowR3
 
+  // CC R1 (16-team mainland cup R16)  — only odd seasons
+  addContinentalCupWindow();
+
   // W7: Super Cup Group R2
   addSuperCupGroupWindow();
 
@@ -181,6 +219,9 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W13: League R9 (all tiers)
   addLeagueWindow(); // topR9 + midR5 + lowR5
 
+  // CC R2 (QF for all three cups)
+  addContinentalCupWindow();
+
   // W14: League R10 (top only)
   addLeagueWindow(); // topR10
 
@@ -199,6 +240,9 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W19: League R13 (all tiers)
   addLeagueWindow(); // topR13 + midR7 + lowR7
 
+  // CC R3 (SF for all three cups)
+  addContinentalCupWindow();
+
   // W20: Super Cup Group R5
   addSuperCupGroupWindow();
 
@@ -216,6 +260,9 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
 
   // W25: League R17 (all tiers)
   addLeagueWindow(); // topR17 + midR9 + lowR9
+
+  // CC R4 (Final for all three cups)
+  addContinentalCupWindow();
 
   // W26: League Cup SF
   addLeagueCupWindow();

@@ -258,6 +258,9 @@ export default function History() {
                   { type: 'league_cup', label: '联赛杯之王', emoji: '🏆' },
                   { type: 'super_cup', label: '超级杯之王', emoji: '⭐' },
                   { type: 'world_cup', label: '环球杯之王', emoji: '🌍' },
+                  { type: 'mainland_cup', label: '大陆杯之王', emoji: '🟧' },
+                  { type: 'southern_cup', label: '南洲杯之王', emoji: '🟦' },
+                  { type: 'eastern_cup', label: '东洲杯之王', emoji: '🟪' },
                 ];
                 return kings.map(k => {
                   const top = countByType(k.type);

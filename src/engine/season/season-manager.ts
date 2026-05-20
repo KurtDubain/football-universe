@@ -2,7 +2,7 @@ import { SeasonState, CalendarWindow } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState } from '../../types/cup';
+import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRegion } from '../../types/cup';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats, PlayerRetirement } from '../../types/player';
@@ -14,6 +14,7 @@ import { createInitialStandings } from '../standings/standings';
 import { determinePromotionRelegation } from '../standings/promotion-relegation';
 import { initLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { initSuperCup, getSuperCupGroupFixtures } from '../cups/super-cup';
+import { initContinentalCup } from '../cups/continental-cup';
 import { generateAllSquads } from '../players/generator';
 import { createInitialPlayerStats, updatePlayerStatsFromResults } from '../players/stats';
 import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
@@ -70,6 +71,24 @@ export interface GameWorld {
   leagueCup: CupState;
   superCup: SuperCupState;
   worldCup: WorldCupState | null;
+  /**
+   * Continental cups (Phase C). Populated only in odd seasons (S % 2 === 1)
+   * after `initializeNewSeason`; null in even seasons. Each region's cup is
+   * independent — disjoint team rosters mean all three can play on the same
+   * continental_cup window without conflict.
+   *
+   * Initialised by `initializeNewSeason` to `{ mainland_cup: null,
+   * southern_cup: null, eastern_cup: null }` in even seasons; in odd seasons
+   * each entry is replaced with a `ContinentalCupState`.
+   *
+   * Trophies are attributed via the `mainland_cup` / `southern_cup` /
+   * `eastern_cup` Trophy types — see `season-end.ts` for the attribution pass.
+   */
+  continentalCups: {
+    mainland_cup: ContinentalCupState | null;
+    southern_cup: ContinentalCupState | null;
+    eastern_cup: ContinentalCupState | null;
+  };
   honorHistory: HonorRecord[];
   teamTrophies: Record<string, Trophy[]>;
   coachTrophies: Record<string, Trophy[]>;
@@ -240,6 +259,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     leagueCup: undefined!,
     superCup: undefined!,
     worldCup: null,
+    continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null },
     honorHistory: [],
     teamTrophies: {},
     coachTrophies: {},
@@ -341,6 +361,49 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
 
   const superCup = initSuperCup(superCupTeams, seasonNumber, rng, superCupConfig.awayGoalRule);
 
+  // ── Continental cups (Phase C) ──
+  // Fire in odd seasons (S1, S3, ..., S17, S19) — never collides with WC
+  // (every-4 schedule on even seasons). Each region's eligible roster is
+  // filtered by region prefix; the region size determines whether the cup
+  // initialises (16 for 大陆, 8 for 南洲 / 东洲). If a region is short of teams
+  // (e.g. due to migration edge cases), the cup is skipped silently for that
+  // region. We never throw here — schedule integrity > strict count.
+  const continentalCups: GameWorld['continentalCups'] = {
+    mainland_cup: null,
+    southern_cup: null,
+    eastern_cup: null,
+  };
+  const isContinentalCupSeason = seasonNumber % 2 === 1;
+  if (isContinentalCupSeason) {
+    const teamsByRegion: Record<CupRegion, string[]> = { '大陆': [], '南洲': [], '东洲': [] };
+    for (const teamId of allTeamIds) {
+      const tb = world.teamBases[teamId];
+      const cont = tb?.region?.split('+')[0] as CupRegion | undefined;
+      if (cont && cont in teamsByRegion) {
+        teamsByRegion[cont].push(teamId);
+      }
+    }
+    // 大陆杯: pick the top 16 by overall (since the continent has > 16 teams).
+    if (teamsByRegion['大陆'].length >= 16) {
+      const top16 = [...teamsByRegion['大陆']]
+        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
+        .slice(0, 16);
+      continentalCups.mainland_cup = initContinentalCup('大陆', top16, seasonNumber, rng);
+    }
+    if (teamsByRegion['南洲'].length >= 8) {
+      const top8 = [...teamsByRegion['南洲']]
+        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
+        .slice(0, 8);
+      continentalCups.southern_cup = initContinentalCup('南洲', top8, seasonNumber, rng);
+    }
+    if (teamsByRegion['东洲'].length >= 8) {
+      const top8 = [...teamsByRegion['东洲']]
+        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
+        .slice(0, 8);
+      continentalCups.eastern_cup = initContinentalCup('东洲', top8, seasonNumber, rng);
+    }
+  }
+
   // Get super cup group fixtures for all 6 rounds
   const superCupGroupRoundFixtures: import('../../types/cup').CupFixture[][] = [];
   for (let r = 1; r <= 6; r++) {
@@ -358,6 +421,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     league3Fixtures,
     leagueCupR1Fixtures,
     superCupGroupRoundFixtures,
+    includeContinentalCup: isContinentalCupSeason,
   };
   const calendar = buildSeasonCalendar(calendarInput);
 
@@ -402,6 +466,22 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     title: `超级杯分组抽签揭晓 — ${scL1Count}顶${scL2Count}甲${scL3Count}乙`,
     description: scGroupInfo,
   });
+
+  // Continental cups draw (odd seasons only)
+  if (isContinentalCupSeason) {
+    for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
+      if (!cup) continue;
+      const fixturePreview = cup.rounds[0].fixtures
+        .map(f => `${world.teamBases[f.homeTeamId]?.shortName ?? f.homeTeamId} vs ${world.teamBases[f.awayTeamId]?.shortName ?? f.awayTeamId}`)
+        .join('、');
+      drawNews.push({
+        id: `draw-cc-${cup.type}-S${seasonNumber}`,
+        seasonNumber, windowIndex: 0, type: 'match_result',
+        title: `${cup.name}抽签揭晓 — ${cup.region}地区${cup.rounds[0].fixtures.length * 2}队角逐`,
+        description: `第${seasonNumber}赛季${cup.name}首轮对阵: ${fixturePreview}`,
+      });
+    }
+  }
 
   // ── Season buffs: reverse old buffs, then apply new ones ──
   let buffedTeamBases = { ...world.teamBases };
@@ -476,6 +556,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     leagueCup,
     superCup,
     worldCup: null,
+    continentalCups,
     coachChangesThisSeason: [],
     playerStats: createInitialPlayerStats(world.squads),
     newsLog: [...(world.newsLog ?? []), ...drawNews, ...buffNews],
@@ -647,6 +728,7 @@ export function executeCurrentWindow(world: GameWorld): {
     world.leagueCup,
     world.superCup,
     world.worldCup,
+    world.continentalCups,
   );
 
   // Post-match processing (rest, pressure, news, events)
@@ -703,6 +785,7 @@ export function executeCurrentWindow(world: GameWorld): {
     leagueCup: windowResult.leagueCup ?? world.leagueCup,
     superCup: windowResult.superCup ?? world.superCup,
     worldCup: windowResult.worldCup !== undefined ? windowResult.worldCup : world.worldCup,
+    continentalCups: windowResult.continentalCups ?? world.continentalCups,
     coachStates: postMatch.coachStates,
     coachCareers: postMatch.coachCareers,
     coachChangesThisSeason: postMatch.coachChanges,

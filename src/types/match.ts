@@ -1,4 +1,4 @@
-export type CompetitionType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup' | 'world_cup_group' | 'relegation_playoff';
+export type CompetitionType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup' | 'world_cup_group' | 'continental_cup' | 'relegation_playoff';
 
 export interface MatchFixture {
   id: string;

@@ -277,6 +277,30 @@ export function applyV11ToV12CoachAge(world: {
   return { coachesTouched, fieldsTouched };
 }
 
+/**
+ * v12 → v13 helper: backfill `continentalCups` (Phase C). Older saves had no
+ * concept of continental cups; we default the slot to all-null on load.
+ *
+ * Idempotent: if `continentalCups` is already an object with the three
+ * region keys present, leaves it alone. Otherwise installs the empty default.
+ *
+ * Mutates `world` in place; returns whether the field was touched (so the
+ * unit test or a manual audit can confirm the migration ran).
+ */
+export function applyV12ToV13ContinentalCupsInit(world: {
+  continentalCups?: unknown;
+}): { touched: boolean } {
+  const cc = world.continentalCups;
+  if (
+    cc && typeof cc === 'object' && !Array.isArray(cc)
+    && 'mainland_cup' in cc && 'southern_cup' in cc && 'eastern_cup' in cc
+  ) {
+    return { touched: false };
+  }
+  world.continentalCups = { mainland_cup: null, southern_cup: null, eastern_cup: null };
+  return { touched: true };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -574,7 +598,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 12,
+      version: 13,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -818,6 +842,13 @@ export const useGameStore = create<GameStore>()(
         // extracted so the migration test can exercise it directly.
         if (version < 12 && state?.world) {
           applyV11ToV12CoachAge(state.world as { coachBases?: unknown; coachRetirementHistory?: unknown; nextCoachIdCounter?: unknown });
+        }
+        // v12 → v13: backfill `continentalCups` (Phase C). Older saves had
+        // no concept of continental cups; we install the empty default on
+        // load. Helper extracted so the migration test can exercise it
+        // directly.
+        if (version < 13 && state?.world) {
+          applyV12ToV13ContinentalCupsInit(state.world as { continentalCups?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

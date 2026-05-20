@@ -2,7 +2,7 @@ import { SeasonState, CalendarWindow } from '../../types/season';
 import { TeamBase, TeamState } from '../../types/team';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState, CupFixture } from '../../types/cup';
+import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupFixture } from '../../types/cup';
 import { simulateMatch, SimulationContext } from '../match/simulator';
 import { SeededRNG } from '../match/rng';
 import { applyMatchStateChanges } from '../state-updater';
@@ -11,6 +11,7 @@ import { determinePromotionRelegation, applyPlayoffResults } from '../standings/
 import { advanceLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { getSuperCupGroupFixtures, updateSuperCupGroupStandings, completeSuperCupGroupStage, advanceSuperCupKnockout } from '../cups/super-cup';
 import { updateWorldCupGroupStandings, completeWorldCupGroupStage, advanceWorldCupKnockout } from '../cups/world-cup';
+import { advanceContinentalCup, getContinentalCupCurrentFixtures } from '../cups/continental-cup';
 import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsId } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
 
@@ -27,6 +28,7 @@ export interface WindowResult {
   leagueCup?: CupState;
   superCup?: SuperCupState;
   worldCup?: WorldCupState | null;
+  continentalCups?: GameWorld['continentalCups'];
   windowFixtures?: MatchFixture[];
 }
 
@@ -511,6 +513,83 @@ export function handleWorldCup(
 // ── Dispatcher ──────────────────────────────────────────────────────
 
 /**
+ * Continental cup window — advances all three continental cups (大陆/南洲/东洲)
+ * in parallel. Cups are disjoint by team so a single window can play matches
+ * across all three without conflict.
+ *
+ * Round 1 (R16) only the 16-team mainland cup plays — the smaller 8-team
+ * cups don't have an R16. From round 2 onward all three cups play QF / SF /
+ * Final on the same window.
+ */
+export function handleContinentalCup(
+  world: GameWorld,
+  window: CalendarWindow,
+  teamStates: Record<string, TeamState>,
+  seasonState: SeasonState,
+  rng: SeededRNG,
+  continentalCups: GameWorld['continentalCups'],
+): WindowResult {
+  // Collect this round's fixtures across all three cups (those that still have an active round)
+  const allCupFixtures: { cup: ContinentalCupState; fixtures: CupFixture[] }[] = [];
+  for (const key of ['mainland_cup', 'southern_cup', 'eastern_cup'] as const) {
+    const cup = continentalCups[key];
+    if (!cup || cup.completed) continue;
+    const fixtures = getContinentalCupCurrentFixtures(cup);
+    if (fixtures.length > 0) {
+      allCupFixtures.push({ cup, fixtures });
+    }
+  }
+
+  if (allCupFixtures.length === 0) {
+    // Nothing to play (e.g. all cups completed) — mark window done with no
+    // matches. This also covers the (illegal) case of even-season pollution.
+    window.fixtures = [];
+    return { results: [], teamsPlayed: new Set(), teamStates, news: [] };
+  }
+
+  // Build a unified MatchFixture list and remember which cup each belongs to
+  const matchFixtures: MatchFixture[] = [];
+  const fixtureCupMap = new Map<string, ContinentalCupState>();
+  for (const { cup, fixtures } of allCupFixtures) {
+    for (const cf of fixtures) {
+      matchFixtures.push({
+        id: cf.id,
+        homeTeamId: cf.homeTeamId,
+        awayTeamId: cf.awayTeamId,
+        competitionType: 'continental_cup' as const,
+        competitionName: cup.name,
+        roundLabel: cf.roundName,
+      });
+      fixtureCupMap.set(cf.id, cup);
+    }
+  }
+
+  const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
+
+  // Group results by cup and advance each cup independently
+  const updatedCups: GameWorld['continentalCups'] = { ...continentalCups };
+  for (const { cup, fixtures } of allCupFixtures) {
+    const ids = new Set(fixtures.map((f) => f.id));
+    const cupResults = sim.results.filter((r) => ids.has(r.fixtureId));
+    const advanced = advanceContinentalCup(cup, cupResults);
+    if (cup.type === 'mainland_cup') updatedCups.mainland_cup = advanced;
+    else if (cup.type === 'southern_cup') updatedCups.southern_cup = advanced;
+    else if (cup.type === 'eastern_cup') updatedCups.eastern_cup = advanced;
+  }
+
+  window.fixtures = matchFixtures;
+
+  return {
+    results: sim.results,
+    teamsPlayed: sim.teamsPlayed,
+    teamStates: sim.teamStates,
+    news: [],
+    continentalCups: updatedCups,
+    windowFixtures: matchFixtures,
+  };
+}
+
+/**
  * Dispatch the current window to the appropriate handler based on window.type.
  */
 export function dispatchWindow(
@@ -525,6 +604,7 @@ export function dispatchWindow(
   leagueCup: CupState,
   superCup: SuperCupState,
   worldCup: WorldCupState | null,
+  continentalCups: GameWorld['continentalCups'],
 ): WindowResult {
   switch (window.type) {
     case 'league':
@@ -535,6 +615,8 @@ export function dispatchWindow(
       return handleSuperCupGroup(world, window, teamStates, seasonState, rng, superCup);
     case 'super_cup':
       return handleSuperCup(world, window, teamStates, seasonState, rng, superCup);
+    case 'continental_cup':
+      return handleContinentalCup(world, window, teamStates, seasonState, rng, continentalCups);
     case 'relegation_playoff':
       return handleRelegationPlayoff(world, window, teamStates, seasonState, rng, league1Standings, league2Standings, league3Standings);
     case 'world_cup_group':

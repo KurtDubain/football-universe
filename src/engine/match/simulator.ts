@@ -45,7 +45,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function isCup(type: CompetitionType): boolean {
-  return type === 'league_cup' || type === 'super_cup' || type === 'world_cup';
+  return type === 'league_cup' || type === 'super_cup' || type === 'world_cup' || type === 'continental_cup';
 }
 
 interface AdjustedStrengths {

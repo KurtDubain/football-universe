@@ -48,6 +48,13 @@ export interface SeasonRecord {
   cupResult?: string;
   superCupResult?: string;
   worldCupResult?: string;
+  /**
+   * Continental cup result — one of '冠军' | '亚军' | '四强' | '八强' | '16强' |
+   * '未参加'. Populated only in odd seasons when the team's region had a
+   * continental cup running. Off-year rows leave it undefined; the UI
+   * displays '—' for those.
+   */
+  continentalCupResult?: string;
   coachId: string;
   teamOverall?: number; // team OVR at end of season
   promoted: boolean;
@@ -55,6 +62,6 @@ export interface SeasonRecord {
 }
 
 export interface Trophy {
-  type: 'league1' | 'league2' | 'league3' | 'league_cup' | 'super_cup' | 'world_cup';
+  type: 'league1' | 'league2' | 'league3' | 'league_cup' | 'super_cup' | 'world_cup' | 'mainland_cup' | 'southern_cup' | 'eastern_cup';
   seasonNumber: number;
 }

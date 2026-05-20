@@ -1,0 +1,75 @@
+import { chromium } from 'playwright';
+import * as fs from 'fs';
+
+const URL = 'http://localhost:5173/';
+const SAVE = JSON.parse(fs.readFileSync('/Users/mutu/Downloads/football-universe-s16.json', 'utf8'));
+
+async function main() {
+  const browser = await chromium.launch({ headless: true });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(`PAGE ERROR: ${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+
+  await page.goto(URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(`
+    localStorage.clear();
+    localStorage.setItem('football-universe-save', ${JSON.stringify(JSON.stringify(SAVE))});
+  `);
+  await page.goto(URL, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1500);
+
+  // Advance full S16 to enter S17 (odd → continental cups trigger)
+  for (let i = 0; i < 80; i++) {
+    const btn = await page.$('button:has-text("推进"), button:has-text("开始模拟")');
+    if (!btn) break;
+    const txt = await btn.textContent();
+    if (!txt || txt.includes('赛季已结束') || txt.includes('模拟中')) break;
+    await btn.click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(100);
+  }
+  await page.waitForTimeout(2000);
+
+  const state = await page.evaluate(`(() => {
+    var raw = localStorage.getItem('football-universe-save');
+    if (!raw) return null;
+    var data = JSON.parse(raw);
+    var w = data.state.world;
+    var cc = w.continentalCups || {};
+    return {
+      version: data.version,
+      season: w.seasonState.seasonNumber,
+      mainland: cc.mainland_cup ? { round: cc.mainland_cup.currentRound, completed: cc.mainland_cup.completed, winner: cc.mainland_cup.winnerId } : null,
+      southern: cc.southern_cup ? { round: cc.southern_cup.currentRound, completed: cc.southern_cup.completed, winner: cc.southern_cup.winnerId } : null,
+      eastern: cc.eastern_cup ? { round: cc.eastern_cup.currentRound, completed: cc.eastern_cup.completed, winner: cc.eastern_cup.winnerId } : null,
+    };
+  })()`);
+  console.log('=== AFTER ADVANCE ===');
+  console.log(JSON.stringify(state, null, 2));
+
+  // Snap continental cup pages
+  await page.goto(URL + 'cup/mainland_cup', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: '/tmp/c-cup-mainland.png', fullPage: false });
+
+  await page.goto(URL + 'cup/southern_cup', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: '/tmp/c-cup-southern.png', fullPage: false });
+
+  await page.goto(URL + 'cup/eastern_cup', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: '/tmp/c-cup-eastern.png', fullPage: false });
+
+  // Team detail to verify new column
+  await page.goto(URL + 'team/gz_hengda', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: '/tmp/c-team-history.png', fullPage: true });
+
+  console.log('=== ERRORS ===');
+  console.log(errors.length === 0 ? 'NONE' : errors.join('\n'));
+  await browser.close();
+}
+
+main().catch((err) => { console.error(err); process.exit(1); });
