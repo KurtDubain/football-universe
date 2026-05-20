@@ -17,6 +17,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 95,
     riskBias: 1,
     stabilityBuff: 9,
+    age: 64,
   },
   {
     id: 'coach_guardiola',
@@ -31,6 +32,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 85,
     riskBias: 3,
     stabilityBuff: 8,
+    age: 53,
   },
   {
     id: 'coach_klopp',
@@ -45,6 +47,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 88,
     riskBias: 5,
     stabilityBuff: 6,
+    age: 57,
   },
   {
     id: 'coach_simeone',
@@ -59,6 +62,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 92,
     riskBias: -7,
     stabilityBuff: 10,
+    age: 54,
   },
   {
     id: 'coach_arteta',
@@ -73,6 +77,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 78,
     riskBias: 0,
     stabilityBuff: 7,
+    age: 42,
   },
   {
     id: 'coach_inzaghi',
@@ -87,6 +92,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 75,
     riskBias: -1,
     stabilityBuff: 7,
+    age: 48,
   },
 
   // ============================================================
@@ -105,6 +111,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 72,
     riskBias: 1,
     stabilityBuff: 6,
+    age: 46,
   },
   {
     id: 'coach_xabi',
@@ -119,6 +126,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 70,
     riskBias: 2,
     stabilityBuff: 5,
+    age: 42,
   },
   {
     id: 'coach_luis_enrique',
@@ -133,6 +141,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 68,
     riskBias: 6,
     stabilityBuff: 3,
+    age: 54,
   },
   {
     id: 'coach_conte',
@@ -147,6 +156,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 60,
     riskBias: -5,
     stabilityBuff: 6,
+    age: 55,
   },
   {
     id: 'coach_motta',
@@ -161,6 +171,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 66,
     riskBias: 0,
     stabilityBuff: 5,
+    age: 42,
   },
   {
     id: 'coach_flick',
@@ -175,6 +186,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 65,
     riskBias: 4,
     stabilityBuff: 4,
+    age: 60,
   },
   {
     id: 'coach_de_zerbi',
@@ -189,6 +201,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 58,
     riskBias: 5,
     stabilityBuff: 2,
+    age: 45,
   },
   {
     id: 'coach_gasperini',
@@ -203,6 +216,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 70,
     riskBias: 7,
     stabilityBuff: 3,
+    age: 65,
   },
   {
     id: 'coach_postecoglou',
@@ -217,6 +231,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 55,
     riskBias: 8,
     stabilityBuff: 1,
+    age: 58,
   },
   {
     id: 'coach_emery',
@@ -231,6 +246,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 64,
     riskBias: 0,
     stabilityBuff: 5,
+    age: 53,
   },
 
   // ============================================================
@@ -249,6 +265,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 50,
     riskBias: -6,
     stabilityBuff: 5,
+    age: 61,
   },
   {
     id: 'coach_xavi',
@@ -263,6 +280,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 45,
     riskBias: 3,
     stabilityBuff: 2,
+    age: 44,
   },
   {
     id: 'coach_conceicao',
@@ -277,6 +295,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 58,
     riskBias: 3,
     stabilityBuff: 3,
+    age: 49,
   },
   {
     id: 'coach_xie_hui',
@@ -291,6 +310,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 52,
     riskBias: 5,
     stabilityBuff: 1,
+    age: 50,
   },
   {
     id: 'coach_choi',
@@ -305,6 +325,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 60,
     riskBias: 0,
     stabilityBuff: 4,
+    age: 64,
   },
   {
     id: 'coach_wu_jingui',
@@ -319,6 +340,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 56,
     riskBias: -4,
     stabilityBuff: 5,
+    age: 65,
   },
   {
     id: 'coach_dyche',
@@ -333,6 +355,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 70,
     riskBias: -8,
     stabilityBuff: 8,
+    age: 53,
   },
   {
     id: 'coach_hasenhuttl',
@@ -347,6 +370,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 50,
     riskBias: 4,
     stabilityBuff: 2,
+    age: 57,
   },
   {
     id: 'coach_li_xiaopeng',
@@ -361,6 +385,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 48,
     riskBias: 0,
     stabilityBuff: 3,
+    age: 49,
   },
   {
     id: 'coach_garcia',
@@ -375,6 +400,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 52,
     riskBias: 1,
     stabilityBuff: 3,
+    age: 60,
   },
   {
     id: 'coach_hao_wei',
@@ -389,6 +415,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 46,
     riskBias: 2,
     stabilityBuff: 2,
+    age: 50,
   },
   {
     id: 'coach_chen_yang',
@@ -403,6 +430,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 44,
     riskBias: -3,
     stabilityBuff: 4,
+    age: 49,
   },
 
   // ============================================================
@@ -421,6 +449,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 42,
     riskBias: 0,
     stabilityBuff: 2,
+    age: 47,
   },
   {
     id: 'coach_wang_baoshan',
@@ -435,6 +464,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 46,
     riskBias: -3,
     stabilityBuff: 4,
+    age: 61,
   },
   {
     id: 'coach_jankovic',
@@ -449,6 +479,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 40,
     riskBias: 2,
     stabilityBuff: 1,
+    age: 54,
   },
   {
     id: 'coach_li_tie',
@@ -463,6 +494,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 35,
     riskBias: -2,
     stabilityBuff: 2,
+    age: 47,
   },
 
   // ============================================================
@@ -481,6 +513,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 58,
     riskBias: 3,
     stabilityBuff: 3,
+    age: 51,
   },
   {
     id: 'coach_allegri',
@@ -495,6 +528,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 62,
     riskBias: -6,
     stabilityBuff: 7,
+    age: 57,
   },
   {
     id: 'coach_pochettino',
@@ -509,6 +543,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 50,
     riskBias: 4,
     stabilityBuff: 2,
+    age: 52,
   },
   {
     id: 'coach_bielsa',
@@ -523,6 +558,7 @@ export const defaultCoaches: CoachBase[] = [
     pressureResistance: 35,
     riskBias: 10,
     stabilityBuff: -2,
+    age: 65,
   },
 ];
 

@@ -54,6 +54,7 @@ function makeCoach(id: string): CoachBase {
     pressureResistance: 70,
     riskBias: 0,
     stabilityBuff: 5,
+    age: 50,
   };
 }
 

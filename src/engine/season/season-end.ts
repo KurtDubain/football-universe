@@ -23,6 +23,7 @@ import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
+import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
@@ -79,6 +80,15 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   let retirementHistory = world.retirementHistory ?? [];
   let coachCandidatePool = world.coachCandidatePool ?? [];
   let nextPlayerUuidCounter = world.nextPlayerUuidCounter ?? 0;
+  // ── Phase B coach lifecycle locals (introduced in v12) ──
+  // Coach retirement history mirrors the player retirement-history shape;
+  // capped at 200 entries (FIFO). nextCoachIdCounter is used by the
+  // replacement engine when generating fresh coaches.
+  let coachRetirementHistory = world.coachRetirementHistory ?? [];
+  let nextCoachIdCounter = world.nextCoachIdCounter ?? 0;
+  // coachBases is a `let` because we may add freshly-generated coaches
+  // into it during the coach-retirement pass below.
+  let coachBases = world.coachBases;
 
   // Determine champions
   const league1Champion = world.league1Standings[0]?.teamId ?? '';
@@ -353,6 +363,91 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
         seasonNumber, windowIndex, type: 'retirement',
         title: `${r.name} 宣布退役`,
         description,
+      });
+    }
+  }
+
+  // ── Phase B: Coach retirements + replacements (mirrors player retirement) ──
+  // Runs AFTER player retirements so the candidate pool seeded by the player
+  // pass is immediately consumable by the coach replacement engine. Runs
+  // BEFORE the transfer window so any team that just got a new coach
+  // doesn't show up as coach-less mid-tick.
+  //
+  // Synthetic world view: feed the LOCAL coachCandidatePool (it may have
+  // grown via processRetirements above). Writes go to local
+  // coachStates / coachBases / coachCareers / coachCandidatePool /
+  // nextCoachIdCounter / coachRetirementHistory.
+  const coachRetResult = processCoachRetirements(
+    { ...world, coachCandidatePool, nextCoachIdCounter },
+    rng,
+  );
+  if (coachRetResult.retirements.length > 0) {
+    // Apply coachStates updates from the result (retirees marked as
+    // unemployed; new hires assigned).
+    Object.assign(coachStates, coachRetResult.coachStates);
+    // Merge fresh CoachBase entries into coachBases.
+    coachBases = { ...coachBases, ...coachRetResult.newCoachBases };
+    // CareerEntry updates were already constructed in coachRetResult; merge
+    // them into coachCareers.
+    Object.assign(coachCareers, coachRetResult.coachCareers);
+    coachCandidatePool = coachRetResult.coachCandidatePool;
+    nextCoachIdCounter = coachRetResult.nextCoachIdCounter;
+
+    // Append + cap retirement history (FIFO).
+    const mergedCoachHistory = [...coachRetirementHistory, ...coachRetResult.retirements];
+    coachRetirementHistory = mergedCoachHistory.length > COACH_RETIREMENT_HISTORY_CAP
+      ? mergedCoachHistory.slice(-COACH_RETIREMENT_HISTORY_CAP)
+      : mergedCoachHistory;
+
+    // News: major retirements (rating >= 80) + each new hire.
+    for (const r of coachRetResult.retirements) {
+      if (r.trophies.length > 0 || r.totalSeasons >= 5) {
+        // Use rating threshold via lookup since the retirement record
+        // itself doesn't carry rating — fetch from world.coachBases.
+        const finalRating = world.coachBases[r.id]?.rating ?? 0;
+        if (finalRating < 80 && r.trophies.length === 0) continue;
+        const trophiesText = r.trophies.length > 0
+          ? `，捧起 ${r.trophies.length} 座冠军奖杯`
+          : '';
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `coach-retire-${r.id}`),
+          seasonNumber, windowIndex, type: 'retirement',
+          title: `${r.name} 宣布退休`,
+          description: `${r.finalTeamName} 名帅 ${r.name}（${r.age} 岁）执教 ${r.totalSeasons} 年后挂靴${trophiesText}。`,
+        });
+      } else if ((world.coachBases[r.id]?.rating ?? 0) >= 80) {
+        // Lower-trophy elite retiree — still worth a line.
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `coach-retire-${r.id}`),
+          seasonNumber, windowIndex, type: 'retirement',
+          title: `${r.name} 宣布退休`,
+          description: `${r.finalTeamName} 名帅 ${r.name}（${r.age} 岁）选择挂靴，结束 ${r.totalSeasons} 年执教生涯。`,
+        });
+      }
+    }
+    for (const hire of coachRetResult.newHires) {
+      const teamName = world.teamBases[hire.teamId]?.name ?? hire.teamId;
+      if (hire.source === 'candidate') {
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `coach-hire-cand-${hire.coach.id}`),
+          seasonNumber, windowIndex, type: 'coach_hired',
+          title: `${hire.coach.name} 转型为教练`,
+          description: `传奇球员 ${hire.coach.name} 接手 ${teamName}，开启教练生涯。`,
+        });
+      } else {
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `coach-hire-fresh-${hire.coach.id}`),
+          seasonNumber, windowIndex, type: 'coach_hired',
+          title: `${teamName} 任命新帅 ${hire.coach.name}`,
+          description: `${teamName} 完成与新教练 ${hire.coach.name} 的签约。`,
+        });
+      }
+      // Mirror the manual coach-firing path: log this as a coach change.
+      coachChangesThisSeason.push({
+        teamId: hire.teamId,
+        oldCoachId: hire.replacedCoachId,
+        newCoachId: hire.coach.id,
+        reason: '退休换帅',
       });
     }
   }
@@ -869,6 +964,19 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     prediction = { ...prediction, settled: true, correctCount: correct };
   }
 
+  // ── Coach age aging ──────────────────────────────────────────
+  // Increment age on every coach AFTER the retirement pass — so the
+  // freshly-generated replacement (age 38-43 / 35-50) doesn't immediately
+  // age twice in its first season. Mirrors the player applyAnnualRevaluation
+  // pass which also bumps age in-place. We rebuild a fresh record here
+  // because `coachBases` may already be a fresh shallow copy from the
+  // retirement merge — but to be safe we always create a new local.
+  const agedCoachBases: Record<string, CoachBase> = {};
+  for (const [coachId, base] of Object.entries(coachBases)) {
+    agedCoachBases[coachId] = { ...base, age: (base.age ?? 50) + 1 };
+  }
+  coachBases = agedCoachBases;
+
   // Final patch — apply ALL accumulated locals over `world` in one spread.
   // No `world.X = ...` mutation has happened above; every change went through
   // a local of the same name.
@@ -877,6 +985,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     seasonState,
     teamBases,
     teamStates,
+    coachBases,
     coachStates,
     coachCareers,
     coachChangesThisSeason,
@@ -892,6 +1001,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     transferHistory,
     retirementHistory,
     coachCandidatePool,
+    coachRetirementHistory,
+    nextCoachIdCounter,
     nextPlayerUuidCounter,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],

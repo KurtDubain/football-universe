@@ -15,6 +15,14 @@ export interface CoachBase {
   pressureResistance: number; // 0-100
   riskBias: number;        // -10 to +10
   stabilityBuff: number;   // -5 to +10
+  /**
+   * Coach age (years). Introduced in v12. The retirement engine increments
+   * this field at every season-end and uses it (alongside rating) to roll
+   * retirement chance. Legacy v11 saves get this field backfilled by
+   * `applyV11ToV12CoachAge` — a deterministic uuid-hash → [35, 65] band.
+   * Hard retirement cap at 72.
+   */
+  age: number;
 }
 
 export interface CoachState {
@@ -23,6 +31,15 @@ export interface CoachState {
   isUnemployed: boolean;
   unemployedSince: number | null;
   contractEnd?: number;
+  /**
+   * Set true when the coach has hung up their boots via the coach-retirement
+   * pipeline. Retired coaches stay in `coachStates` (so historical
+   * SeasonRecord refs keep resolving) but must NOT be re-hired by
+   * `hireNewCoach`. Without this flag, they'd cycle: retire → marked
+   * isUnemployed=true → next contract-expiry hires them → retire again.
+   * Introduced in v12 alongside the coach lifecycle.
+   */
+  retired?: boolean;
 }
 
 export interface CareerEntry {
@@ -52,4 +69,29 @@ export interface CoachCandidate {
   peakRating: number;
   enteredPoolSeason: number;
   style: CoachStyle;
+}
+
+/**
+ * A retired coach. Captured at the season-end moment of retirement by the
+ * coach-retirement engine. Mirrors `PlayerRetirement` shape so /legends can
+ * render both with the same card primitives.
+ *
+ * `id` matches the retired CoachBase.id — historical references in
+ * coachCareers / coachTrophies / honor records keep resolving. The coach is
+ * NOT removed from world.coachBases; they're simply no longer assigned to
+ * any team and no longer eligible to be re-hired.
+ *
+ * `fromPlayer` is true when the coach originated from the candidate pool —
+ * "retired star player → coach → retired coach" full lifecycle.
+ */
+export interface CoachRetirement {
+  id: string;
+  name: string;
+  age: number;           // age at retirement
+  seasonRetired: number;
+  totalSeasons: number;  // career length (sum of seasons across CareerEntry list)
+  trophies: Trophy[];    // career trophies (snapshot at retirement)
+  finalTeamId: string;
+  finalTeamName: string;
+  fromPlayer?: boolean;  // true if originated from candidate pool
 }

@@ -16,7 +16,9 @@ export function hireNewCoach(
   seasonNumber: number,
   rng: SeededRNG,
 ): { coachId: string; careerEntry: CareerEntry } {
-  const unemployed = availableCoaches.filter((c) => c.state.isUnemployed);
+  // Available = unemployed AND not retired. Retired coaches stay in
+  // `coachStates` for historical-ref resolution but must never be re-hired.
+  const unemployed = availableCoaches.filter((c) => c.state.isUnemployed && c.state.retired !== true);
 
   if (unemployed.length === 0) {
     // Generate a caretaker coach

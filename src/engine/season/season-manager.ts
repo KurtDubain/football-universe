@@ -6,7 +6,7 @@ import { CupState, SuperCupState, WorldCupState } from '../../types/cup';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats, PlayerRetirement } from '../../types/player';
-import { CoachCandidate } from '../../types/coach';
+import { CoachCandidate, CoachRetirement } from '../../types/coach';
 import { Achievement } from '../achievements';
 import { SeededRNG } from '../match/rng';
 import { generateLeagueFixtures } from '../standings/fixtures';
@@ -97,6 +97,20 @@ export interface GameWorld {
    * v11; the v10 → v11 migration backfills it as `[]` on legacy saves.
    */
   coachCandidatePool: CoachCandidate[];
+  /**
+   * Append-only history of coach retirements. Capped at the last 200 entries
+   * by the season-end pipeline (see `engine/coaches/coach-retirement.ts`).
+   * Introduced in v12; the v11 → v12 migration backfills it as `[]` on
+   * legacy saves.
+   */
+  coachRetirementHistory: CoachRetirement[];
+  /**
+   * Monotonic counter for assigning new fresh-coach ids (`c-fresh-{N}`).
+   * Bumped each time the replacement engine generates a non-pool coach so
+   * ids never collide with existing entries in `world.coachBases`.
+   * Introduced in v12.
+   */
+  nextCoachIdCounter: number;
   activeEvents: import('../events').SeasonEvent[];
   achievements: Achievement[];
   newsLog: NewsItem[];
@@ -236,6 +250,8 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     nextPlayerUuidCounter,
     retirementHistory: [],
     coachCandidatePool: [],
+    coachRetirementHistory: [],
+    nextCoachIdCounter: 0,
     activeEvents: [],
     achievements: [],
     newsLog: [],

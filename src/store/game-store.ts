@@ -230,6 +230,53 @@ export function applyV10ToV11RetirementInit(world: {
   return { touched };
 }
 
+/**
+ * v11 → v12 helper: backfill `age` on every CoachBase, plus the new
+ * `coachRetirementHistory` + `nextCoachIdCounter` fields introduced in
+ * Phase B (coach lifecycle).
+ *
+ * Age is derived deterministically from `coach.id` via the same
+ * 31-multiplier hash used in `applyV9ToV10PlayerCurve` so the same save
+ * loaded twice produces identical ages. Range is [35, 65] — younger
+ * candidates (35-40) join the future-prospect band; older ones (60+)
+ * become near-term retirement candidates. The hard age cap is 72.
+ *
+ * Idempotent: if `age` is already a number on a coach, it's left alone.
+ * Mutates `world` in place; returns counts of touched fields and coaches.
+ */
+export function applyV11ToV12CoachAge(world: {
+  coachBases?: Record<string, { id?: string; age?: number }> | unknown;
+  coachRetirementHistory?: unknown;
+  nextCoachIdCounter?: unknown;
+}): { coachesTouched: number; fieldsTouched: number } {
+  let coachesTouched = 0;
+  let fieldsTouched = 0;
+
+  if (world.coachBases && typeof world.coachBases === 'object') {
+    const cb = world.coachBases as Record<string, { id?: string; age?: number }>;
+    for (const coach of Object.values(cb)) {
+      if (!coach || typeof coach !== 'object') continue;
+      if (typeof coach.age === 'number') continue;
+      // Hash the id (or fall back to a stable string for malformed entries
+      // — they get a single deterministic age, but they were broken anyway).
+      const idStr = typeof coach.id === 'string' ? coach.id : 'coach-?';
+      let h = 0;
+      for (const ch of idStr) h = (h * 31 + ch.charCodeAt(0)) | 0;
+      coach.age = 35 + Math.abs(h) % 31; // [35, 65]
+      coachesTouched++;
+    }
+  }
+  if (!Array.isArray(world.coachRetirementHistory)) {
+    world.coachRetirementHistory = [];
+    fieldsTouched++;
+  }
+  if (typeof world.nextCoachIdCounter !== 'number') {
+    world.nextCoachIdCounter = 0;
+    fieldsTouched++;
+  }
+  return { coachesTouched, fieldsTouched };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -527,7 +574,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 11,
+      version: 12,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -763,6 +810,14 @@ export const useGameStore = create<GameStore>()(
         // the migration test can exercise it directly.
         if (version < 11 && state?.world) {
           applyV10ToV11RetirementInit(state.world as { retirementHistory?: unknown; coachCandidatePool?: unknown });
+        }
+        // v11 → v12: backfill `age` on every CoachBase, plus the new
+        // coachRetirementHistory + nextCoachIdCounter fields. Coach age is
+        // derived from id-hash (deterministic) — no other reasonable
+        // backfill exists since pre-v12 saves never tracked it. Helper
+        // extracted so the migration test can exercise it directly.
+        if (version < 12 && state?.world) {
+          applyV11ToV12CoachAge(state.world as { coachBases?: unknown; coachRetirementHistory?: unknown; nextCoachIdCounter?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

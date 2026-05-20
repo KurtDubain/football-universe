@@ -153,6 +153,8 @@ function buildWorld(): GameWorld {
     memorableMatches: [],
     retirementHistory: [],
     coachCandidatePool: [],
+    coachRetirementHistory: [],
+    nextCoachIdCounter: 0,
   };
 }
 

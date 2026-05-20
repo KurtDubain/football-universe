@@ -5,10 +5,13 @@ import { getCoachStyleLabel } from '../utils/format';
 import { buildCareerArc, type CareerArcPoint } from '../engine/players/career-arc';
 import TrophyBreakdown from '../components/TrophyBreakdown';
 import type { PlayerPosition, PlayerRetirement } from '../types/player';
-import type { CoachCandidate } from '../types/coach';
+import type { CoachCandidate, CoachRetirement } from '../types/coach';
 
 type EraFilter = 'all' | 'recent' | 'classic';
 type SortKey = 'recent' | 'peak' | 'goals';
+/** Top-level tab — 退役球员 (default) vs 退役教练. The candidate pool always renders below. */
+type LegendTab = 'players' | 'coaches';
+type CoachSortKey = 'recent' | 'trophies' | 'tenure';
 
 const POS_LABEL: Record<PlayerPosition, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const POS_CHIP: Record<PlayerPosition, string> = {
@@ -30,20 +33,24 @@ export default function Legends() {
   const world = useGameStore((s) => s.world);
   const [era, setEra] = useState<EraFilter>('all');
   const [sortBy, setSortBy] = useState<SortKey>('recent');
+  const [tab, setTab] = useState<LegendTab>('players');
+  const [coachSortBy, setCoachSortBy] = useState<CoachSortKey>('recent');
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
   const currentSeason = world.seasonState.seasonNumber;
   const retirements = world.retirementHistory ?? [];
   const candidatePool = world.coachCandidatePool ?? [];
+  const coachRetirements = world.coachRetirementHistory ?? [];
 
   // Whole-page empty state — applies BEFORE filtering, so newcomers don't
-  // think their filter wiped out the data.
-  if (retirements.length === 0 && candidatePool.length === 0) {
+  // think their filter wiped out the data. Only kicks in when every section
+  // is empty (else the user can still see the candidate pool / coaches tab).
+  if (retirements.length === 0 && candidatePool.length === 0 && coachRetirements.length === 0) {
     return <FullEmptyState />;
   }
 
-  // ── Section B: filter + sort retirees ──
+  // ── Section B (players): filter + sort retirees ──
   const filtered = retirements.filter((r) => {
     const seasonsAgo = currentSeason - r.seasonRetired;
     if (era === 'recent') return seasonsAgo <= 5;
@@ -64,6 +71,18 @@ export default function Legends() {
     }
   });
 
+  // ── Section B (coaches): sort retirees ──
+  const sortedCoaches = [...coachRetirements].sort((a, b) => {
+    switch (coachSortBy) {
+      case 'recent':
+        return b.seasonRetired - a.seasonRetired || b.trophies.length - a.trophies.length;
+      case 'trophies':
+        return b.trophies.length - a.trophies.length || b.seasonRetired - a.seasonRetired;
+      case 'tenure':
+        return b.totalSeasons - a.totalSeasons || b.trophies.length - a.trophies.length;
+    }
+  });
+
   return (
     <div className="max-w-6xl space-y-6">
       {/* ── Section A: header ── */}
@@ -74,59 +93,112 @@ export default function Legends() {
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           已记录 <span className="text-slate-300 font-semibold">{retirements.length}</span> 位退役球员 ·{' '}
+          <span className="text-slate-300 font-semibold">{coachRetirements.length}</span> 位退役教练 ·{' '}
           <span className="text-slate-300 font-semibold">{candidatePool.length}</span> 位未来名帅候选
         </p>
       </header>
 
+      {/* ── Tab toggle: 退役球员 / 退役教练 ── */}
+      <div className="flex gap-1 bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/50 w-fit">
+        {([
+          { key: 'players' as const, label: `退役球员 (${retirements.length})` },
+          { key: 'coaches' as const, label: `退役教练 (${coachRetirements.length})` },
+        ]).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
+              tab === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── Section B: retired players ── */}
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-slate-200">退役球员</h3>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Era filter */}
-            <div className="flex gap-1 bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/50">
-              {([
-                { key: 'all', label: '全部' },
-                { key: 'recent', label: '近 5 季' },
-                { key: 'classic', label: '经典老将' },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setEra(key)}
-                  className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                    era === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {label}
-                </button>
+      {tab === 'players' && (
+        <section>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 className="text-sm font-semibold text-slate-200">退役球员</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Era filter */}
+              <div className="flex gap-1 bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/50">
+                {([
+                  { key: 'all', label: '全部' },
+                  { key: 'recent', label: '近 5 季' },
+                  { key: 'classic', label: '经典老将' },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setEra(key)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                      era === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-lg px-2 py-1.5 cursor-pointer"
+              >
+                <option value="recent">最近退役</option>
+                <option value="peak">巅峰能力</option>
+                <option value="goals">职业进球</option>
+              </select>
+            </div>
+          </div>
+
+          {sorted.length === 0 ? (
+            <div className="bg-slate-800/60 rounded-xl border border-slate-700/60 p-6 text-center text-sm text-slate-500">
+              当前筛选下没有退役球员。
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {sorted.map((r) => (
+                <RetireeCard key={`${r.uuid}-${r.seasonRetired}`} retiree={r} world={world} />
               ))}
             </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Section B' (coaches): retired coaches ── */}
+      {tab === 'coaches' && (
+        <section>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 className="text-sm font-semibold text-slate-200">退役教练</h3>
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              value={coachSortBy}
+              onChange={(e) => setCoachSortBy(e.target.value as CoachSortKey)}
               className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-lg px-2 py-1.5 cursor-pointer"
             >
-              <option value="recent">最近退役</option>
-              <option value="peak">巅峰能力</option>
-              <option value="goals">职业进球</option>
+              <option value="recent">最近退休</option>
+              <option value="trophies">冠军总数</option>
+              <option value="tenure">执教年限</option>
             </select>
           </div>
-        </div>
 
-        {sorted.length === 0 ? (
-          <div className="bg-slate-800/60 rounded-xl border border-slate-700/60 p-6 text-center text-sm text-slate-500">
-            当前筛选下没有退役球员。
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {sorted.map((r) => (
-              <RetireeCard key={`${r.uuid}-${r.seasonRetired}`} retiree={r} world={world} />
-            ))}
-          </div>
-        )}
-      </section>
+          {sortedCoaches.length === 0 ? (
+            <CoachRetireeEmptyState />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {sortedCoaches.map((r) => (
+                <CoachRetireeCard
+                  key={`${r.id}-${r.seasonRetired}`}
+                  retiree={r}
+                  world={world}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-      {/* ── Section C: coach candidate pool ── */}
+      {/* ── Section C: coach candidate pool (always shown — same future-coach context regardless of tab) ── */}
       <section>
         <div className="flex items-center justify-between gap-3 mb-3">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -436,6 +508,103 @@ function CoachPoolEmptyState() {
       <p className="text-sm text-slate-300 font-medium">暂无候选名帅</p>
       <p className="text-xs text-slate-500 mt-1">
         当巅峰 ≥ 85 的球员在 35 岁后退役时，有概率进入名帅候选池。
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Card for a retired COACH. Mirrors the player retiree card layout so the
+ * tab toggle feels symmetric. Adds a "出身球员" badge when fromPlayer=true
+ * (the coach used to be a star player who entered the candidate pool).
+ */
+function CoachRetireeCard({
+  retiree,
+  world,
+}: {
+  retiree: CoachRetirement;
+  world: ReturnType<typeof useGameStore.getState>['world'];
+}) {
+  const team = world?.teamBases[retiree.finalTeamId];
+  // Final coachBase still exists in world.coachBases — fetch style for the chip.
+  const finalCoach = world?.coachBases[retiree.id];
+  const styleChip = finalCoach?.style
+    ? STYLE_CHIP[finalCoach.style] ?? 'text-slate-300 bg-slate-700/50 border-slate-600/30'
+    : null;
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
+      {/* Header row: name + style chip + fromPlayer badge */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-sm font-semibold text-slate-100 truncate" title={retiree.name}>
+              {retiree.name}
+            </h4>
+            {styleChip && finalCoach?.style && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${styleChip}`}>
+                {getCoachStyleLabel(finalCoach.style)}
+              </span>
+            )}
+            {retiree.fromPlayer && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-900/30 text-amber-300 border-amber-700/40">
+                出身球员
+              </span>
+            )}
+          </div>
+          {/* Last team */}
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="shrink-0">告别</span>
+            {team ? (
+              <Link
+                to={`/team/${retiree.finalTeamId}`}
+                className="flex items-center gap-1.5 hover:text-blue-300 transition-colors min-w-0"
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: team.color }}
+                />
+                <span className="truncate">{team.name}</span>
+              </Link>
+            ) : (
+              <span className="text-slate-500 truncate">{retiree.finalTeamName}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <StatPill label="退休" value={`S${retiree.seasonRetired}`} />
+        <StatPill label="退休年龄" value={`${retiree.age}岁`} />
+        <StatPill label="执教年限" value={`${retiree.totalSeasons} 季`} accent="text-blue-300" />
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-2 text-center">
+        <StatPill
+          label="冠军总数"
+          value={String(retiree.trophies.length)}
+          accent={retiree.trophies.length > 0 ? 'text-emerald-300' : ''}
+        />
+      </div>
+
+      {/* Trophy breakdown — only if non-empty */}
+      {retiree.trophies.length > 0 && (
+        <div className="mt-2">
+          <TrophyBreakdown trophies={retiree.trophies} size="xs" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CoachRetireeEmptyState() {
+  return (
+    <div className="bg-slate-800/60 rounded-xl border border-dashed border-slate-700/60 p-5 text-center">
+      <div className="text-2xl mb-1" aria-hidden>🎩</div>
+      <p className="text-sm text-slate-300 font-medium">暂无退役教练</p>
+      <p className="text-xs text-slate-500 mt-1">
+        年龄 60 岁以上的教练会按概率退休，72 岁强制挂靴。
       </p>
     </div>
   );
