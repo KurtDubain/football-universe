@@ -151,6 +151,8 @@ function buildWorld(): GameWorld {
     playerAwardsHistory: [],
     transferHistory: [],
     memorableMatches: [],
+    retirementHistory: [],
+    coachCandidatePool: [],
   };
 }
 

@@ -48,6 +48,8 @@ function buildWorld(overrides: Partial<GameWorld>): GameWorld {
     bets: [],
     seasonBuffsHistory: [],
     memorableMatches: [],
+    retirementHistory: [],
+    coachCandidatePool: [],
   };
   return { ...base, ...overrides } as GameWorld;
 }

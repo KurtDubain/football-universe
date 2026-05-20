@@ -22,6 +22,7 @@ import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
+import { processRetirements } from '../players/retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
 
 /**
@@ -70,6 +71,14 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   let transferHistory = world.transferHistory;
   let playerStats = world.playerStats;
   let squads = world.squads;
+  // ── A2 retirement / coach-pool locals (introduced in v11) ──
+  // Initialised to (defensive) empty arrays so legacy worlds that haven't yet
+  // been touched by the v10 → v11 migration don't blow up here. The migration
+  // backfills them; this is a belt-and-suspenders for in-memory worlds built
+  // by tests.
+  let retirementHistory = world.retirementHistory ?? [];
+  let coachCandidatePool = world.coachCandidatePool ?? [];
+  let nextPlayerUuidCounter = world.nextPlayerUuidCounter ?? 0;
 
   // Determine champions
   const league1Champion = world.league1Standings[0]?.teamId ?? '';
@@ -304,6 +313,39 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     playerAwardsHistory = [];
   }
 
+  // ── A2: Retirements + youth replacements + coach-pool seeding ──
+  // Runs BEFORE the transfer window so the new youths are eligible to be
+  // transferred (and any retiree slot is already filled when the window
+  // logic looks for swap targets). playerStats are intentionally PRESERVED
+  // for retired players — historical references resolve, but they no longer
+  // accrue stats since their uuid is removed from squads.
+  //
+  // Reads from `world.squads` directly (still equals the local `squads`
+  // here). Writes to LOCAL `squads`, `retirementHistory`, `coachCandidatePool`,
+  // `nextPlayerUuidCounter` — never to `world.X`.
+  const retirementResult = processRetirements(world, rng);
+  if (retirementResult.retirements.length > 0) {
+    squads = retirementResult.squads;
+    nextPlayerUuidCounter = retirementResult.nextPlayerUuidCounter;
+    // FIFO with cap — keep the last RETIREMENT_HISTORY_CAP entries.
+    const merged = [...retirementHistory, ...retirementResult.retirements];
+    retirementHistory = merged.length > 300 ? merged.slice(-300) : merged;
+    coachCandidatePool = retirementResult.coachCandidatePool;
+
+    // Generate news for major retirements (peakRating >= 80). Don't spam —
+    // a typical season produces only a handful of these.
+    for (const r of retirementResult.retirements) {
+      if (r.peakRating < 80) continue;
+      const yearsSnap = Math.max(1, r.age - 18); // rough career length estimate
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `retire-${r.uuid}`),
+        seasonNumber, windowIndex, type: 'coach_fired',
+        title: `${r.name} 宣布退役`,
+        description: `${r.teamName} 老将 ${r.name}（${r.age} 岁）结束 ${yearsSnap} 年职业生涯，留下 ${r.careerGoals} 球的纪录。`,
+      });
+    }
+  }
+
   // ── Transfer window ──────────────────────────────────────────
   // Player UUIDs are stable across transfers, so playerStats keys, awards,
   // and prior transferHistory entries continue to resolve without any
@@ -311,7 +353,12 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // affected stat entry's `teamId` (so this season's freshly-attributed
   // top-scorer / awards news points to the new club) — processTransferWindow
   // returns the refreshed playerStats record.
-  const transferResult = processTransferWindow(world, rng);
+  //
+  // Synthetic world view: pass post-retirement `squads` so transfer logic
+  // operates on the current rosters (not on `world.squads` which still has
+  // the retirees). `playerStats` is unchanged at this point — preserved for
+  // historical lookups.
+  const transferResult = processTransferWindow({ ...world, squads, playerStats }, rng);
   if (transferResult.transfers.length > 0) {
     squads = transferResult.squads;
     playerStats = transferResult.playerStats;
@@ -832,6 +879,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     playerStats,
     playerAwardsHistory,
     transferHistory,
+    retirementHistory,
+    coachCandidatePool,
+    nextPlayerUuidCounter,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

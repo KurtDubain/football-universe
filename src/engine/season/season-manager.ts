@@ -5,7 +5,8 @@ import { StandingEntry } from '../../types/league';
 import { CupState, SuperCupState, WorldCupState } from '../../types/cup';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
-import { Player, PlayerSeasonStats } from '../../types/player';
+import { Player, PlayerSeasonStats, PlayerRetirement } from '../../types/player';
+import { CoachCandidate } from '../../types/coach';
 import { Achievement } from '../achievements';
 import { SeededRNG } from '../match/rng';
 import { generateLeagueFixtures } from '../standings/fixtures';
@@ -83,6 +84,19 @@ export interface GameWorld {
    * v8 migration so legacy saves get a sane starting point too.
    */
   nextPlayerUuidCounter: number;
+  /**
+   * Append-only history of retirements. Capped at the last 300 entries by
+   * the season-end pipeline (see `engine/players/retirement.ts`). Introduced
+   * in v11; the v10 → v11 migration backfills it as `[]` on legacy saves.
+   */
+  retirementHistory: PlayerRetirement[];
+  /**
+   * FIFO pool of recently-retired stars eligible to become future coaches.
+   * Capped at 12 entries (oldest evicted on overflow). A3 will consume from
+   * here when assembling new coaches; A2 only seeds the pool. Introduced in
+   * v11; the v10 → v11 migration backfills it as `[]` on legacy saves.
+   */
+  coachCandidatePool: CoachCandidate[];
   activeEvents: import('../events').SeasonEvent[];
   achievements: Achievement[];
   newsLog: NewsItem[];
@@ -220,6 +234,8 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     squads,
     playerStats,
     nextPlayerUuidCounter,
+    retirementHistory: [],
+    coachCandidatePool: [],
     activeEvents: [],
     achievements: [],
     newsLog: [],

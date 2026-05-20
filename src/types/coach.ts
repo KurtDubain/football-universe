@@ -33,3 +33,23 @@ export interface CareerEntry {
   fired: boolean;
   trophies: Trophy[];
 }
+
+/**
+ * Pool entry for a recently-retired star player who is eligible to become
+ * a future coach. Seeded by the retirement engine — the candidate inherits
+ * their playing peakRating as a base coaching rating, and a tactical style
+ * derived from their playing position. Lives on `world.coachCandidatePool`.
+ *
+ * The pool is FIFO with a hard cap (12). Phase A3 will consume from this
+ * pool when an unemployed coach slot opens up.
+ */
+export interface CoachCandidate {
+  /** Re-uses the retired player's uuid, so legacy references still resolve. */
+  uuid: string;
+  name: string;
+  fromTeamId: string;
+  /** Player's peak — becomes their starting coach rating in A3. */
+  peakRating: number;
+  enteredPoolSeason: number;
+  style: CoachStyle;
+}

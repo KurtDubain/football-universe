@@ -115,6 +115,7 @@ describe('UUID stability across transfer (integration)', () => {
       godHandUsed: false, coins: 0, bets: [],
       matchHistory: [], seasonBuffsHistory: [],
       playerAwardsHistory: [], transferHistory: [], memorableMatches: [],
+      retirementHistory: [], coachCandidatePool: [],
     };
   }
 

@@ -204,6 +204,32 @@ export function applyV9ToV10PlayerCurve(world: {
   return { touched, skipped };
 }
 
+/**
+ * v10 → v11 helper: backfill the retirement / coach-candidate-pool fields
+ * introduced in Phase A2. Older saves had no retirement system, so these
+ * arrays simply start empty — there's no "salvage" path needed; the next
+ * season-end will populate them organically.
+ *
+ * Idempotent: if either field is already present and an array, it's left
+ * alone. Mutates `world` in place; returns the count of fields touched
+ * (so the unit test can assert the migration ran).
+ */
+export function applyV10ToV11RetirementInit(world: {
+  retirementHistory?: unknown;
+  coachCandidatePool?: unknown;
+}): { touched: number } {
+  let touched = 0;
+  if (!Array.isArray(world.retirementHistory)) {
+    world.retirementHistory = [];
+    touched++;
+  }
+  if (!Array.isArray(world.coachCandidatePool)) {
+    world.coachCandidatePool = [];
+    touched++;
+  }
+  return { touched };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -501,7 +527,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 10,
+      version: 11,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -730,6 +756,13 @@ export const useGameStore = create<GameStore>()(
         // so the migration test can exercise it directly.
         if (version < 10 && state?.world) {
           applyV9ToV10PlayerCurve(state.world);
+        }
+        // v10 → v11: backfill retirementHistory + coachCandidatePool. Older
+        // saves had no retirement system, so these arrays start empty and
+        // fill organically from the next season-end. Helper extracted so
+        // the migration test can exercise it directly.
+        if (version < 11 && state?.world) {
+          applyV10ToV11RetirementInit(state.world as { retirementHistory?: unknown; coachCandidatePool?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action
