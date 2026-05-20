@@ -21,10 +21,28 @@ export interface Player {
   name: string;        // assigned by region pool, e.g. "张伟"
   number: number;      // shirt number (mutable on transfer)
   position: PlayerPosition;
-  rating: number;      // 40-99
-  goalScoring: number; // 0-100, chance weight for being picked as scorer
+  /**
+   * Cached current rating (30-99). Recomputed at season-end from the curve in
+   * `engine/players/development.ts` after age++. Read-only between season-ends:
+   * any code that needs the player's "current ability" reads `rating` directly,
+   * never re-derives from peakRating in a hot path.
+   */
+  rating: number;
+  goalScoring: number; // 0-100, chance weight for being picked as scorer (NOT age-affected)
   marketValue: number; // in millions, e.g. 85 for €85M
   age: number;         // simulated age, increments each season
+  /**
+   * Destined ceiling rating (30-99). Immutable once set — assigned at
+   * generation, mirrored from `rating` for legacy v9 saves by the v9→v10
+   * migration. The age curve scales `rating` from `peakRating` based on age.
+   */
+  peakRating: number;
+  /**
+   * The age at which this player hits peak performance (24-29). Immutable
+   * once set; introduced in v10. Plus/minus 2 years either side counts as
+   * the plateau (full peak); decline begins at peakAge + 3.
+   */
+  peakAge: number;
 }
 
 export interface PlayerSeasonStats {

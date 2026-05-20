@@ -43,6 +43,11 @@ function makePlayer(
     number,
     position,
     rating,
+    // Test fixtures: peakRating == rating, peakAge == 27 (median). These
+    // satisfy the v10 contract without forcing every test to think about
+    // the development curve.
+    peakRating: rating,
+    peakAge: 27,
     goalScoring: 50,
     marketValue: 10,
     age: 26,

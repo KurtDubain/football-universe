@@ -3,6 +3,7 @@ import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { pickPlayerName } from '../../config/player-names';
 import { computeInitialMarketValue } from '../economy/market-value';
+import { computeCurrentRating } from './development';
 
 /**
  * Format a uuid from a monotonic counter. The shape `p-<n>` is opaque to
@@ -91,14 +92,17 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
         break;
     }
 
-    // Add variation: +/-10 for normal, +5 to +12 for stars
-    let rating: number;
+    // Add variation: +/-10 for normal, +5 to +12 for stars.
+    // This is the player's DESTINED PEAK rating — their ceiling. The current
+    // rating is derived below from the age curve so a teenager doesn't ship
+    // at full peak.
+    let peakRating: number;
     if (isStar) {
-      rating = Math.round(baseRating + rng.nextFloat(5, 12));
+      peakRating = Math.round(baseRating + rng.nextFloat(5, 12));
     } else {
-      rating = Math.round(baseRating + rng.nextFloat(-10, 5));
+      peakRating = Math.round(baseRating + rng.nextFloat(-10, 5));
     }
-    rating = Math.max(25, Math.min(99, rating));
+    peakRating = Math.max(25, Math.min(99, peakRating));
 
     // Goal scoring tendency
     let goalScoring: number;
@@ -133,8 +137,13 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
     }
 
     const playerName = pickPlayerName(region, usedNames, (arr) => rng.pick(arr));
-    // Age: stars are 25-30 (peak), others 19-34 (uniform)
+    // Age: stars are 24-30 (peak band), others 19-34 (uniform spread).
     const age = isStar ? rng.nextInt(24, 30) : rng.nextInt(19, 34);
+    // Individual peak-age variance — 24-29, uniform. peakRating is fixed;
+    // the curve in development.ts scales the *current* rating from it so a
+    // 19-year-old wonderkid doesn't ship at full peak.
+    const peakAge = rng.nextInt(24, 29);
+    const rating = computeCurrentRating(peakRating, age, peakAge);
     const newPlayer: Player = {
       uuid: formatPlayerUuid(nextUuid.value++),
       teamId: team.id,
@@ -142,6 +151,8 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
       number,
       position: pos,
       rating,
+      peakRating,
+      peakAge,
       goalScoring,
       age,
       marketValue: 0, // computed below after object exists

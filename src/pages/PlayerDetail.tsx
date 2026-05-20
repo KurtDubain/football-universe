@@ -219,6 +219,14 @@ export default function PlayerDetail() {
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">球员属性</h3>
         <div className="space-y-2">
           <AttrBar label="综合能力" value={player.rating} max={99} />
+          {typeof player.peakRating === 'number' && player.peakRating > player.rating && (
+            <AttrBar
+              label={`巅峰能力 (${player.peakAge ?? '?'}岁)`}
+              value={player.peakRating}
+              max={99}
+              color="bg-amber-500"
+            />
+          )}
           <AttrBar label="进球倾向" value={player.goalScoring} max={100} color="bg-amber-500" />
         </div>
       </div>

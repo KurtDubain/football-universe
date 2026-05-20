@@ -9,6 +9,7 @@ import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { pickPlayerName } from '../config/player-names';
 import { computeInitialMarketValue } from '../engine/economy/market-value';
+import { computeCurrentRating } from '../engine/players/development';
 
 interface GameStore {
   world: GameWorld | null;
@@ -123,6 +124,84 @@ export function backfillStaleHistoryPlayerIds(world: {
     }
   }
   return { transfers, awards };
+}
+
+/**
+ * v9 → v10 migration: introduce `peakRating` + `peakAge` and recompute
+ * `rating` from the development curve. Half-compresses ages over 33 so
+ * legacy saves with bloated ages (some players hit 49 in v9) settle into
+ * a plausible band — old age 41 → new age 37; old 49 → new 41.
+ *
+ * Idempotent: running it twice on the same world is a no-op (the second
+ * pass sees `peakRating` already set and skips). Exported so the migration
+ * test file can exercise it without standing up zustand + localStorage,
+ * and so the same logic can be invoked from any future re-migration script.
+ *
+ * Mutates `world.squads` in place; returns counts of touched / skipped
+ * players for diagnostics.
+ */
+export function applyV9ToV10PlayerCurve(world: {
+  squads?: Record<string, Array<{
+    uuid?: string;
+    age?: number;
+    rating?: number;
+    peakRating?: number;
+    peakAge?: number;
+    marketValue?: number;
+    teamId?: string;
+    name?: string;
+    number?: number;
+    position?: import('../types/player').PlayerPosition;
+    goalScoring?: number;
+  }>>;
+}): { touched: number; skipped: number } {
+  let touched = 0;
+  let skipped = 0;
+  for (const squad of Object.values(world.squads ?? {})) {
+    if (!Array.isArray(squad)) continue;
+    for (const p of squad) {
+      // Idempotency guard: previous pass already set BOTH peakRating + peakAge.
+      // (Stricter than just peakRating — a half-migrated save where peakRating
+      //  exists but peakAge doesn't would skip in the old version and stay
+      //  broken; this version fixes it through.)
+      if (typeof p.peakRating === 'number' && typeof p.peakAge === 'number') {
+        skipped++;
+        continue;
+      }
+      // Half-compress ages over 33 — old saves drifted ages up unbounded
+      // (no retirement system existed pre-v10). 41 → 37, 49 → 41.
+      const oldAge = typeof p.age === 'number' ? p.age : 28;
+      const newAge = oldAge > 33 ? 33 + Math.floor((oldAge - 33) * 0.5) : oldAge;
+      p.age = newAge;
+      // peakRating = current rating (their destined ceiling, frozen now).
+      // For a 35-year-old that's actually their *post-decline* rating — but
+      // the alternative (estimating peak from a forgotten age curve) is
+      // strictly worse. The migration treats `rating-at-time-of-v10` as
+      // the canonical peak, and the curve flows forward from here.
+      const currentRating = typeof p.rating === 'number' ? p.rating : 60;
+      p.peakRating = currentRating;
+      // peakAge — derived deterministically from uuid so the same save loaded
+      // twice (or shared between two browsers) produces identical peak ages.
+      // Range is [24, 29] to match generator output; we hash with the same
+      // 31-multiplier + abs trick used elsewhere in the migration code.
+      let hash = 0;
+      const uuid = typeof p.uuid === 'string' ? p.uuid : '';
+      for (const ch of uuid) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+      p.peakAge = 24 + Math.abs(hash) % 6;
+      // Recompute current rating with the new curve. Reuses the canonical
+      // implementation in development.ts so the migration and runtime stay
+      // in lockstep — no chance of curve drift between the two paths.
+      p.rating = computeCurrentRating(p.peakRating, newAge, p.peakAge);
+      // Recompute marketValue from scratch — the old value was derived from
+      // (peakRating, oldAge, oldAgeMul). After age compression, the new
+      // (peakRating, newAge, newAgeMul) gives a different bracket multiplier,
+      // and applyAnnualRevaluation only relatively adjusts (mul * newAgeMul/oldAgeMul)
+      // so the staleness never self-corrects. Reset from canonical formula.
+      p.marketValue = computeInitialMarketValue(p as import('../types/player').Player);
+      touched++;
+    }
+  }
+  return { touched, skipped };
 }
 
 export const useGameStore = create<GameStore>()(
@@ -422,10 +501,10 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 9,
+      version: 10,
       /**
        * Migrates a persisted save from any older version up to the current
-       * schema (v9). Each `if (version < N)` block applies one forward step.
+       * schema (v10). Each `if (version < N)` block applies one forward step.
        *
        * SAFETY CONTRACT:
        * - Input shape is `unknown`. We narrow once to a `Partial<GameStore>`
@@ -639,6 +718,18 @@ export const useGameStore = create<GameStore>()(
         // zustand + localStorage. Extraction is otherwise a no-op.
         if (version < 9 && state?.world) {
           backfillStaleHistoryPlayerIds(state.world);
+        }
+        // v9 → v10: introduce peakRating + peakAge per player and recompute
+        // each player's `rating` from the development curve in
+        // engine/players/development.ts. Also half-compresses ages over 33
+        // because pre-v10 saves had no retirement system and let some
+        // players drift up to ~49 — we want them slotted into a plausible
+        // band so the new curve produces sane numbers.
+        //
+        // Helper extracted to `applyV9ToV10PlayerCurve` (top of this file)
+        // so the migration test can exercise it directly.
+        if (version < 10 && state?.world) {
+          applyV9ToV10PlayerCurve(state.world);
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

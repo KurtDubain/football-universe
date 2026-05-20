@@ -6,9 +6,12 @@
  * transferred kept their FORMER legacy id, so the link rendered as
  * "未找到球员: jeonbuk-75". v9 walks `transferHistory` / `playerAwardsHistory`
  * and resolves those stale ids by name + team lookup.
+ *
+ * v9 → v10 migration tests for `applyV9ToV10PlayerCurve` are at the bottom.
  */
 import { describe, it, expect } from 'vitest';
-import { backfillStaleHistoryPlayerIds } from './game-store';
+import { backfillStaleHistoryPlayerIds, applyV9ToV10PlayerCurve } from './game-store';
+import { computeCurrentRating } from '../engine/players/development';
 
 type TestPlayer = { uuid: string; name: string };
 type TestWorld = Parameters<typeof backfillStaleHistoryPlayerIds>[0];
@@ -187,3 +190,176 @@ describe('backfillStaleHistoryPlayerIds (v8 → v9)', () => {
     expect(tally.awards).toBe(1);
   });
 });
+
+/**
+ * v9 → v10 migration tests for `applyV9ToV10PlayerCurve`.
+ *
+ * The v10 schema introduces `peakRating` + `peakAge` per player and
+ * recomputes `rating` from the development curve. It also half-compresses
+ * ages over 33 because pre-v10 saves had no retirement system and let some
+ * players drift up to ~49.
+ */
+
+type V9Player = {
+  uuid: string;
+  age: number;
+  rating: number;
+  peakRating?: number;
+  peakAge?: number;
+};
+
+function makeV9World(squads: Record<string, V9Player[]>) {
+  return { squads };
+}
+
+describe('applyV9ToV10PlayerCurve (v9 → v10)', () => {
+  it('assigns peakRating + peakAge to every player and recomputes rating', () => {
+    const world = makeV9World({
+      teamA: [
+        { uuid: 'p-1', age: 25, rating: 80 }, // peak band
+      ],
+    });
+    const tally = applyV9ToV10PlayerCurve(world);
+
+    expect(tally.touched).toBe(1);
+    expect(tally.skipped).toBe(0);
+    const p = world.squads.teamA[0];
+    expect(p.peakRating).toBe(80);
+    expect(p.peakAge).toBeGreaterThanOrEqual(24);
+    expect(p.peakAge).toBeLessThanOrEqual(29);
+    // Age 25, peakAge in [24,29] — always inside the plateau (peakAge ± 2 → 22-31).
+    // So rating == peakRating after recompute.
+    expect(p.rating).toBe(80);
+  });
+
+  it('half-compresses ages over 33: 41 → 37, 49 → 41, 35 → 34', () => {
+    const world = makeV9World({
+      teamA: [
+        { uuid: 'p-old1', age: 41, rating: 99 },
+        { uuid: 'p-old2', age: 49, rating: 80 },
+        { uuid: 'p-old3', age: 35, rating: 75 },
+        { uuid: 'p-young', age: 24, rating: 70 }, // no compression for ≤ 33
+      ],
+    });
+    applyV9ToV10PlayerCurve(world);
+
+    expect(world.squads.teamA[0].age).toBe(37); // 33 + floor((41-33)*0.5) = 33+4
+    expect(world.squads.teamA[1].age).toBe(41); // 33 + floor((49-33)*0.5) = 33+8
+    expect(world.squads.teamA[2].age).toBe(34); // 33 + floor((35-33)*0.5) = 33+1
+    expect(world.squads.teamA[3].age).toBe(24); // unchanged
+  });
+
+  it('idempotent: running it twice produces the same output', () => {
+    const world = makeV9World({
+      teamA: [
+        { uuid: 'p-a', age: 41, rating: 99 },
+        { uuid: 'p-b', age: 25, rating: 78 },
+        { uuid: 'p-c', age: 19, rating: 70 },
+      ],
+    });
+    applyV9ToV10PlayerCurve(world);
+    const snapshot = JSON.parse(JSON.stringify(world));
+
+    // Second run — should be a no-op (peakRating already set on every player).
+    const tally2 = applyV9ToV10PlayerCurve(world);
+    expect(tally2.touched).toBe(0);
+    expect(tally2.skipped).toBe(3);
+    expect(world).toEqual(snapshot);
+  });
+
+  it('peakAge is deterministic from uuid (reproducibility)', () => {
+    // Two worlds with the same uuid → same peakAge.
+    const a = makeV9World({ teamA: [{ uuid: 'p-deterministic', age: 25, rating: 80 }] });
+    const b = makeV9World({ teamA: [{ uuid: 'p-deterministic', age: 25, rating: 80 }] });
+    applyV9ToV10PlayerCurve(a);
+    applyV9ToV10PlayerCurve(b);
+    expect(a.squads.teamA[0].peakAge).toBe(b.squads.teamA[0].peakAge);
+  });
+
+  it('old age 41 + rating 99 → new age 37, peakRating 99, rating in plausible range', () => {
+    const world = makeV9World({
+      teamA: [{ uuid: 'p-vet1', age: 41, rating: 99 }],
+    });
+    applyV9ToV10PlayerCurve(world);
+    const p = world.squads.teamA[0];
+    expect(p.age).toBe(37);
+    expect(p.peakRating).toBe(99);
+    // age 37, peakAge in [24, 29], new (softer) curve:
+    //   peakAge=24 → 37 = peakAge+13, twilight: 0.75 - 3*0.04 = 0.63 → 62
+    //   peakAge=29 → 37 = peakAge+8, late career: 0.925 - 3*0.035 = 0.82 → 81
+    expect(p.rating).toBeGreaterThanOrEqual(60);
+    expect(p.rating).toBeLessThanOrEqual(82);
+  });
+
+  it('old age 49 + rating 80 → new age 41, peakRating 80, rating reasonable', () => {
+    const world = makeV9World({
+      teamA: [{ uuid: 'p-vet2', age: 49, rating: 80 }],
+    });
+    applyV9ToV10PlayerCurve(world);
+    const p = world.squads.teamA[0];
+    expect(p.age).toBe(41);
+    expect(p.peakRating).toBe(80);
+    // age 41 with peakAge in [24,29]:
+    //   peakAge=24 → 41 = peakAge+17 → very-old: max(0.40, 0.55 - 2*0.05) = 0.45 → 36
+    //   peakAge=29 → 41 = peakAge+12 → twilight: 0.75 - 2*0.04 = 0.67 → 54
+    expect(p.rating).toBeGreaterThanOrEqual(35);
+    expect(p.rating).toBeLessThanOrEqual(55);
+  });
+
+  it('young player (age 19, rating 70) gets peak ≥ rating after migration', () => {
+    // A 19-year-old in v9 had rating 70. In v10 with the new curve and our
+    // migration's "peakRating = current rating" rule, we KEEP peakRating=70
+    // (we have no way to know they were destined for higher). Their rating
+    // recomputes from the curve: age 19, peakAge in [24,29], so they're in
+    // the rising segment.
+    const world = makeV9World({
+      teamA: [{ uuid: 'p-young', age: 19, rating: 70 }],
+    });
+    applyV9ToV10PlayerCurve(world);
+    const p = world.squads.teamA[0];
+    expect(p.peakRating).toBe(70);
+    // For peakAge 24-29, age 19:
+    //   peakAge=24 (peakAge-2=22) → 19<22, rising. t=(19-18)/(22-18)=0.25 → 0.775 × 70 ≈ 54
+    //   peakAge=29 (peakAge-2=27) → 19<27, rising. t=(19-18)/(27-18)=1/9 ≈ 0.111 → 0.733 × 70 ≈ 51
+    // Either way, rating drops from 70 to ~51-54.
+    expect(p.rating).toBeLessThan(70);
+    expect(p.rating).toBeGreaterThanOrEqual(50);
+  });
+
+  it('produces ratings consistent with computeCurrentRating', () => {
+    // Cross-check: the migration should produce exactly what computeCurrentRating
+    // would produce given the migration's chosen peakRating + peakAge.
+    const world = makeV9World({
+      teamA: [
+        { uuid: 'p-test1', age: 28, rating: 85 },
+        { uuid: 'p-test2', age: 35, rating: 70 },
+      ],
+    });
+    applyV9ToV10PlayerCurve(world);
+    for (const p of world.squads.teamA) {
+      const expected = computeCurrentRating(p.peakRating!, p.age, p.peakAge!);
+      expect(p.rating).toBe(expected);
+    }
+  });
+
+  it('handles missing/empty squads without throwing', () => {
+    expect(() => applyV9ToV10PlayerCurve({ squads: {} })).not.toThrow();
+    expect(() => applyV9ToV10PlayerCurve({})).not.toThrow();
+    expect(() => applyV9ToV10PlayerCurve({ squads: { teamA: [] } })).not.toThrow();
+  });
+
+  it('handles missing rating / age fields with sensible fallbacks', () => {
+    const world = makeV9World({
+      teamA: [
+        { uuid: 'p-broken' } as V9Player, // missing both age and rating
+      ],
+    });
+    expect(() => applyV9ToV10PlayerCurve(world)).not.toThrow();
+    const p = world.squads.teamA[0];
+    expect(p.peakRating).toBe(60); // fallback rating
+    expect(p.age).toBe(28); // fallback age
+    expect(p.peakAge).toBeGreaterThanOrEqual(24);
+    expect(p.peakAge).toBeLessThanOrEqual(29);
+  });
+});
+

@@ -74,18 +74,18 @@ describe('UUID stability across transfer (integration)', () => {
     const weak = makeTeam('weak', 65);
 
     const eliteSquad: Player[] = [
-      { uuid: 'p-1', teamId: 'elite', name: 'A', number: 9, position: 'FW', rating: 85, goalScoring: 80, marketValue: 50, age: 28 },
-      { uuid: 'p-2', teamId: 'elite', name: 'B', number: 10, position: 'FW', rating: 80, goalScoring: 75, marketValue: 40, age: 27 },
-      { uuid: 'p-3', teamId: 'elite', name: 'C', number: 11, position: 'FW', rating: 75, goalScoring: 70, marketValue: 30, age: 26 },
-      { uuid: 'p-4', teamId: 'elite', name: 'D', number: 17, position: 'FW', rating: 70, goalScoring: 60, marketValue: 20, age: 25 },
-      { uuid: 'p-5', teamId: 'elite', name: 'GK', number: 1, position: 'GK', rating: 88, goalScoring: 1, marketValue: 30, age: 30 },
+      { uuid: 'p-1', teamId: 'elite', name: 'A', number: 9, position: 'FW', rating: 85, peakRating: 85, peakAge: 27, goalScoring: 80, marketValue: 50, age: 28 },
+      { uuid: 'p-2', teamId: 'elite', name: 'B', number: 10, position: 'FW', rating: 80, peakRating: 80, peakAge: 27, goalScoring: 75, marketValue: 40, age: 27 },
+      { uuid: 'p-3', teamId: 'elite', name: 'C', number: 11, position: 'FW', rating: 75, peakRating: 75, peakAge: 27, goalScoring: 70, marketValue: 30, age: 26 },
+      { uuid: 'p-4', teamId: 'elite', name: 'D', number: 17, position: 'FW', rating: 70, peakRating: 70, peakAge: 27, goalScoring: 60, marketValue: 20, age: 25 },
+      { uuid: 'p-5', teamId: 'elite', name: 'GK', number: 1, position: 'GK', rating: 88, peakRating: 88, peakAge: 27, goalScoring: 1, marketValue: 30, age: 30 },
     ];
     const weakSquad: Player[] = [
-      { uuid: 'p-101', teamId: 'weak', name: 'Cand', number: 9, position: 'FW', rating: 78, goalScoring: 80, marketValue: 15, age: 24 },
-      { uuid: 'p-102', teamId: 'weak', name: 'F', number: 10, position: 'FW', rating: 72, goalScoring: 65, marketValue: 8, age: 25 },
-      { uuid: 'p-103', teamId: 'weak', name: 'G', number: 11, position: 'FW', rating: 68, goalScoring: 60, marketValue: 5, age: 26 },
-      { uuid: 'p-104', teamId: 'weak', name: 'H', number: 17, position: 'FW', rating: 60, goalScoring: 50, marketValue: 3, age: 27 },
-      { uuid: 'p-105', teamId: 'weak', name: 'GK', number: 1, position: 'GK', rating: 65, goalScoring: 0, marketValue: 5, age: 28 },
+      { uuid: 'p-101', teamId: 'weak', name: 'Cand', number: 9, position: 'FW', rating: 78, peakRating: 78, peakAge: 27, goalScoring: 80, marketValue: 15, age: 24 },
+      { uuid: 'p-102', teamId: 'weak', name: 'F', number: 10, position: 'FW', rating: 72, peakRating: 72, peakAge: 27, goalScoring: 65, marketValue: 8, age: 25 },
+      { uuid: 'p-103', teamId: 'weak', name: 'G', number: 11, position: 'FW', rating: 68, peakRating: 68, peakAge: 27, goalScoring: 60, marketValue: 5, age: 26 },
+      { uuid: 'p-104', teamId: 'weak', name: 'H', number: 17, position: 'FW', rating: 60, peakRating: 60, peakAge: 27, goalScoring: 50, marketValue: 3, age: 27 },
+      { uuid: 'p-105', teamId: 'weak', name: 'GK', number: 1, position: 'GK', rating: 65, peakRating: 65, peakAge: 27, goalScoring: 0, marketValue: 5, age: 28 },
     ];
 
     const playerStats: Record<string, PlayerSeasonStats> = {

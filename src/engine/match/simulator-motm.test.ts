@@ -134,6 +134,10 @@ function makeSquad(teamId: string, prefix: string): Player[] {
         uuid: `${prefix}-${n}`,
         teamId, name: `${prefix}${n}`, number: n,
         position: pos, rating, age: 25,
+        // Test fixtures: peakRating mirrors rating, peakAge fixed to 27 —
+        // see season-awards.test.ts for the same rationale.
+        peakRating: rating,
+        peakAge: 27,
         goalScoring: pos === 'FW' ? 80 : pos === 'MF' ? 50 : pos === 'DF' ? 20 : 5,
         marketValue: rating,
       });

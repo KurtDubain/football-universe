@@ -7,6 +7,9 @@ function mkPlayer(uuid: string, teamId: string): Player {
   return {
     uuid, teamId, name: '测试', number: 9, position: 'FW',
     rating: 80, goalScoring: 70, marketValue: 10, age: 25,
+    // Test fixtures pin peak == rating + age 27 so curve-aware code paths
+    // get a sensible default without needing per-test setup.
+    peakRating: 80, peakAge: 27,
   };
 }
 

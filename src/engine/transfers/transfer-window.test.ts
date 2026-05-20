@@ -46,6 +46,10 @@ function makePlayer(
     number,
     position,
     rating,
+    // Test fixtures: peakRating == rating, peakAge == 27 (see other test
+    // helpers). Tests that exercise the development curve set these explicitly.
+    peakRating: rating,
+    peakAge: 27,
     goalScoring: 50,
     marketValue: 10,
     age: 26,
