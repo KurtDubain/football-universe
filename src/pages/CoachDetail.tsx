@@ -19,6 +19,9 @@ export default function CoachDetail() {
   const team = state.currentTeamId ? world.teamBases[state.currentTeamId] : null;
   const teamState = state.currentTeamId ? world.teamStates[state.currentTeamId] : null;
   const pressure = teamState?.coachPressure ?? 0;
+  const retiredEntry = state.retired
+    ? world.coachRetirementHistory.find((r) => r.id === id) ?? null
+    : null;
 
   const ratingTier = base.rating >= 85 ? 'from-amber-600 to-amber-500' : base.rating >= 70 ? 'from-blue-600 to-blue-500' : 'from-slate-600 to-slate-500';
 
@@ -54,7 +57,16 @@ export default function CoachDetail() {
               <span className={`text-xs px-2 py-0.5 rounded ${styleColor[base.style] ?? ''}`}>
                 {getCoachStyleLabel(base.style)}
               </span>
-              {state.isUnemployed ? (
+              {state.retired ? (
+                <>
+                  <span className="text-xs px-2 py-0.5 rounded bg-amber-900/50 text-amber-300 border border-amber-700/40">
+                    🏛️ 已退役{retiredEntry ? ` · S${retiredEntry.seasonRetired}` : ''}
+                  </span>
+                  <Link to="/legends" className="text-[10px] text-blue-400 hover:text-blue-300">
+                    查看名人堂条目 →
+                  </Link>
+                </>
+              ) : state.isUnemployed ? (
                 <span className="text-xs px-2 py-0.5 rounded bg-red-900/40 text-red-400">
                   待业{state.unemployedSince != null ? ` (自S${state.unemployedSince})` : ''}
                 </span>

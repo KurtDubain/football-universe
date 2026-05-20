@@ -271,8 +271,7 @@ export function applyIncome(
   // ── 2. Cup prizes ──
   // League cup winner / runner-up
   const lcWinner = world.leagueCup?.winnerId;
-  if (lcWinner) {
-    next[lcWinner] = next[lcWinner] ?? { ...next[Object.keys(next)[0]] };
+  if (lcWinner && next[lcWinner]) {
     next[lcWinner].cash += CUP_PRIZE.league_cup_winner;
     next[lcWinner].totalIncome += CUP_PRIZE.league_cup_winner;
     // Runner-up = the other team in the final

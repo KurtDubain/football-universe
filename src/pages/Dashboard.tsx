@@ -140,6 +140,17 @@ export default function Dashboard() {
     setSelectedResult(null);
   };
 
+  // Wrap advanceWindow so clicking advance dismisses any blocking overlay
+  // first. MatchLive (z-[200] full-viewport) intercepts clicks otherwise,
+  // and a user spamming the button mid-celebration would expect it to skip.
+  // Celebration is pointer-events-none so it doesn't actually block — but we
+  // clear it too for visual coherence on the next tick.
+  const handleAdvanceClick = () => {
+    if (liveResult) setLiveResult(null);
+    if (celebrationType) setCelebrationType(null);
+    advanceWindow();
+  };
+
   // Check if we have a completed season to review
   const lastCompletedSeason = world.honorHistory.length > 0
     ? world.honorHistory[world.honorHistory.length - 1].seasonNumber
@@ -165,7 +176,7 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl flex flex-col h-full">
       {/* ═══════ Compact Top Bar ═══════ */}
-      <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-700/50 flex-wrap">
+      <div className="sticky top-0 z-[210] bg-slate-900/95 backdrop-blur-sm flex items-center justify-between gap-2 pb-3 border-b border-slate-700/50 flex-wrap">
         {/* Left: season + progress */}
         <div className="flex items-center gap-2 text-sm min-w-0">
           <span className="font-semibold text-slate-200">
@@ -191,7 +202,7 @@ export default function Dashboard() {
 
         {/* Right: advance button */}
         <button
-          onClick={advanceWindow}
+          onClick={handleAdvanceClick}
           disabled={isAdvancing || !currentWindow}
           className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
         >

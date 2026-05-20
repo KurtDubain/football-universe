@@ -564,6 +564,16 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
   }
 
+  // Teams whose coach was just replaced via retirement (above). We skip these
+  // in the voluntary-departure and contract-expiry loops below: a fresh hire
+  // should not immediately be subject to "急流勇退" or contract-renewal
+  // judgment on a contract they never signed.
+  const replacedTeamIdsByRetirement = new Set<string>(
+    coachRetResult.retirements.length > 0
+      ? coachRetResult.newHires.map((h) => h.teamId)
+      : [],
+  );
+
   // ── Phase H: Economy income (prize money + TV/sponsor) ─────────
   // Runs BEFORE the transfer window so teams have post-prize cash to bid
   // with (the transfer-window engine doesn't yet read finances, but elite
@@ -981,9 +991,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // All writes target the LOCAL coachStates / teamStates / coachCareers /
   // coachChangesThisSeason — never world.X[id].
   for (const teamId of getAllTeamIds(teamStates)) {
+    // Skip teams whose coach was just installed via retirement replacement —
+    // a fresh hire shouldn't be subject to "急流勇退" the same season they
+    // signed.
+    if (replacedTeamIdsByRetirement.has(teamId)) continue;
     const coachId = getTeamCoachId(coachStates, teamId);
     if (!coachId) continue;
-    const coach = world.coachBases[coachId];
+    const coach = coachBases[coachId];
     if (!coach || coach.rating < 78) continue; // only elite coaches do this
 
     // Check if this coach's team won a major trophy this season
@@ -997,7 +1011,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // earlier in this loop are visible (the new hire from the previous team
     // appears here as a candidate to consider).
     const allCoachData = Object.entries(coachStates).map(([id, cs]) => ({
-      base: world.coachBases[id], state: cs,
+      base: coachBases[id], state: cs,
     })).filter(c => c.base != null);
 
     const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
@@ -1014,7 +1028,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     coachCareers[firingResult.newCoachId] = [...(coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
 
     const coachName = coach.name;
-    const newCoachName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+    const newCoachName = coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
     news.push({
       id: createNewsId(seasonNumber, windowIndex, `retire-${coachId}`),
       seasonNumber, windowIndex, type: 'coach_fired',
@@ -1032,6 +1046,9 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // Reads `currentTeamId` and `contractEnd` from LOCAL coachStates so
   // changes from the voluntary-departure loop above are picked up here.
   for (const teamId of getAllTeamIds(teamStates)) {
+    // Skip teams whose coach was just installed via retirement replacement —
+    // their contract was just generated; nothing to expire this season.
+    if (replacedTeamIdsByRetirement.has(teamId)) continue;
     const coachId = getTeamCoachId(coachStates, teamId);
     if (!coachId) continue;
     const coachState = coachStates[coachId];
@@ -1049,7 +1066,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     if (rng.next() < renewChance) {
       const extension = wonTrophy ? rng.nextInt(2, 3) : rng.nextInt(1, 2);
       coachStates[coachId] = { ...coachStates[coachId], contractEnd: seasonNumber + extension };
-      const coachName = world.coachBases[coachId]?.name ?? coachId;
+      const coachName = coachBases[coachId]?.name ?? coachId;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `renew-${coachId}`),
         seasonNumber, windowIndex, type: 'coach_hired',
@@ -1058,7 +1075,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       });
     } else {
       const allCoachData = Object.entries(coachStates).map(([id, cs]) => ({
-        base: world.coachBases[id], state: cs,
+        base: coachBases[id], state: cs,
       })).filter(c => c.base != null);
       const firingResult = processCoachFiring(teamId, coachId, world.teamBases[teamId], allCoachData, seasonNumber, rng);
 
@@ -1077,8 +1094,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       coachCareers[coachId] = careerList;
       coachCareers[firingResult.newCoachId] = [...(coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
 
-      const coachName = world.coachBases[coachId]?.name ?? coachId;
-      const newName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+      const coachName = coachBases[coachId]?.name ?? coachId;
+      const newName = coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `expire-${coachId}`),
         seasonNumber, windowIndex, type: 'coach_fired',
