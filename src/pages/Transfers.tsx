@@ -11,13 +11,56 @@ const posColor: Record<string, string> = {
   FW: 'text-red-400 bg-red-900/30',
 };
 
+/**
+ * Detect "swap-back" legs: a `free` record paired with a `transfer` record in
+ * the same (season, windowIndex) window where the two records move opposite
+ * directions between the same pair of teams. The free leg is then a swap, not
+ * a release. Returns the set of record indices (within `all`) that should be
+ * rendered as swaps.
+ */
+function detectSwapIndices(all: TransferRecord[]): Set<number> {
+  const swaps = new Set<number>();
+  // Bucket transfer-type records by (season|windowIndex|fromTeamId|toTeamId)
+  // for O(1) lookup of an inverse match for each `free` record.
+  const transferKey = new Map<string, number[]>();
+  all.forEach((r, idx) => {
+    if (r.type !== 'transfer') return;
+    const k = `${r.season}|${r.windowIndex}|${r.fromTeamId}|${r.toTeamId}`;
+    if (!transferKey.has(k)) transferKey.set(k, []);
+    transferKey.get(k)!.push(idx);
+  });
+  all.forEach((r, idx) => {
+    if (r.type !== 'free') return;
+    // Look for a transfer with reversed teams in the same window
+    const inverseKey = `${r.season}|${r.windowIndex}|${r.toTeamId}|${r.fromTeamId}`;
+    const matches = transferKey.get(inverseKey);
+    if (matches && matches.length > 0) {
+      swaps.add(idx);
+      // Also flag the matched transfer leg so it visually pairs as a swap.
+      swaps.add(matches[0]);
+    }
+  });
+  return swaps;
+}
+
 export default function Transfers() {
   const world = useGameStore((s) => s.world);
   const [filter, setFilter] = useState<'all' | 'major'>('all');
 
   const transferData = useMemo(() => {
-    if (!world) return { bySeasons: [] as { season: number; records: TransferRecord[] }[], total: 0 };
+    if (!world) return { bySeasons: [] as { season: number; records: TransferRecord[]; swapIndices: Set<number> }[], total: 0 };
     const all = world.transferHistory ?? [];
+    // Compute swap indices on the FULL list so detection survives filtering.
+    // We then re-index by record identity (we use original index pre-filter)
+    // through a helper map keyed by (season|windowIndex|playerId|fromTeamId|toTeamId).
+    const swapIdxAll = detectSwapIndices(all);
+    const swapKey = new Set<string>();
+    all.forEach((r, idx) => {
+      if (swapIdxAll.has(idx)) {
+        swapKey.add(`${r.season}|${r.windowIndex}|${r.playerId}|${r.fromTeamId}|${r.toTeamId}`);
+      }
+    });
+
     const filtered = filter === 'major' ? all.filter((t) => t.type === 'transfer') : all;
     const grouped = new Map<number, TransferRecord[]>();
     for (const t of filtered) {
@@ -26,7 +69,14 @@ export default function Transfers() {
     }
     const bySeasons = [...grouped.entries()]
       .sort((a, b) => b[0] - a[0])
-      .map(([season, records]) => ({ season, records }));
+      .map(([season, records]) => {
+        const swapIndices = new Set<number>();
+        records.forEach((r, i) => {
+          const k = `${r.season}|${r.windowIndex}|${r.playerId}|${r.fromTeamId}|${r.toTeamId}`;
+          if (swapKey.has(k)) swapIndices.add(i);
+        });
+        return { season, records, swapIndices };
+      });
     return { bySeasons, total: filtered.length };
   }, [world, filter]);
 
@@ -69,7 +119,7 @@ export default function Transfers() {
         </div>
       ) : (
         <div className="space-y-4">
-          {transferData.bySeasons.map(({ season, records }) => (
+          {transferData.bySeasons.map(({ season, records, swapIndices }) => (
             <div key={season} className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
               <div className="px-4 py-2 bg-slate-700/30 border-b border-slate-700/60">
                 <div className="flex items-center justify-between">
@@ -79,7 +129,7 @@ export default function Transfers() {
               </div>
               <div className="divide-y divide-slate-700/40">
                 {records.map((t, i) => (
-                  <TransferRow key={i} record={t} world={world} />
+                  <TransferRow key={i} record={t} world={world} isSwap={swapIndices.has(i)} />
                 ))}
               </div>
             </div>
@@ -90,11 +140,26 @@ export default function Transfers() {
   );
 }
 
-function TransferRow({ record, world }: { record: TransferRecord; world: NonNullable<ReturnType<typeof useGameStore.getState>['world']> }) {
+function TransferRow({ record, world, isSwap }: { record: TransferRecord; world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>; isSwap: boolean }) {
   const fromColor = world.teamBases[record.fromTeamId]?.color ?? '#666';
   const toColor = world.teamBases[record.toTeamId]?.color ?? '#666';
-  const arrow = record.type === 'transfer' ? '→' : record.type === 'loan' ? '⇄' : '○';
-  const arrowColor = record.type === 'transfer' ? 'text-emerald-400' : record.type === 'loan' ? 'text-amber-400' : 'text-slate-500';
+  // Swap legs (paired free + transfer between the same teams in one window)
+  // render with a two-way arrow + amber accent so the user sees them as a
+  // swap rather than a release / standalone purchase.
+  const arrow = isSwap
+    ? '↔'
+    : record.type === 'transfer'
+      ? '→'
+      : record.type === 'loan'
+        ? '⇄'
+        : '○';
+  const arrowColor = isSwap
+    ? 'text-amber-400'
+    : record.type === 'transfer'
+      ? 'text-emerald-400'
+      : record.type === 'loan'
+        ? 'text-amber-400'
+        : 'text-slate-500';
 
   return (
     <div className="px-3 py-2 hover:bg-slate-700/20 transition-colors">
@@ -115,7 +180,7 @@ function TransferRow({ record, world }: { record: TransferRecord; world: NonNull
           <Link to={`/team/${record.fromTeamId}`} className="text-slate-400 hover:text-blue-300 truncate">
             {record.fromTeamName}
           </Link>
-          <span className={`${arrowColor} font-bold shrink-0`}>{arrow}</span>
+          <span className={`${arrowColor} font-bold shrink-0`} title={isSwap ? '互换交易' : undefined}>{arrow}</span>
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: toColor }} />
           <Link to={`/team/${record.toTeamId}`} className="text-slate-200 hover:text-blue-300 truncate font-medium">
             {record.toTeamName}

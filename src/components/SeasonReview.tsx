@@ -325,9 +325,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             const mvp = [...allStats.values()].sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists))[0];
             if (!mvp) return null;
             const mvpPlayer = world.squads[mvp.teamId]?.find(p => p.uuid === mvp.playerId);
-            const num = mvpPlayer?.number ?? '';
+            const mvpName = mvpPlayer?.name ?? (mvpPlayer ? `${mvpPlayer.number}号` : '球员');
             return (
-              <AwardCard emoji="🏆" title="赛季MVP" value={`${getTeamName(mvp.teamId, tb)} ${num}号`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
+              <AwardCard emoji="🏆" title="赛季MVP" value={`${getTeamName(mvp.teamId, tb)} ${mvpName}`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
             );
           })()}
           {/* Best Coach — team with highest position vs expectation */}
@@ -351,9 +351,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             const nonEliteScorer = scorers.find(s => (tb[s.teamId]?.overall ?? 99) < 75);
             if (!nonEliteScorer) return null;
             const player = world.squads[nonEliteScorer.teamId]?.find(p => p.uuid === nonEliteScorer.playerId);
-            const num = player?.number ?? '';
+            const name = player?.name ?? (player ? `${player.number}号` : '球员');
             return (
-              <AwardCard emoji="⭐" title="最佳新星" value={`${getTeamName(nonEliteScorer.teamId, tb)} ${num}号`} sub={`${nonEliteScorer.goals}球`} />
+              <AwardCard emoji="⭐" title="最佳新星" value={`${getTeamName(nonEliteScorer.teamId, tb)} ${name}`} sub={`${nonEliteScorer.goals}球`} />
             );
           })()}
           {/* Most Improved — team that climbed the most positions vs last season */}

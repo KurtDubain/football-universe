@@ -2,6 +2,7 @@ import {
   MatchFixture,
   MatchResult,
   MatchStats,
+  MatchEvent,
   CompetitionType,
 } from '../../types';
 import { TeamBase, TeamState } from '../../types/team';
@@ -229,6 +230,43 @@ function updateFormArray(
 
 // ── Main simulation ────────────────────────────────────────────────
 
+/**
+ * Compute Man of the Match from generated events.
+ * Weights: goal=3, assist=2, save=0.5, yellow=-1, red=-2.
+ * Players on the winning side get a 1.2× multiplier; shootout kicks
+ * (minute > 120) are skipped. Threshold of 3 means at least one
+ * goal-equivalent contribution is required.
+ */
+export function pickMotm(
+  events: MatchEvent[],
+  winnerTeamId: string | null,
+): string | undefined {
+  const score = new Map<string, number>(); // playerName → score
+  for (const e of events) {
+    if (e.minute > 120) continue; // skip shootout
+    if (!e.playerName) continue;
+    let delta = 0;
+    if (e.type === 'goal' || e.type === 'penalty_goal') delta = 3;
+    else if (e.type === 'assist') delta = 2;
+    else if (e.type === 'save') delta = 0.5;
+    else if (e.type === 'yellow_card') delta = -1;
+    else if (e.type === 'red_card') delta = -2;
+    else continue;
+    // Bonus if on winning side
+    if (winnerTeamId && e.teamId === winnerTeamId) delta *= 1.2;
+    score.set(e.playerName, (score.get(e.playerName) ?? 0) + delta);
+  }
+  let bestName: string | undefined;
+  let bestScore = 0;
+  for (const [name, s] of score) {
+    if (s > bestScore) {
+      bestScore = s;
+      bestName = name;
+    }
+  }
+  return bestScore >= 3 ? bestName : undefined; // need at least 1 goal-equivalent
+}
+
 export function simulateMatch(
   ctx: SimulationContext,
   fixture: MatchFixture,
@@ -374,6 +412,17 @@ export function simulateMatch(
     competitionName: fixture.competitionName,
     roundLabel: fixture.roundLabel,
   };
+
+  // 8b. Compute Man of the Match (winner determined by combined regulation
+  // + extra time totals; penalties shootouts do not influence MotM scoring).
+  const totalHome = regHomeGoals + (etHomeGoals ?? 0);
+  const totalAway = regAwayGoals + (etAwayGoals ?? 0);
+  const winnerTeamId =
+    totalHome > totalAway ? homeTeam.id
+    : totalAway > totalHome ? awayTeam.id
+    : null;
+  const motm = pickMotm(events, winnerTeamId);
+  if (motm) matchResult.motm = motm;
 
   // 9. Calculate state changes
   const { homeStateChanges, awayStateChanges, homePressureChange, awayPressureChange } =
