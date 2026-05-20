@@ -35,7 +35,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement';
   title: string;
   description: string;
 }

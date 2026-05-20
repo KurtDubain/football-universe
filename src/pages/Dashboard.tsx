@@ -14,6 +14,8 @@ import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
+import { detectPlayerHighlights } from '../engine/players/player-highlights';
+import { getTopScorerByTeam } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
@@ -286,6 +288,7 @@ export default function Dashboard() {
           <MatchdayTab
             world={world}
             currentWindow={currentWindow}
+            lastResults={lastResults}
             onFixtureClick={handleFixtureClick}
           />
         )}
@@ -346,15 +349,41 @@ export default function Dashboard() {
 function MatchdayTab({
   world,
   currentWindow,
+  lastResults,
   onFixtureClick,
 }: {
   world: GameWorld;
   currentWindow: ReturnType<ReturnType<typeof useGameStore.getState>['getCurrentWindow']>;
+  lastResults: MatchResult[];
   onFixtureClick: (f: MatchFixture) => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
+
+  // Player highlights from the last batch of results — capped at 3.
+  // Position is refined from `world.squads` when possible (the helper only
+  // infers from event mix, but we have the real player record here).
+  // Hooks live BEFORE the early returns so the call order stays stable.
+  const playerHighlights = useMemo(() => {
+    const detected = detectPlayerHighlights(lastResults);
+    return detected.slice(0, 3).map(h => {
+      // Refine position from the actual squad record (if the player still
+      // resolves — they will, since lastResults is the latest batch).
+      const squadPlayer = world.squads[h.teamId]?.find(p => p.uuid === h.playerId);
+      return {
+        ...h,
+        position: squadPlayer?.position ?? h.position,
+      };
+    });
+  }, [lastResults, world.squads]);
+
+  // Per-team top scorer map — recomputed only when playerStats changes.
+  // Used by the FixtureCard "射手 X N球" lines on each side.
+  const teamTopScorers = useMemo(
+    () => getTopScorerByTeam(world.playerStats),
+    [world.playerStats],
+  );
 
   if (!currentWindow) {
     return (
@@ -454,6 +483,48 @@ function MatchdayTab({
         </div>
       )}
 
+      {/* Player highlights from the previous batch of results */}
+      {playerHighlights.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-slate-800 rounded-xl border border-purple-700/30 p-3">
+          <h3 className="text-xs font-bold text-purple-300 mb-2 flex items-center gap-1.5">
+            <span>🌟</span><span>本轮焦点球员</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {playerHighlights.map((h) => {
+              const team = world.teamBases[h.teamId];
+              const opponentName = getTeamName(h.opponentTeamId, world.teamBases);
+              return (
+                <Link
+                  key={`${h.playerId}-${h.fixtureId}-${h.label}`}
+                  to={`/player/${h.playerId}`}
+                  className="block bg-slate-900/40 rounded-lg border border-purple-800/30 p-2 hover:border-purple-500/60 transition-colors"
+                >
+                  <div className={`text-[11px] font-semibold mb-1 flex items-center gap-1 ${h.color}`}>
+                    <span>{h.emoji}</span>
+                    <span>{h.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: team?.color ?? '#64748b' }}
+                    />
+                    <span className="text-xs font-semibold text-slate-100 truncate">
+                      {h.playerName}
+                    </span>
+                    {h.position && (
+                      <span className="text-[9px] text-slate-500 shrink-0">({h.position})</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">
+                    {h.detail} · vs {opponentName}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Context tips banner */}
       {windowTips.length > 0 && (
         <div className="space-y-1.5">
@@ -481,6 +552,7 @@ function MatchdayTab({
                 key={fixture.id}
                 fixture={fixture}
                 world={world}
+                teamTopScorers={teamTopScorers}
                 onClick={() => onFixtureClick(fixture)}
               />
             ))}
@@ -878,10 +950,12 @@ function StatMini({ label, value, sub }: { label: string; value: string; sub: st
 function FixtureCard({
   fixture,
   world,
+  teamTopScorers,
   onClick,
 }: {
   fixture: MatchFixture;
   world: GameWorld;
+  teamTopScorers: Record<string, PlayerSeasonStats>;
   onClick: () => void;
 }) {
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
@@ -952,6 +1026,31 @@ function FixtureCard({
         </div>
       </div>
 
+      {/* Per-side top scorer line — only shown when the team has any goals
+          attributed in the current season. Resolved through the precomputed
+          `teamTopScorers` map so we don't walk playerStats per card. */}
+      {(() => {
+        const homeScorer = teamTopScorers[fixture.homeTeamId];
+        const awayScorer = teamTopScorers[fixture.awayTeamId];
+        if (!homeScorer && !awayScorer) return null;
+        const homePlayer = homeScorer
+          ? world.squads[fixture.homeTeamId]?.find(p => p.uuid === homeScorer.playerId)
+          : null;
+        const awayPlayer = awayScorer
+          ? world.squads[fixture.awayTeamId]?.find(p => p.uuid === awayScorer.playerId)
+          : null;
+        return (
+          <div className="flex items-center justify-between text-[9px] text-slate-500 mb-1 gap-1">
+            <span className="truncate flex-1 min-w-0">
+              {homePlayer && homeScorer ? `射手 ${homePlayer.name} ${homeScorer.goals}球` : ''}
+            </span>
+            <span className="truncate flex-1 min-w-0 text-right">
+              {awayPlayer && awayScorer ? `射手 ${awayPlayer.name} ${awayScorer.goals}球` : ''}
+            </span>
+          </div>
+        );
+      })()}
+
       {/* Mini probability bar */}
       <div className="flex h-0.5 rounded-full overflow-hidden bg-slate-700">
         <div className="bg-green-500" style={{ width: `${pred.homeWinPct}%` }} />
@@ -977,6 +1076,7 @@ function getNewsBorderColor(type: string): string {
     trophy: '#f59e0b',
     upset: '#a855f7',
     streak: '#0ea5e9',
+    retirement: '#fcd34d',
   };
   return colors[type] ?? '#64748b';
 }

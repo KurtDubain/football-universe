@@ -333,15 +333,26 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     coachCandidatePool = retirementResult.coachCandidatePool;
 
     // Generate news for major retirements (peakRating >= 80). Don't spam —
-    // a typical season produces only a handful of these.
+    // a typical season produces only a handful of these. The blurb mentions
+    // club + age + position + career goals, plus a trophy count tail when
+    // the player walked away with silverware.
+    const positionLabel: Record<'GK' | 'DF' | 'MF' | 'FW', string> = {
+      GK: '门将', DF: '后卫', MF: '中场', FW: '前锋',
+    };
     for (const r of retirementResult.retirements) {
       if (r.peakRating < 80) continue;
       const yearsSnap = Math.max(1, r.age - 18); // rough career length estimate
+      const posCN = positionLabel[r.position];
+      const trophyCount = r.careerTrophies?.length ?? 0;
+      const baseDesc = `${r.teamName} ${posCN} ${r.name}（${r.age} 岁）结束 ${yearsSnap} 年职业生涯，留下 ${r.careerGoals} 球的纪录`;
+      const description = trophyCount > 0
+        ? `${baseDesc}，并捧起 ${trophyCount} 座冠军奖杯。`
+        : `${baseDesc}。`;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `retire-${r.uuid}`),
-        seasonNumber, windowIndex, type: 'coach_fired',
+        seasonNumber, windowIndex, type: 'retirement',
         title: `${r.name} 宣布退役`,
-        description: `${r.teamName} 老将 ${r.name}（${r.age} 岁）结束 ${yearsSnap} 年职业生涯，留下 ${r.careerGoals} 球的纪录。`,
+        description,
       });
     }
   }

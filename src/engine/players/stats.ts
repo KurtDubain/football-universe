@@ -118,3 +118,30 @@ export function getTopAssists(
     .sort((a, b) => b.assists - a.assists || b.goals - a.goals)
     .slice(0, limit);
 }
+
+/**
+ * Build a `teamId → top scorer` map from current-season stats.
+ *
+ * Each entry is the player on that team with the most goals (ties broken
+ * arbitrarily by insertion order). Teams with no scorers are NOT present
+ * in the result — the caller decides whether to render a placeholder. The
+ * helper does an O(N) walk over `stats`; callers that re-render frequently
+ * should memoise the call against `playerStats`.
+ *
+ * Currently used by:
+ *   - Dashboard FixtureCard (per-side top scorer line)
+ *   - League page (per-row "最佳射手" column)
+ */
+export function getTopScorerByTeam(
+  stats: Record<string, PlayerSeasonStats>,
+): Record<string, PlayerSeasonStats> {
+  const out: Record<string, PlayerSeasonStats> = {};
+  for (const s of Object.values(stats)) {
+    if (s.goals <= 0) continue;
+    const cur = out[s.teamId];
+    if (!cur || s.goals > cur.goals) {
+      out[s.teamId] = s;
+    }
+  }
+  return out;
+}

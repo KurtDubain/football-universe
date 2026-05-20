@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
@@ -7,6 +7,7 @@ import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
+import { getTopScorerByTeam } from '../engine/players/stats';
 import {
   getTeamName,
   formatForm,
@@ -26,6 +27,16 @@ export default function League() {
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
 
   const leagueLevel = parseInt(level ?? '1', 10) as 1 | 2 | 3;
+
+  // Per-team top individual scorer — used by the "最佳射手" column.
+  // Memoised so we walk playerStats once per render rather than per row.
+  // Hook is declared BEFORE the early returns so the call order stays
+  // stable across renders even before the world has loaded.
+  const playerStats = world?.playerStats;
+  const teamTopScorers = useMemo(
+    () => (playerStats ? getTopScorerByTeam(playerStats) : {}),
+    [playerStats],
+  );
 
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -275,6 +286,7 @@ export default function League() {
                     <th className="hidden md:table-cell text-center px-2 py-2">进</th>
                     <th className="hidden md:table-cell text-center px-2 py-2">失</th>
                     <th className="text-center px-1 sm:px-2 py-2">净胜</th>
+                    <th className="hidden md:table-cell text-left px-2 py-2">最佳射手</th>
                     <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
                     <th className="text-center px-1 sm:px-2 py-2">近况</th>
                   </tr>
@@ -331,6 +343,24 @@ export default function League() {
                         <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
                           {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
+                        </td>
+                        <td className="hidden md:table-cell text-left px-2 py-2">
+                          {(() => {
+                            const scorer = teamTopScorers[entry.teamId];
+                            if (!scorer) return <span className="text-slate-600 text-xs">—</span>;
+                            const player = world.squads[entry.teamId]?.find(p => p.uuid === scorer.playerId);
+                            if (!player) return <span className="text-slate-600 text-xs">—</span>;
+                            return (
+                              <Link
+                                to={`/player/${scorer.playerId}`}
+                                className="text-xs text-slate-300 hover:text-blue-400 truncate inline-block max-w-[120px]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-slate-200">{player.name}</span>
+                                <span className="text-slate-500 ml-1">{scorer.goals}球</span>
+                              </Link>
+                            );
+                          })()}
                         </td>
                         <td className="text-center px-1.5 sm:px-2 py-2 font-bold text-sm sm:text-lg text-slate-100">{entry.points}</td>
                         <td className="hidden sm:table-cell text-center px-1 py-2">
