@@ -65,3 +65,37 @@ export interface Trophy {
   type: 'league1' | 'league2' | 'league3' | 'league_cup' | 'super_cup' | 'world_cup' | 'mainland_cup' | 'southern_cup' | 'eastern_cup';
   seasonNumber: number;
 }
+
+// ── Phase H: Economy ────────────────────────────────────────────
+/**
+ * Per-team finance state. Cash can go negative — there is no bankruptcy
+ * mechanic by design; negative balances surface in the UI as a warning and
+ * trigger the 200% fire-sale offer at season-end. `totalIncome` and
+ * `totalExpense` accumulate during the current season and are zeroed on
+ * `archiveSeasonFinance` (called from season-end after all flows ran).
+ *
+ * `history` keeps the last 10 season records (FIFO). Older entries get
+ * dropped to keep the persisted save bounded — finance UI never goes back
+ * further than that.
+ */
+export interface FinanceState {
+  /** Money in the bank, in millions of euros. Can be negative. */
+  cash: number;
+  /** Running total of income this season (resets in archiveSeasonFinance). */
+  totalIncome: number;
+  /** Running total of expenses this season (resets in archiveSeasonFinance). */
+  totalExpense: number;
+  /** Last 10 seasons of finance history, oldest first. */
+  history: FinanceSeasonRecord[];
+}
+
+export interface FinanceSeasonRecord {
+  season: number;
+  startCash: number;
+  endCash: number;
+  prizeMoney: number;     // league + cup prizes
+  tvSponsor: number;      // flat per league tier
+  transferIncome: number; // sales (incl. fire sales)
+  salaries: number;       // wage bill
+  transferExpense: number;// purchases (incl. fire sale buys)
+}

@@ -25,6 +25,15 @@ import {
   getCoachName,
   getTierLabel,
 } from '../utils/format';
+import { formatMoney } from '../engine/economy/finance';
+
+/**
+ * Compact money formatter for chip display.
+ * Drops decimals when |n| ≥ 10 and uses a `€` glyph.
+ */
+function formatMoneyChip(n: number): string {
+  return formatMoney(n);
+}
 
 type TabKey = 'matchday' | 'results' | 'overview' | 'review';
 
@@ -195,6 +204,34 @@ export default function Dashboard() {
       </div>
 
       {/* ═══════ Favorite Team Cards (up to 3) ═══════ */}
+      {favoriteTeamIds.length > 0 && (() => {
+        // Surface any negative-cash favorites as a Phase H alert banner.
+        const broke = favoriteTeamIds.filter(tid => (world.teamFinances?.[tid]?.cash ?? 0) < 0);
+        if (broke.length === 0) return null;
+        return (
+          <div className="bg-red-950/40 border border-red-800/50 text-red-200 rounded-lg px-3 py-2 text-xs flex items-start gap-2">
+            <span className="text-red-300">⚠</span>
+            <div className="min-w-0">
+              <div className="font-semibold mb-0.5">财政告急</div>
+              <div className="text-[11px] text-red-300/90">
+                {broke.map((tid, i) => {
+                  const t = world.teamBases[tid];
+                  const cash = world.teamFinances?.[tid]?.cash ?? 0;
+                  return (
+                    <span key={tid}>
+                      {i > 0 && '、'}
+                      <Link to={`/team/${tid}`} className="text-red-200 hover:text-white underline-offset-2 hover:underline">
+                        {t?.name ?? tid}
+                      </Link> ({formatMoney(cash)})
+                    </span>
+                  );
+                })}
+                {' '}—— 赛季结束时将以 200% 高溢价被迫甩卖 €30M+ 球员（若有顶级买家），现金可恢复正值。
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {favoriteTeamIds.length > 0 && (
         <div className="space-y-1.5 mt-1">
           {favoriteTeamIds.map((tid) => {
@@ -211,6 +248,8 @@ export default function Dashboard() {
             })();
             const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === tid || f.awayTeamId === tid);
             const opponentId = nextFixture ? (nextFixture.homeTeamId === tid ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
+            const cash = world.teamFinances?.[tid]?.cash ?? 0;
+            const cashTone = cash < 0 ? 'text-red-300' : cash < 10 ? 'text-amber-300' : 'text-emerald-300';
 
             return (
               <div key={tid} className="flex items-center gap-3 bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
@@ -218,6 +257,9 @@ export default function Dashboard() {
                 <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto text-xs">
                   <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 shrink-0">{fav.name}</Link>
                   <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
+                  <span className={`shrink-0 ${cashTone}`} title="球队现金 (Phase H 经济)">
+                    💰{formatMoneyChip(cash)}
+                  </span>
                   <span className="text-slate-600 shrink-0">{coachName}</span>
                   <div className="flex gap-0.5 shrink-0">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (

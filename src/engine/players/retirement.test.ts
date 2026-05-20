@@ -113,7 +113,7 @@ function buildWorld(args: {
     seasonBuffsHistory: [],
     playerAwardsHistory: [],
     transferHistory: [],
-    memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0,
+    memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {},
   };
 }
 
@@ -658,7 +658,7 @@ describe('handleSeasonEnd integration', () => {
       seasonBuffsHistory: [],
       playerAwardsHistory: [],
       transferHistory: [],
-      memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0,
+      memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {},
     };
   }
 

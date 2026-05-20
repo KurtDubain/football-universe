@@ -8,6 +8,7 @@ import {
   formatForm,
 } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
+import { formatMoney } from '../engine/economy/finance';
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 
@@ -216,6 +217,9 @@ export default function TeamDetail() {
           );
         })()}
       </div>
+
+      {/* ═══ 财政状态（Phase H） ═══ */}
+      <FinancePanel teamId={id} />
 
       {/* Season records */}
       {records.length > 0 && (
@@ -844,5 +848,100 @@ function FireCoachButton({ teamId, coachId, teamName }: { teamId: string; coachI
       className="ml-auto px-2 py-0.5 text-[10px] bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded cursor-pointer transition-colors">
       解雇教练
     </button>
+  );
+}
+
+/**
+ * Phase H — Team finance panel.
+ *
+ * Shows the current cash balance with a coloured pill (red if negative,
+ * amber if low, green otherwise) and the per-season finance history (last
+ * 10 seasons) as a sortable table. The header banner doubles as an alert
+ * when cash < 0 — surfaces the fire-sale risk to the player.
+ */
+function FinancePanel({ teamId }: { teamId: string }) {
+  const world = useGameStore((s) => s.world);
+  if (!world) return null;
+  const fin = world.teamFinances?.[teamId];
+  if (!fin) return null;
+
+  const cashTone = fin.cash < 0
+    ? 'text-red-300 bg-red-900/40 border-red-700/40'
+    : fin.cash < 10
+    ? 'text-amber-300 bg-amber-900/30 border-amber-700/40'
+    : 'text-emerald-300 bg-emerald-900/30 border-emerald-700/40';
+
+  const reversed = [...fin.history].reverse();
+
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
+        <h3 className="text-sm font-semibold text-slate-200">财政状态</h3>
+        <span className={`text-xs px-2 py-0.5 rounded border ${cashTone}`}>
+          现金: {formatMoney(fin.cash)}
+        </span>
+      </div>
+      {fin.cash < 0 && (
+        <div className="px-4 py-2 text-[11px] text-red-300 bg-red-950/30 border-b border-red-900/40">
+          ⚠ 财政告急 — 赛季结束时将以 200% 高溢价被迫甩卖一名身价 €30M+ 球员（若有顶级买家），现金可恢复正值。
+        </div>
+      )}
+      {/* Current season running totals */}
+      <div className="px-4 py-2 border-b border-slate-700/60 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+        <div>
+          <span className="text-slate-500">本季收入累计:</span>{' '}
+          <span className="text-emerald-300">{formatMoney(fin.totalIncome)}</span>
+        </div>
+        <div>
+          <span className="text-slate-500">本季支出累计:</span>{' '}
+          <span className="text-red-300">-{formatMoney(fin.totalExpense)}</span>
+        </div>
+      </div>
+      {reversed.length === 0 ? (
+        <div className="px-4 py-3 text-xs text-slate-500">
+          首个赛季尚未结束，暂无历史数据。
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-slate-400 border-b border-slate-700">
+                <th className="px-2 py-1.5 text-left">赛季</th>
+                <th className="px-2 py-1.5 text-right">期初</th>
+                <th className="px-2 py-1.5 text-right">奖金</th>
+                <th className="px-2 py-1.5 text-right">转播</th>
+                <th className="px-2 py-1.5 text-right">转入</th>
+                <th className="px-2 py-1.5 text-right">薪资</th>
+                <th className="px-2 py-1.5 text-right">转出</th>
+                <th className="px-2 py-1.5 text-right">期末</th>
+                <th className="px-2 py-1.5 text-right">变动</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reversed.map((rec) => {
+                const delta = rec.endCash - rec.startCash;
+                const deltaTone = delta >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const endTone = rec.endCash < 0 ? 'text-red-300' : 'text-slate-200';
+                return (
+                  <tr key={rec.season} className="border-t border-slate-700/40">
+                    <td className="px-2 py-1.5 text-slate-300">S{rec.season}</td>
+                    <td className="px-2 py-1.5 text-right text-slate-400">{formatMoney(rec.startCash)}</td>
+                    <td className="px-2 py-1.5 text-right text-amber-300">+{formatMoney(rec.prizeMoney)}</td>
+                    <td className="px-2 py-1.5 text-right text-blue-300">+{formatMoney(rec.tvSponsor)}</td>
+                    <td className="px-2 py-1.5 text-right text-emerald-300">+{formatMoney(rec.transferIncome)}</td>
+                    <td className="px-2 py-1.5 text-right text-rose-300">-{formatMoney(rec.salaries)}</td>
+                    <td className="px-2 py-1.5 text-right text-red-400">-{formatMoney(rec.transferExpense)}</td>
+                    <td className={`px-2 py-1.5 text-right font-semibold ${endTone}`}>{formatMoney(rec.endCash)}</td>
+                    <td className={`px-2 py-1.5 text-right ${deltaTone}`}>
+                      {delta >= 0 ? '+' : ''}{formatMoney(delta)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

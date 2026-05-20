@@ -9,6 +9,7 @@ import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { pickPlayerName } from '../config/player-names';
 import { computeInitialMarketValue } from '../engine/economy/market-value';
+import { initTeamFinances } from '../engine/economy/finance';
 import { computeCurrentRating } from '../engine/players/development';
 
 interface GameStore {
@@ -325,6 +326,34 @@ export function applyV13ToV14InjuriesInit(world: {
   return { touched: true };
 }
 
+/**
+ * v14 → v15 helper: backfill `world.teamFinances` (Phase H — economy).
+ * Older saves had no concept of finances; we seed each team with starting
+ * cash from its reputation tier (€20M-€150M) and an empty history.
+ *
+ * Idempotent: if `teamFinances` is already a non-empty record, leave it
+ * alone. Mutates `world` in place; returns whether the field was touched.
+ *
+ * Note: the import on `initTeamFinances` lives at the top of this file
+ * (not inline) because zustand's persist middleware loads modules eagerly.
+ */
+export function applyV14ToV15FinanceInit(world: {
+  teamFinances?: unknown;
+  teamBases?: Record<string, { id?: string; reputation?: number }>;
+}): { touched: boolean; teamsInitialized: number } {
+  if (
+    world.teamFinances && typeof world.teamFinances === 'object'
+    && !Array.isArray(world.teamFinances)
+    && Object.keys(world.teamFinances as Record<string, unknown>).length > 0
+  ) {
+    return { touched: false, teamsInitialized: 0 };
+  }
+  const bases = (world.teamBases ?? {}) as Record<string, import('../types/team').TeamBase>;
+  const finances = initTeamFinances(bases);
+  world.teamFinances = finances;
+  return { touched: true, teamsInitialized: Object.keys(finances).length };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -622,7 +651,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 14,
+      version: 15,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -881,6 +910,15 @@ export const useGameStore = create<GameStore>()(
         if (version < 14 && state?.world) {
           applyV13ToV14InjuriesInit(
             state.world as { totalElapsedWindows?: unknown; seasonState?: { currentWindowIndex?: number; calendar?: unknown[] } },
+          );
+        }
+        // v14 → v15: backfill `teamFinances` (Phase H — economy). Older saves
+        // had no concept of cash / salaries / prize money. Each team is
+        // seeded based on its reputation tier (€20M-€150M starting cash);
+        // history is empty until the next season-end populates it.
+        if (version < 15 && state?.world) {
+          applyV14ToV15FinanceInit(
+            state.world as { teamFinances?: unknown; teamBases?: Record<string, import('../types/team').TeamBase> },
           );
         }
         // SAFETY: by this point all migration steps above have backfilled the

@@ -391,3 +391,76 @@ describe("applyV13ToV14InjuriesInit (v13 → v14)", () => {
   });
 });
 
+
+// ── v14 → v15 migration tests (Phase H — economy) ────────────────
+
+import { applyV14ToV15FinanceInit } from "./game-store";
+import type { TeamBase } from "../types/team";
+
+function mkBase(id: string, reputation: number): TeamBase {
+  return {
+    id, name: id, shortName: id.slice(0, 2), color: '#000', tier: 'mid',
+    overall: 70, attack: 70, midfield: 70, defense: 70, stability: 70, depth: 70,
+    reputation, initialLeagueLevel: 1, expectation: 3, region: '大陆+测试',
+  };
+}
+
+describe("applyV14ToV15FinanceInit (v14 → v15)", () => {
+  it("seeds teamFinances from teamBases reputation tiers", () => {
+    const world: { teamFinances?: unknown; teamBases?: Record<string, TeamBase> } = {
+      teamBases: {
+        ELITE: mkBase('ELITE', 92),
+        TOP: mkBase('TOP', 78),
+        MID: mkBase('MID', 70),
+        LOW: mkBase('LOW', 40),
+      },
+    };
+    const r = applyV14ToV15FinanceInit(world);
+    expect(r.touched).toBe(true);
+    expect(r.teamsInitialized).toBe(4);
+    const fin = world.teamFinances as Record<string, { cash: number; totalIncome: number; totalExpense: number; history: unknown[] }>;
+    expect(fin.ELITE.cash).toBe(150);
+    expect(fin.TOP.cash).toBe(80);
+    expect(fin.MID.cash).toBe(40);
+    expect(fin.LOW.cash).toBe(20);
+    // Empty running totals + history on every team
+    for (const id of ['ELITE', 'TOP', 'MID', 'LOW']) {
+      expect(fin[id].totalIncome).toBe(0);
+      expect(fin[id].totalExpense).toBe(0);
+      expect(fin[id].history).toEqual([]);
+    }
+  });
+
+  it("idempotent — leaves an existing non-empty teamFinances alone", () => {
+    const existing = {
+      A: { cash: 999, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+    const world: { teamFinances?: unknown; teamBases?: Record<string, TeamBase> } = {
+      teamFinances: existing,
+      teamBases: { A: mkBase('A', 90) },
+    };
+    const r = applyV14ToV15FinanceInit(world);
+    expect(r.touched).toBe(false);
+    expect(world.teamFinances).toBe(existing);
+    expect((world.teamFinances as typeof existing).A.cash).toBe(999);
+  });
+
+  it("treats {} (empty object) as missing and seeds from teamBases", () => {
+    const world: { teamFinances?: unknown; teamBases?: Record<string, TeamBase> } = {
+      teamFinances: {},
+      teamBases: { A: mkBase('A', 90) },
+    };
+    const r = applyV14ToV15FinanceInit(world);
+    expect(r.touched).toBe(true);
+    expect((world.teamFinances as Record<string, { cash: number }>).A.cash).toBe(150);
+  });
+
+  it("handles missing teamBases gracefully (no crash, empty seed)", () => {
+    const world: { teamFinances?: unknown; teamBases?: Record<string, TeamBase> } = {};
+    const r = applyV14ToV15FinanceInit(world);
+    expect(r.touched).toBe(true);
+    expect(r.teamsInitialized).toBe(0);
+    expect(world.teamFinances).toEqual({});
+  });
+});
+

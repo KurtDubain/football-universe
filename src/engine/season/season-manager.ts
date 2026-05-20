@@ -30,6 +30,7 @@ import { handleSeasonEnd, finalizeWorldCup } from './season-end';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
 import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
+import { initTeamFinances } from '../economy/finance';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale';
   title: string;
   description: string;
 }
@@ -161,6 +162,15 @@ export interface GameWorld {
    * Backfilled to 0 by the v13 → v14 migration on legacy saves.
    */
   totalElapsedWindows: number;
+  /**
+   * Phase H — per-team finances. Initialised by `initializeGameWorld` based on
+   * each team's reputation tier (€20M-€150M starting cash). Each entry tracks
+   * cash, season-cumulative income / expense, and a FIFO history of the last
+   * 10 seasons. Cash CAN go negative — there is no bankruptcy.
+   *
+   * Backfilled by the v14 → v15 migration on legacy saves.
+   */
+  teamFinances: Record<string, import('../../types/team').FinanceState>;
 }
 
 export interface MatchHistoryEntry {
@@ -303,6 +313,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     memorableMatches: [],
     gameMode: options?.gameMode ?? 'free',
     totalElapsedWindows: 0,
+    teamFinances: {},
   };
 
   // Initialize empty trophies / records for every team
@@ -313,6 +324,10 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   for (const coachId of Object.keys(coachBases)) {
     world.coachTrophies[coachId] = [];
   }
+
+  // Phase H — seed starting cash by reputation tier. See finance.ts for
+  // tier thresholds and starting amounts.
+  world.teamFinances = initTeamFinances(teamBases);
 
   // 8. Set up season 1
   return initializeNewSeason(world);

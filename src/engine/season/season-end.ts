@@ -25,6 +25,17 @@ import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
+import {
+  applyIncome as applyFinanceIncome,
+  applyExpense as applyFinanceExpense,
+  attemptFireSale,
+  archiveSeasonFinance,
+  initTeamFinances,
+  leaguePrize,
+  CUP_PRIZE,
+  TV_SPONSOR_BY_TIER,
+  getSalaryRate,
+} from '../economy/finance';
 
 /**
  * Walk knockout rounds from latest to earliest, return the round in which
@@ -89,6 +100,33 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // coachBases is a `let` because we may add freshly-generated coaches
   // into it during the coach-retirement pass below.
   let coachBases = world.coachBases;
+  // ── Phase H Economy locals (introduced in v15) ──
+  // Initialised defensively for in-memory worlds built by tests that haven't
+  // been touched by the v14 → v15 migration. The migration backfills
+  // `teamFinances` from reputation tier; the runtime path always has it.
+  let teamFinances = world.teamFinances && Object.keys(world.teamFinances).length > 0
+    ? { ...world.teamFinances }
+    : initTeamFinances(world.teamBases);
+  // Snapshot start-of-season cash for each team so the archive pass can
+  // record startCash → endCash on the FinanceSeasonRecord.
+  const startCashByTeam: Record<string, number> = {};
+  for (const [tid, fin] of Object.entries(teamFinances)) {
+    startCashByTeam[tid] = fin.cash;
+  }
+  // Per-team breakdown of this season's income / expense flows. Populated
+  // incrementally as each economy step runs; consumed by archiveSeasonFinance.
+  const financeBreakdown: Record<string, {
+    prizeMoney: number;
+    tvSponsor: number;
+    transferIncome: number;
+    salaries: number;
+    transferExpense: number;
+  }> = {};
+  for (const tid of Object.keys(teamFinances)) {
+    financeBreakdown[tid] = {
+      prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
+    };
+  }
 
   // Determine champions
   const league1Champion = world.league1Standings[0]?.teamId ?? '';
@@ -526,6 +564,97 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     }
   }
 
+  // ── Phase H: Economy income (prize money + TV/sponsor) ─────────
+  // Runs BEFORE the transfer window so teams have post-prize cash to bid
+  // with (the transfer-window engine doesn't yet read finances, but elite
+  // fire-sale buys later will). We resolve each team's level and rank from
+  // the just-finished standings — NOT from teamStates which may already
+  // reflect promotion/relegation by this point in the patch chain.
+  {
+    // Compute per-team breakdown so the archive pass knows what came from
+    // where. We mirror the logic in applyIncome here so the breakdown
+    // stays in sync; refactoring applyIncome to return a breakdown is
+    // possible but the duplication is ~15 lines so we keep them paired.
+    for (const teamId of getAllTeamIds(teamStates)) {
+      const standingsByLevel: Record<1 | 2 | 3, StandingEntry[]> = {
+        1: world.league1Standings,
+        2: world.league2Standings,
+        3: world.league3Standings,
+      };
+      let lv: 1 | 2 | 3 = teamStates[teamId].leagueLevel;
+      let rank = 99;
+      for (const [lvStr, st] of Object.entries(standingsByLevel)) {
+        const idx = st.findIndex(s => s.teamId === teamId && s.played > 0);
+        if (idx >= 0) {
+          lv = parseInt(lvStr) as 1 | 2 | 3;
+          rank = idx + 1;
+          break;
+        }
+      }
+      const tv = TV_SPONSOR_BY_TIER[lv];
+      const prize = leaguePrize(lv, rank);
+      financeBreakdown[teamId].tvSponsor += tv;
+      financeBreakdown[teamId].prizeMoney += prize;
+    }
+    // Cup prizes — straight lookup
+    if (leagueCupWinner && financeBreakdown[leagueCupWinner]) {
+      financeBreakdown[leagueCupWinner].prizeMoney += CUP_PRIZE.league_cup_winner;
+    }
+    const lcFinal = world.leagueCup.rounds.at(-1)?.fixtures[0];
+    if (lcFinal && leagueCupWinner) {
+      const ru = lcFinal.homeTeamId === leagueCupWinner ? lcFinal.awayTeamId : lcFinal.homeTeamId;
+      if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.league_cup_runner_up;
+    }
+    if (superCupWinner && financeBreakdown[superCupWinner]) {
+      financeBreakdown[superCupWinner].prizeMoney += CUP_PRIZE.super_cup_winner;
+    }
+    if (worldCupWinner && financeBreakdown[worldCupWinner]) {
+      financeBreakdown[worldCupWinner].prizeMoney += CUP_PRIZE.world_cup_winner;
+    }
+    // Continental cup prizes — winner only here; runner-up + semi handled
+    // by applyIncome which we delegate to for the actual cash mutation.
+    for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
+      if (!cup?.winnerId || !cup.completed) continue;
+      if (financeBreakdown[cup.winnerId]) {
+        financeBreakdown[cup.winnerId].prizeMoney += CUP_PRIZE.continental_cup_winner;
+      }
+      const finalRound = cup.rounds.at(-1);
+      const finalFix = finalRound?.fixtures[0];
+      if (finalFix) {
+        const ru = finalFix.homeTeamId === cup.winnerId ? finalFix.awayTeamId : finalFix.homeTeamId;
+        if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.continental_cup_runner_up;
+      }
+      const semis = cup.rounds.at(-2);
+      if (semis) {
+        for (const f of semis.fixtures) {
+          if (!f.winnerId) continue;
+          const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
+          if (financeBreakdown[loser]) financeBreakdown[loser].prizeMoney += CUP_PRIZE.continental_cup_semi;
+        }
+      }
+    }
+    // World cup runner-up / semi (rare — only in WC years)
+    if (world.worldCup) {
+      const wcFinal = world.worldCup.knockoutRounds.at(-1)?.fixtures[0];
+      if (wcFinal && worldCupWinner) {
+        const ru = wcFinal.homeTeamId === worldCupWinner ? wcFinal.awayTeamId : wcFinal.homeTeamId;
+        if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.world_cup_runner_up;
+      }
+      const wcSemis = world.worldCup.knockoutRounds.at(-2);
+      if (wcSemis) {
+        for (const f of wcSemis.fixtures) {
+          if (!f.winnerId) continue;
+          const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
+          if (financeBreakdown[loser]) financeBreakdown[loser].prizeMoney += CUP_PRIZE.world_cup_semi;
+        }
+      }
+    }
+    // Now apply via the canonical implementation — modifies cash + totalIncome.
+    const incomeResult = applyFinanceIncome(teamFinances, world, seasonNumber);
+    teamFinances = incomeResult.teamFinances;
+    news.push(...incomeResult.news);
+  }
+
   // ── Transfer window ──────────────────────────────────────────
   // Player UUIDs are stable across transfers, so playerStats keys, awards,
   // and prior transferHistory entries continue to resolve without any
@@ -543,6 +672,29 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     squads = transferResult.squads;
     playerStats = transferResult.playerStats;
     transferHistory = [...(transferHistory ?? []), ...transferResult.transfers];
+
+    // Phase H: book transfer cash flows. The existing transfer engine returns
+    // both directions (poach + reverse loan-down) — we only count `transfer`
+    // type entries against finances, since `free` moves carry no fee.
+    for (const t of transferResult.transfers) {
+      if (t.type !== 'transfer' || !t.fee) continue;
+      if (financeBreakdown[t.fromTeamId]) financeBreakdown[t.fromTeamId].transferIncome += t.fee;
+      if (financeBreakdown[t.toTeamId]) financeBreakdown[t.toTeamId].transferExpense += t.fee;
+      if (teamFinances[t.fromTeamId]) {
+        teamFinances[t.fromTeamId] = {
+          ...teamFinances[t.fromTeamId],
+          cash: teamFinances[t.fromTeamId].cash + t.fee,
+          totalIncome: teamFinances[t.fromTeamId].totalIncome + t.fee,
+        };
+      }
+      if (teamFinances[t.toTeamId]) {
+        teamFinances[t.toTeamId] = {
+          ...teamFinances[t.toTeamId],
+          cash: teamFinances[t.toTeamId].cash - t.fee,
+          totalExpense: teamFinances[t.toTeamId].totalExpense + t.fee,
+        };
+      }
+    }
 
     // Top 3 transfers as news
     const topTransfers = transferResult.transfers
@@ -568,6 +720,51 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   } else if (!transferHistory) {
     transferHistory = [];
   }
+
+  // ── Phase H: Economy expense (salaries) + fire sale ─────────────
+  // Salaries are computed AFTER the transfer window so the wage bill
+  // reflects the current squad's market value sum (just-poached stars
+  // raise the buyer's bill; sold stars reduce the seller's).
+  {
+    // Compute breakdown for archive
+    for (const [teamId, squad] of Object.entries(squads)) {
+      const squadValue = (squad ?? []).reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
+      const salaries = Math.round(squadValue * getSalaryRate());
+      financeBreakdown[teamId] = financeBreakdown[teamId] ?? {
+        prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
+      };
+      financeBreakdown[teamId].salaries += salaries;
+    }
+    // Apply via canonical implementation
+    const expenseResult = applyFinanceExpense(teamFinances, squads);
+    teamFinances = expenseResult.teamFinances;
+  }
+
+  // ── Phase H: Fire sale for negative-cash teams ─────────────────
+  // After salaries land, any team with cash < 0 AND a €30M+ player on
+  // squad triggers a forced sale at 200% of marketValue to an elite
+  // buyer with cash. Up to 1 sale per team per season; news + transfer
+  // record generated for each.
+  {
+    const fireSaleResult = attemptFireSale(
+      teamFinances, squads, world.teamBases,
+      seasonNumber, windowIndex, rng,
+    );
+    teamFinances = fireSaleResult.teamFinances;
+    squads = fireSaleResult.squads;
+    if (fireSaleResult.transfers.length > 0) {
+      transferHistory = [...(transferHistory ?? []), ...fireSaleResult.transfers];
+      // Book the cash flows in the breakdown (cash already moved by
+      // attemptFireSale; we just track the breakdown for the archive).
+      for (const t of fireSaleResult.transfers) {
+        if (!t.fee) continue;
+        if (financeBreakdown[t.fromTeamId]) financeBreakdown[t.fromTeamId].transferIncome += t.fee;
+        if (financeBreakdown[t.toTeamId]) financeBreakdown[t.toTeamId].transferExpense += t.fee;
+      }
+    }
+    news.push(...fireSaleResult.news);
+  }
+
 
   // ── Annual market value revaluation ──────────────────────────
   // Mutates squad in place (also bumps each player's age). Pass the LOCAL
@@ -1094,6 +1291,13 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   }
   coachBases = agedCoachBases;
 
+  // ── Phase H: Archive finance — push the season's totals to history ──
+  // and reset the running totalIncome / totalExpense counters. Cash carries
+  // forward unchanged. We do this LAST so all flows from this season
+  // (income, transfers, salaries, fire sales) have already landed on the
+  // teamFinances locals.
+  teamFinances = archiveSeasonFinance(teamFinances, seasonNumber, startCashByTeam, financeBreakdown);
+
   // Final patch — apply ALL accumulated locals over `world` in one spread.
   // No `world.X = ...` mutation has happened above; every change went through
   // a local of the same name.
@@ -1121,6 +1325,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     coachRetirementHistory,
     nextCoachIdCounter,
     nextPlayerUuidCounter,
+    teamFinances,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

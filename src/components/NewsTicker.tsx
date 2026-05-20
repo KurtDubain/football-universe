@@ -3,13 +3,14 @@ import type { NewsItem } from '../engine/season/season-manager';
 
 const priorityMap: Record<string, number> = {
   trophy: 10, upset: 8, coach_fired: 7, coach_hired: 6, retirement: 6,
-  injury: 6, promotion: 5, relegation: 5, streak: 4, match_result: 2,
+  injury: 6, fire_sale: 6, prize_money: 4, promotion: 5, relegation: 5,
+  streak: 4, match_result: 2,
 };
 
 const typeIcon: Record<string, string> = {
   trophy: '🏆', upset: '🔥', coach_fired: '📋', coach_hired: '✅',
   promotion: '⬆️', relegation: '⬇️', streak: '📊', match_result: '⚽',
-  retirement: '🎖️', injury: '🩹',
+  retirement: '🎖️', injury: '🩹', fire_sale: '💸', prize_money: '💰',
 };
 
 const typeBg: Record<string, string> = {
@@ -23,6 +24,8 @@ const typeBg: Record<string, string> = {
   match_result: 'border-l-emerald-500',
   retirement: 'border-l-amber-300',
   injury: 'border-l-red-300',
+  fire_sale: 'border-l-orange-500',
+  prize_money: 'border-l-yellow-500',
 };
 
 export default function NewsTicker({ news }: { news: NewsItem[] }) {

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName, getTierLabel, getTierColor } from '../utils/format';
+import { formatMoney } from '../engine/economy/finance';
 import SeasonReview from '../components/SeasonReview';
 import type { Achievement } from '../engine/achievements';
 
@@ -27,6 +28,19 @@ export default function History() {
     }
   }
   trophyCounts.sort((a, b) => b.count - a.count);
+
+  // Phase H — wealth leaderboard (current cash by team).
+  // Cash CAN go negative — separate richest / poorest views.
+  const wealthRanking: { teamId: string; name: string; cash: number; color: string }[] = [];
+  for (const [teamId, fin] of Object.entries(world.teamFinances ?? {})) {
+    wealthRanking.push({
+      teamId,
+      name: getTeamName(teamId, world.teamBases),
+      cash: fin.cash,
+      color: world.teamBases[teamId]?.color ?? '#666',
+    });
+  }
+  wealthRanking.sort((a, b) => b.cash - a.cash);
 
   // Fun records computed from season records
   const funRecords = useMemo(() => {
@@ -133,6 +147,48 @@ export default function History() {
                 <span className="text-[10px] text-slate-500">座</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Phase H — wealth leaderboard (current cash) */}
+      {wealthRanking.length > 0 && (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">财富榜</h3>
+            <span className="text-[10px] text-slate-600">当前现金 · Phase H</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+            {/* Richest 5 */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] text-emerald-400/80 uppercase tracking-wider mb-1">最富有</div>
+              {wealthRanking.slice(0, 5).map((t, i) => (
+                <div key={t.teamId} className="flex items-center gap-2">
+                  <span className={`w-5 text-center text-xs font-bold ${i === 0 ? 'text-emerald-400' : 'text-slate-500'}`}>{i + 1}</span>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                  <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate">{t.name}</Link>
+                  <span className="text-sm font-bold text-emerald-300">{formatMoney(t.cash)}</span>
+                </div>
+              ))}
+            </div>
+            {/* Poorest 5 (only show if any have negative cash, OR show bottom 5) */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] text-red-400/80 uppercase tracking-wider mb-1">财政告急</div>
+              {(() => {
+                const slice = wealthRanking.slice(-5).reverse();
+                return slice.map((t, i) => {
+                  const tone = t.cash < 0 ? 'text-red-300' : t.cash < 10 ? 'text-amber-300' : 'text-slate-400';
+                  return (
+                    <div key={t.teamId} className="flex items-center gap-2">
+                      <span className="w-5 text-center text-xs font-bold text-slate-500">{wealthRanking.length - i}</span>
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                      <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate">{t.name}</Link>
+                      <span className={`text-sm font-bold ${tone}`}>{formatMoney(t.cash)}</span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
