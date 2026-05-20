@@ -350,6 +350,9 @@ export default function TeamDetail() {
         </div>
       )}
 
+      {/* ═══ 伤员 / 停赛 ═══ */}
+      <InjuryBoard teamId={id} />
+
       {/* ═══ 阵容名单 ═══ */}
       <SquadRoster teamId={id} />
     </div>
@@ -499,6 +502,8 @@ function SquadRoster({ teamId }: { teamId: string }) {
   const squad = world.squads[teamId] ?? [];
   if (squad.length === 0) return null;
 
+  const currentWindowIdx = world.totalElapsedWindows ?? 0;
+
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       <div className="px-4 py-2.5 border-b border-slate-700">
@@ -525,21 +530,40 @@ function SquadRoster({ teamId }: { teamId: string }) {
               {players.map((player) => {
                 const stats = world.playerStats[player.uuid];
                 const isStar = starIds.has(player.uuid);
+                const injuredUntil = player.injuredUntilWindow ?? 0;
+                const suspendedUntil = player.suspendedUntilWindow ?? 0;
+                const isInjured = injuredUntil > currentWindowIdx;
+                const isSuspended = suspendedUntil > currentWindowIdx;
 
                 return (
                   <div
                     key={player.uuid}
-                    className="flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors"
+                    className={`flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors ${isInjured ? 'opacity-70' : ''}`}
                   >
                     {/* Number badge — clickable */}
-                    <Link to={`/player/${player.uuid}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors">
+                    <Link to={`/player/${player.uuid}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors relative">
                       <span className="text-xs font-bold text-slate-200">
                         {player.number}
                       </span>
+                      {isInjured && (
+                        <span
+                          className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border border-slate-800"
+                          title="伤病"
+                        />
+                      )}
+                      {!isInjured && isSuspended && (
+                        <span
+                          className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-yellow-500 border border-slate-800"
+                          title="停赛"
+                        />
+                      )}
                     </Link>
 
                     {/* Name */}
-                    <Link to={`/player/${player.uuid}`} className="text-sm text-slate-200 hover:text-blue-300 truncate w-16 sm:w-24 shrink-0">
+                    <Link
+                      to={`/player/${player.uuid}`}
+                      className={`text-sm hover:text-blue-300 truncate w-16 sm:w-24 shrink-0 ${isInjured ? 'text-slate-500 line-through' : 'text-slate-200'}`}
+                    >
                       {player.name ?? `${player.number}号`}
                     </Link>
 
@@ -611,6 +635,88 @@ function SquadRoster({ teamId }: { teamId: string }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ── Injury / suspension board ─────────────────────────────────
+
+/**
+ * Phase G — list active injuries and suspensions for the team. Hidden when
+ * neither side has any entries. The chips link to PlayerDetail (for the
+ * full injury history) and the right-side count is the games-remaining
+ * value relative to `world.totalElapsedWindows`.
+ */
+function InjuryBoard({ teamId }: { teamId: string }) {
+  const world = useGameStore((s) => s.world);
+  if (!world) return null;
+  const squad = world.squads[teamId] ?? [];
+  if (squad.length === 0) return null;
+
+  const cur = world.totalElapsedWindows ?? 0;
+  const injured = squad
+    .filter((p) => (p.injuredUntilWindow ?? 0) > cur)
+    .sort((a, b) => (b.injuredUntilWindow ?? 0) - (a.injuredUntilWindow ?? 0));
+  const suspended = squad
+    .filter((p) => (p.injuredUntilWindow ?? 0) <= cur && (p.suspendedUntilWindow ?? 0) > cur)
+    .sort((a, b) => (b.suspendedUntilWindow ?? 0) - (a.suspendedUntilWindow ?? 0));
+
+  if (injured.length === 0 && suspended.length === 0) return null;
+
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+      <h3 className="text-sm font-semibold text-slate-200 mb-3">
+        🩹 伤员 / 停赛 ({injured.length + suspended.length})
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <div className="text-[11px] text-red-400 mb-1.5 font-semibold">伤员 ({injured.length})</div>
+          {injured.length === 0 ? (
+            <div className="text-[11px] text-slate-600">—</div>
+          ) : (
+            <div className="space-y-1">
+              {injured.map((p) => {
+                const lastInj = p.injuryHistory?.[p.injuryHistory.length - 1];
+                const remaining = Math.max(0, (p.injuredUntilWindow ?? 0) - cur);
+                return (
+                  <Link
+                    key={p.uuid}
+                    to={`/player/${p.uuid}`}
+                    className="flex items-center gap-2 text-[11px] bg-red-900/15 hover:bg-red-900/30 border border-red-900/30 rounded px-2 py-1 transition-colors"
+                  >
+                    <span className="text-slate-300 truncate flex-1">{p.name}</span>
+                    <span className="text-slate-500 text-[10px]">{lastInj?.reason ?? '伤病'}</span>
+                    <span className="text-red-400 font-mono shrink-0">{remaining}场</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="text-[11px] text-yellow-400 mb-1.5 font-semibold">停赛 ({suspended.length})</div>
+          {suspended.length === 0 ? (
+            <div className="text-[11px] text-slate-600">—</div>
+          ) : (
+            <div className="space-y-1">
+              {suspended.map((p) => {
+                const remaining = Math.max(0, (p.suspendedUntilWindow ?? 0) - cur);
+                return (
+                  <Link
+                    key={p.uuid}
+                    to={`/player/${p.uuid}`}
+                    className="flex items-center gap-2 text-[11px] bg-yellow-900/10 hover:bg-yellow-900/20 border border-yellow-900/30 rounded px-2 py-1 transition-colors"
+                  >
+                    <span className="text-slate-300 truncate flex-1">{p.name}</span>
+                    <span className="text-slate-500 text-[10px]">累计纪律</span>
+                    <span className="text-yellow-400 font-mono shrink-0">{remaining}场</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -71,12 +71,18 @@ function ageMultiplier(age: number): number {
  *
  * `peakRating` and `peakAge` are NEVER mutated here — they're immutable
  * destiny attributes set at generation (or backfilled by v9→v10).
+ *
+ * Phase G: players carrying an ACTIVE major / long_term injury (still
+ * sidelined past the current global window counter) take a 10% haircut on
+ * marketValue — "伤情打折". Caller passes `currentWindowIdx`; defaults to 0
+ * for backward-compatible test paths that don't track injuries yet.
  */
 export function applyAnnualRevaluation(
   squads: Record<string, Player[]>,
   playerStats: Record<string, PlayerSeasonStats>,
   promotedTeamIds: Set<string>,
   championTeamId: string | null,
+  currentWindowIdx: number = 0,
 ): void {
   for (const [teamId, players] of Object.entries(squads)) {
     const isPromoted = promotedTeamIds.has(teamId);
@@ -117,6 +123,15 @@ export function applyAnnualRevaluation(
       const oldAgeMul = ageMultiplier(newAge - 1);
       const newAgeMul = ageMultiplier(newAge);
       newValue *= newAgeMul / oldAgeMul;
+
+      // Phase G: long-injury haircut. Buyers price in the recovery risk and
+      // the games missed; we model it as -10% for any player whose latest
+      // injury is still active and was major / long_term.
+      const lastInj = p.injuryHistory?.[p.injuryHistory.length - 1];
+      const stillSidelined = (p.injuredUntilWindow ?? 0) > currentWindowIdx;
+      if (stillSidelined && lastInj && (lastInj.type === 'major' || lastInj.type === 'long_term')) {
+        newValue *= 0.90;
+      }
 
       // Cap and floor
       p.marketValue = Math.max(0.2, Math.min(150, Math.round(newValue * 10) / 10));

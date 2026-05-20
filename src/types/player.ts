@@ -43,6 +43,48 @@ export interface Player {
    * the plateau (full peak); decline begins at peakAge + 3.
    */
   peakAge: number;
+  // ── Phase G: 伤病 / 停赛 ──────────────────────────────────────────
+  /**
+   * Global window index (cumulative across seasons via
+   * `world.totalElapsedWindows`) the player is unavailable due to injury.
+   * Player is selectable when `currentWindowIdx >= injuredUntilWindow`. Set
+   * by post-match injury rolls; cleared at season-end for short injuries
+   * (duration <= 30 matches), retained for long_term ones.
+   *
+   * Optional — undefined / 0 means "no active injury".
+   */
+  injuredUntilWindow?: number;
+  /**
+   * Global window index the player is suspended until. Set when cumulative
+   * yellow / red counters trip; cleared every season-end (offseason wipes
+   * all bans).
+   */
+  suspendedUntilWindow?: number;
+  /**
+   * Career injury log. FIFO-capped at the last 10 entries. Used by the
+   * UI (PlayerDetail) and by retirement (long-term injuries boost retire
+   * chance).
+   */
+  injuryHistory?: Injury[];
+}
+
+/**
+ * One entry in `Player.injuryHistory`. Severity drives both `durationMatches`
+ * and the news copy.
+ */
+export type InjurySeverity = 'minor' | 'moderate' | 'major' | 'long_term';
+
+export interface Injury {
+  /** Severity bucket — see `InjurySeverity`. */
+  type: InjurySeverity;
+  /** Season in which the injury was sustained. */
+  startSeason: number;
+  /** Global window index at which the injury was sustained. */
+  startWindow: number;
+  /** Number of MATCH WINDOWS the player is sidelined for. */
+  durationMatches: number;
+  /** Chinese-language reason, e.g. 膝伤 / 脚踝扭伤 / 肌肉拉伤 / 头部撞击. */
+  reason: string;
 }
 
 export interface PlayerSeasonStats {

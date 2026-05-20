@@ -4,6 +4,7 @@ import type { SimulationContext } from '../match/simulator';
 import type { SeededRNG } from '../match/rng';
 import type { GameWorld } from './season-manager';
 import { getTeamCoachId } from '../coaches/coach-lookup';
+import { pickMatchday as pickMatchdayWithDiscipline } from '../players/injuries';
 
 export function buildSimulationContext(
   fixture: MatchFixture,
@@ -25,9 +26,13 @@ export function buildSimulationContext(
     || fixture.competitionType === 'super_cup'
     || fixture.competitionType === 'continental_cup';
 
+  // Phase G — pickMatchday now filters out injured / suspended players via
+  // `world.totalElapsedWindows`. Falls back to the legacy top-14 if the
+  // counter isn't present (in-flight migration; tests sometimes build
+  // synthetic worlds without the field).
+  const currentWindowIdx = world.totalElapsedWindows ?? 0;
   const pickMatchday = (squad: import('../../types/player').Player[] | undefined) => {
-    if (!squad || squad.length <= 14) return squad;
-    return [...squad].sort((a, b) => b.rating - a.rating).slice(0, 14);
+    return pickMatchdayWithDiscipline(squad, currentWindowIdx);
   };
 
   return {

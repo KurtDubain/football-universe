@@ -363,3 +363,31 @@ describe('applyV9ToV10PlayerCurve (v9 → v10)', () => {
   });
 });
 
+
+// ── v13 → v14 migration tests ────────────────────────────────────
+
+import { applyV13ToV14InjuriesInit } from "./game-store";
+
+describe("applyV13ToV14InjuriesInit (v13 → v14)", () => {
+  it("backfills totalElapsedWindows from seasonState.currentWindowIndex", () => {
+    const world: { totalElapsedWindows?: unknown; seasonState?: { currentWindowIndex?: number } } = {
+      seasonState: { currentWindowIndex: 17 },
+    };
+    const r = applyV13ToV14InjuriesInit(world);
+    expect(r.touched).toBe(true);
+    expect(world.totalElapsedWindows).toBe(17);
+  });
+  it("defaults to 0 if seasonState is missing", () => {
+    const world: { totalElapsedWindows?: unknown } = {};
+    const r = applyV13ToV14InjuriesInit(world);
+    expect(r.touched).toBe(true);
+    expect(world.totalElapsedWindows).toBe(0);
+  });
+  it("idempotent — leaves existing number alone", () => {
+    const world: { totalElapsedWindows?: unknown } = { totalElapsedWindows: 42 };
+    const r = applyV13ToV14InjuriesInit(world);
+    expect(r.touched).toBe(false);
+    expect(world.totalElapsedWindows).toBe(42);
+  });
+});
+

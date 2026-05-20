@@ -39,11 +39,20 @@ export const RETIREMENT_HISTORY_CAP = 300;
  * Rating bonus uses peakRating (destiny) rather than current rating, because
  * a 38yo who PEAKED at 95 should still be presumed important enough to play
  * one more year, even though their *current* rating has decayed.
+ *
+ * Phase G: if `hasLongTermInjury` is true and the player is 33+, a flat +20%
+ * is added on top (capped at the existing 0.95). Long-term knees / Achilles
+ * tend to end careers — this expresses that.
  */
-export function computeRetirementChance(age: number, peakRating: number): number {
+export function computeRetirementChance(
+  age: number,
+  peakRating: number,
+  hasLongTermInjury: boolean = false,
+): number {
   if (age < 33) return 0;
   const ratingBonus = Math.max(0, peakRating - 80) / 100;
   let chance = (age - 33) / 12 - ratingBonus;
+  if (hasLongTermInjury && age >= 33) chance += 0.20;
   chance = Math.max(0, Math.min(0.95, chance));
   if (age >= 38) chance = Math.max(0.40, chance);
   return chance;
@@ -245,6 +254,7 @@ export function processRetirements(
 } {
   const seasonNumber = world.seasonState.seasonNumber;
   const nextUuid = { value: world.nextPlayerUuidCounter ?? 0 };
+  const currentWindowIdx = world.totalElapsedWindows ?? 0;
 
   // ── Step 1: Roll chance per player, gather candidates per team ──
   const candidatesByTeam: Record<string, RetirementCandidate[]> = {};
@@ -254,7 +264,14 @@ export function processRetirements(
       const age = p.age ?? 25;
       if (age < 33) continue; // fast path
       const forced = age >= HARD_AGE_CAP;
-      const chance = computeRetirementChance(age, p.peakRating ?? p.rating ?? 60);
+      // Phase G: a player carrying an active major / long_term injury has
+      // an inflated retirement chance. We mark this on the candidate so
+      // news copy below can flag it as a "forced by injury" retirement.
+      const lastInj = p.injuryHistory?.[p.injuryHistory.length - 1];
+      const isLongTerm = !!lastInj
+        && (lastInj.type === 'major' || lastInj.type === 'long_term')
+        && (p.injuredUntilWindow ?? 0) > currentWindowIdx;
+      const chance = computeRetirementChance(age, p.peakRating ?? p.rating ?? 60, isLongTerm);
       // Roll once per player. Forced retirees always end up in the candidate
       // list regardless of the roll.
       const roll = rng.next();

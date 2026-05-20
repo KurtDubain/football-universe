@@ -262,6 +262,78 @@ export default function PlayerDetail() {
           <span className="text-sm text-red-400 font-semibold">红牌: {stats!.redCards}</span>
         </div>
       )}
+
+      {/* Phase G — Injury record */}
+      <InjurySection player={player} currentWindowIdx={world.totalElapsedWindows ?? 0} />
+    </div>
+  );
+}
+
+// ── Injury history section ─────────────────────────────────
+
+const severityLabel: Record<string, string> = {
+  minor: '轻伤', moderate: '中等', major: '重伤', long_term: '长期',
+};
+const severityColor: Record<string, string> = {
+  minor: 'text-slate-400 bg-slate-700/40',
+  moderate: 'text-amber-400 bg-amber-900/40',
+  major: 'text-orange-400 bg-orange-900/40',
+  long_term: 'text-red-400 bg-red-900/40',
+};
+
+/**
+ * Phase G — career injury log. Renders most-recent-first. Hidden when the
+ * player has no injuryHistory entries.
+ *
+ * The header carries a live badge for "currently injured / suspended" so the
+ * user can tell at a glance whether the player is available for the next
+ * match (the squad-roster red dot tells the same story from the team view).
+ */
+function InjurySection({
+  player,
+  currentWindowIdx,
+}: {
+  player: Player;
+  currentWindowIdx: number;
+}) {
+  const history = player.injuryHistory ?? [];
+  const isInjured = (player.injuredUntilWindow ?? 0) > currentWindowIdx;
+  const isSuspended = (player.suspendedUntilWindow ?? 0) > currentWindowIdx;
+  if (history.length === 0 && !isInjured && !isSuspended) return null;
+  const sorted = [...history].sort((a, b) => b.startWindow - a.startWindow);
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">🩹 伤病记录</h3>
+        <div className="flex gap-1.5">
+          {isInjured && (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-red-900/40 text-red-400 border border-red-700/40">
+              当前伤停 (剩{Math.max(0, (player.injuredUntilWindow ?? 0) - currentWindowIdx)}场)
+            </span>
+          )}
+          {isSuspended && (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-900/40 text-yellow-400 border border-yellow-700/40">
+              当前停赛 (剩{Math.max(0, (player.suspendedUntilWindow ?? 0) - currentWindowIdx)}场)
+            </span>
+          )}
+        </div>
+      </div>
+      {sorted.length === 0 ? (
+        <p className="text-[11px] text-slate-500">暂无历史伤病记录</p>
+      ) : (
+        <div className="space-y-1.5">
+          {sorted.map((inj, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 w-14 shrink-0">S{inj.startSeason} W{inj.startWindow}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${severityColor[inj.type] ?? ''}`}>
+                {severityLabel[inj.type] ?? inj.type}
+              </span>
+              <span className="text-slate-300 flex-1 truncate">{inj.reason}</span>
+              <span className="text-[10px] text-slate-500 shrink-0">{inj.durationMatches}场</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

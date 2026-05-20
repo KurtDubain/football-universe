@@ -1,5 +1,6 @@
 import { Player, PlayerSeasonStats } from '../../types/player';
 import { MatchResult } from '../../types/match';
+import { pickMatchday as pickMatchdayWithDiscipline } from './injuries';
 
 /**
  * Create initial empty stats for all players in all squads.
@@ -28,11 +29,16 @@ export function createInitialPlayerStats(
 /**
  * Update player stats from match results.
  * Scan events for goals, cards, etc. and increment the matching player stats.
+ *
+ * Phase G: appearances are credited via the SAME pickMatchday filter used at
+ * simulation time, so injured / suspended players don't get credited
+ * "appeared in a match they weren't actually in".
  */
 export function updatePlayerStatsFromResults(
   currentStats: Record<string, PlayerSeasonStats>,
   results: MatchResult[],
   squads: Record<string, Player[]>,
+  globalWindowIdx: number = 0,
 ): Record<string, PlayerSeasonStats> {
   const stats = { ...currentStats };
 
@@ -40,18 +46,15 @@ export function updatePlayerStatsFromResults(
     // Mark appearances for matchday squad (top 14 by rating = 11 starters + 3 subs)
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
-    const matchdaySize = 14;
 
-    const pickMatchday = (squad: Player[] | undefined) => {
-      if (!squad) return [];
-      return [...squad].sort((a, b) => b.rating - a.rating).slice(0, matchdaySize);
-    };
+    const homeMatchday = pickMatchdayWithDiscipline(homeSquad, globalWindowIdx) ?? [];
+    const awayMatchday = pickMatchdayWithDiscipline(awaySquad, globalWindowIdx) ?? [];
 
-    for (const p of pickMatchday(homeSquad)) {
+    for (const p of homeMatchday) {
       if (!stats[p.uuid]) continue;
       stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
     }
-    for (const p of pickMatchday(awaySquad)) {
+    for (const p of awayMatchday) {
       if (!stats[p.uuid]) continue;
       stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
     }
@@ -76,10 +79,11 @@ export function updatePlayerStatsFromResults(
           s.goals++;
           break;
         case 'yellow_card':
-          s.yellowCards++;
+          // Phase G: yellow/red counters are folded by the injuries module
+          // (which also handles suspension reset). Skip them here to avoid
+          // double-counting.
           break;
         case 'red_card':
-          s.redCards++;
           break;
         case 'assist':
           s.assists++;

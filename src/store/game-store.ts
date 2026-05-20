@@ -301,6 +301,30 @@ export function applyV12ToV13ContinentalCupsInit(world: {
   return { touched: true };
 }
 
+/**
+ * v13 → v14 helper: backfill `world.totalElapsedWindows` (Phase G — injuries
+ * + suspensions). The counter is monotonic across seasons and is used to
+ * express injury/suspension durations as absolute window indices. For a
+ * legacy save we approximate by summing the lengths of all completed
+ * calendars — a perfect estimate is impossible (we don't snapshot historical
+ * calendar lengths), so we use the current season's index as a lower bound.
+ *
+ * Idempotent: skipped when the field is already a number.
+ *
+ * Returns whether the field was touched.
+ */
+export function applyV13ToV14InjuriesInit(world: {
+  totalElapsedWindows?: unknown;
+  seasonState?: { currentWindowIndex?: number; calendar?: unknown[] };
+}): { touched: boolean } {
+  if (typeof world.totalElapsedWindows === 'number') {
+    return { touched: false };
+  }
+  const cur = world.seasonState?.currentWindowIndex;
+  world.totalElapsedWindows = typeof cur === 'number' ? cur : 0;
+  return { touched: true };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -598,7 +622,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 13,
+      version: 14,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -849,6 +873,15 @@ export const useGameStore = create<GameStore>()(
         // directly.
         if (version < 13 && state?.world) {
           applyV12ToV13ContinentalCupsInit(state.world as { continentalCups?: unknown });
+        }
+        // v13 → v14: backfill `totalElapsedWindows` (Phase G). Older saves
+        // never tracked a global window counter — we seed it from the
+        // season's current window so future post-match injury rolls have a
+        // monotonic clock to write `untilWindow` against.
+        if (version < 14 && state?.world) {
+          applyV13ToV14InjuriesInit(
+            state.world as { totalElapsedWindows?: unknown; seasonState?: { currentWindowIndex?: number; calendar?: unknown[] } },
+          );
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

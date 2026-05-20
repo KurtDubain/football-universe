@@ -114,7 +114,7 @@ describe('UUID stability across transfer (integration)', () => {
       seasonStartLevels: {}, seasonBuffs: [],
       godHandUsed: false, coins: 0, bets: [],
       matchHistory: [], seasonBuffsHistory: [],
-      playerAwardsHistory: [], transferHistory: [], memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null },
+      playerAwardsHistory: [], transferHistory: [], memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0,
       retirementHistory: [], coachCandidatePool: [],
       coachRetirementHistory: [], nextCoachIdCounter: 0,
     };

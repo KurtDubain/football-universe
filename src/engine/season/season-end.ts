@@ -392,14 +392,42 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     // a typical season produces only a handful of these. The blurb mentions
     // club + age + position + career goals, plus a trophy count tail when
     // the player walked away with silverware.
+    //
+    // Phase G: a player who retired carrying an active major / long_term
+    // injury gets a different headline so the news ticker reflects the
+    // "forced by injury" narrative.
     const positionLabel: Record<'GK' | 'DF' | 'MF' | 'FW', string> = {
       GK: '门将', DF: '后卫', MF: '中场', FW: '前锋',
     };
+    const currentWindowIdx = world.totalElapsedWindows ?? 0;
+    // Build a uuid → player lookup from the PRE-retirement world so we can
+    // detect the "forced by long injury" case via injuryHistory.
+    const preRetirePlayerLookup = new Map<string, import('../../types/player').Player>();
+    for (const sq of Object.values(world.squads)) {
+      if (!Array.isArray(sq)) continue;
+      for (const p of sq) preRetirePlayerLookup.set(p.uuid, p);
+    }
     for (const r of retirementResult.retirements) {
       if (r.peakRating < 80) continue;
       const yearsSnap = Math.max(1, r.age - 18); // rough career length estimate
       const posCN = positionLabel[r.position];
       const trophyCount = r.careerTrophies?.length ?? 0;
+      const pre = preRetirePlayerLookup.get(r.uuid);
+      const lastInj = pre?.injuryHistory?.[pre.injuryHistory.length - 1];
+      const forcedByInjury = !!lastInj
+        && (lastInj.type === 'major' || lastInj.type === 'long_term')
+        && (pre?.injuredUntilWindow ?? 0) > currentWindowIdx;
+
+      if (forcedByInjury) {
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `retire-${r.uuid}`),
+          seasonNumber, windowIndex, type: 'retirement',
+          title: `传奇陨落: ${r.name} 因长期伤病被迫挂靴`,
+          description: `${r.teamName} ${posCN} ${r.name}（${r.age} 岁）因${lastInj?.reason}的长期伤病不得不告别绿茵场，留下 ${r.careerGoals} 球的纪录。`,
+        });
+        continue;
+      }
+
       const baseDesc = `${r.teamName} ${posCN} ${r.name}（${r.age} 岁）结束 ${yearsSnap} 年职业生涯，留下 ${r.careerGoals} 球的纪录`;
       const description = trophyCount > 0
         ? `${baseDesc}，并捧起 ${trophyCount} 座冠军奖杯。`
@@ -551,6 +579,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     playerStats,
     new Set(actualPromoted.map((p) => p.teamId)),
     league1Champion || null,
+    world.totalElapsedWindows ?? 0,
   );
 
   // Promoted teams

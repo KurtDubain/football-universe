@@ -29,6 +29,7 @@ import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
+import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury';
   title: string;
   description: string;
 }
@@ -147,6 +148,19 @@ export interface GameWorld {
   transferHistory: import('../../types/transfer').TransferRecord[];
   memorableMatches: import('../../types/memorable').MemorableMatchEntry[];
   gameMode?: import('../../types/game-mode').GameMode;
+  /**
+   * Phase G — monotonic counter of how many *match-bearing* calendar windows
+   * have been simulated since the world was created. Bumped exactly once per
+   * `executeCurrentWindow` call that produces results, BEFORE post-match
+   * processing runs (so injury / suspension `untilWindow` values can use it
+   * directly). Survives season transitions — that is the whole point: an
+   * injury sustained at the end of S17 needs to express its remaining
+   * duration in S18 windows. The per-season counter `seasonState.currentWindowIndex`
+   * resets on `initializeNewSeason`, so it can't be used for this.
+   *
+   * Backfilled to 0 by the v13 → v14 migration on legacy saves.
+   */
+  totalElapsedWindows: number;
 }
 
 export interface MatchHistoryEntry {
@@ -288,6 +302,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     transferHistory: [],
     memorableMatches: [],
     gameMode: options?.gameMode ?? 'free',
+    totalElapsedWindows: 0,
   };
 
   // Initialize empty trophies / records for every team
@@ -546,6 +561,11 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     newBuffsHistory.push({ season: prevSeason, buffs: world.seasonBuffs ?? [] });
   }
 
+  // Phase G — off-season cleanup. Wipes all suspensions; resets non-long-term
+  // injuries. Mutates squads in place (the Player objects are shared across
+  // the world snapshot — see note in `processInjuriesAndSuspensions`).
+  resetDisciplineForNewSeason(world.squads, world.totalElapsedWindows ?? 0);
+
   return enforceStorageLimits({
     ...world,
     teamBases: buffedTeamBases,
@@ -731,6 +751,14 @@ export function executeCurrentWindow(world: GameWorld): {
     world.continentalCups,
   );
 
+  // Phase G — bump the global window counter the moment we know this window
+  // produced match results. Both the injury/suspension processor and the
+  // stats updater below need to read the POST-bump value so the writes they
+  // produce (injuredUntilWindow, suspendedUntilWindow) are expressed in a
+  // consistent absolute scale.
+  const totalElapsedWindowsAfter = (world.totalElapsedWindows ?? 0)
+    + (windowResult.results.length > 0 ? 1 : 0);
+
   // Post-match processing (rest, pressure, news, events)
   const postMatch = runPostMatchProcessing(
     world,
@@ -750,10 +778,33 @@ export function executeCurrentWindow(world: GameWorld): {
     world.seasonState,
   );
 
-  // Update player stats
+  // Update player stats — passes the post-bump global window so injured /
+  // suspended players don't get credited an appearance.
   const updatedPlayerStats = windowResult.results.length > 0
-    ? updatePlayerStatsFromResults(world.playerStats, windowResult.results, world.squads)
+    ? updatePlayerStatsFromResults(world.playerStats, windowResult.results, world.squads, totalElapsedWindowsAfter)
     : world.playerStats;
+
+  // Phase G — injury rolls + suspension folding. Mutates `world.squads`
+  // (in place — we are crossing the immutability fence intentionally here:
+  // the players themselves are objects shared across the world snapshot,
+  // and the existing economy / retirement passes already mutate them. The
+  // squads ARRAY identity stays the same; only player FIELDS update.). The
+  // returned news is wired into the news log alongside the other post-match
+  // notifications. We pass a MUTABLE shallow-copied playerStats so the
+  // counter resets land on the same object the caller will commit. (We
+  // already cloned this above for the appearance-credit pass.)
+  const injuryResult = windowResult.results.length > 0
+    ? processInjuriesAndSuspensions({
+        results: windowResult.results,
+        squads: world.squads,
+        playerStats: updatedPlayerStats,
+        teamBases: postMatch.teamBases,
+        seasonNumber,
+        globalWindowIdx: totalElapsedWindowsAfter,
+        windowIndex,
+        rng,
+      })
+    : { injuriesApplied: [], suspensionsApplied: [], news: [] };
 
   // Mark window completed, advance index
   const seasonState = { ...world.seasonState };
@@ -791,9 +842,10 @@ export function executeCurrentWindow(world: GameWorld): {
     coachChangesThisSeason: postMatch.coachChanges,
     playerStats: updatedPlayerStats,
     activeEvents: postMatch.activeEvents,
-    newsLog: [...world.newsLog, ...windowResult.news, ...postMatch.news],
+    newsLog: [...world.newsLog, ...windowResult.news, ...postMatch.news, ...injuryResult.news],
     memorableMatches: appendMemorableMatches(world.memorableMatches, postMatch.memorableMatches),
     rngState: rng.getState(),
+    totalElapsedWindows: totalElapsedWindowsAfter,
   };
 
   // WC phase just ended — finalize WC results and start next season
@@ -823,7 +875,7 @@ export function executeCurrentWindow(world: GameWorld): {
   return {
     world: updatedWorld,
     results: windowResult.results,
-    news: [...windowResult.news, ...postMatch.news],
+    news: [...windowResult.news, ...postMatch.news, ...injuryResult.news],
   };
 }
 
