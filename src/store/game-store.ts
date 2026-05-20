@@ -52,6 +52,79 @@ interface GameStore {
   trimStorage: () => void;
 }
 
+/**
+ * v8 → v9 helper: walk `transferHistory` and `playerAwardsHistory`, replacing
+ * any stale legacy `${teamId}-${number}` playerId with the player's current
+ * `uuid`. Resolves by `(playerName, teamIdHint)` first (precise), then by
+ * `playerName` alone (names are mostly unique in this game). Mutates `world`
+ * in place; entries already shaped like a uuid (`p-…`) or with no match are
+ * left untouched, so calling this on an already-migrated save is a no-op.
+ *
+ * Returns a tally `{ transfers, awards }` of how many entries were repaired —
+ * the migration in zustand discards it; the unit test asserts on it. The
+ * function is exported solely so the test can exercise the logic without
+ * standing up a zustand store + localStorage shim.
+ */
+export function backfillStaleHistoryPlayerIds(world: {
+  squads?: Record<string, Array<{ uuid?: string; name?: string }>>;
+  transferHistory?: Array<{ playerId?: string; playerName?: string; toTeamId?: string }>;
+  playerAwardsHistory?: Array<{ playerId?: string; playerName?: string; teamId?: string }>;
+}): { transfers: number; awards: number } {
+  const byName = new Map<string, string>();
+  const byNameTeam = new Map<string, string>();  // key = "name|teamId"
+  for (const [teamId, squad] of Object.entries(world.squads ?? {})) {
+    if (!Array.isArray(squad)) continue;
+    for (const p of squad) {
+      if (typeof p?.uuid !== 'string' || typeof p?.name !== 'string') continue;
+      // name → uuid: last write wins. Collisions are rare and the (name, team)
+      // path is the precise lookup anyway — this is just a coarse fallback.
+      byName.set(p.name, p.uuid);
+      byNameTeam.set(`${p.name}|${teamId}`, p.uuid);
+    }
+  }
+
+  /** Returns the original id on miss so the UI's missing-player fallback still
+   *  applies — a partial repair is strictly better than corruption. */
+  const repair = (legacyId: string, name: string | undefined, teamIdHint?: string): string => {
+    if (typeof legacyId !== 'string') return legacyId;
+    if (legacyId.startsWith('p-')) return legacyId; // already a uuid — idempotent
+    if (typeof name !== 'string' || name.length === 0) return legacyId;
+    if (teamIdHint) {
+      const u = byNameTeam.get(`${name}|${teamIdHint}`);
+      if (u) return u;
+    }
+    const u = byName.get(name);
+    if (u) return u;
+    return legacyId;
+  };
+
+  let transfers = 0;
+  let awards = 0;
+  if (Array.isArray(world.transferHistory)) {
+    for (const t of world.transferHistory) {
+      if (typeof t?.playerId !== 'string') continue;
+      // toTeamId is the destination — that's where the player ended up after
+      // the move, so it's the most likely team to find them on today.
+      const next = repair(t.playerId, t.playerName, t.toTeamId);
+      if (next !== t.playerId) {
+        t.playerId = next;
+        transfers++;
+      }
+    }
+  }
+  if (Array.isArray(world.playerAwardsHistory)) {
+    for (const a of world.playerAwardsHistory) {
+      if (typeof a?.playerId !== 'string') continue;
+      const next = repair(a.playerId, a.playerName, a.teamId);
+      if (next !== a.playerId) {
+        a.playerId = next;
+        awards++;
+      }
+    }
+  }
+  return { transfers, awards };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -349,10 +422,10 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 8,
+      version: 9,
       /**
        * Migrates a persisted save from any older version up to the current
-       * schema (v8). Each `if (version < N)` block applies one forward step.
+       * schema (v9). Each `if (version < N)` block applies one forward step.
        *
        * SAFETY CONTRACT:
        * - Input shape is `unknown`. We narrow once to a `Partial<GameStore>`
@@ -552,6 +625,20 @@ export const useGameStore = create<GameStore>()(
               }
             }
           }
+        }
+        // v8 → v9: backfill stale playerId references in transferHistory and
+        // playerAwardsHistory. The v8 migration only rewrote ids that matched
+        // the player's CURRENT `${teamId}-${number}` shape — historical entries
+        // produced before a transfer kept the player's *former* legacy id
+        // (e.g. a 3-season-old "jeonbuk-75" that now points nowhere because
+        // the player moved to bj_guoan). Those references currently render as
+        // dead links ("未找到球员: jeonbuk-75") in /transfers and SeasonReview.
+        //
+        // Logic lives in a top-level helper so the unit test in
+        // `game-store-migration.test.ts` can exercise it without standing up
+        // zustand + localStorage. Extraction is otherwise a no-op.
+        if (version < 9 && state?.world) {
+          backfillStaleHistoryPlayerIds(state.world);
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action
