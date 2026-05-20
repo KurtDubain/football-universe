@@ -59,11 +59,20 @@ export function updatePlayerStatsFromResults(
     // Process events
     for (const event of result.events) {
       if (!event.playerId || !stats[event.playerId]) continue;
+
+      // Penalty shootout kicks (after the 120th minute) are NEVER counted as
+      // regular goals — they decide the tie but do not inflate top-scorer
+      // tables, market value, or any keep-stat aggregate downstream. The
+      // shootout generator (engine/match/events.ts ~498) is the only emitter
+      // of `penalty_goal`; regulation/extra-time penalties go through the
+      // normal `goal` type. We belt-and-suspender both conditions so an
+      // accidental future emitter at minute > 120 is also excluded.
+      if (event.type === 'penalty_goal' || event.minute > 120) continue;
+
       const s = { ...stats[event.playerId] };
 
       switch (event.type) {
         case 'goal':
-        case 'penalty_goal':
           s.goals++;
           break;
         case 'yellow_card':

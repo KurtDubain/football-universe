@@ -59,14 +59,14 @@ export default function PlayerDetail() {
     return { rank, total: sorted.length };
   }, [world.playerStats, world.squads, player, uuid]);
 
-  // Recent match highlights (goals scored by this player from calendar)
+  // Recent match highlights — only regulation/ET goals; shootout kicks excluded
   const highlights = useMemo(() => {
     const hl: { window: string; minute: number; desc: string }[] = [];
     for (const w of world.seasonState.calendar) {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
         for (const e of r.events) {
-          if (e.playerId === uuid && (e.type === 'goal' || e.type === 'penalty_goal')) {
+          if (e.playerId === uuid && e.type === 'goal' && e.minute <= 120) {
             hl.push({ window: w.label, minute: e.minute, desc: e.description });
           }
         }
@@ -75,7 +75,9 @@ export default function PlayerDetail() {
     return hl.slice(-8);
   }, [world.seasonState.calendar, uuid]);
 
-  // Key match metrics (computed from calendar events)
+  // Key match metrics — excludes shootout kicks; lateGoals uses RUNNING score
+  // at goal time (not final score) so 89' goal in 3-1 game isn't counted, and
+  // shootout 121+ kicks don't masquerade as last-minute drama.
   const keyMetrics = useMemo(() => {
     let finalGoals = 0;
     let lateGoals = 0;
@@ -83,7 +85,10 @@ export default function PlayerDetail() {
     for (const w of world.seasonState.calendar) {
       if (!w.completed || !w.results) continue;
       for (const r of w.results) {
-        const myGoals = r.events.filter(e => e.playerId === uuid && (e.type === 'goal' || e.type === 'penalty_goal'));
+        // Only count regulation + extra time goals — skip shootout penalty_goal
+        const myGoals = r.events.filter(
+          e => e.playerId === uuid && e.type === 'goal' && e.minute <= 120,
+        );
         if (myGoals.length === 0) continue;
         // Hat trick (3+ goals in single match)
         if (myGoals.length >= 3) hatTricks++;
@@ -91,13 +96,20 @@ export default function PlayerDetail() {
         const isFinal = (r.competitionType === 'super_cup' || r.competitionType === 'world_cup' || r.competitionType === 'league_cup')
           && (r.roundLabel === 'Final' || r.roundLabel.includes('决赛'));
         if (isFinal) finalGoals += myGoals.length;
-        // Late drama goals (>=85 min in close match: diff <= 1 at the time)
-        const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
-        const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
-        const isClose = Math.abs(totalH - totalA) <= 1;
-        if (isClose) {
-          for (const g of myGoals) {
-            if (g.minute >= 85) lateGoals++;
+        // Late drama: walk events chronologically, track running score, check
+        // diff AT THE GOAL TIME (not at final whistle)
+        const myGoalMinutes = new Set(myGoals.filter(g => g.minute >= 85 && g.minute <= 90).map(g => g.minute));
+        if (myGoalMinutes.size === 0) continue;
+        let runHome = 0, runAway = 0;
+        const sortedEvents = [...r.events]
+          .filter(e => (e.type === 'goal' || e.type === 'own_goal') && e.minute <= 120)
+          .sort((a, b) => a.minute - b.minute);
+        for (const e of sortedEvents) {
+          const isHomeGoal = e.teamId === r.homeTeamId;
+          if (isHomeGoal) runHome++; else runAway++;
+          if (e.playerId === uuid && myGoalMinutes.has(e.minute)) {
+            // At THIS moment, diff should be ≤ 1 to count as late drama
+            if (Math.abs(runHome - runAway) <= 1) lateGoals++;
           }
         }
       }
