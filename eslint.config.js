@@ -20,4 +20,21 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // [E] Engine determinism: NO Math.random() in any engine code.
+    // Engine logic MUST go through SeededRNG so the same seed reproduces
+    // the same universe across reloads. Visual effects (src/components/),
+    // initial seed pick (src/store/game-store.ts newGame), and migrations
+    // (one-time, never re-run) are exempt.
+    files: ['src/engine/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.name='Math'][property.name='random']",
+          message: 'Math.random() is forbidden in src/engine — use SeededRNG via `rng.next()` / `rng.nextInt()` / `rng.pick()` so the simulation stays deterministic.',
+        },
+      ],
+    },
+  },
 ])
