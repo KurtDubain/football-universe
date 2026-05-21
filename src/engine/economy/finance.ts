@@ -128,6 +128,40 @@ export function isUsingFlatRate(): boolean { return _useFlatRate; }
 /** Max history entries kept on each FinanceState (oldest dropped). */
 export const FINANCE_HISTORY_CAP = 10;
 
+// PHASE H v3 (2026-05-21): The bracketed schedule worked for *played-in*
+// universes (where 22 squads have aged through retirements + youth
+// pipeline, dropping market value). But fresh-game generation creates
+// star-loaded squads at peak market value: a fresh elite club's
+// squadValue can hit €1000-€1500M, vs €200-€350M after 16 seasons of
+// natural turnover. Even with the bracket schedule, 33+22+15% on €1500M
+// is €245M salary — way over the typical €100M income.
+//
+// Fix: salary cap by league level. The salary the team actually pays is
+// MIN(bracketed wage bill, league-level wage cap). This makes fresh-game
+// star clubs pay sustainable wages immediately while keeping the bracket
+// in effect for mature squads where it never binds.
+//
+// Caps were chosen as 1.25× the AVERAGE annual revenue per league tier:
+//   L1 avg revenue ≈ €60M (TV €40M + avg prize €18M + cup €2M)
+//   L2 avg revenue ≈ €30M
+//   L3 avg revenue ≈ €15M
+//
+// 1.25× headroom keeps top finishers comfortably profitable while the
+// bottom 25% bleeds modestly (a soft incentive to manage well, never
+// catastrophic).
+export const LEAGUE_WAGE_CAP_BY_TIER: Record<1 | 2 | 3, number> = {
+  1: 75,
+  2: 38,
+  3: 19,
+};
+
+let _runtimeWageCap: Record<1 | 2 | 3, number> = LEAGUE_WAGE_CAP_BY_TIER;
+export function getLeagueWageCap(): Record<1 | 2 | 3, number> { return _runtimeWageCap; }
+export function setLeagueWageCapForTesting(cap: Record<1 | 2 | 3, number>): void {
+  _runtimeWageCap = cap;
+}
+export function resetLeagueWageCap(): void { _runtimeWageCap = LEAGUE_WAGE_CAP_BY_TIER; }
+
 // ── Salary brackets (progressive) ────────────────────────────────
 //
 // PHASE H v2 (2026-05-21): The flat 33% rate worked on tier averages but
@@ -180,16 +214,21 @@ export function setSalaryBracketsForTesting(brackets: SalaryBracket[]): void {
 export function resetSalaryBrackets(): void { _runtimeBrackets = SALARY_BRACKETS; }
 
 /**
- * Compute the wage bill for a squad given its market value.
- * Applies the progressive bracket schedule. Returns a rounded €M number.
+ * Compute the wage bill for a squad given its market value AND league level.
+ * Applies the progressive bracket schedule, then caps at the league-level
+ * wage cap. Returns a rounded €M number.
  *
- * Examples (with default brackets 33/22/15 above €0/50/200):
- *   squadValue=30  → 30 × 0.33                                = €9.9M
- *   squadValue=100 → 50×0.33 + 50×0.22                        = €27.5M
- *   squadValue=200 → 50×0.33 + 150×0.22                       = €49.5M
- *   squadValue=500 → 50×0.33 + 150×0.22 + 300×0.15            = €94.5M
+ * Examples (default brackets 33/22/15 above €0/50/200, caps L1=75 / L2=38 / L3=19):
+ *   squadValue=30,  level=3 → 30 × 0.33                                   = €9.9M  (under cap)
+ *   squadValue=150, level=2 → 50×0.33 + 100×0.22                          = €38.5M → cap €38M
+ *   squadValue=300, level=1 → 50×0.33 + 150×0.22 + 100×0.15               = €64.5M (under cap)
+ *   squadValue=500, level=1 → bracketed €94.5M                             → cap €75M
+ *   squadValue=1500,level=1 → bracketed €244.5M                            → cap €75M
+ *
+ * `level` may be omitted in legacy/test contexts — defaults to L1 (most
+ * permissive cap) so the function stays backward-compatible.
  */
-export function computeSalary(squadValue: number): number {
+export function computeSalary(squadValue: number, level: 1 | 2 | 3 = 1): number {
   if (squadValue <= 0) return 0;
   const brackets = _runtimeBrackets;
   let salary = 0;
@@ -202,7 +241,8 @@ export function computeSalary(squadValue: number): number {
     prevBoundary = b.boundary;
     if (squadValue <= b.boundary) break;
   }
-  return Math.round(salary);
+  const cap = _runtimeWageCap[level];
+  return Math.round(Math.min(salary, cap));
 }
 
 // ── Legacy linear rate API (kept for backward compat in sim harness) ──
@@ -492,21 +532,29 @@ export function applyIncome(
  * Apply salaries to every team. Pure: returns new teamFinances + news.
  *
  * Salary calculation is progressive (see `SALARY_BRACKETS` and
- * `computeSalary()`). The legacy flat-rate path is preserved for the sim
- * harness via `setSalaryRateForTesting()`.
+ * `computeSalary()`) PLUS a league-level wage cap (see `LEAGUE_WAGE_CAP_BY_TIER`).
+ * The legacy flat-rate path is preserved for the sim harness via
+ * `setSalaryRateForTesting()`.
+ *
+ * `teamLevels` should map teamId → 1|2|3 reflecting the league each team
+ * just finished playing in (NOT the post-promotion/relegation level —
+ * income & wage cap should both reflect the season they actually played).
+ * If a team is missing from the map, defaults to L1 (most permissive cap).
  */
 export function applyExpense(
   teamFinances: Record<string, FinanceState>,
   squads: Record<string, Player[]>,
+  teamLevels: Record<string, 1 | 2 | 3> = {},
 ): { teamFinances: Record<string, FinanceState> } {
   const next: Record<string, FinanceState> = { ...teamFinances };
   for (const id of Object.keys(next)) {
     next[id] = { ...next[id] };
     const squad = squads[id] ?? [];
     const squadValue = squad.reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
+    const level: 1 | 2 | 3 = teamLevels[id] ?? 1;
     const salaries = _useFlatRate
-      ? Math.round(squadValue * _runtimeSalaryRate)
-      : computeSalary(squadValue);
+      ? Math.round(Math.min(squadValue * _runtimeSalaryRate, _runtimeWageCap[level]))
+      : computeSalary(squadValue, level);
     next[id].cash -= salaries;
     next[id].totalExpense += salaries;
   }

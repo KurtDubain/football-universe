@@ -34,7 +34,7 @@ import {
   leaguePrize,
   CUP_PRIZE,
   TV_SPONSOR_BY_TIER,
-  getSalaryRate,
+  computeSalary,
 } from '../economy/finance';
 
 /**
@@ -734,19 +734,37 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // ── Phase H: Economy expense (salaries) + fire sale ─────────────
   // Salaries are computed AFTER the transfer window so the wage bill
   // reflects the current squad's market value sum (just-poached stars
-  // raise the buyer's bill; sold stars reduce the seller's).
+  // raise the buyer's bill; sold stars reduce the seller's). v3 also
+  // applies a league-level wage cap — `applyExpense` needs to know each
+  // team's league so the cap binds correctly.
   {
-    // Compute breakdown for archive
+    // Resolve each team's just-played league level from standings (same
+    // logic applyIncome uses for prize lookup).
+    const teamLevels: Record<string, 1 | 2 | 3> = {};
+    for (const lv of [1, 2, 3] as const) {
+      const arr = lv === 1 ? world.league1Standings : lv === 2 ? world.league2Standings : world.league3Standings;
+      for (const s of arr) {
+        if (s.played > 0) teamLevels[s.teamId] = lv;
+      }
+    }
+    for (const tid of Object.keys(squads)) {
+      if (teamLevels[tid] === undefined) {
+        teamLevels[tid] = (world.teamStates[tid]?.leagueLevel ?? 3) as 1 | 2 | 3;
+      }
+    }
+    // Compute breakdown for archive using the same formula applyExpense uses
+    // (otherwise the FinancePanel salary number diverges from the actual
+    // cash deduction — a sneaky UI lie that bit us in v1).
     for (const [teamId, squad] of Object.entries(squads)) {
       const squadValue = (squad ?? []).reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
-      const salaries = Math.round(squadValue * getSalaryRate());
+      const salaries = computeSalary(squadValue, teamLevels[teamId] ?? 1);
       financeBreakdown[teamId] = financeBreakdown[teamId] ?? {
         prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
       };
       financeBreakdown[teamId].salaries += salaries;
     }
     // Apply via canonical implementation
-    const expenseResult = applyFinanceExpense(teamFinances, squads);
+    const expenseResult = applyFinanceExpense(teamFinances, squads, teamLevels);
     teamFinances = expenseResult.teamFinances;
   }
 

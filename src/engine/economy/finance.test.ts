@@ -134,10 +134,10 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     const squads: Record<string, Player[]> = {
       A: [mkPlayer({ marketValue: 100 }), mkPlayer({ uuid: 'p-2', marketValue: 200 })],
     };
-    // squadValue = 300; flat 33% → 99
+    // squadValue = 300; flat 33% = 99, BUT default L1 wage cap = 75 → 75
     const r = applyExpense(fin, squads);
-    expect(r.teamFinances.A.cash).toBe(100 - 99);
-    expect(r.teamFinances.A.totalExpense).toBe(99);
+    expect(r.teamFinances.A.cash).toBe(100 - 75);
+    expect(r.teamFinances.A.totalExpense).toBe(75);
     clearFlatRate();
   });
   it('honours setSalaryRateForTesting overrides', () => {
@@ -149,6 +149,7 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     const squads: Record<string, Player[]> = {
       A: [mkPlayer({ marketValue: 100 })],
     };
+    // 100 × 50% = 50, under L1 cap 75
     const r = applyExpense(fin, squads);
     expect(r.teamFinances.A.cash).toBe(50);
     setSalaryRateForTesting(orig);
@@ -167,20 +168,32 @@ describe('computeSalary — progressive bracket schedule', () => {
     expect(computeSalary(50)).toBe(Math.round(50 * 0.33));      // 17 (rounded from 16.5)
   });
   it('applies progressive rates across bracket boundaries', () => {
-    // 100M = 50×0.33 + 50×0.22 = 16.5 + 11 = 27.5 → 28
+    // 100M = 50×0.33 + 50×0.22 = 16.5 + 11 = 27.5 → 28 (under L1 cap 75)
     expect(computeSalary(100)).toBe(28);
-    // 200M = 50×0.33 + 150×0.22 = 16.5 + 33 = 49.5 → 50
+    // 200M = 50×0.33 + 150×0.22 = 16.5 + 33 = 49.5 → 50 (under L1 cap 75)
     expect(computeSalary(200)).toBe(50);
-    // 500M = 50×0.33 + 150×0.22 + 300×0.15 = 16.5 + 33 + 45 = 94.5 → 95
-    expect(computeSalary(500)).toBe(95);
+    // 500M bracketed = 94.5, but L1 cap = 75 → 75
+    expect(computeSalary(500)).toBe(75);
+    // 500M with explicit L1 cap → still 75
+    expect(computeSalary(500, 1)).toBe(75);
+    // 500M with L2 cap (38) → 38
+    expect(computeSalary(500, 2)).toBe(38);
+    // 500M with L3 cap (19) → 19
+    expect(computeSalary(500, 3)).toBe(19);
   });
   it('big squads pay sub-linear salary (key invariant)', () => {
     // Doubling squad value should not double salary — that's the whole point
     const s100 = computeSalary(100);
     const s500 = computeSalary(500);
-    // Linear-flat would give 5x. Bracketed should give clearly less.
+    // Linear-flat would give 5x. Bracketed+capped should be <3x.
     expect(s500 / s100).toBeLessThan(4);
-    expect(s500 / s100).toBeGreaterThan(2.5);
+    expect(s500 / s100).toBeGreaterThan(2);
+  });
+  it('league wage cap binds for star-loaded squads', () => {
+    // €1500M fresh-game squad should hit cap regardless of bracket
+    expect(computeSalary(1500, 1)).toBe(75);
+    expect(computeSalary(1500, 2)).toBe(38);
+    expect(computeSalary(1500, 3)).toBe(19);
   });
   it('honours setSalaryBracketsForTesting overrides', () => {
     setSalaryBracketsForTesting([{ boundary: Infinity, rate: 0.10 }]);
@@ -197,7 +210,7 @@ describe('computeSalary — progressive bracket schedule', () => {
 });
 
 describe('applyExpense — uses bracketed salary by default (post-v2)', () => {
-  it('charges bracketed salary when no flat-rate override is set', () => {
+  it('charges bracketed+capped salary when no flat-rate override is set', () => {
     clearFlatRate(); // ensure default bracketed mode
     const fin: Record<string, FinanceState> = {
       A: { cash: 200, totalIncome: 0, totalExpense: 0, history: [] },
@@ -210,10 +223,24 @@ describe('applyExpense — uses bracketed salary by default (post-v2)', () => {
         mkPlayer({ uuid: 'p-3', marketValue: 100 }),
       ],
     };
+    // 500 → bracketed 95, capped to 75 (default L1)
     const r = applyExpense(fin, squads);
-    // 500 → 95 (bracketed), not 165 (flat 33%)
-    expect(r.teamFinances.A.cash).toBe(200 - 95);
-    expect(r.teamFinances.A.totalExpense).toBe(95);
+    expect(r.teamFinances.A.cash).toBe(200 - 75);
+    expect(r.teamFinances.A.totalExpense).toBe(75);
+  });
+  it('respects per-team league level for cap', () => {
+    clearFlatRate();
+    const fin: Record<string, FinanceState> = {
+      A: { cash: 200, totalIncome: 0, totalExpense: 0, history: [] },
+      B: { cash: 200, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+    const squads: Record<string, Player[]> = {
+      A: [mkPlayer({ uuid: 'pa', marketValue: 500 })],
+      B: [mkPlayer({ uuid: 'pb', marketValue: 500 })],
+    };
+    const r = applyExpense(fin, squads, { A: 1, B: 3 });
+    expect(r.teamFinances.A.totalExpense).toBe(75); // L1 cap
+    expect(r.teamFinances.B.totalExpense).toBe(19); // L3 cap
   });
 });
 

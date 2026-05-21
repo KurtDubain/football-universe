@@ -354,6 +354,44 @@ export function applyV14ToV15FinanceInit(world: {
   return { touched: true, teamsInitialized: Object.keys(finances).length };
 }
 
+/**
+ * v15 → v16: Heal legacy economy debt.
+ *
+ * The v15 economy used a flat 33% salary rate against ALL of squadValue,
+ * which silently bled big-rep clubs (€500M+ squad → €165M wages on €100M
+ * income). v16 (this version's runtime) adds league-level wage caps that
+ * make fresh-game economies stable.
+ *
+ * But existing v15 saves accumulated heavy debt under the buggy
+ * calculation. On first load they would mass-trigger fire sales — the
+ * exact behavior we just fixed for fresh games. Heal pass:
+ *
+ *   For each team with cash < 0:
+ *     - reset cash to startingCashForRep tier (€20M-€150M)
+ *     - DO NOT touch finance history (preserve audit trail)
+ *
+ * Idempotent: a v16-clean save (cash always ≥ 0) is unchanged. Replays of
+ * the same migration on the same save also no-op.
+ */
+export function applyV15ToV16HealLegacyDebt(world: {
+  teamFinances?: Record<string, { cash: number }>;
+  teamBases?: Record<string, { id?: string; reputation?: number }>;
+}): { touched: boolean; teamsHealed: number } {
+  const fins = world.teamFinances;
+  const bases = world.teamBases;
+  if (!fins || !bases) return { touched: false, teamsHealed: 0 };
+  let healed = 0;
+  for (const [tid, fin] of Object.entries(fins)) {
+    if (fin.cash < 0) {
+      const rep = bases[tid]?.reputation ?? 60;
+      const tier = rep >= 85 ? 150 : rep >= 75 ? 80 : rep >= 65 ? 40 : 20;
+      fin.cash = tier;
+      healed++;
+    }
+  }
+  return { touched: healed > 0, teamsHealed: healed };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -651,7 +689,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 15,
+      version: 16,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -919,6 +957,18 @@ export const useGameStore = create<GameStore>()(
         if (version < 15 && state?.world) {
           applyV14ToV15FinanceInit(
             state.world as { teamFinances?: unknown; teamBases?: Record<string, import('../types/team').TeamBase> },
+          );
+        }
+        // v15 → v16: Heal accumulated debt from the buggy v15 economy
+        // (flat 33% salary, no league wage cap). Teams with cash < 0 are
+        // reset to their tier's starting balance so they don't mass-trigger
+        // fire sales on first load with v16 code.
+        if (version < 16 && state?.world) {
+          applyV15ToV16HealLegacyDebt(
+            state.world as {
+              teamFinances?: Record<string, { cash: number }>;
+              teamBases?: Record<string, { id?: string; reputation?: number }>;
+            },
           );
         }
         // SAFETY: by this point all migration steps above have backfilled the

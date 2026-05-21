@@ -464,3 +464,54 @@ describe("applyV14ToV15FinanceInit (v14 → v15)", () => {
   });
 });
 
+
+import { applyV15ToV16HealLegacyDebt } from "./game-store";
+
+describe("applyV15ToV16HealLegacyDebt (v15 → v16)", () => {
+  it("resets cash for negative-cash teams to tier-appropriate starting balance", () => {
+    const world = {
+      teamFinances: {
+        ELITE: { cash: -300, totalIncome: 100, totalExpense: 400, history: [] },
+        TOP: { cash: -100, totalIncome: 80, totalExpense: 180, history: [] },
+        MID: { cash: 50, totalIncome: 60, totalExpense: 10, history: [] },
+        LOW: { cash: -20, totalIncome: 40, totalExpense: 60, history: [] },
+      },
+      teamBases: {
+        ELITE: mkBase("ELITE", 90),
+        TOP: mkBase("TOP", 80),
+        MID: mkBase("MID", 70),
+        LOW: mkBase("LOW", 50),
+      },
+    };
+    const r = applyV15ToV16HealLegacyDebt(world);
+    expect(r.touched).toBe(true);
+    expect(r.teamsHealed).toBe(3); // MID was already positive — left alone
+    expect(world.teamFinances.ELITE.cash).toBe(150);
+    expect(world.teamFinances.TOP.cash).toBe(80);
+    expect(world.teamFinances.MID.cash).toBe(50); // unchanged
+    expect(world.teamFinances.LOW.cash).toBe(20);
+    // Running totals + history preserved
+    expect(world.teamFinances.ELITE.totalExpense).toBe(400);
+    expect(world.teamFinances.ELITE.history).toEqual([]);
+  });
+
+  it("idempotent — clean v16 save unchanged", () => {
+    const world = {
+      teamFinances: {
+        A: { cash: 100, totalIncome: 0, totalExpense: 0, history: [] },
+        B: { cash: 50, totalIncome: 0, totalExpense: 0, history: [] },
+      },
+      teamBases: { A: mkBase("A", 90), B: mkBase("B", 60) },
+    };
+    const r = applyV15ToV16HealLegacyDebt(world);
+    expect(r.touched).toBe(false);
+    expect(r.teamsHealed).toBe(0);
+    expect(world.teamFinances.A.cash).toBe(100);
+  });
+
+  it("handles missing teamFinances/teamBases gracefully", () => {
+    const r1 = applyV15ToV16HealLegacyDebt({});
+    expect(r1.touched).toBe(false);
+    expect(r1.teamsHealed).toBe(0);
+  });
+});
