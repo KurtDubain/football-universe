@@ -354,6 +354,38 @@ export function processTransferWindow(
     });
   }
 
+  // ── Step 2.7: Wanderer tag — voluntary departure ────────────────
+  // v18 — players with 🎒 wanderer tag have an 8% per-season chance to
+  // self-request transfer (released to pool, no buyer needed). Applies
+  // to ALL teams including elites — a wanderer might leave 广州恒大 too.
+  const WANDERER_RELEASE_CHANCE = 0.08;
+  for (const tid of Object.keys(squads)) {
+    const sq = squads[tid];
+    if (!sq || sq.length < MIN_SQUAD_AFTER_RELEASE + 1) continue;
+    const wanderers = sq.filter(p => p.tag === 'wanderer');
+    for (const w of wanderers) {
+      if (rng.next() >= WANDERER_RELEASE_CHANCE) continue;
+      if (squads[tid].length <= MIN_SQUAD_AFTER_RELEASE) break;
+      squads[tid] = squads[tid].filter(p => p.uuid !== w.uuid);
+      freeAgentPool.push({ player: w, releasedFromTeamId: tid });
+      const teamName = world.teamBases[tid]?.name ?? tid;
+      transfers.push({
+        season: seasonNumber,
+        windowIndex,
+        playerId: w.uuid,
+        playerName: w.name ?? `${w.number}号`,
+        playerNumber: w.number,
+        position: w.position,
+        fromTeamId: tid,
+        fromTeamName: teamName,
+        toTeamId: '__free_market__',
+        toTeamName: '自由市场',
+        type: 'free',
+        reason: '🎒 浪子情怀，自请离队',
+      });
+    }
+  }
+
   // ── Step 3: Leftover free agents stay in the persistent pool ────
   // v17 — unsold players persist across seasons (was: immediate retire).
   // Pool capped at FREE_AGENT_POOL_CAP — overflow retires the OLDEST so

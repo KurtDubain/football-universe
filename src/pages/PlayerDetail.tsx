@@ -7,10 +7,13 @@ import { computePlayerRivals } from '../engine/players/player-rivalries';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 
 const TAG_HINT: Record<PlayerTag, string> = {
-  loyal:     '忠诚 — 永不被豪门挖角',
-  ambitious: '野心家 — 被挖角概率 ×1.5',
-  iron:      '铁人 — 受伤几率 ÷3',
-  glass:     '玻璃人 — 受伤几率 ×2，市值打 7 折',
+  loyal:        '忠诚 — 永不被豪门挖角',
+  ambitious:    '野心家 — 被挖角概率 ×1.5',
+  iron:         '铁人 — 受伤几率 ÷3',
+  glass:        '玻璃人 — 受伤几率 ×2，市值打 7 折',
+  clutch:       '大心脏 — 在杯赛决赛 / 德比战中进球倾向 ×1.3',
+  late_bloomer: '大器晚成 — 巅峰年龄 28-32（默认 24-29）',
+  wanderer:     '浪子 — 每赛季 8% 概率自请离队进自由市场',
 };
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };

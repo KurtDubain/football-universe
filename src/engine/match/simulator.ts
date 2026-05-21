@@ -357,6 +357,13 @@ export function simulateMatch(
   }
 
   // 6. Generate match events
+  // v18 — flag "big match" so clutch-tagged players get a +30% weight on
+  // the goal-scorer roll. Big match = cup final OR derby. Stays loose
+  // (just biases who scores; doesn't change the outcome itself).
+  const isBigMatch =
+    fixture.roundLabel === 'Final' ||
+    fixture.roundLabel === '决赛' ||
+    isDerby(homeTeam.id, awayTeam.id);
   const events = generateMatchEvents(
     regHomeGoals,
     regAwayGoals,
@@ -371,6 +378,7 @@ export function simulateMatch(
     ctx.awaySquad,
     etHomeGoals ?? 0,
     etAwayGoals ?? 0,
+    isBigMatch,
   );
 
   // 7. Generate match stats

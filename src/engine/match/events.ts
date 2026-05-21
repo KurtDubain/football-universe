@@ -100,17 +100,23 @@ const PENALTY_SHOOTOUT_MISS = [
  * Pick a player from the squad weighted by position relevance and goalScoring stat.
  * positionWeights maps position to a base weight multiplier.
  * The goalScoring stat is then used as additional weighting for scoring events.
+ *
+ * v18 — `isBigMatch=true` boosts clutch-tagged players by ×1.3 on their
+ * weight, so cup finals + derbies see "决赛先生" types over-represented
+ * in the scorer pool. No effect for non-clutch players.
  */
 function pickPlayer(
   squad: Player[],
   positionWeights: Record<string, number>,
   rng: SeededRNG,
   useGoalScoring: boolean = false,
+  isBigMatch: boolean = false,
 ): Player {
   const weights = squad.map((p) => {
     const posWeight = positionWeights[p.position] ?? 1;
     const scoringWeight = useGoalScoring ? Math.max(1, p.goalScoring) : 10;
-    return posWeight * scoringWeight;
+    const clutchMul = isBigMatch && p.tag === 'clutch' ? 1.3 : 1;
+    return posWeight * scoringWeight * clutchMul;
   });
 
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -127,12 +133,13 @@ function pickPlayer(
 /**
  * Pick a goal scorer: heavily weighted toward FW, then MF, rarely DF.
  */
-function pickGoalScorer(squad: Player[], rng: SeededRNG): Player {
+function pickGoalScorer(squad: Player[], rng: SeededRNG, isBigMatch: boolean = false): Player {
   return pickPlayer(
     squad,
     { FW: 10, MF: 4, DF: 1, GK: 0.05 },
     rng,
     true,
+    isBigMatch,
   );
 }
 
@@ -257,6 +264,7 @@ export function generateMatchEvents(
   awaySquad?: Player[],
   etHomeGoals: number = 0,
   etAwayGoals: number = 0,
+  isBigMatch: boolean = false,
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const maxNormalMinute = 90;
@@ -301,7 +309,7 @@ export function generateMatchEvents(
       let playerNumber: number | undefined;
       let playerName: string | undefined;
       if (squad) {
-        const scorer = pickGoalScorer(squad, rng);
+        const scorer = pickGoalScorer(squad, rng, isBigMatch);
         playerId = scorer.uuid;
         playerNumber = scorer.number;
         playerName = scorer.name;

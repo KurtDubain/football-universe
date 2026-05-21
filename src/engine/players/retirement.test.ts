@@ -284,7 +284,8 @@ describe('generateYouthReplacement — basic shape', () => {
       expect(youth.age).toBeGreaterThanOrEqual(18);
       expect(youth.age).toBeLessThanOrEqual(22);
       expect(youth.peakAge).toBeGreaterThanOrEqual(24);
-      expect(youth.peakAge).toBeLessThanOrEqual(29);
+      // v18 — late_bloomer tag shifts peakAge to 28-32 (vs default 24-29)
+      expect(youth.peakAge).toBeLessThanOrEqual(32);
     }
   });
 

@@ -146,7 +146,10 @@ export function generateYouthReplacement(
   const ageA = rng.nextInt(18, 22);
   const ageB = rng.nextInt(18, 22);
   const age = Math.min(ageA, ageB);
-  const peakAge = rng.nextInt(24, 29);
+  // Pre-roll uuid + tag so peakAge can react to late_bloomer
+  const uuid = formatPlayerUuid(nextUuid.value++);
+  const tag = rollTagForUuid(uuid);
+  const peakAge = tag === 'late_bloomer' ? rng.nextInt(28, 32) : rng.nextInt(24, 29);
 
   // Base peak from team strength: 33-50 for weak (overall ~45), up to 55-70
   // for elite (overall ~90). The +12 noise ceiling lets a kid roll into a
@@ -196,7 +199,7 @@ export function generateYouthReplacement(
   const name = pickPlayerName(team.region ?? '大陆+其他', usedNames, (arr) => rng.pick(arr));
 
   const player: Player = {
-    uuid: formatPlayerUuid(nextUuid.value++),
+    uuid,
     teamId: team.id,
     name,
     number,
@@ -208,8 +211,7 @@ export function generateYouthReplacement(
     age,
     marketValue: 0,
   };
-  // Tag — deterministic from uuid (matches generator.ts behavior)
-  const tag = rollTagForUuid(player.uuid);
+  // Tag — pre-rolled above (deterministic from uuid)
   if (tag) player.tag = tag;
   player.marketValue = computeInitialMarketValue(player);
   return player;

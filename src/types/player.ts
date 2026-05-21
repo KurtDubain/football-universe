@@ -82,8 +82,16 @@ export interface Player {
   tag?: PlayerTag;
 }
 
-/** v17 — player personality tag (at most one per player). */
-export type PlayerTag = 'loyal' | 'ambitious' | 'iron' | 'glass';
+/** v17+ — player personality tag (at most one per player). */
+export type PlayerTag =
+  | 'loyal'        // never poached
+  | 'ambitious'    // 1.5× poach probability
+  | 'iron'         // injury chance ÷ 3
+  | 'glass'        // injury chance × 2, market value × 0.7
+  // v18 additions
+  | 'clutch'       // +30% goal weight in finals + derbies
+  | 'late_bloomer' // peakAge 28-32 instead of 24-29
+  | 'wanderer';    // 8% per season chance to self-release to free agent pool
 
 /**
  * One entry in `Player.injuryHistory`. Severity drives both `durationMatches`
