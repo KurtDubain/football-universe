@@ -150,7 +150,7 @@ function buildWorld(): GameWorld {
     seasonBuffsHistory: [],
     playerAwardsHistory: [],
     transferHistory: [],
-    memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {},
+    memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {}, freeAgentPool: [],
     retirementHistory: [],
     coachCandidatePool: [],
     coachRetirementHistory: [],

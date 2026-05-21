@@ -3,6 +3,7 @@ import { CoachCandidate, CoachStyle } from '../../types/coach';
 import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { GameWorld } from '../season/season-manager';
+import { rollTagForUuid } from './tags';
 import { pickPlayerName } from '../../config/player-names';
 import { computeCurrentRating } from './development';
 import { computeInitialMarketValue } from '../economy/market-value';
@@ -207,6 +208,9 @@ export function generateYouthReplacement(
     age,
     marketValue: 0,
   };
+  // Tag — deterministic from uuid (matches generator.ts behavior)
+  const tag = rollTagForUuid(player.uuid);
+  if (tag) player.tag = tag;
   player.marketValue = computeInitialMarketValue(player);
   return player;
 }

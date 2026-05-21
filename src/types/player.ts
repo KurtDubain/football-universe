@@ -66,7 +66,24 @@ export interface Player {
    * chance).
    */
   injuryHistory?: Injury[];
+  // ── v17: Personality tag ──────────────────────────────────────────
+  /**
+   * Optional personality tag affecting transfers / injuries / market value.
+   * Mutually exclusive — 0 or 1 tag per player. Assigned at generation
+   * based on a deterministic uuid-hash roll (~30% chance of any tag,
+   * roughly: 10% loyal / 10% ambitious / 5% iron / 5% glass).
+   *
+   * Effects:
+   *   loyal     — never poached by elites (poach probability = 0)
+   *   ambitious — poach probability × 1.5
+   *   iron      — injury chance ÷ 3
+   *   glass     — injury chance × 2, market value × 0.7
+   */
+  tag?: PlayerTag;
 }
+
+/** v17 — player personality tag (at most one per player). */
+export type PlayerTag = 'loyal' | 'ambitious' | 'iron' | 'glass';
 
 /**
  * One entry in `Player.injuryHistory`. Severity drives both `durationMatches`

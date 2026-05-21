@@ -2,7 +2,15 @@ import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
-import type { Player, PlayerRetirement, PlayerSeasonStats } from '../types/player';
+import { TAG_META } from '../engine/players/tags';
+import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
+
+const TAG_HINT: Record<PlayerTag, string> = {
+  loyal:     '忠诚 — 永不被豪门挖角',
+  ambitious: '野心家 — 被挖角概率 ×1.5',
+  iron:      '铁人 — 受伤几率 ÷3',
+  glass:     '玻璃人 — 受伤几率 ×2，市值打 7 折',
+};
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = { GK: 'bg-amber-900/40 text-amber-400', DF: 'bg-blue-900/40 text-blue-400', MF: 'bg-green-900/40 text-green-400', FW: 'bg-red-900/40 text-red-400' };
@@ -159,6 +167,14 @@ export default function PlayerDetail() {
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${posColor[player.position] ?? ''}`}>
                 {posLabel[player.position] ?? player.position}
               </span>
+              {player.tag && TAG_META[player.tag] && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${TAG_META[player.tag].color}`}
+                  title={TAG_HINT[player.tag]}
+                >
+                  {TAG_META[player.tag].icon} {TAG_META[player.tag].label}
+                </span>
+              )}
               <span className="text-xs text-slate-500">能力 {player.rating}</span>
               {player.age !== undefined && (
                 <span className="text-xs text-slate-500">{player.age}岁</span>

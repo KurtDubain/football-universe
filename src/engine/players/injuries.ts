@@ -443,7 +443,13 @@ export function processInjuriesAndSuspensions(args: {
       for (const p of md) {
         // Skip currently-injured players — they can't get re-injured this match.
         if ((p.injuredUntilWindow ?? 0) > globalWindowIdx) continue;
-        if (rng.next() >= INJURY_ROLL_CHANCE) continue;
+        // v17 — personality tag scales injury probability:
+        //   iron  → ÷3 (rarely injured)
+        //   glass → ×2 (injury-prone)
+        let chance = INJURY_ROLL_CHANCE;
+        if (p.tag === 'iron')  chance /= 3;
+        if (p.tag === 'glass') chance *= 2;
+        if (rng.next() >= chance) continue;
 
         const injury = rollInjury(seasonNumber, globalWindowIdx, rng);
         p.injuredUntilWindow = globalWindowIdx + 1 + injury.durationMatches;

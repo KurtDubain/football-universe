@@ -6,6 +6,7 @@ import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
 import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
+import { rollTagForUuid } from '../engine/players/tags';
 import type { Achievement } from '../engine/achievements';
 import { pickPlayerName } from '../config/player-names';
 import { computeInitialMarketValue } from '../engine/economy/market-value';
@@ -392,6 +393,44 @@ export function applyV15ToV16HealLegacyDebt(world: {
   return { touched: healed > 0, teamsHealed: healed };
 }
 
+/**
+ * v16 → v17: Player tag assignment + free agent pool init.
+ *
+ * Assigns a personality tag (loyal / ambitious / iron / glass / none) to
+ * every existing player based on a deterministic uuid hash. Same uuid →
+ * same tag across reloads. Also initializes `world.freeAgentPool = []`
+ * so the persistent pool engine has a place to start.
+ *
+ * Idempotent — running twice on a v17+ save no-ops because the function
+ * only sets `tag` on players that don't have one yet, and only sets
+ * `freeAgentPool` if missing.
+ */
+export function applyV16ToV17TagsAndPool(world: {
+  squads?: Record<string, Array<{ uuid?: string; tag?: string }>>;
+  freeAgentPool?: unknown;
+}): { touched: boolean; playersTagged: number; poolInitialized: boolean } {
+  let tagged = 0;
+  if (world.squads) {
+    for (const sq of Object.values(world.squads)) {
+      for (const p of sq) {
+        if (p.tag !== undefined) continue;
+        if (!p.uuid) continue;
+        const t = rollTagForUuid(p.uuid);
+        if (t) {
+          p.tag = t;
+          tagged++;
+        }
+      }
+    }
+  }
+  let poolInitialized = false;
+  if (!Array.isArray(world.freeAgentPool)) {
+    world.freeAgentPool = [];
+    poolInitialized = true;
+  }
+  return { touched: tagged > 0 || poolInitialized, playersTagged: tagged, poolInitialized };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -689,7 +728,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 16,
+      version: 17,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -968,6 +1007,17 @@ export const useGameStore = create<GameStore>()(
             state.world as {
               teamFinances?: Record<string, { cash: number }>;
               teamBases?: Record<string, { id?: string; reputation?: number }>;
+            },
+          );
+        }
+        // v16 → v17: assign personality tags to existing players +
+        // initialize the persistent free agent pool. Tags are
+        // deterministic (uuid hash), so applying this twice is a no-op.
+        if (version < 17 && state?.world) {
+          applyV16ToV17TagsAndPool(
+            state.world as {
+              squads?: Record<string, Array<{ uuid?: string; tag?: string }>>;
+              freeAgentPool?: unknown;
             },
           );
         }

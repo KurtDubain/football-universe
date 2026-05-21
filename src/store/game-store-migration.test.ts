@@ -515,3 +515,58 @@ describe("applyV15ToV16HealLegacyDebt (v15 → v16)", () => {
     expect(r1.teamsHealed).toBe(0);
   });
 });
+
+import { applyV16ToV17TagsAndPool } from "./game-store";
+
+describe("applyV16ToV17TagsAndPool (v16 → v17)", () => {
+  it("assigns tags deterministically based on uuid hash + inits empty pool", () => {
+    const world = {
+      squads: {
+        TEAM_A: [
+          { uuid: 'p-001' },
+          { uuid: 'p-002' },
+          { uuid: 'p-003' },
+          { uuid: 'p-004' },
+        ],
+      },
+    };
+    const r1 = applyV16ToV17TagsAndPool(world);
+    expect(r1.touched).toBe(true);
+    expect(r1.poolInitialized).toBe(true);
+    // Re-run on same state — no new tags, pool already there
+    const r2 = applyV16ToV17TagsAndPool(world);
+    expect(r2.touched).toBe(false);
+    expect(r2.playersTagged).toBe(0);
+  });
+
+  it("never assigns more than one tag per player", () => {
+    const world = {
+      squads: { T: [{ uuid: 'p-xyz' }] },
+    };
+    applyV16ToV17TagsAndPool(world);
+    const p = world.squads.T[0] as { uuid?: string; tag?: string };
+    // tag may be undefined (70% bucket) or one of 4 — never an array
+    if (p.tag !== undefined) {
+      expect(['loyal', 'ambitious', 'iron', 'glass']).toContain(p.tag);
+    }
+  });
+
+  it("preserves existing freeAgentPool if already non-empty", () => {
+    const existing = [{ uuid: 'old' } as unknown];
+    const world = {
+      squads: {},
+      freeAgentPool: existing,
+    };
+    const r = applyV16ToV17TagsAndPool(world);
+    expect(r.poolInitialized).toBe(false);
+    expect(world.freeAgentPool).toBe(existing);
+  });
+
+  it("preserves pre-existing tag values (idempotent)", () => {
+    const world = {
+      squads: { T: [{ uuid: 'p-1', tag: 'loyal' }] },
+    };
+    applyV16ToV17TagsAndPool(world);
+    expect(world.squads.T[0].tag).toBe('loyal');
+  });
+});

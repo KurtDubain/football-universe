@@ -112,6 +112,13 @@ export interface GameWorld {
    */
   retirementHistory: PlayerRetirement[];
   /**
+   * v17 — persistent free agent pool. Released players (downstream of a
+   * poach) live here until some non-elite team signs them in a future
+   * season's transfer window. Capped at 40 — overflow retires the oldest
+   * (kept sorted oldest-first by age, the same direction the FIFO read).
+   */
+  freeAgentPool: Player[];
+  /**
    * FIFO pool of recently-retired stars eligible to become future coaches.
    * Capped at 12 entries (oldest evicted on overflow). A3 will consume from
    * here when assembling new coaches; A2 only seeds the pool. Introduced in
@@ -293,6 +300,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     playerStats,
     nextPlayerUuidCounter,
     retirementHistory: [],
+    freeAgentPool: [],
     coachCandidatePool: [],
     coachRetirementHistory: [],
     nextCoachIdCounter: 0,

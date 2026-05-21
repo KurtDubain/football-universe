@@ -46,7 +46,11 @@ export function computeInitialMarketValue(player: Player): number {
   // length), not raw ability. Ability is already baked into peakRating's tier.
   const ageMul = ageMultiplier(player.age ?? 25);
 
-  return Math.max(0.3, Math.round(base * posMul * ageMul * 10) / 10);
+  // v17 — tag effect: glass-prone players take a 30% market value haircut
+  // (high injury risk depresses what buyers will pay).
+  const tagMul = player.tag === 'glass' ? 0.7 : 1.0;
+
+  return Math.max(0.3, Math.round(base * posMul * ageMul * tagMul * 10) / 10);
 }
 
 function ageMultiplier(age: number): number {

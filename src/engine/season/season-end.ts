@@ -96,6 +96,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // backfills them; this is a belt-and-suspenders for in-memory worlds built
   // by tests.
   let retirementHistory = world.retirementHistory ?? [];
+  let freeAgentPool = world.freeAgentPool ?? [];
   let coachCandidatePool = world.coachCandidatePool ?? [];
   let nextPlayerUuidCounter = world.nextPlayerUuidCounter ?? 0;
   // ── Phase B coach lifecycle locals (introduced in v12) ──
@@ -663,7 +664,10 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // operates on the current rosters (not on `world.squads` which still has
   // the retirees). `playerStats` is unchanged at this point — preserved for
   // historical lookups.
-  const transferResult = processTransferWindow({ ...world, squads, playerStats }, rng);
+  const transferResult = processTransferWindow({ ...world, squads, playerStats, freeAgentPool }, rng);
+  // v17 — always pick up the pool the transfer engine returns (may grow
+  // or shrink even when no transfers fire, due to overflow/age-out checks).
+  freeAgentPool = transferResult.freeAgentPool;
   if (transferResult.transfers.length > 0 || transferResult.freeAgentRetirees.length > 0) {
     squads = transferResult.squads;
     playerStats = transferResult.playerStats;
@@ -1374,6 +1378,7 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     playerAwardsHistory,
     transferHistory,
     retirementHistory,
+    freeAgentPool,
     coachCandidatePool,
     coachRetirementHistory,
     nextCoachIdCounter,

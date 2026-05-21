@@ -3,6 +3,7 @@ import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { pickPlayerName } from '../../config/player-names';
 import { computeInitialMarketValue } from '../economy/market-value';
+import { rollTagForUuid } from './tags';
 import { computeCurrentRating } from './development';
 
 /**
@@ -157,6 +158,9 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
       age,
       marketValue: 0, // computed below after object exists
     };
+    // Assign personality tag deterministically (uuid-hash based)
+    const tag = rollTagForUuid(newPlayer.uuid);
+    if (tag) newPlayer.tag = tag;
     newPlayer.marketValue = computeInitialMarketValue(newPlayer);
     players.push(newPlayer);
   }

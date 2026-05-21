@@ -158,6 +158,8 @@ export function processTransferWindow(
   playerStats: Record<string, PlayerSeasonStats>;
   /** Players released to the free agent pool and never re-signed — retired. */
   freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }>;
+  /** v17 — new persistent free agent pool state (after this window). */
+  freeAgentPool: Player[];
 } {
   const transfers: TransferRecord[] = [];
   const squads: Record<string, Player[]> = { ...world.squads };
@@ -167,7 +169,7 @@ export function processTransferWindow(
     .filter(t => t.overall >= ELITE_OVERALL_THRESHOLD)
     .map(t => t.id);
   if (eliteTeamIds.length === 0) {
-    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [] };
+    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: world.freeAgentPool ?? [] };
   }
 
   const seasonNumber = world.seasonState.seasonNumber;
@@ -190,7 +192,14 @@ export function processTransferWindow(
   for (const cand of shuffledCandidates) {
     // Per-seller cap: each non-elite team loses at most N stars per season.
     if ((sellerPoachCount[cand.teamId] ?? 0) >= MAX_POACHES_PER_SELLER) continue;
-    if (rng.next() >= POACH_PROBABILITY) continue;
+    // v17 — personality tag affects poach probability:
+    //   loyal player  → never poached (probability = 0)
+    //   ambitious     → 1.5× probability
+    const fromSquad = squads[cand.teamId];
+    const candPlayer = fromSquad?.find(p => p.uuid === cand.playerUuid);
+    if (candPlayer?.tag === 'loyal') continue;
+    const tagMul = candPlayer?.tag === 'ambitious' ? 1.5 : 1;
+    if (rng.next() >= POACH_PROBABILITY * tagMul) continue;
     // Eligible buyers: elite teams that aren't the seller AND haven't hit
     // their buyer cap yet. Without this cap one elite can hoard 4+ stars
     // in a season.
@@ -201,11 +210,10 @@ export function processTransferWindow(
     if (buyers.length === 0) continue;
     const buyerId = rng.pick(buyers);
 
-    const fromSquad = squads[cand.teamId];
     const toSquad = squads[buyerId];
     if (!fromSquad || !toSquad) continue;
 
-    const incomingPlayer = fromSquad.find(p => p.uuid === cand.playerUuid);
+    const incomingPlayer = candPlayer;
     if (!incomingPlayer) continue;
 
     const sameRolePool = toSquad
@@ -249,6 +257,15 @@ export function processTransferWindow(
     sellersNeedReplacement.add(cand.teamId);
     sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
     buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
+  }
+
+  // ── Step 1.5: Merge persistent pool into the in-flight pool ────
+  // v17 — players released in previous seasons that no team picked up
+  // stay in `world.freeAgentPool` until someone signs them. We tag them
+  // with a sentinel `releasedFromTeamId` (last team they played for) so
+  // free_agent records still have a `fromTeamId` for cash flow purposes.
+  for (const carryOver of (world.freeAgentPool ?? [])) {
+    freeAgentPool.push({ player: carryOver, releasedFromTeamId: carryOver.teamId });
   }
 
   // ── Step 2: Distribute free agents ─────────────────────────────
@@ -301,28 +318,92 @@ export function processTransferWindow(
     });
   }
 
-  // ── Step 3: Leftover free agents → retire ──────────────────────
+  // ── Step 2.5: Random churn — each non-elite team has a small chance
+  // each season to release a fringe player into the persistent pool
+  // (modeling contract decisions, dressing room dynamics, etc.). Keeps
+  // the pool from sitting empty AND breaks the "every release gets
+  // signed same-season" coupling user complained about.
+  const RANDOM_RELEASE_CHANCE = 0.10;
+  const MIN_SQUAD_AFTER_RELEASE = 18;
+  for (const tid of Object.keys(squads)) {
+    if (eliteTeamIds.includes(tid)) continue;
+    const sq = squads[tid];
+    if (!sq || sq.length < MIN_SQUAD_AFTER_RELEASE + 1) continue;
+    if (rng.next() >= RANDOM_RELEASE_CHANCE) continue;
+    // Release the lowest-rated player (fringe). Skip if they have a tag
+    // that suggests loyalty — those would never voluntarily depart.
+    const sortedByRating = [...sq].sort((a, b) => a.rating - b.rating);
+    const candidate = sortedByRating.find(p => p.tag !== 'loyal');
+    if (!candidate) continue;
+    squads[tid] = sq.filter(p => p.uuid !== candidate.uuid);
+    freeAgentPool.push({ player: candidate, releasedFromTeamId: tid });
+    const teamName = world.teamBases[tid]?.name ?? tid;
+    transfers.push({
+      season: seasonNumber,
+      windowIndex,
+      playerId: candidate.uuid,
+      playerName: candidate.name ?? `${candidate.number}号`,
+      playerNumber: candidate.number,
+      position: candidate.position,
+      fromTeamId: tid,
+      fromTeamName: teamName,
+      toTeamId: '__free_market__',
+      toTeamName: '自由市场',
+      type: 'free',
+      reason: '合同到期未续约',
+    });
+  }
+
+  // ── Step 3: Leftover free agents stay in the persistent pool ────
+  // v17 — unsold players persist across seasons (was: immediate retire).
+  // Pool capped at FREE_AGENT_POOL_CAP — overflow retires the OLDEST so
+  // we never balloon player count past control.
+  const FREE_AGENT_POOL_CAP = 40;
+  const FREE_AGENT_MAX_AGE = 36;
+  const remainingPlayers = freeAgentPool.map(fa => fa.player);
+  // Age-out retirees (anyone > FREE_AGENT_MAX_AGE — no team would sign)
   const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }> = [];
-  for (const { player, releasedFromTeamId } of freeAgentPool) {
-    const releasedFromTeam = world.teamBases[releasedFromTeamId];
-    const stat = world.playerStats[player.uuid];
+  const stillInPool: Player[] = [];
+  for (const player of remainingPlayers) {
+    if ((player.age ?? 28) > FREE_AGENT_MAX_AGE) {
+      const stat = world.playerStats[player.uuid];
+      freeAgentRetirees.push({
+        uuid: player.uuid,
+        name: player.name ?? `${player.number}号`,
+        teamId: player.teamId,
+        teamName: world.teamBases[player.teamId]?.name ?? player.teamId,
+        position: player.position,
+        peakRating: player.peakRating ?? player.rating,
+        age: player.age ?? 28,
+        careerGoals: stat?.goals ?? 0,
+      });
+    } else {
+      stillInPool.push(player);
+    }
+  }
+  // Cap overflow — sort oldest first, drop excess into retirees
+  stillInPool.sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
+  while (stillInPool.length > FREE_AGENT_POOL_CAP) {
+    const oldest = stillInPool.shift()!;
+    const stat = world.playerStats[oldest.uuid];
     freeAgentRetirees.push({
-      uuid: player.uuid,
-      name: player.name ?? `${player.number}号`,
-      teamId: releasedFromTeamId,
-      teamName: releasedFromTeam?.name ?? releasedFromTeamId,
-      position: player.position,
-      peakRating: player.peakRating ?? player.rating,
-      age: player.age ?? 28,
+      uuid: oldest.uuid,
+      name: oldest.name ?? `${oldest.number}号`,
+      teamId: oldest.teamId,
+      teamName: world.teamBases[oldest.teamId]?.name ?? oldest.teamId,
+      position: oldest.position,
+      peakRating: oldest.peakRating ?? oldest.rating,
+      age: oldest.age ?? 28,
       careerGoals: stat?.goals ?? 0,
     });
   }
+  const newFreeAgentPool = stillInPool;
 
   // ── Step 4: Refresh playerStats teamId for moved players ─────
   // Always rebuild to a fresh object IF anything happened (transfers OR
   // retirees), so the caller sees a new reference and can detect change.
-  if (transfers.length === 0 && freeAgentRetirees.length === 0) {
-    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [] };
+  if (transfers.length === 0 && freeAgentRetirees.length === 0 && newFreeAgentPool.length === (world.freeAgentPool ?? []).length) {
+    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: newFreeAgentPool };
   }
   const uuidToTeam = new Map<string, string>();
   for (const [tid, sq] of Object.entries(squads)) {
@@ -341,5 +422,5 @@ export function processTransferWindow(
     }
   }
 
-  return { squads, transfers, playerStats: updatedStats, freeAgentRetirees };
+  return { squads, transfers, playerStats: updatedStats, freeAgentRetirees, freeAgentPool: newFreeAgentPool };
 }
