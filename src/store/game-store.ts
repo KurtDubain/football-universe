@@ -431,6 +431,18 @@ export function applyV16ToV17TagsAndPool(world: {
   return { touched: tagged > 0 || poolInitialized, playersTagged: tagged, poolInitialized };
 }
 
+/**
+ * v17 → v18: Init `world.transferRumors = []`. Pure backfill.
+ * Idempotent — skips if already set.
+ */
+export function applyV17ToV18RumorsInit(world: {
+  transferRumors?: unknown;
+}): { touched: boolean } {
+  if (Array.isArray(world.transferRumors)) return { touched: false };
+  world.transferRumors = [];
+  return { touched: true };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -728,7 +740,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 17,
+      version: 18,
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.
@@ -1020,6 +1032,10 @@ export const useGameStore = create<GameStore>()(
               freeAgentPool?: unknown;
             },
           );
+        }
+        // v17 → v18: init the (transient) transferRumors array.
+        if (version < 18 && state?.world) {
+          applyV17ToV18RumorsInit(state.world as { transferRumors?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

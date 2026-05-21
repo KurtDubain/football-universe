@@ -27,6 +27,7 @@ import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
+import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
 import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
@@ -38,7 +39,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor';
   title: string;
   description: string;
 }
@@ -118,6 +119,12 @@ export interface GameWorld {
    * (kept sorted oldest-first by age, the same direction the FIFO read).
    */
   freeAgentPool: Player[];
+  /**
+   * v18 — transient transfer rumors generated in the last ~10 windows
+   * of each season. Cleared at season-end after the actual transfer
+   * window fires. NOT a load-bearing structure — purely narrative.
+   */
+  transferRumors: import('../transfers/rumor-generator').TransferRumor[];
   /**
    * FIFO pool of recently-retired stars eligible to become future coaches.
    * Capped at 12 entries (oldest evicted on overflow). A3 will consume from
@@ -301,6 +308,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     nextPlayerUuidCounter,
     retirementHistory: [],
     freeAgentPool: [],
+    transferRumors: [],
     coachCandidatePool: [],
     coachRetirementHistory: [],
     nextCoachIdCounter: 0,
@@ -870,6 +878,21 @@ export function executeCurrentWindow(world: GameWorld): {
     rngState: rng.getState(),
     totalElapsedWindows: totalElapsedWindowsAfter,
   };
+
+  // v18 — transfer rumors: in the last ~10 windows of the season, every
+  // 3 windows generate a small batch of "elite X interested in Y" rumors.
+  // Persistent on world; cleared by season-end transfer pipeline.
+  if (shouldGenerateRumors(updatedWorld)) {
+    const rumorResult = generateRumors(updatedWorld, rng);
+    if (rumorResult.rumors.length > 0) {
+      updatedWorld = {
+        ...updatedWorld,
+        transferRumors: [...(updatedWorld.transferRumors ?? []), ...rumorResult.rumors],
+        newsLog: [...updatedWorld.newsLog, ...rumorResult.news],
+        rngState: rng.getState(),
+      };
+    }
+  }
 
   // WC phase just ended — finalize WC results and start next season
   if (isSeasonDone && updatedSeasonState.worldCupPhase) {

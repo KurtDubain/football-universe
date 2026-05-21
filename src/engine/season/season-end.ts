@@ -1379,6 +1379,8 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     transferHistory,
     retirementHistory,
     freeAgentPool,
+    /** v18 — rumors are transient; cleared at season-end. */
+    transferRumors: [],
     coachCandidatePool,
     coachRetirementHistory,
     nextCoachIdCounter,

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
+import { computePlayerRivals } from '../engine/players/player-rivalries';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 
 const TAG_HINT: Record<PlayerTag, string> = {
@@ -285,6 +286,9 @@ export default function PlayerDetail() {
       {/* Awards (career) */}
       <AwardsSection world={world} playerUuid={uuid!} />
 
+      {/* Positional rivals — same league, same position, top N by rating */}
+      <RivalsSection world={world} playerUuid={uuid!} />
+
       {/* Transfer history (career) */}
       <TransferHistorySection world={world} playerUuid={uuid!} />
 
@@ -332,9 +336,49 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   );
 }
 
-/** Career transfer chain for this player (uuid). */
-function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
+/** Positional rivals — same league, same position, top peers by rating. */
+function RivalsSection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
   if (!world) return null;
+  const rivals = computePlayerRivals(world, playerUuid, 3);
+  if (rivals.length === 0) return null;
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          ⚔️ 位置之争
+        </h3>
+        <span className="text-[10px] text-slate-500">同位置同级别强敌</span>
+      </div>
+      <div className="space-y-1.5">
+        {rivals.map((r) => (
+          <Link
+            key={r.playerUuid}
+            to={`/player/${r.playerUuid}`}
+            className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-slate-700/40 transition-colors"
+          >
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.teamColor }} />
+            <span className="text-slate-200 font-medium truncate">{r.playerName}</span>
+            <span className="text-[10px] text-slate-500 truncate max-w-[100px]">@ {r.teamName}</span>
+            {r.isDerbyRival && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-red-900/40 text-red-300 border border-red-700/40 font-semibold">
+                德比
+              </span>
+            )}
+            {r.awardCount > 0 && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40">
+                🏅×{r.awardCount}
+              </span>
+            )}
+            <span className="text-slate-300 font-bold tabular-nums ml-auto">{r.playerRating}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Career transfer chain for this player (uuid). */
+function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {  if (!world) return null;
   const transfers = (world.transferHistory ?? []).filter(t => t.playerId === playerUuid);
   if (transfers.length === 0) return null;
   // Oldest first (career progression)

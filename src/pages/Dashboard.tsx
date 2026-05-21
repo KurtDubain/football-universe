@@ -312,6 +312,43 @@ export default function Dashboard() {
         );
       })()}
 
+      {/* ═══════ Transfer rumors (v18) — favorite teams' involvement ═══════ */}
+      {favoriteTeamIds.length > 0 && (() => {
+        const favSet = new Set(favoriteTeamIds);
+        const rumors = (world.transferRumors ?? []).filter(r =>
+          favSet.has(r.fromTeamId) || favSet.has(r.eliteTeamId)
+        );
+        if (rumors.length === 0) return null;
+        return (
+          <div className="space-y-1.5 mt-1">
+            {rumors.slice(-6).reverse().map((r) => {
+              const intensityColor = r.intensity === 'high' ? 'border-rose-700/50 bg-rose-900/15'
+                : r.intensity === 'medium' ? 'border-amber-700/50 bg-amber-900/15'
+                : 'border-slate-700/60 bg-slate-800/50';
+              const intensityText = r.intensity === 'high' ? '紧锣密鼓' : r.intensity === 'medium' ? '深入接触' : '初步关注';
+              return (
+                <div key={r.id} className={`rounded-lg border px-3 py-2 ${intensityColor}`}>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-base shrink-0">📢</span>
+                    <Link to={`/team/${r.eliteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400">
+                      {r.eliteTeamName}
+                    </Link>
+                    <span className="text-slate-500">{intensityText}</span>
+                    <Link to={`/player/${r.candidateUuid}`} className="text-slate-100 font-medium hover:text-blue-400 truncate">
+                      {r.candidateName}
+                    </Link>
+                    <span className="text-[10px] text-slate-500">({r.candidatePosition})</span>
+                    <span className="text-[10px] text-slate-500 ml-auto shrink-0">
+                      来自 <Link to={`/team/${r.fromTeamId}`} className="text-slate-400 hover:text-blue-400">{r.fromTeamName}</Link>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* ═══════ Tab Bar ═══════ */}
       <div className="flex gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
         {tabs.map((tab) => (
