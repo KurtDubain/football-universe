@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { compressedStorage } from './compressed-storage';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -741,6 +742,11 @@ export const useGameStore = create<GameStore>()(
     {
       name: 'football-universe-save',
       version: 18,
+      // [D] — wrap localStorage with LZ-string compression. ~4-6× size
+      // reduction (1MB raw → ~200KB on disk), giving comfortable
+      // headroom under the 5MB quota for 50-100 seasons. Auto-detects
+      // legacy uncompressed saves (no migration step).
+      storage: createJSONStorage(() => compressedStorage),
       /**
        * Migrates a persisted save from any older version up to the current
        * schema (v10). Each `if (version < N)` block applies one forward step.

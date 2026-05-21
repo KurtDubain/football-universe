@@ -20,13 +20,13 @@ import type { PlayerAward } from '../../types/award';
 import type { SeasonRecord } from '../../types/team';
 
 /** Keep matchHistory entries from the last N seasons (inclusive of current). */
-export const MATCH_HISTORY_SEASONS = 5;
+export const MATCH_HISTORY_SEASONS = 3;
 /** Keep transferHistory entries from the last N seasons (inclusive of current). */
-export const TRANSFER_HISTORY_SEASONS = 50;
+export const TRANSFER_HISTORY_SEASONS = 20;
 /** Keep playerAwardsHistory entries from the last N seasons (inclusive of current). */
-export const PLAYER_AWARDS_SEASONS = 100;
+export const PLAYER_AWARDS_SEASONS = 50;
 /** Per-team season-record cap (most recent N entries kept). */
-export const TEAM_SEASON_RECORDS_PER_TEAM = 80;
+export const TEAM_SEASON_RECORDS_PER_TEAM = 40;
 
 function currentSeasonOf(world: GameWorld): number {
   return world.seasonState?.seasonNumber ?? 0;
