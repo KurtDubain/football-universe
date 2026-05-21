@@ -163,6 +163,9 @@ export default function PlayerDetail() {
               {player.age !== undefined && (
                 <span className="text-xs text-slate-500">{player.age}岁</span>
               )}
+              {team.region && (
+                <span className="text-xs text-slate-500" title="出身地区(由初始球队决定)">📍{team.region.split('+')[0]}</span>
+              )}
               {player.marketValue !== undefined && player.marketValue > 0 && (
                 <span className="text-xs text-emerald-400 font-semibold">市值 {formatMarketValue(player.marketValue)}</span>
               )}
@@ -263,8 +266,95 @@ export default function PlayerDetail() {
         </div>
       )}
 
+      {/* Awards (career) */}
+      <AwardsSection world={world} playerUuid={uuid!} />
+
+      {/* Transfer history (career) */}
+      <TransferHistorySection world={world} playerUuid={uuid!} />
+
       {/* Phase G — Injury record */}
       <InjurySection player={player} currentWindowIdx={world.totalElapsedWindows ?? 0} />
+    </div>
+  );
+}
+
+const AWARD_META: Record<string, { label: string; icon: string; color: string }> = {
+  mvp:           { label: '金球奖',  icon: '🏆', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
+  golden_boot:   { label: '金靴奖',  icon: '👟', color: 'bg-orange-900/40 text-orange-300 border-orange-700/40' },
+  best_defender: { label: '最佳后卫', icon: '🛡️', color: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
+  young_player:  { label: '最佳新星', icon: '⭐', color: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
+};
+
+/** Career awards collected by this player (uuid). */
+function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
+  if (!world) return null;
+  const awards = (world.playerAwardsHistory ?? []).filter(a => a.playerId === playerUuid);
+  if (awards.length === 0) return null;
+  // Newest first
+  const sorted = [...awards].sort((a, b) => b.season - a.season);
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        🏅 个人荣誉 ({awards.length})
+      </h3>
+      <div className="space-y-1.5">
+        {sorted.map((a, i) => {
+          const meta = AWARD_META[a.type] ?? { label: a.type, icon: '🏅', color: 'bg-slate-700/60 text-slate-300 border-slate-600/40' };
+          return (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 w-10 shrink-0">S{a.season}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.color} font-semibold`}>
+                {meta.icon} {meta.label}
+              </span>
+              <span className="text-slate-400 flex-1 truncate">{a.statLabel}</span>
+              <span className="text-[10px] text-slate-500 truncate max-w-[100px]">于 {a.teamName}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Career transfer chain for this player (uuid). */
+function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
+  if (!world) return null;
+  const transfers = (world.transferHistory ?? []).filter(t => t.playerId === playerUuid);
+  if (transfers.length === 0) return null;
+  // Oldest first (career progression)
+  const sorted = [...transfers].sort((a, b) => a.season - b.season || a.windowIndex - b.windowIndex);
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        🔄 转会履历 ({transfers.length})
+      </h3>
+      <div className="space-y-1.5">
+        {sorted.map((t, i) => {
+          const typeChip =
+            t.type === 'transfer'   ? { text: '转会',     cls: 'bg-blue-900/40 text-blue-300 border-blue-700/40' } :
+            t.type === 'free_agent' ? { text: '自由身',   cls: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' } :
+            t.type === 'loan'       ? { text: '租借',     cls: 'bg-purple-900/40 text-purple-300 border-purple-700/40' } :
+                                      { text: '自由转会', cls: 'bg-slate-700/60 text-slate-300 border-slate-600/40' };
+          return (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 w-10 shrink-0">S{t.season}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeChip.cls}`}>
+                {typeChip.text}
+              </span>
+              <Link to={`/team/${t.fromTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]">
+                {t.fromTeamName}
+              </Link>
+              <span className="text-slate-500">→</span>
+              <Link to={`/team/${t.toTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]">
+                {t.toTeamName}
+              </Link>
+              {t.fee && (
+                <span className="text-[10px] text-emerald-400 font-semibold ml-auto">€{t.fee}M</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -425,6 +515,10 @@ function RetiredPlayerView({
         <StatBox label="巅峰能力" value={retired.peakRating} color="text-amber-300" />
         <StatBox label="冠军" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
       </div>
+
+      {/* Awards + transfer history for retired players too */}
+      <AwardsSection world={world} playerUuid={retired.uuid} />
+      <TransferHistorySection world={world} playerUuid={retired.uuid} />
 
       <p className="text-[11px] text-slate-500 text-center">
         本页面为退役球员的精简档案。完整档案与生涯轨迹请查看

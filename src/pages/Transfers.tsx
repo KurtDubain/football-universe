@@ -152,14 +152,18 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
       ? '→'
       : record.type === 'loan'
         ? '⇄'
-        : '○';
+        : record.type === 'free_agent'
+          ? '⤳'
+          : '○';
   const arrowColor = isSwap
     ? 'text-amber-400'
     : record.type === 'transfer'
       ? 'text-emerald-400'
       : record.type === 'loan'
         ? 'text-amber-400'
-        : 'text-slate-500';
+        : record.type === 'free_agent'
+          ? 'text-cyan-400'
+          : 'text-slate-500';
 
   return (
     <div className="px-3 py-2 hover:bg-slate-700/20 transition-colors">

@@ -3,7 +3,7 @@
  * Tracked at end of each season; shown in /transfers and TeamDetail history.
  */
 
-export type TransferType = 'transfer' | 'free' | 'loan';
+export type TransferType = 'transfer' | 'free' | 'loan' | 'free_agent';
 
 export interface TransferRecord {
   season: number;

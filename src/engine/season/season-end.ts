@@ -664,16 +664,48 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // the retirees). `playerStats` is unchanged at this point — preserved for
   // historical lookups.
   const transferResult = processTransferWindow({ ...world, squads, playerStats }, rng);
-  if (transferResult.transfers.length > 0) {
+  if (transferResult.transfers.length > 0 || transferResult.freeAgentRetirees.length > 0) {
     squads = transferResult.squads;
     playerStats = transferResult.playerStats;
     transferHistory = [...(transferHistory ?? []), ...transferResult.transfers];
 
-    // Phase H: book transfer cash flows. The existing transfer engine returns
-    // both directions (poach + reverse loan-down) — we only count `transfer`
-    // type entries against finances, since `free` moves carry no fee.
+    // v2: any free agent that didn't get re-signed → retire. Add to
+    // retirementHistory with reason "未获自由市场报价" via the description
+    // field. Keeps player count from inflating ("球员太多" feedback).
+    if (transferResult.freeAgentRetirees.length > 0) {
+      const newRetirements = transferResult.freeAgentRetirees.map(fa => ({
+        uuid: fa.uuid,
+        name: fa.name,
+        teamId: fa.teamId,
+        teamName: fa.teamName,
+        position: fa.position,
+        peakRating: fa.peakRating,
+        age: fa.age,
+        seasonRetired: seasonNumber,
+        careerGoals: fa.careerGoals,
+      }));
+      const merged = [...retirementHistory, ...newRetirements];
+      retirementHistory = merged.length > 300 ? merged.slice(-300) : merged;
+      // News for elite released players who weren't picked up
+      for (const fa of transferResult.freeAgentRetirees) {
+        if (fa.peakRating >= 80) {
+          news.push({
+            id: createNewsId(seasonNumber, windowIndex, `freeagent-retire-${fa.uuid}`),
+            seasonNumber, windowIndex, type: 'retirement',
+            title: `${fa.name} 未获报价后挂靴`,
+            description: `${fa.teamName} 释放的 ${fa.name}（${fa.age}岁，巅峰 ${fa.peakRating}）在自由市场上未收到任何报价，宣布退役。`,
+          });
+        }
+      }
+    }
+
+    // Phase H: book transfer cash flows. Both 'transfer' (poach) and
+    // 'free_agent' (free-market signing) carry a fee with seller→buyer
+    // (or released-from→recipient for free_agent) flow. 'free' and 'loan'
+    // have no fee.
     for (const t of transferResult.transfers) {
-      if (t.type !== 'transfer' || !t.fee) continue;
+      if (t.type !== 'transfer' && t.type !== 'free_agent') continue;
+      if (!t.fee) continue;
       if (financeBreakdown[t.fromTeamId]) financeBreakdown[t.fromTeamId].transferIncome += t.fee;
       if (financeBreakdown[t.toTeamId]) financeBreakdown[t.toTeamId].transferExpense += t.fee;
       if (teamFinances[t.fromTeamId]) {
