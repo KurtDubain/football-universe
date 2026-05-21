@@ -446,32 +446,12 @@ export function applyIncome(
     next[scWinner].cash += CUP_PRIZE.super_cup_winner;
     next[scWinner].totalIncome += CUP_PRIZE.super_cup_winner;
   }
-  // World cup winner / runner-up / semi (only in WC years)
-  const wc = world.worldCup;
-  if (wc?.winnerId && next[wc.winnerId]) {
-    next[wc.winnerId].cash += CUP_PRIZE.world_cup_winner;
-    next[wc.winnerId].totalIncome += CUP_PRIZE.world_cup_winner;
-    const wcFinal = wc.knockoutRounds.at(-1)?.fixtures[0];
-    if (wcFinal) {
-      const ru = wcFinal.homeTeamId === wc.winnerId ? wcFinal.awayTeamId : wcFinal.homeTeamId;
-      if (next[ru]) {
-        next[ru].cash += CUP_PRIZE.world_cup_runner_up;
-        next[ru].totalIncome += CUP_PRIZE.world_cup_runner_up;
-      }
-      // Semi-final losers — pick from the second-to-last round
-      const semis = wc.knockoutRounds.at(-2);
-      if (semis) {
-        for (const f of semis.fixtures) {
-          if (!f.winnerId) continue;
-          const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
-          if (next[loser]) {
-            next[loser].cash += CUP_PRIZE.world_cup_semi;
-            next[loser].totalIncome += CUP_PRIZE.world_cup_semi;
-          }
-        }
-      }
-    }
-  }
+  // World cup prize money is paid by `finalizeWorldCup` in season-end.ts —
+  // NOT here. At the point applyIncome runs (season_end window),
+  // world.worldCup.winnerId is still unset (the WC tail hasn't played yet).
+  // finalizeWorldCup runs after the WC final and mutates teamFinances
+  // directly + patches the just-archived FinanceSeasonRecord.
+
   // Continental cups (winner / runner-up / semi)
   const cups = [world.continentalCups?.mainland_cup, world.continentalCups?.southern_cup, world.continentalCups?.eastern_cup];
   for (const cup of cups) {

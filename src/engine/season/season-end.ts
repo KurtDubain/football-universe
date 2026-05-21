@@ -35,6 +35,7 @@ import {
   CUP_PRIZE,
   TV_SPONSOR_BY_TIER,
   computeSalary,
+  formatMoney,
 } from '../economy/finance';
 
 /**
@@ -618,9 +619,12 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     if (superCupWinner && financeBreakdown[superCupWinner]) {
       financeBreakdown[superCupWinner].prizeMoney += CUP_PRIZE.super_cup_winner;
     }
-    if (worldCupWinner && financeBreakdown[worldCupWinner]) {
-      financeBreakdown[worldCupWinner].prizeMoney += CUP_PRIZE.world_cup_winner;
-    }
+    // World cup prize money (winner / runner-up / semi) is booked by
+    // finalizeWorldCup AFTER the WC tail plays — see season-end.ts.
+    // At this point in the pipeline (season_end window), the WC final
+    // hasn't happened yet; reading world.worldCup.winnerId here gives
+    // undefined every time, which is why this used to silently lose
+    // €65M every WC year.
     // Continental cup prizes — winner only here; runner-up + semi handled
     // by applyIncome which we delegate to for the actual cash mutation.
     for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
@@ -640,22 +644,6 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
           if (!f.winnerId) continue;
           const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
           if (financeBreakdown[loser]) financeBreakdown[loser].prizeMoney += CUP_PRIZE.continental_cup_semi;
-        }
-      }
-    }
-    // World cup runner-up / semi (rare — only in WC years)
-    if (world.worldCup) {
-      const wcFinal = world.worldCup.knockoutRounds.at(-1)?.fixtures[0];
-      if (wcFinal && worldCupWinner) {
-        const ru = wcFinal.homeTeamId === worldCupWinner ? wcFinal.awayTeamId : wcFinal.homeTeamId;
-        if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.world_cup_runner_up;
-      }
-      const wcSemis = world.worldCup.knockoutRounds.at(-2);
-      if (wcSemis) {
-        for (const f of wcSemis.fixtures) {
-          if (!f.winnerId) continue;
-          const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
-          if (financeBreakdown[loser]) financeBreakdown[loser].prizeMoney += CUP_PRIZE.world_cup_semi;
         }
       }
     }
@@ -1516,6 +1504,63 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
     }
 
     updatedWorld = { ...updatedWorld, honorHistory, teamTrophies, coachTrophies, teamSeasonRecords };
+
+    // ── Phase H: WC prize money (winner / runner-up / semis) ──
+    // This was originally in applyIncome (handleSeasonEnd), but at that
+    // point in WC years the WC tail hadn't run yet — winnerId was always
+    // unset, so €30M+€15M+4×€5M = €65M of prize money silently disappeared
+    // every WC year. Pay it here instead, AFTER the final has resolved.
+    //
+    // The season's FinanceSeasonRecord was archived seconds ago in
+    // handleSeasonEnd. We patch its tail entry in-place so the breakdown
+    // (and the FinancePanel which reads from history) shows the WC prize.
+    const wcPrizeRecipients: Array<{ teamId: string; amount: number; role: string }> = [];
+    wcPrizeRecipients.push({ teamId: wcWinnerId, amount: CUP_PRIZE.world_cup_winner, role: '冠军' });
+    if (wcRunnerUp) {
+      wcPrizeRecipients.push({ teamId: wcRunnerUp, amount: CUP_PRIZE.world_cup_runner_up, role: '亚军' });
+    }
+    const wcSemis = updatedWorld.worldCup!.knockoutRounds.at(-2);
+    if (wcSemis) {
+      for (const f of wcSemis.fixtures) {
+        if (!f.winnerId) continue;
+        const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
+        wcPrizeRecipients.push({ teamId: loser, amount: CUP_PRIZE.world_cup_semi, role: '四强' });
+      }
+    }
+    const teamFinances = { ...updatedWorld.teamFinances };
+    const newsLog = [...updatedWorld.newsLog];
+    const windowIndex = updatedWorld.seasonState.currentWindowIndex;
+    for (const { teamId, amount, role } of wcPrizeRecipients) {
+      const fin = teamFinances[teamId];
+      if (!fin) continue;
+      // Patch tail history entry (the season we just archived) so prize
+      // money is visible in the breakdown. If the tail isn't this season
+      // (defensive — shouldn't happen), skip the patch and just bump cash.
+      const history = [...fin.history];
+      const tail = history[history.length - 1];
+      if (tail && tail.season === sn) {
+        history[history.length - 1] = {
+          ...tail,
+          prizeMoney: tail.prizeMoney + amount,
+          endCash: tail.endCash + amount,
+        };
+      }
+      teamFinances[teamId] = {
+        ...fin,
+        cash: fin.cash + amount,
+        history,
+      };
+      const teamName = updatedWorld.teamBases[teamId]?.name ?? teamId;
+      newsLog.push({
+        id: createNewsId(sn, windowIndex, `wc-prize-${teamId}`),
+        seasonNumber: sn,
+        windowIndex,
+        type: 'prize_money',
+        title: `${teamName} 环球冠军杯${role}奖金 ${formatMoney(amount)}`,
+        description: `${teamName} 在第${sn}届环球冠军杯${role === '冠军' ? '夺冠' : role === '亚军' ? '获亚军' : '闯入四强'}，收获 ${formatMoney(amount)} 奖金。`,
+      });
+    }
+    updatedWorld = { ...updatedWorld, teamFinances, newsLog };
   }
 
   return updatedWorld;
