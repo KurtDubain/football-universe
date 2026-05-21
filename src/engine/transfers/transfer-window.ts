@@ -47,6 +47,13 @@ const FREE_AGENT_SIGNING_FEE = 5;        // €M, charged to recipient
 const FW_GOALS_MIN = 6;
 const MF_CONTRIB_MIN = 6;                 // goals + assists
 const DF_GK_APPEARANCES_MIN = 20;
+// Concentration caps — one of the v2 pain points was "the same 3-4 weak
+// teams keep losing stars every season because they always produce the
+// most candidates". Caps here force variety: each team is in/out at most
+// the limit per window. Combined with shuffled iteration order this gives
+// a much more diverse market across seasons.
+const MAX_POACHES_PER_SELLER = 1;
+const MAX_POACHES_PER_BUYER = 2;
 // NOTE: no rating gate on candidates — the "released.rating >= incomingPlayer.rating"
 // check at swap time naturally filters out players who aren't an upgrade
 // for the buyer's bench. Adding an absolute rating floor here filtered out
@@ -166,15 +173,31 @@ export function processTransferWindow(
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
   const candidates = buildCandidates(world);
+  // Shuffle so iteration order doesn't bias toward FW (which appear first
+  // in the per-position concat). Different position/team gets a fair shot
+  // each season; combined with the per-seller cap below this makes the
+  // visible transfer mix feel random rather than always-same-team-selling.
+  const shuffledCandidates = rng.shuffle([...candidates]);
 
   // ── Step 1: Poachings ────────────────────────────────────────
   type FreeAgent = { player: Player; releasedFromTeamId: string };
   const freeAgentPool: FreeAgent[] = [];
   const sellersNeedReplacement = new Set<string>();
+  // Concentration caps — see constants comment block.
+  const sellerPoachCount: Record<string, number> = {};
+  const buyerPoachCount: Record<string, number> = {};
 
-  for (const cand of candidates) {
+  for (const cand of shuffledCandidates) {
+    // Per-seller cap: each non-elite team loses at most N stars per season.
+    if ((sellerPoachCount[cand.teamId] ?? 0) >= MAX_POACHES_PER_SELLER) continue;
     if (rng.next() >= POACH_PROBABILITY) continue;
-    const buyers = eliteTeamIds.filter(tid => tid !== cand.teamId);
+    // Eligible buyers: elite teams that aren't the seller AND haven't hit
+    // their buyer cap yet. Without this cap one elite can hoard 4+ stars
+    // in a season.
+    const buyers = eliteTeamIds.filter(tid =>
+      tid !== cand.teamId
+      && (buyerPoachCount[tid] ?? 0) < MAX_POACHES_PER_BUYER,
+    );
     if (buyers.length === 0) continue;
     const buyerId = rng.pick(buyers);
 
@@ -224,6 +247,8 @@ export function processTransferWindow(
 
     freeAgentPool.push({ player: released, releasedFromTeamId: buyerId });
     sellersNeedReplacement.add(cand.teamId);
+    sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
+    buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
   }
 
   // ── Step 2: Distribute free agents ─────────────────────────────

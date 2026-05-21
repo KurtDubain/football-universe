@@ -335,3 +335,83 @@ describe('processTransferWindow v2 — 4 positions + free agent pool', () => {
     expect(Array.isArray(result.freeAgentRetirees)).toBe(true);
   });
 });
+
+describe('processTransferWindow v2 — concentration caps', () => {
+  it('per-seller cap limits one team to MAX_POACHES_PER_SELLER per season', () => {
+    // Build a non-elite team with 5 high-scoring forwards. Without the cap,
+    // multiple of them would get poached in a single season. With cap=1,
+    // exactly one moves no matter how many candidates qualify.
+    const elite1 = makeTeam('elite1', 90);
+    const elite2 = makeTeam('elite2', 88);
+    const weak = makeTeam('weak', 65);
+    const candUuids = ['c1', 'c2', 'c3', 'c4', 'c5'];
+    const eliteSquad1 = [
+      makePlayer('elite1', 9, 'FW', 88),
+      makePlayer('elite1', 10, 'FW', 70), // weakest — poachable target
+    ];
+    const eliteSquad2 = [
+      makePlayer('elite2', 9, 'FW', 85),
+      makePlayer('elite2', 10, 'FW', 68), // weakest
+    ];
+    const weakSquad = candUuids.map((u, i) => makePlayer('weak', 9 + i, 'FW', 82, u));
+    const playerStats: Record<string, PlayerSeasonStats> = {};
+    for (const u of candUuids) playerStats[u] = makeStat(u, 'weak', 15);
+
+    const world: GameWorld = {
+      ...buildWorld(),
+      teamBases: { elite1, elite2, weak },
+      squads: { elite1: eliteSquad1, elite2: eliteSquad2, weak: weakSquad },
+      playerStats,
+    };
+
+    // Run many seeds. In each, count how many of weak's players got poached.
+    // ALL of them should land at 1 or 0 — never ≥ 2.
+    let maxFromOneTeam = 0;
+    for (let s = 0; s < 30; s++) {
+      const r = processTransferWindow(world, new SeededRNG(s));
+      const fromWeak = r.transfers.filter(t => t.fromTeamId === 'weak' && t.type === 'transfer').length;
+      maxFromOneTeam = Math.max(maxFromOneTeam, fromWeak);
+    }
+    expect(maxFromOneTeam).toBeLessThanOrEqual(1);
+  });
+
+  it('per-buyer cap limits one elite to MAX_POACHES_PER_BUYER per season', () => {
+    // Multiple weak teams have candidates; one elite that could hoover them
+    // all up. With buyer cap = 2, that elite is capped at 2 even if there
+    // are 10 candidates.
+    const elite = makeTeam('elite', 90);
+    const w1 = makeTeam('w1', 65);
+    const w2 = makeTeam('w2', 65);
+    const w3 = makeTeam('w3', 65);
+    const w4 = makeTeam('w4', 65);
+    const eliteSquad = [
+      makePlayer('elite', 9, 'FW', 88),
+      makePlayer('elite', 10, 'FW', 70), // 4× weak FWs — but cap=2
+      makePlayer('elite', 11, 'FW', 70),
+      makePlayer('elite', 12, 'FW', 70),
+      makePlayer('elite', 13, 'FW', 70),
+    ];
+    const ws = [w1, w2, w3, w4];
+    const squads: Record<string, Player[]> = { elite: eliteSquad };
+    const playerStats: Record<string, PlayerSeasonStats> = {};
+    for (let i = 0; i < ws.length; i++) {
+      const u = `c-${i}`;
+      squads[ws[i].id] = [makePlayer(ws[i].id, 9, 'FW', 80, u)];
+      playerStats[u] = makeStat(u, ws[i].id, 18);
+    }
+    const world: GameWorld = {
+      ...buildWorld(),
+      teamBases: { elite, w1, w2, w3, w4 },
+      squads,
+      playerStats,
+    };
+
+    let maxToElite = 0;
+    for (let s = 0; s < 30; s++) {
+      const r = processTransferWindow(world, new SeededRNG(s));
+      const toElite = r.transfers.filter(t => t.toTeamId === 'elite' && t.type === 'transfer').length;
+      maxToElite = Math.max(maxToElite, toElite);
+    }
+    expect(maxToElite).toBeLessThanOrEqual(2);
+  });
+});
