@@ -36,6 +36,12 @@ import {
   TV_SPONSOR_BY_TIER,
   computeSalary,
   formatMoney,
+  attributeCupPrizes,
+  LEAGUE_CUP_TIERS,
+  SUPER_CUP_TIERS,
+  WORLD_CUP_TIERS,
+  MAINLAND_CUP_TIERS,
+  SMALL_CONTINENTAL_CUP_TIERS,
 } from '../economy/finance';
 
 /**
@@ -607,44 +613,36 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
       financeBreakdown[teamId].tvSponsor += tv;
       financeBreakdown[teamId].prizeMoney += prize;
     }
-    // Cup prizes — straight lookup
-    if (leagueCupWinner && financeBreakdown[leagueCupWinner]) {
-      financeBreakdown[leagueCupWinner].prizeMoney += CUP_PRIZE.league_cup_winner;
+    // Cup prizes — tiered (mirrors applyIncome via shared helper).
+    if (world.leagueCup?.rounds && world.leagueCup.rounds.length > 0) {
+      const prizes = attributeCupPrizes(world.leagueCup.rounds, LEAGUE_CUP_TIERS);
+      for (const [teamId, amt] of Object.entries(prizes)) {
+        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
+      }
     }
-    const lcFinal = world.leagueCup.rounds.at(-1)?.fixtures[0];
-    if (lcFinal && leagueCupWinner) {
-      const ru = lcFinal.homeTeamId === leagueCupWinner ? lcFinal.awayTeamId : lcFinal.homeTeamId;
-      if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.league_cup_runner_up;
+    if (world.superCup?.knockoutRounds && world.superCup.knockoutRounds.length > 0) {
+      const prizes = attributeCupPrizes(world.superCup.knockoutRounds, SUPER_CUP_TIERS);
+      for (const [teamId, amt] of Object.entries(prizes)) {
+        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
+      }
     }
-    if (superCupWinner && financeBreakdown[superCupWinner]) {
-      financeBreakdown[superCupWinner].prizeMoney += CUP_PRIZE.super_cup_winner;
-    }
-    // World cup prize money (winner / runner-up / semi) is booked by
+    // World cup prize money (winner / runner-up / quarters / R16) is booked by
     // finalizeWorldCup AFTER the WC tail plays — see season-end.ts.
     // At this point in the pipeline (season_end window), the WC final
     // hasn't happened yet; reading world.worldCup.winnerId here gives
     // undefined every time, which is why this used to silently lose
-    // €65M every WC year.
-    // Continental cup prizes — winner only here; runner-up + semi handled
-    // by applyIncome which we delegate to for the actual cash mutation.
-    for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
-      if (!cup?.winnerId || !cup.completed) continue;
-      if (financeBreakdown[cup.winnerId]) {
-        financeBreakdown[cup.winnerId].prizeMoney += CUP_PRIZE.continental_cup_winner;
-      }
-      const finalRound = cup.rounds.at(-1);
-      const finalFix = finalRound?.fixtures[0];
-      if (finalFix) {
-        const ru = finalFix.homeTeamId === cup.winnerId ? finalFix.awayTeamId : finalFix.homeTeamId;
-        if (financeBreakdown[ru]) financeBreakdown[ru].prizeMoney += CUP_PRIZE.continental_cup_runner_up;
-      }
-      const semis = cup.rounds.at(-2);
-      if (semis) {
-        for (const f of semis.fixtures) {
-          if (!f.winnerId) continue;
-          const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
-          if (financeBreakdown[loser]) financeBreakdown[loser].prizeMoney += CUP_PRIZE.continental_cup_semi;
-        }
+    // prize money every WC year.
+    // Continental cups — region-aware tier (mainland 16-team, others 8-team)
+    const continentalConfigs: Array<[typeof continentalCups.mainland_cup, typeof LEAGUE_CUP_TIERS]> = [
+      [continentalCups.mainland_cup, MAINLAND_CUP_TIERS],
+      [continentalCups.southern_cup, SMALL_CONTINENTAL_CUP_TIERS],
+      [continentalCups.eastern_cup, SMALL_CONTINENTAL_CUP_TIERS],
+    ];
+    for (const [cup, tier] of continentalConfigs) {
+      if (!cup?.completed || !cup.rounds || cup.rounds.length === 0) continue;
+      const prizes = attributeCupPrizes(cup.rounds, tier);
+      for (const [teamId, amt] of Object.entries(prizes)) {
+        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
       }
     }
     // Now apply via the canonical implementation — modifies cash + totalIncome.
@@ -1505,34 +1503,28 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
 
     updatedWorld = { ...updatedWorld, honorHistory, teamTrophies, coachTrophies, teamSeasonRecords };
 
-    // ── Phase H: WC prize money (winner / runner-up / semis) ──
+    // ── Phase H: WC prize money (winner / runner-up / semis / quarters / R16) ──
     // This was originally in applyIncome (handleSeasonEnd), but at that
     // point in WC years the WC tail hadn't run yet — winnerId was always
-    // unset, so €30M+€15M+4×€5M = €65M of prize money silently disappeared
-    // every WC year. Pay it here instead, AFTER the final has resolved.
+    // unset, so prize money silently disappeared every WC year. Pay it
+    // here instead, AFTER the final has resolved.
+    //
+    // Tiered: every team that advanced past groups earns at least the
+    // R16 prize; quarter-finalists earn QF; semi-finalists earn SF;
+    // runner-up + winner earn the big bucks.
     //
     // The season's FinanceSeasonRecord was archived seconds ago in
     // handleSeasonEnd. We patch its tail entry in-place so the breakdown
     // (and the FinancePanel which reads from history) shows the WC prize.
-    const wcPrizeRecipients: Array<{ teamId: string; amount: number; role: string }> = [];
-    wcPrizeRecipients.push({ teamId: wcWinnerId, amount: CUP_PRIZE.world_cup_winner, role: '冠军' });
-    if (wcRunnerUp) {
-      wcPrizeRecipients.push({ teamId: wcRunnerUp, amount: CUP_PRIZE.world_cup_runner_up, role: '亚军' });
-    }
-    const wcSemis = updatedWorld.worldCup!.knockoutRounds.at(-2);
-    if (wcSemis) {
-      for (const f of wcSemis.fixtures) {
-        if (!f.winnerId) continue;
-        const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
-        wcPrizeRecipients.push({ teamId: loser, amount: CUP_PRIZE.world_cup_semi, role: '四强' });
-      }
-    }
+    const wcPrizes = attributeCupPrizes(updatedWorld.worldCup!.knockoutRounds, WORLD_CUP_TIERS);
     const teamFinances = { ...updatedWorld.teamFinances };
     const newsLog = [...updatedWorld.newsLog];
     const windowIndex = updatedWorld.seasonState.currentWindowIndex;
-    for (const { teamId, amount, role } of wcPrizeRecipients) {
+    // Sort recipients by amount desc so the news log surfaces winner first
+    const recipients = Object.entries(wcPrizes).sort((a, b) => b[1] - a[1]);
+    for (const [teamId, amount] of recipients) {
       const fin = teamFinances[teamId];
-      if (!fin) continue;
+      if (!fin || amount <= 0) continue;
       // Patch tail history entry (the season we just archived) so prize
       // money is visible in the breakdown. If the tail isn't this season
       // (defensive — shouldn't happen), skip the patch and just bump cash.
@@ -1550,6 +1542,13 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
         cash: fin.cash + amount,
         history,
       };
+      // Determine role label by amount (winner/RU/SF/QF/R16)
+      let role = '参赛';
+      if (teamId === wcWinnerId) role = '冠军';
+      else if (teamId === wcRunnerUp) role = '亚军';
+      else if (amount >= CUP_PRIZE.world_cup_semi) role = '四强';
+      else if (amount >= CUP_PRIZE.world_cup_qf) role = '八强';
+      else if (amount >= CUP_PRIZE.world_cup_r16) role = '16强';
       const teamName = updatedWorld.teamBases[teamId]?.name ?? teamId;
       newsLog.push({
         id: createNewsId(sn, windowIndex, `wc-prize-${teamId}`),
@@ -1557,7 +1556,7 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
         windowIndex,
         type: 'prize_money',
         title: `${teamName} 环球冠军杯${role}奖金 ${formatMoney(amount)}`,
-        description: `${teamName} 在第${sn}届环球冠军杯${role === '冠军' ? '夺冠' : role === '亚军' ? '获亚军' : '闯入四强'}，收获 ${formatMoney(amount)} 奖金。`,
+        description: `${teamName} 在第${sn}届环球冠军杯打入${role}，收获 ${formatMoney(amount)} 奖金。`,
       });
     }
     updatedWorld = { ...updatedWorld, teamFinances, newsLog };

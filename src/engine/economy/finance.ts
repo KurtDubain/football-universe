@@ -82,6 +82,7 @@ import { TeamBase, FinanceState, FinanceSeasonRecord } from '../../types/team';
 import { Player } from '../../types/player';
 import { GameWorld, NewsItem } from '../season/season-manager';
 import { StandingEntry } from '../../types/league';
+import { ContinentalCupState } from '../../types/cup';
 import { SeededRNG } from '../match/rng';
 import { TransferRecord } from '../../types/transfer';
 import { createNewsId } from '../season/helpers';
@@ -312,17 +313,172 @@ export function leaguePrize(level: 1 | 2 | 3, rank: number): number {
 }
 
 // ── Cup prize money (€M) ──
+//
+// Tiered payouts per cup. Each tier represents the FURTHEST round a team
+// reached. A team's prize = sum of tier they reached (NOT cumulative —
+// the elimination-round prize is the total they earn from that cup).
+//
+// Design principle: cups with a group stage pay €0 to teams that don't
+// advance out of groups; cups without a group stage pay €0 for the
+// first round (so winning the first round is the "qualifying" milestone).
+// Each subsequent round earns more, with finalists/winners getting the
+// big prizes.
+//
+// `CUP_PRIZE` is kept as a flat object for backward-compat with
+// finance.test.ts and other callers that read specific keys; the new
+// per-round breakdowns are below as `CUP_PRIZE_TIERS`.
 export const CUP_PRIZE = {
-  league_cup_winner: 15,
-  league_cup_runner_up: 7,
-  super_cup_winner: 5,
-  world_cup_winner: 30,
-  world_cup_runner_up: 15,
-  world_cup_semi: 5,
-  continental_cup_winner: 25,
-  continental_cup_runner_up: 12,
-  continental_cup_semi: 4,
+  // 联赛杯 (32-team knockout)
+  league_cup_r16: 2,
+  league_cup_qf: 5,
+  league_cup_sf: 10,
+  league_cup_runner_up: 18,
+  league_cup_winner: 30,
+  // 超级杯 (16-team groups + KO)
+  super_cup_qf: 2,           // advanced out of groups
+  super_cup_sf: 5,
+  super_cup_runner_up: 10,
+  super_cup_winner: 18,
+  // 环球冠军杯 (32-team groups + KO)
+  world_cup_r16: 5,           // advanced out of groups
+  world_cup_qf: 10,
+  world_cup_semi: 15,
+  world_cup_runner_up: 30,
+  world_cup_winner: 60,
+  // 大陆杯 (16-team knockout)
+  continental_cup_r8: 4,      // won R16
+  continental_cup_semi: 10,
+  continental_cup_runner_up: 25,
+  continental_cup_winner: 45,
+  // 南洲杯 / 东洲杯 (8-team knockout)
+  small_continental_cup_sf: 8,    // won R8
+  small_continental_cup_runner_up: 20,
+  small_continental_cup_winner: 40,
 };
+
+// ── Cup prize tier configs (per-round elimination prizes) ──
+//
+// Each cup is configured with: final winner + runner-up + losers-by-round.
+// We label rounds by their distance from the final (rounds.at(-2) = semis,
+// rounds.at(-3) = quarters, rounds.at(-4) = R16, etc) — this is robust
+// to varying bracket sizes (8/16/32-team cups all share the same logic).
+//
+// First-round losers in knockout-only cups (e.g. R32 in 联赛杯) get €0
+// by leaving the corresponding tier at 0. Group-stage participants in
+// group+KO cups get €0 implicitly — only KO rounds are passed in.
+
+export interface CupTierConfig {
+  finalWinnerPrize: number;
+  finalRunnerUpPrize: number;
+  semiLoserPrize: number;     // rounds.at(-2)
+  quarterLoserPrize: number;  // rounds.at(-3)
+  r16LoserPrize: number;      // rounds.at(-4)
+}
+
+// 联赛杯: 32-team knockout, 5 rounds (R32 → R16 → QF → SF → Final)
+//   - R32 elim (rounds.at(-5)) → €0 (first round, no prize)
+//   - R16 elim (rounds.at(-4)) → €2M
+//   - QF elim (rounds.at(-3)) → €5M
+//   - SF elim (rounds.at(-2)) → €10M
+//   - Runner-up (final loser) → €18M
+//   - Winner (final winner) → €30M
+export const LEAGUE_CUP_TIERS: CupTierConfig = {
+  finalWinnerPrize: CUP_PRIZE.league_cup_winner,
+  finalRunnerUpPrize: CUP_PRIZE.league_cup_runner_up,
+  semiLoserPrize: CUP_PRIZE.league_cup_sf,
+  quarterLoserPrize: CUP_PRIZE.league_cup_qf,
+  r16LoserPrize: CUP_PRIZE.league_cup_r16,
+};
+
+// 超级杯: 16-team groups + KO (KO has 3 rounds: QF → SF → Final)
+//   Group exits get €0 (not iterated here — only KO rounds passed).
+//   Past-group teams who lose in QF (rounds.at(-3)) earn QF prize.
+export const SUPER_CUP_TIERS: CupTierConfig = {
+  finalWinnerPrize: CUP_PRIZE.super_cup_winner,
+  finalRunnerUpPrize: CUP_PRIZE.super_cup_runner_up,
+  semiLoserPrize: CUP_PRIZE.super_cup_sf,
+  quarterLoserPrize: CUP_PRIZE.super_cup_qf,
+  r16LoserPrize: 0,
+};
+
+// 环球冠军杯: 32-team groups + KO (KO has 4 rounds: R16 → QF → SF → Final)
+export const WORLD_CUP_TIERS: CupTierConfig = {
+  finalWinnerPrize: CUP_PRIZE.world_cup_winner,
+  finalRunnerUpPrize: CUP_PRIZE.world_cup_runner_up,
+  semiLoserPrize: CUP_PRIZE.world_cup_semi,
+  quarterLoserPrize: CUP_PRIZE.world_cup_qf,
+  r16LoserPrize: CUP_PRIZE.world_cup_r16,
+};
+
+// 大陆杯: 16-team knockout, 4 rounds (R16 → R8 → SF → Final)
+//   First round = R16, gets €0. R8 (= "quarter" in our 4-round labeling)
+//   gets the continental_cup_r8 prize.
+export const MAINLAND_CUP_TIERS: CupTierConfig = {
+  finalWinnerPrize: CUP_PRIZE.continental_cup_winner,
+  finalRunnerUpPrize: CUP_PRIZE.continental_cup_runner_up,
+  semiLoserPrize: CUP_PRIZE.continental_cup_semi,
+  quarterLoserPrize: CUP_PRIZE.continental_cup_r8,
+  r16LoserPrize: 0,            // R16 is the first round in this 16-team cup
+};
+
+// 南洲杯 / 东洲杯: 8-team knockout, 3 rounds (R8 → SF → Final)
+//   R8 is the first round (rounds.at(-3)) → €0.
+//   SF (rounds.at(-2)) gets small_continental_cup_sf prize.
+export const SMALL_CONTINENTAL_CUP_TIERS: CupTierConfig = {
+  finalWinnerPrize: CUP_PRIZE.small_continental_cup_winner,
+  finalRunnerUpPrize: CUP_PRIZE.small_continental_cup_runner_up,
+  semiLoserPrize: CUP_PRIZE.small_continental_cup_sf,
+  quarterLoserPrize: 0,        // first round = R8 = "quarter" → no prize
+  r16LoserPrize: 0,
+};
+
+/**
+ * Attribute tiered prize money for a knockout bracket.
+ *
+ * Identifies rounds by distance from the final:
+ *   rounds.at(-1) = final  → winner gets finalWinnerPrize, loser gets finalRunnerUpPrize
+ *   rounds.at(-2) = semis  → losers get semiLoserPrize
+ *   rounds.at(-3) = quarters → losers get quarterLoserPrize
+ *   rounds.at(-4) = R16    → losers get r16LoserPrize
+ *   earlier rounds         → no prize (first-round elimination)
+ *
+ * This is robust across cup sizes — an 8-team cup (3 rounds) and a 32-team
+ * cup (5 rounds) use the SAME function; only their tier configs differ.
+ *
+ * Returns a teamId → prize map. Empty result if no rounds have winners.
+ */
+export function attributeCupPrizes(
+  rounds: Array<{ fixtures: Array<{ homeTeamId: string; awayTeamId: string; winnerId?: string }> }>,
+  config: CupTierConfig,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (rounds.length === 0) return out;
+
+  const finalRound = rounds[rounds.length - 1];
+  for (const f of finalRound.fixtures) {
+    if (!f.winnerId) continue;
+    const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
+    out[f.winnerId] = (out[f.winnerId] ?? 0) + config.finalWinnerPrize;
+    out[loser] = (out[loser] ?? 0) + config.finalRunnerUpPrize;
+  }
+
+  const tierByDistance: Array<[number, number]> = [
+    [2, config.semiLoserPrize],
+    [3, config.quarterLoserPrize],
+    [4, config.r16LoserPrize],
+  ];
+  for (const [dist, prize] of tierByDistance) {
+    if (prize <= 0) continue;
+    const round = rounds[rounds.length - dist];
+    if (!round) continue;
+    for (const f of round.fixtures) {
+      if (!f.winnerId) continue;
+      const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
+      out[loser] = (out[loser] ?? 0) + prize;
+    }
+  }
+  return out;
+}
 
 // ── Public API ────────────────────────────────────────────
 
@@ -424,27 +580,24 @@ export function applyIncome(
     next[id].totalIncome += tv + prize;
   }
 
-  // ── 2. Cup prizes ──
-  // League cup winner / runner-up
-  const lcWinner = world.leagueCup?.winnerId;
-  if (lcWinner && next[lcWinner]) {
-    next[lcWinner].cash += CUP_PRIZE.league_cup_winner;
-    next[lcWinner].totalIncome += CUP_PRIZE.league_cup_winner;
-    // Runner-up = the other team in the final
-    const lcFinal = world.leagueCup.rounds.at(-1)?.fixtures[0];
-    if (lcFinal) {
-      const ru = lcFinal.homeTeamId === lcWinner ? lcFinal.awayTeamId : lcFinal.homeTeamId;
-      if (next[ru]) {
-        next[ru].cash += CUP_PRIZE.league_cup_runner_up;
-        next[ru].totalIncome += CUP_PRIZE.league_cup_runner_up;
-      }
+  // ── 2. Cup prizes (tiered by elimination round) ──
+  // League cup — full bracket payout
+  if (world.leagueCup?.rounds && world.leagueCup.rounds.length > 0) {
+    const prizes = attributeCupPrizes(world.leagueCup.rounds, LEAGUE_CUP_TIERS);
+    for (const [teamId, amt] of Object.entries(prizes)) {
+      if (!next[teamId] || amt <= 0) continue;
+      next[teamId].cash += amt;
+      next[teamId].totalIncome += amt;
     }
   }
-  // Super cup winner
-  const scWinner = world.superCup?.winnerId;
-  if (scWinner && next[scWinner]) {
-    next[scWinner].cash += CUP_PRIZE.super_cup_winner;
-    next[scWinner].totalIncome += CUP_PRIZE.super_cup_winner;
+  // Super cup — KO portion only (group exits get €0 by design, not iterated)
+  if (world.superCup?.knockoutRounds && world.superCup.knockoutRounds.length > 0) {
+    const prizes = attributeCupPrizes(world.superCup.knockoutRounds, SUPER_CUP_TIERS);
+    for (const [teamId, amt] of Object.entries(prizes)) {
+      if (!next[teamId] || amt <= 0) continue;
+      next[teamId].cash += amt;
+      next[teamId].totalIncome += amt;
+    }
   }
   // World cup prize money is paid by `finalizeWorldCup` in season-end.ts —
   // NOT here. At the point applyIncome runs (season_end window),
@@ -452,33 +605,20 @@ export function applyIncome(
   // finalizeWorldCup runs after the WC final and mutates teamFinances
   // directly + patches the just-archived FinanceSeasonRecord.
 
-  // Continental cups (winner / runner-up / semi)
-  const cups = [world.continentalCups?.mainland_cup, world.continentalCups?.southern_cup, world.continentalCups?.eastern_cup];
-  for (const cup of cups) {
-    if (!cup || !cup.completed || !cup.winnerId) continue;
-    if (next[cup.winnerId]) {
-      next[cup.winnerId].cash += CUP_PRIZE.continental_cup_winner;
-      next[cup.winnerId].totalIncome += CUP_PRIZE.continental_cup_winner;
-    }
-    const finalRound = cup.rounds.at(-1);
-    const finalFix = finalRound?.fixtures[0];
-    if (finalFix) {
-      const ru = finalFix.homeTeamId === cup.winnerId ? finalFix.awayTeamId : finalFix.homeTeamId;
-      if (next[ru]) {
-        next[ru].cash += CUP_PRIZE.continental_cup_runner_up;
-        next[ru].totalIncome += CUP_PRIZE.continental_cup_runner_up;
-      }
-    }
-    const semis = cup.rounds.at(-2);
-    if (semis) {
-      for (const f of semis.fixtures) {
-        if (!f.winnerId) continue;
-        const loser = f.homeTeamId === f.winnerId ? f.awayTeamId : f.homeTeamId;
-        if (next[loser]) {
-          next[loser].cash += CUP_PRIZE.continental_cup_semi;
-          next[loser].totalIncome += CUP_PRIZE.continental_cup_semi;
-        }
-      }
+  // Continental cups (region-aware tier — mainland uses 16-team config,
+  // southern/eastern use 8-team config)
+  const continentalCupConfigs: Array<[ContinentalCupState | null | undefined, CupTierConfig]> = [
+    [world.continentalCups?.mainland_cup, MAINLAND_CUP_TIERS],
+    [world.continentalCups?.southern_cup, SMALL_CONTINENTAL_CUP_TIERS],
+    [world.continentalCups?.eastern_cup, SMALL_CONTINENTAL_CUP_TIERS],
+  ];
+  for (const [cup, tier] of continentalCupConfigs) {
+    if (!cup || !cup.completed || !cup.rounds || cup.rounds.length === 0) continue;
+    const prizes = attributeCupPrizes(cup.rounds, tier);
+    for (const [teamId, amt] of Object.entries(prizes)) {
+      if (!next[teamId] || amt <= 0) continue;
+      next[teamId].cash += amt;
+      next[teamId].totalIncome += amt;
     }
   }
 
@@ -495,8 +635,9 @@ export function applyIncome(
       description: `第${idx + 1}名 ${teamName} 获得${formatMoney(prize)}的顶级联赛奖金。`,
     });
   });
-  if (lcWinner) {
-    const teamName = world.teamBases[lcWinner]?.name ?? lcWinner;
+  if (world.leagueCup?.winnerId) {
+    const lcw = world.leagueCup.winnerId;
+    const teamName = world.teamBases[lcw]?.name ?? lcw;
     news.push({
       id: createNewsId(season, windowIndex, `prize-lc`),
       seasonNumber: season, windowIndex, type: 'prize_money',

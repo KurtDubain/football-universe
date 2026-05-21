@@ -22,6 +22,11 @@ import {
   setSalaryBracketsForTesting,
   clearFlatRate,
   CUP_PRIZE,
+  attributeCupPrizes,
+  LEAGUE_CUP_TIERS,
+  WORLD_CUP_TIERS,
+  MAINLAND_CUP_TIERS,
+  SMALL_CONTINENTAL_CUP_TIERS,
   TV_SPONSOR_BY_TIER,
   FIRE_SALE_PREMIUM,
   FIRE_SALE_MIN_VALUE,
@@ -376,5 +381,105 @@ describe('CUP_PRIZE / TV_SPONSOR_BY_TIER — sanity', () => {
     expect(TV_SPONSOR_BY_TIER[1]).toBe(40);
     expect(TV_SPONSOR_BY_TIER[2]).toBe(20);
     expect(TV_SPONSOR_BY_TIER[3]).toBe(10);
+  });
+});
+
+describe('attributeCupPrizes — tiered prize attribution', () => {
+  function fix(home: string, away: string, winner: string) {
+    return { homeTeamId: home, awayTeamId: away, winnerId: winner };
+  }
+
+  it('handles a 3-round (8-team) cup — 南洲杯 style', () => {
+    // 8 teams: A...H. R8: A>B, C>D, E>F, G>H. SF: A>C, E>G. Final: A>E
+    const rounds = [
+      { fixtures: [fix('A','B','A'), fix('C','D','C'), fix('E','F','E'), fix('G','H','G')] },
+      { fixtures: [fix('A','C','A'), fix('E','G','E')] },
+      { fixtures: [fix('A','E','A')] },
+    ];
+    const out = attributeCupPrizes(rounds, SMALL_CONTINENTAL_CUP_TIERS);
+    expect(out.A).toBe(CUP_PRIZE.small_continental_cup_winner);  // 40
+    expect(out.E).toBe(CUP_PRIZE.small_continental_cup_runner_up);  // 20
+    expect(out.C).toBe(CUP_PRIZE.small_continental_cup_sf);  // 8 (lost SF)
+    expect(out.G).toBe(CUP_PRIZE.small_continental_cup_sf);  // 8
+    // R8 first-round losers (B, D, F, H) get nothing
+    expect(out.B).toBeUndefined();
+    expect(out.D).toBeUndefined();
+    expect(out.F).toBeUndefined();
+    expect(out.H).toBeUndefined();
+  });
+
+  it('handles a 4-round (16-team) cup — 大陆杯 style', () => {
+    // 16 teams. Build out final 4 rounds quickly. Just verify SF/QF prizes.
+    // R16, R8, SF, Final
+    const rounds = [
+      { fixtures: [
+        fix('A','B','A'), fix('C','D','C'), fix('E','F','E'), fix('G','H','G'),
+        fix('I','J','I'), fix('K','L','K'), fix('M','N','M'), fix('O','P','O'),
+      ] },
+      { fixtures: [fix('A','C','A'), fix('E','G','E'), fix('I','K','I'), fix('M','O','M')] },
+      { fixtures: [fix('A','E','A'), fix('I','M','I')] },
+      { fixtures: [fix('A','I','A')] },
+    ];
+    const out = attributeCupPrizes(rounds, MAINLAND_CUP_TIERS);
+    expect(out.A).toBe(CUP_PRIZE.continental_cup_winner);   // 45
+    expect(out.I).toBe(CUP_PRIZE.continental_cup_runner_up); // 25
+    expect(out.E).toBe(CUP_PRIZE.continental_cup_semi);      // 10 (lost SF)
+    expect(out.M).toBe(CUP_PRIZE.continental_cup_semi);      // 10
+    expect(out.C).toBe(CUP_PRIZE.continental_cup_r8);        // 4 (lost R8 = "quarter" in 4-round labeling)
+    expect(out.G).toBe(CUP_PRIZE.continental_cup_r8);        // 4
+    // R16 first-round losers get nothing
+    expect(out.B).toBeUndefined();
+    expect(out.D).toBeUndefined();
+  });
+
+  it('handles a 5-round (32-team) cup — 联赛杯 style', () => {
+    // Just verify the chain — winner gets winner prize, semi loser gets sf,
+    // quarter loser gets qf, R16 loser gets r16, R32 loser gets nothing
+    const rounds = [
+      // R32 — only fill 4 fixtures (champion's path) for brevity
+      { fixtures: [fix('A','B','A')] },
+      // R16
+      { fixtures: [fix('A','C','A')] },
+      // QF
+      { fixtures: [fix('A','D','A')] },
+      // SF
+      { fixtures: [fix('A','E','A')] },
+      // Final
+      { fixtures: [fix('A','F','A')] },
+    ];
+    const out = attributeCupPrizes(rounds, LEAGUE_CUP_TIERS);
+    expect(out.A).toBe(CUP_PRIZE.league_cup_winner);     // 30
+    expect(out.F).toBe(CUP_PRIZE.league_cup_runner_up);  // 18
+    expect(out.E).toBe(CUP_PRIZE.league_cup_sf);         // 10
+    expect(out.D).toBe(CUP_PRIZE.league_cup_qf);         // 5
+    expect(out.C).toBe(CUP_PRIZE.league_cup_r16);        // 2
+    expect(out.B).toBeUndefined(); // R32 = first round, no prize
+  });
+
+  it('handles a degenerate cup (no rounds yet) — empty result', () => {
+    expect(attributeCupPrizes([], LEAGUE_CUP_TIERS)).toEqual({});
+  });
+
+  it('handles incomplete rounds (no winnerId) gracefully', () => {
+    const rounds = [
+      { fixtures: [{ homeTeamId: 'A', awayTeamId: 'B' /* no winnerId */ }] },
+    ];
+    expect(attributeCupPrizes(rounds, SMALL_CONTINENTAL_CUP_TIERS)).toEqual({});
+  });
+
+  it('WC tiers — confirms full progression', () => {
+    // 4 rounds: R16 → QF → SF → Final
+    const rounds = [
+      { fixtures: [fix('A','B','A')] },  // R16
+      { fixtures: [fix('A','C','A')] },  // QF
+      { fixtures: [fix('A','D','A')] },  // SF
+      { fixtures: [fix('A','E','A')] },  // Final
+    ];
+    const out = attributeCupPrizes(rounds, WORLD_CUP_TIERS);
+    expect(out.A).toBe(CUP_PRIZE.world_cup_winner);     // 60
+    expect(out.E).toBe(CUP_PRIZE.world_cup_runner_up);  // 30
+    expect(out.D).toBe(CUP_PRIZE.world_cup_semi);       // 15
+    expect(out.C).toBe(CUP_PRIZE.world_cup_qf);         // 10
+    expect(out.B).toBe(CUP_PRIZE.world_cup_r16);        // 5
   });
 });
