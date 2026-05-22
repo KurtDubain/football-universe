@@ -133,6 +133,13 @@ export interface GameWorld {
    */
   playerStatsHistory: Record<string, import('../../types/player').PlayerSeasonStatsHistoryEntry[]>;
   /**
+   * v20 — favorite-team transfer window. Non-null between season-end
+   * (window opens) and user clicking "完成" (window closes). Other
+   * teams' transfers run as today; only favorite teams' player moves
+   * stage here as user decisions.
+   */
+  transferWindow: import('../../types/transfer').TransferWindowState | null;
+  /**
    * FIFO pool of recently-retired stars eligible to become future coaches.
    * Capped at 12 entries (oldest evicted on overflow). A3 will consume from
    * here when assembling new coaches; A2 only seeds the pool. Introduced in
@@ -375,6 +382,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     freeAgentPool: [],
     transferRumors: [],
     playerStatsHistory: {},
+    transferWindow: null,
     coachCandidatePool: [],
     coachRetirementHistory: [],
     nextCoachIdCounter: 0,
@@ -794,8 +802,12 @@ export function getCurrentWindow(world: GameWorld): CalendarWindow | null {
 
 /**
  * Execute the current calendar window: simulate all matches and update state.
+ *
+ * `options.favoriteTeamIds` — Phase 2 transfer-window plumbing. Listed
+ * teams have their incoming poach offers + outbound targets staged into
+ * `world.transferWindow` for user decision rather than auto-resolved.
  */
-export function executeCurrentWindow(world: GameWorld): {
+export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamIds?: string[] }): {
   world: GameWorld;
   results: MatchResult[];
   news: NewsItem[];
@@ -815,7 +827,7 @@ export function executeCurrentWindow(world: GameWorld): {
       ...world,
       seasonState: { ...world.seasonState },
       rngState: rng.getState(),
-    });
+    }, { favoriteTeamIds: options?.favoriteTeamIds ?? [] });
 
     const currentCal = [...updatedWorld.seasonState.calendar];
     if (windowIndex < currentCal.length) {
@@ -827,8 +839,11 @@ export function executeCurrentWindow(world: GameWorld): {
       rngState: rng.getState(),
     };
 
-    // If not a WC year (no worldCupPhase), start next season now
-    if (!updatedWorld.seasonState.worldCupPhase) {
+    // If not a WC year (no worldCupPhase), start next season now.
+    // v20 — pause if transferWindow is open (favorite team has decisions);
+    // store will call initializeNewSeason after user closes window.
+    const windowPending = updatedWorld.transferWindow?.status === 'open';
+    if (!updatedWorld.seasonState.worldCupPhase && !windowPending) {
       updatedWorld = initializeNewSeason(updatedWorld);
     }
 
@@ -970,7 +985,10 @@ export function executeCurrentWindow(world: GameWorld): {
   // WC phase just ended — finalize WC results and start next season
   if (isSeasonDone && updatedSeasonState.worldCupPhase) {
     updatedWorld = finalizeWorldCup(updatedWorld);
-    updatedWorld = initializeNewSeason(updatedWorld);
+    // v20 — pause if transferWindow open (same logic as season_end path)
+    if (updatedWorld.transferWindow?.status !== 'open') {
+      updatedWorld = initializeNewSeason(updatedWorld);
+    }
   }
 
   // Pre-populate NEXT window if it needs dynamic fixtures

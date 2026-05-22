@@ -71,7 +71,7 @@ function findTeamEliminationRound(rounds: CupRound[], teamId: string): string | 
  * Never write `world.X = ...`; write to the local with the same name and put
  * it on the patch object.
  */
-export function handleSeasonEnd(world: GameWorld): GameWorld {
+export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: string[] }): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
 
@@ -664,10 +664,18 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
   // operates on the current rosters (not on `world.squads` which still has
   // the retirees). `playerStats` is unchanged at this point — preserved for
   // historical lookups.
-  const transferResult = processTransferWindow({ ...world, squads, playerStats, freeAgentPool }, rng);
+  const favoriteSet = new Set(options?.favoriteTeamIds ?? []);
+  const transferResult = processTransferWindow({ ...world, squads, playerStats, freeAgentPool }, rng, { favoriteTeamIds: favoriteSet });
   // v17 — always pick up the pool the transfer engine returns (may grow
   // or shrink even when no transfers fire, due to overflow/age-out checks).
   freeAgentPool = transferResult.freeAgentPool;
+  // v20 — staged offers/targets for favorite teams. If non-empty, opens
+  // a transfer window for the UI to resolve.
+  let stagedOffers = transferResult.pendingOffers;
+  let stagedTargets = transferResult.pendingTargets;
+  // Free agent pool snapshot for UI to display (uuids only; full lookup
+  // via world.freeAgentPool live).
+  const freeAgentPoolSnapshot = freeAgentPool.map(p => p.uuid);
   if (transferResult.transfers.length > 0 || transferResult.freeAgentRetirees.length > 0) {
     squads = transferResult.squads;
     playerStats = transferResult.playerStats;
@@ -1381,6 +1389,17 @@ export function handleSeasonEnd(world: GameWorld): GameWorld {
     freeAgentPool,
     /** v18 — rumors are transient; cleared at season-end. */
     transferRumors: [],
+    /** v20 — open transfer window if favorites have pending offers/targets. */
+    transferWindow: (favoriteSet.size > 0 && (stagedOffers.length > 0 || stagedTargets.length > 0))
+      ? {
+          season: seasonNumber,
+          status: 'open' as const,
+          incomingOffers: stagedOffers,
+          outgoingTargets: stagedTargets,
+          freeAgentUuids: freeAgentPoolSnapshot,
+          signedFromPool: [],
+        }
+      : null,
     coachCandidatePool,
     coachRetirementHistory,
     nextCoachIdCounter,

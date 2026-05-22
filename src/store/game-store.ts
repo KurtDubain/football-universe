@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
-import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
+import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete, initializeNewSeason } from '../engine/season/season-manager';
+import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
@@ -49,6 +50,13 @@ interface GameStore {
   toggleStarFixture: (fixtureId: string) => void;
   clearStarredFixtures: () => void;
   placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => void;
+  // ── Phase 2: transfer window actions ──
+  acceptIncomingOffer: (offerId: string) => void;
+  rejectIncomingOffer: (offerId: string) => void;
+  counterIncomingOffer: (offerId: string) => void;
+  bidForOutgoingTarget: (targetId: string, fee: number) => void;
+  signFromFreeAgentPool: (uuid: string) => void;
+  closeTransferWindow: (autoResolveRest: boolean) => void;
   resetGame: () => void;
   getCurrentWindow: () => CalendarWindow | null;
   getTeamsByLeague: (level: 1 | 2 | 3) => string[];
@@ -459,6 +467,19 @@ export function applyV18ToV19StatsHistoryInit(world: {
   return { touched: true };
 }
 
+/**
+ * v19 → v20: Init `world.transferWindow = null`. Pure backfill.
+ */
+export function applyV19ToV20WindowInit(world: {
+  transferWindow?: unknown;
+}): { touched: boolean } {
+  if (world.transferWindow === null || world.transferWindow === undefined) {
+    world.transferWindow = null;
+    return { touched: true };
+  }
+  return { touched: false };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -488,7 +509,7 @@ export const useGameStore = create<GameStore>()(
         if (!world) return;
         set({ isAdvancing: true });
         try {
-          const result = executeCurrentWindow(world);
+          const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
           // Settle bets
           let coins = result.world.coins ?? 1000;
           const settledBets = (result.world.bets ?? []).length > 0 ? [] : [];
@@ -528,7 +549,7 @@ export const useGameStore = create<GameStore>()(
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
-            const result = executeCurrentWindow(world);
+            const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
             world = result.world;
             allResults = result.results; // keep only last window's results
             allNews = [...allNews, ...result.news];
@@ -556,7 +577,7 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
-            const result = executeCurrentWindow(world);
+            const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];
@@ -715,6 +736,121 @@ export const useGameStore = create<GameStore>()(
         set({ starredFixtureIds: [] });
       },
 
+      // ── Phase 2: transfer window actions ─────────────────────
+      // All mutate `world.transferWindow` + (when accepted) move players
+      // and adjust cash. After every action the world snapshot is updated
+      // and persisted via the debounced compressed-storage layer.
+
+      acceptIncomingOffer: (offerId: string) => {
+        const { world } = get();
+        if (!world?.transferWindow) return;
+        const tw = world.transferWindow;
+        const offer = tw.incomingOffers.find(o => o.id === offerId);
+        if (!offer || offer.resolution !== 'pending') return;
+        const fee = offer.counterFee ?? offer.fee;
+        const newWorld = applyOfferTransfer(world, offer, fee);
+        const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
+          ? { ...o, resolution: 'accepted' as const }
+          : o);
+        set({ world: { ...newWorld, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
+      },
+
+      rejectIncomingOffer: (offerId: string) => {
+        const { world } = get();
+        if (!world?.transferWindow) return;
+        const tw = world.transferWindow;
+        const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
+          ? { ...o, resolution: 'rejected' as const }
+          : o);
+        set({ world: { ...world, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
+      },
+
+      counterIncomingOffer: (offerId: string) => {
+        const { world } = get();
+        if (!world?.transferWindow) return;
+        const tw = world.transferWindow;
+        const offer = tw.incomingOffers.find(o => o.id === offerId);
+        if (!offer || offer.resolution !== 'pending') return;
+        const counterFee = Math.round(offer.fee * 1.3);
+        // 60% chance the buyer accepts the counter
+        const rng = new SeededRNG(world.rngState ^ Date.now());
+        const accepts = rng.next() < 0.6;
+        if (accepts) {
+          const newWorld = applyOfferTransfer(world, offer, counterFee);
+          const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
+            ? { ...o, counterFee, resolution: 'countered_accepted' as const }
+            : o);
+          set({ world: { ...newWorld, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
+        } else {
+          const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
+            ? { ...o, counterFee, resolution: 'countered_rejected' as const }
+            : o);
+          set({ world: { ...world, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
+        }
+      },
+
+      bidForOutgoingTarget: (targetId: string, fee: number) => {
+        const { world } = get();
+        if (!world?.transferWindow) return;
+        const tw = world.transferWindow;
+        const target = tw.outgoingTargets.find(t => t.id === targetId);
+        if (!target || target.resolution !== 'pending') return;
+        const finance = world.teamFinances[target.toTeamId];
+        if (!finance || finance.cash < fee) {
+          // Cash check failed — silently mark skipped
+          const updatedTargets = tw.outgoingTargets.map(t => t.id === targetId
+            ? { ...t, bidFee: fee, resolution: 'skipped' as const }
+            : t);
+          set({ world: { ...world, transferWindow: { ...tw, outgoingTargets: updatedTargets } }, advanceTick: get().advanceTick + 1 });
+          return;
+        }
+        // AI decision: accept if bid >= suggestedFee × 0.9
+        // Otherwise 40% chance to accept anyway (greedy seller)
+        const rng = new SeededRNG(world.rngState ^ Date.now());
+        const meetsAsk = fee >= target.suggestedFee * 0.9;
+        const accepted = meetsAsk || rng.next() < 0.4;
+        if (accepted) {
+          const newWorld = applyOutgoingBid(world, target, fee);
+          const updatedTargets = tw.outgoingTargets.map(t => t.id === targetId
+            ? { ...t, bidFee: fee, resolution: 'bid_accepted' as const }
+            : t);
+          set({ world: { ...newWorld, transferWindow: { ...tw, outgoingTargets: updatedTargets } }, advanceTick: get().advanceTick + 1 });
+        } else {
+          const updatedTargets = tw.outgoingTargets.map(t => t.id === targetId
+            ? { ...t, bidFee: fee, resolution: 'bid_rejected' as const }
+            : t);
+          set({ world: { ...world, transferWindow: { ...tw, outgoingTargets: updatedTargets } }, advanceTick: get().advanceTick + 1 });
+        }
+      },
+
+      signFromFreeAgentPool: (uuid: string) => {
+        const { world, favoriteTeamIds } = get();
+        if (!world?.transferWindow) return;
+        const tw = world.transferWindow;
+        if (tw.signedFromPool.includes(uuid)) return;
+        if (favoriteTeamIds.length === 0) return;
+        // Sign to first favorite team that has room
+        const targetTeamId = favoriteTeamIds[0];
+        const newWorld = signFreeAgent(world, uuid, targetTeamId);
+        if (!newWorld) return; // sign failed
+        set({
+          world: { ...newWorld, transferWindow: { ...tw, signedFromPool: [...tw.signedFromPool, uuid] } },
+          advanceTick: get().advanceTick + 1,
+        });
+      },
+
+      closeTransferWindow: (autoResolveRest: boolean) => {
+        let { world } = get();
+        if (!world?.transferWindow) return;
+        if (autoResolveRest) {
+          world = autoResolveRemaining(world);
+        }
+        // Clear window + advance to next season
+        const cleared = { ...world, transferWindow: null };
+        const initialized = initializeNewSeason(cleared);
+        set({ world: initialized, advanceTick: get().advanceTick + 1 });
+      },
+
       resetGame: () => {
         set({ world: null, initialized: false, lastResults: [], lastNews: [], favoriteTeamId: null, favoriteTeamIds: [] });
       },
@@ -756,7 +892,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 19,
+      version: 20,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1063,6 +1199,11 @@ export const useGameStore = create<GameStore>()(
         // for migration; new history accumulates from next season end.
         if (version < 19 && state?.world) {
           applyV18ToV19StatsHistoryInit(state.world as { playerStatsHistory?: unknown });
+        }
+        // v19 → v20: init `transferWindow = null`. Window only spins up
+        // at season-end for favorite teams; default-closed.
+        if (version < 20 && state?.world) {
+          applyV19ToV20WindowInit(state.world as { transferWindow?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

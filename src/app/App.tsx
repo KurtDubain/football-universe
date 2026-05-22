@@ -19,6 +19,7 @@ import Settings from '../pages/Settings';
 import Welcome from '../pages/Welcome';
 import TeamEditor from '../pages/TeamEditor';
 import Transfers from '../pages/Transfers';
+import Market from '../pages/Market';
 import MemorableMatches from '../pages/MemorableMatches';
 import AdvancedSearch from '../pages/AdvancedSearch';
 
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/chronicle" element={<Chronicle />} />
         <Route path="/legends" element={<Legends />} />
         <Route path="/transfers" element={<Transfers />} />
+        <Route path="/market" element={<Market />} />
         <Route path="/memorable" element={<MemorableMatches />} />
         <Route path="/search" element={<AdvancedSearch />} />
         <Route path="/compare" element={<Compare />} />

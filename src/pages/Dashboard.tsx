@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
@@ -45,6 +45,7 @@ const roundLabelCN: Record<string, string> = {
 function cnLabel(label: string) { return roundLabelCN[label] ?? label; }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const world = useGameStore((s) => s.world);
   const lastResults = useGameStore((s) => s.lastResults);
   const lastNews = useGameStore((s) => s.lastNews);
@@ -99,6 +100,14 @@ export default function Dashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTick]);
+
+  // v20 — auto-redirect to /market when transfer window opens
+  useEffect(() => {
+    if (world?.transferWindow?.status === 'open' && window.location.pathname !== '/market') {
+      navigate('/market');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world?.transferWindow?.status]);
 
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;

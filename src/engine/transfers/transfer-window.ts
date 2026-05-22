@@ -152,6 +152,7 @@ function findWeakestPosition(squad: Player[]): PlayerPosition {
 export function processTransferWindow(
   world: GameWorld,
   rng: SeededRNG,
+  options?: { favoriteTeamIds?: Set<string> },
 ): {
   squads: Record<string, Player[]>;
   transfers: TransferRecord[];
@@ -160,7 +161,13 @@ export function processTransferWindow(
   freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }>;
   /** v17 — new persistent free agent pool state (after this window). */
   freeAgentPool: Player[];
+  /** v20 — staged offers/targets for favorite teams (UI handles). */
+  pendingOffers: import('../../types/transfer').IncomingOffer[];
+  pendingTargets: import('../../types/transfer').OutgoingTarget[];
 } {
+  const favoriteSet = options?.favoriteTeamIds ?? new Set<string>();
+  const pendingOffers: import('../../types/transfer').IncomingOffer[] = [];
+  const pendingTargets: import('../../types/transfer').OutgoingTarget[] = [];
   const transfers: TransferRecord[] = [];
   const squads: Record<string, Player[]> = { ...world.squads };
   for (const tid of Object.keys(squads)) squads[tid] = [...squads[tid]];
@@ -169,7 +176,7 @@ export function processTransferWindow(
     .filter(t => t.overall >= ELITE_OVERALL_THRESHOLD)
     .map(t => t.id);
   if (eliteTeamIds.length === 0) {
-    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: world.freeAgentPool ?? [] };
+    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: world.freeAgentPool ?? [], pendingOffers: [], pendingTargets: [] };
   }
 
   const seasonNumber = world.seasonState.seasonNumber;
@@ -223,6 +230,33 @@ export function processTransferWindow(
     const released = sameRolePool[0];
     if (released.rating >= incomingPlayer.rating) continue;
 
+    const fee = Math.round((incomingPlayer.rating - 60) * 1.2);
+    const fromTeam = world.teamBases[cand.teamId];
+    const toTeam = world.teamBases[buyerId];
+
+    // v20 — if seller is a favorite team, DON'T execute. Stage as an
+    // IncomingOffer for the UI to resolve. (Free agent pool still gets
+    // the released player ONLY when user accepts; deferred to apply step.)
+    if (favoriteSet.has(cand.teamId)) {
+      pendingOffers.push({
+        id: `offer-${seasonNumber}-${cand.playerUuid}-${buyerId}`,
+        playerId: incomingPlayer.uuid,
+        playerName: incomingPlayer.name ?? `${incomingPlayer.number}号`,
+        playerPosition: incomingPlayer.position,
+        playerRating: incomingPlayer.rating,
+        ownerTeamId: cand.teamId,
+        ownerTeamName: fromTeam?.name ?? cand.teamId,
+        buyerId,
+        buyerName: toTeam?.name ?? buyerId,
+        fee: fee > 0 ? fee : 1,
+        resolution: 'pending',
+      });
+      // Bump seller/buyer caps so we don't generate 10 offers for the same player
+      sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
+      buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
+      continue;
+    }
+
     const buyerNumbersUsed = new Set(toSquad.filter(p => p.uuid !== released.uuid).map(p => p.number));
     const incomingNumber = pickFreeNumber(buyerNumbersUsed, incomingPlayer.number);
 
@@ -232,10 +266,6 @@ export function processTransferWindow(
 
     squads[cand.teamId] = fromSquad.filter(p => p.uuid !== incomingPlayer.uuid);
     squads[buyerId] = toSquad.filter(p => p.uuid !== released.uuid).concat(movedToElite);
-
-    const fromTeam = world.teamBases[cand.teamId];
-    const toTeam = world.teamBases[buyerId];
-    const fee = Math.round((incomingPlayer.rating - 60) * 1.2);
 
     transfers.push({
       season: seasonNumber,
@@ -268,6 +298,41 @@ export function processTransferWindow(
     freeAgentPool.push({ player: carryOver, releasedFromTeamId: carryOver.teamId });
   }
 
+  // ── Step 1.7: Generate outgoing targets for favorite teams ─────
+  // Suggest 3 candidates per favorite team they could try to bid for.
+  // Pulls from `candidates` (top stat-producers from non-elite teams)
+  // who haven't already been poached this window. Skipped if favorite
+  // is the candidate's current team (can't bid on own player).
+  if (favoriteSet.size > 0) {
+    const poachedUuids = new Set(pendingOffers.map(o => o.playerId).concat(transfers.map(t => t.playerId)));
+    for (const favId of favoriteSet) {
+      const favTeam = world.teamBases[favId];
+      if (!favTeam) continue;
+      const candidatesForFav = candidates
+        .filter(c => c.teamId !== favId)
+        .filter(c => !poachedUuids.has(c.playerUuid))
+        .slice(0, 4);
+      for (const c of candidatesForFav) {
+        const sellerSquad = squads[c.teamId] ?? [];
+        const p = sellerSquad.find(pp => pp.uuid === c.playerUuid);
+        if (!p) continue;
+        const suggestedFee = Math.max(5, Math.round((p.rating - 55) * 1.5));
+        pendingTargets.push({
+          id: `target-${seasonNumber}-${p.uuid}-${favId}`,
+          playerId: p.uuid,
+          playerName: p.name ?? `${p.number}号`,
+          playerPosition: p.position,
+          playerRating: p.rating,
+          fromTeamId: c.teamId,
+          fromTeamName: world.teamBases[c.teamId]?.name ?? c.teamId,
+          toTeamId: favId,
+          suggestedFee,
+          resolution: 'pending',
+        });
+      }
+    }
+  }
+
   // ── Step 2: Distribute free agents ─────────────────────────────
   // Priority: sellers-needing-replacement first, then non-elite teams
   // by inverse league rank (weakest position first).
@@ -289,6 +354,8 @@ export function processTransferWindow(
   for (const recipient of recipients) {
     if (freeAgentPool.length === 0) break;
     if (eliteSet.has(recipient)) continue; // elites don't sign freebies; they poach
+    // v20 — favorite teams sign manually via /market UI; skip auto-assign
+    if (favoriteSet.has(recipient)) continue;
     const recipientSquad = squads[recipient] ?? [];
     const gap = findWeakestPosition(recipientSquad);
     // Prefer free agent at the gap position; otherwise take whoever
@@ -435,7 +502,7 @@ export function processTransferWindow(
   // Always rebuild to a fresh object IF anything happened (transfers OR
   // retirees), so the caller sees a new reference and can detect change.
   if (transfers.length === 0 && freeAgentRetirees.length === 0 && newFreeAgentPool.length === (world.freeAgentPool ?? []).length) {
-    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: newFreeAgentPool };
+    return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: newFreeAgentPool, pendingOffers, pendingTargets };
   }
   const uuidToTeam = new Map<string, string>();
   for (const [tid, sq] of Object.entries(squads)) {
@@ -454,5 +521,5 @@ export function processTransferWindow(
     }
   }
 
-  return { squads, transfers, playerStats: updatedStats, freeAgentRetirees, freeAgentPool: newFreeAgentPool };
+  return { squads, transfers, playerStats: updatedStats, freeAgentRetirees, freeAgentPool: newFreeAgentPool, pendingOffers, pendingTargets };
 }
