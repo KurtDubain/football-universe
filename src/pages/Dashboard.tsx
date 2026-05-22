@@ -203,13 +203,13 @@ export default function Dashboard() {
         {/* Left: season + progress */}
         <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0">
           <span className="font-semibold text-slate-200">
-            S{world.seasonState.seasonNumber}
+            <span className="sm:hidden">S{world.seasonState.seasonNumber}</span>
+            <span className="hidden sm:inline">第{world.seasonState.seasonNumber}赛季</span>
           </span>
           <span className="text-slate-500">·</span>
           <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
-          <span className="text-slate-500 hidden sm:inline">·</span>
-          <span className="text-xs text-amber-400 font-medium hidden sm:inline">{world.coins ?? 1000} 金币</span>
-          <span className="text-[10px] text-amber-400 font-medium sm:hidden ml-1">🪙{world.coins ?? 1000}</span>
+          <span className="text-slate-500">·</span>
+          <span className="text-xs text-amber-400 font-medium">🪙 {world.coins ?? 1000}</span>
         </div>
 
         {/* Center: current window badge */}
@@ -287,25 +287,33 @@ export default function Dashboard() {
             const cashTone = cash < 0 ? 'text-red-300' : cash < 10 ? 'text-amber-300' : 'text-emerald-300';
 
             return (
-              <div key={tid} className="flex items-center gap-3 bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
-                <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
-                <div className="flex items-center gap-3 flex-1 min-w-0 overflow-x-auto text-xs">
-                  <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 shrink-0">{fav.name}</Link>
+              <div key={tid} className="bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
+                {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
+                <div className="flex items-center gap-2 sm:gap-3 text-xs">
+                  <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
+                  <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 truncate min-w-0">{fav.name}</Link>
                   <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
-                  <span className={`shrink-0 ${cashTone}`} title="球队现金 (Phase H 经济)">
-                    💰{formatMoneyChip(cash)}
-                  </span>
-                  <span className="text-slate-600 shrink-0">{coachName}</span>
-                  <div className="flex gap-0.5 shrink-0">
+                  <div className="flex gap-0.5 shrink-0 ml-auto">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
                       <span key={i} className={`w-4 h-4 rounded text-[11px] sm:text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
                     ))}
                   </div>
+                </div>
+                {/* Row 2 — cash / coach / next fixture. Always visible (no horizontal scroll). */}
+                <div className="flex items-center gap-2 sm:gap-3 mt-1.5 text-[11px] sm:text-xs flex-wrap pl-8">
+                  <span className={`${cashTone}`} title="球队现金 (Phase H 经济)">
+                    💰{formatMoneyChip(cash)}
+                  </span>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-400 truncate" title={`主帅 ${coachName}`}>👔 {coachName}</span>
                   {opponentId && (
-                    <span className="text-slate-500 shrink-0">
-                      下场: vs <span className="text-slate-300">{getTeamName(opponentId, world.teamBases)}</span>
-                      {nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}
-                    </span>
+                    <>
+                      <span className="text-slate-500">·</span>
+                      <span className="text-slate-400">
+                        下场 vs <span className="text-slate-200">{getTeamName(opponentId, world.teamBases)}</span>
+                        <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
+                      </span>
+                    </>
                   )}
                 </div>
               </div>

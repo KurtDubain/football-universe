@@ -51,6 +51,7 @@ function makeStat(uuid: string, overrides: Partial<PlayerSeasonStats> = {}): Pla
     yellowCards: 0,
     redCards: 0,
     appearances: 0,
+    cleanSheets: 0,
     ...overrides,
   };
 }

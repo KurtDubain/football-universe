@@ -301,15 +301,44 @@ const LEAGUE_PRIZE_BASE = 60;
 const LEAGUE_PRIZE_DECAY = 0.85;
 const LEAGUE_PRIZE_TIER_MULT: Record<1 | 2 | 3, number> = { 1: 1.0, 2: 0.5, 3: 0.25 };
 
+// ── v21 — Relegation consolation prize (保级慰问金) for ranks 9-16 ─
+//
+// Why: original top-8-only schedule meant the bottom half of every league
+// got €0 league prize — combined with the wage cap being sized to the
+// AVERAGE revenue, mid-table teams slowly bled €5-€15M/year and ended up
+// in a perpetual "bleed → fire-sale → recover → bleed" loop.
+//
+// Fix: tiny tail prize 9th-16th, linear from €5M down to ~€2M (L1 base),
+// scaled by the same tier mult. Adds ~€27M / league / season at L1, not
+// enough to disturb top-team dynamics, enough to plug the mid-table leak.
+//
+//   L1 9th-16th: 5.0/4.6/4.1/3.7/3.2/2.8/2.3/1.9 (≈ €27M tail total)
+//   L2 9th-16th: 2.5/2.3/2.1/1.9/1.6/1.4/1.2/1.0 (≈ €14M)
+//   L3 9th-16th: 1.3/1.2/1.0/0.9/0.8/0.7/0.6/0.5 (≈ €7M)
+const LEAGUE_TAIL_PRIZE_TOP = 5; // 9th-place L1 prize before tier mult
+const LEAGUE_TAIL_PRIZE_BOTTOM = 1.9; // 16th-place L1 prize before tier mult
+
 /**
- * Compute league prize for a (level, rank) pair. Returns 0 for ranks beyond
- * the top 8 — only the top 8 in each league get prize money.
+ * Compute league prize for a (level, rank) pair.
+ *
+ * - Ranks 1-8: original schedule (€60M × 0.85^(rank-1) × tierMult).
+ * - Ranks 9-16: relegation consolation tail (LEAGUE_TAIL_PRIZE_TOP down to
+ *   LEAGUE_TAIL_PRIZE_BOTTOM linearly), scaled by tier mult.
+ * - Ranks outside 1-16 (or < 1): €0.
  */
 export function leaguePrize(level: 1 | 2 | 3, rank: number): number {
-  if (rank < 1 || rank > 8) return 0;
-  const base = LEAGUE_PRIZE_BASE * LEAGUE_PRIZE_TIER_MULT[level];
-  const value = base * Math.pow(LEAGUE_PRIZE_DECAY, rank - 1);
-  return Math.round(value);
+  if (rank < 1 || rank > 16) return 0;
+  const tierMult = LEAGUE_PRIZE_TIER_MULT[level];
+  if (rank <= 8) {
+    const base = LEAGUE_PRIZE_BASE * tierMult;
+    const value = base * Math.pow(LEAGUE_PRIZE_DECAY, rank - 1);
+    return Math.round(value);
+  }
+  // Linear taper from rank 9 (TOP) down to rank 16 (BOTTOM).
+  const t = (rank - 9) / 7; // 0..1
+  const baseTail = LEAGUE_TAIL_PRIZE_TOP - (LEAGUE_TAIL_PRIZE_TOP - LEAGUE_TAIL_PRIZE_BOTTOM) * t;
+  const value = baseTail * tierMult;
+  return Math.round(value * 10) / 10; // 1 decimal — these are small numbers
 }
 
 // ── Cup prize money (€M) ──

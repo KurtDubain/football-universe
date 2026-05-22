@@ -65,6 +65,7 @@ function makeStat(playerUuid: string, teamId: string, goals = 0): PlayerSeasonSt
     yellowCards: 0,
     redCards: 0,
     appearances: 30,
+    cleanSheets: 0,
   };
 }
 

@@ -20,6 +20,7 @@ export function createInitialPlayerStats(
         yellowCards: 0,
         redCards: 0,
         appearances: 0,
+        cleanSheets: 0,
       };
     }
   }
@@ -57,6 +58,31 @@ export function updatePlayerStatsFromResults(
     for (const p of awayMatchday) {
       if (!stats[p.uuid]) continue;
       stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
+    }
+
+    // v21 — credit clean sheets to DF/GK whenever the opposing side scored
+    // 0 goals in regulation + extra time. Penalty shootouts are excluded
+    // (shootout outcome doesn't count against the defence). Result fields
+    // already separate `homeGoals`/`awayGoals` (regulation) from
+    // `etHomeGoals`/`etAwayGoals` (extra time) and `penaltyHome`/`penaltyAway`
+    // (shootout), so summing the first two is the right number.
+    const awayConceded = result.awayGoals + (result.etAwayGoals ?? 0);
+    const homeConceded = result.homeGoals + (result.etHomeGoals ?? 0);
+    if (awayConceded === 0) {
+      for (const p of homeMatchday) {
+        if (!stats[p.uuid]) continue;
+        if (p.position === 'DF' || p.position === 'GK') {
+          stats[p.uuid] = { ...stats[p.uuid], cleanSheets: stats[p.uuid].cleanSheets + 1 };
+        }
+      }
+    }
+    if (homeConceded === 0) {
+      for (const p of awayMatchday) {
+        if (!stats[p.uuid]) continue;
+        if (p.position === 'DF' || p.position === 'GK') {
+          stats[p.uuid] = { ...stats[p.uuid], cleanSheets: stats[p.uuid].cleanSheets + 1 };
+        }
+      }
     }
 
     // Process events

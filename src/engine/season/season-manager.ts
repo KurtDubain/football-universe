@@ -280,6 +280,7 @@ function snapshotPlayerStatsHistory(
       redCards: stat.redCards,
       teamGoalsConceded: ctx.gc,
       teamMatches: ctx.matches,
+      cleanSheets: stat.cleanSheets,
     };
     const existing = next[uuid] ?? [];
     // Avoid double-snapshot if this exact (season,teamId) row already there

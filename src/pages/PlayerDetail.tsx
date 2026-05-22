@@ -350,14 +350,26 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
 // Each position has a different "shining" KPI:
 //   FW: goals per match (≥0.5/match = elite)
 //   MF: (goals+assists) per match
-//   DF: defensive proxy from team's goals conceded rate
-//   GK: same defensive proxy
-// Returns a 0-100 normalized score + a human label.
+//   DF: blend of personal clean-sheet rate (60%) + team's goals-conceded
+//       rate (40%) — credits individual contribution but still rewards
+//       being part of a defensive unit
+//   GK: clean-sheet rate (40% clean sheets = elite)
+// v21: DF/GK now use the individual `cleanSheets` field (incremented
+// per match a player started for the side that conceded 0). Two
+// defenders on the same team can now diverge: the one who started
+// 30/30 matches accrues a clean-sheet rate the bench DF doesn't get.
 function computePositionScore(
   player: Player,
   stats: PlayerSeasonStats | undefined,
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>,
-): { score: number; rating: string; perGame?: number; label: string } {
+): {
+  score: number;
+  rating: string;
+  perGame?: number;
+  label: string;
+  /** v21 — extra context line for DF/GK (e.g. "12 场零封 / 28 出场 · 球队场均失球 0.9"). */
+  detail?: string;
+} {
   const apps = stats?.appearances ?? 0;
   const goals = stats?.goals ?? 0;
   const assists = stats?.assists ?? 0;
@@ -373,7 +385,8 @@ function computePositionScore(
     const score = Math.min(100, perGame * 200);
     return { score, rating: scoreToGrade(score), perGame, label: '场均传射贡献' };
   }
-  // DF / GK: use team's goals-conceded rate as proxy
+  // DF / GK — find the team's league goals-conceded context (only used as
+  // tiebreaker / context line; the headline number is personal cleanSheets).
   let teamGC = 0;
   let teamMatches = 0;
   for (const st of [world.league1Standings, world.league2Standings, world.league3Standings]) {
@@ -384,9 +397,18 @@ function computePositionScore(
       break;
     }
   }
+  const cleanSheets = stats?.cleanSheets ?? 0;
+  const cleanRate = cleanSheets / apps; // 0..1, individual contribution
   const gcPerGame = teamMatches > 0 ? teamGC / teamMatches : 2;
-  const score = Math.max(0, 100 - gcPerGame * 25);
-  return { score, rating: scoreToGrade(score), perGame: gcPerGame, label: '失球抑制率(球队)' };
+  const teamDefenseScore = Math.max(0, 100 - gcPerGame * 25); // 0..100, team context
+  // GK headline = pure clean rate. 40% clean rate → 100; 20% → 50.
+  // DF headline = 60% personal + 40% team context.
+  const score = player.position === 'GK'
+    ? Math.min(100, cleanRate * 250)
+    : Math.min(100, cleanRate * 150 + teamDefenseScore * 0.4);
+  const label = player.position === 'GK' ? '场均零封率' : '防线贡献指数';
+  const detail = `本季 ${cleanSheets} 场零封 / ${apps} 出场 · 球队场均失球 ${gcPerGame.toFixed(2)}`;
+  return { score, rating: scoreToGrade(score), perGame: cleanRate, label, detail };
 }
 
 function scoreToGrade(score: number): string {
@@ -424,7 +446,13 @@ function PositionPerformanceCard({
         </h3>
         <span className={`text-2xl font-black ${gradeColor}`}>{result.rating}</span>
       </div>
-      <div className="text-[11px] text-slate-500 mb-1">{result.label}{result.perGame !== undefined ? ` ${result.perGame.toFixed(2)}` : ''}</div>
+      <div className="text-[11px] text-slate-500 mb-1">
+        {result.label}
+        {result.perGame !== undefined ? ` ${player.position === 'GK' || player.position === 'DF' ? (result.perGame * 100).toFixed(0) + '%' : result.perGame.toFixed(2)}` : ''}
+      </div>
+      {result.detail && (
+        <div className="text-[10px] text-slate-400 mb-2">{result.detail}</div>
+      )}
       <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(100, result.score)}%` }} />
       </div>
@@ -439,7 +467,8 @@ function PositionPerformanceCard({
 function positionScoreHint(pos: string): string {
   if (pos === 'FW') return '0.5球/场 = 100分';
   if (pos === 'MF') return '0.5传射/场 = 100分';
-  return '球队场均失球决定';
+  if (pos === 'GK') return '40%零封率 = 100分';
+  return '60%个人零封 + 40%球队防守';
 }
 
 /** Per-season career history table (v19). */

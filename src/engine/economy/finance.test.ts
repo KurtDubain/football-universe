@@ -73,13 +73,25 @@ describe('startingCashForRep — reputation-tier seeding', () => {
   });
 });
 
-describe('leaguePrize — top-8 only with 0.85 decay', () => {
+describe('leaguePrize — top-8 plus 9-16 consolation tail', () => {
   it('L1 champion gets €60M', () => {
     expect(leaguePrize(1, 1)).toBe(60);
   });
-  it('L1 8th place still positive (cliff is at 9th)', () => {
-    expect(leaguePrize(1, 8)).toBeGreaterThan(0);
-    expect(leaguePrize(1, 9)).toBe(0);
+  it('L1 8th place still > 9th place (cliff shrunk, not gone)', () => {
+    expect(leaguePrize(1, 8)).toBeGreaterThan(leaguePrize(1, 9));
+  });
+  it('L1 9th-16th all positive (v21 consolation prize)', () => {
+    for (let r = 9; r <= 16; r++) {
+      expect(leaguePrize(1, r)).toBeGreaterThan(0);
+    }
+  });
+  it('L1 9th is in the €4-€5M band', () => {
+    expect(leaguePrize(1, 9)).toBeGreaterThanOrEqual(4);
+    expect(leaguePrize(1, 9)).toBeLessThanOrEqual(5);
+  });
+  it('L1 16th is in the €1.5-€2.5M band', () => {
+    expect(leaguePrize(1, 16)).toBeGreaterThanOrEqual(1.5);
+    expect(leaguePrize(1, 16)).toBeLessThanOrEqual(2.5);
   });
   it('L2 champion gets exactly half of L1', () => {
     expect(leaguePrize(2, 1)).toBe(Math.round(60 * 0.5));
@@ -87,13 +99,14 @@ describe('leaguePrize — top-8 only with 0.85 decay', () => {
   it('L3 champion gets a quarter of L1', () => {
     expect(leaguePrize(3, 1)).toBe(Math.round(60 * 0.25));
   });
-  it('decay is monotonic (rank N+1 < rank N)', () => {
-    for (let r = 1; r < 8; r++) {
+  it('decay is monotonic across the full 1-16 schedule', () => {
+    for (let r = 1; r < 16; r++) {
       expect(leaguePrize(1, r + 1)).toBeLessThan(leaguePrize(1, r));
     }
   });
   it('out-of-range ranks return 0', () => {
     expect(leaguePrize(1, 0)).toBe(0);
+    expect(leaguePrize(1, 17)).toBe(0);
     expect(leaguePrize(1, 99)).toBe(0);
     expect(leaguePrize(1, -1)).toBe(0);
   });

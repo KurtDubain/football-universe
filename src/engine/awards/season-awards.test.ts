@@ -69,6 +69,7 @@ function makeStat(
     yellowCards: 0,
     redCards: 0,
     appearances: apps,
+    cleanSheets: 0,
   };
 }
 

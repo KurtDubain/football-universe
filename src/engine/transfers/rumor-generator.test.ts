@@ -27,8 +27,8 @@ function makeWorld(currentWindow: number, calendarLen: number = 47): GameWorld {
       ],
     },
     playerStats: {
-      'p-1': { playerId: 'p-1', teamId: 'WEAK', goals: 15, assists: 5, yellowCards: 0, redCards: 0, appearances: 28 },
-      'p-2': { playerId: 'p-2', teamId: 'WEAK', goals: 12, assists: 3, yellowCards: 0, redCards: 0, appearances: 27 },
+      'p-1': { playerId: 'p-1', teamId: 'WEAK', goals: 15, assists: 5, yellowCards: 0, redCards: 0, appearances: 28, cleanSheets: 0 },
+      'p-2': { playerId: 'p-2', teamId: 'WEAK', goals: 12, assists: 3, yellowCards: 0, redCards: 0, appearances: 27, cleanSheets: 0 },
     },
     transferRumors: [],
   } as unknown as GameWorld;

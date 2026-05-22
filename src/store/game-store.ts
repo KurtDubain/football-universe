@@ -480,6 +480,26 @@ export function applyV19ToV20WindowInit(world: {
   return { touched: false };
 }
 
+/**
+ * v20 → v21: Backfill `cleanSheets: 0` on every existing PlayerSeasonStats
+ * row. Field is new for DF/GK position scoring; existing saves have no
+ * historical data so the count starts at 0 and accumulates from now on.
+ */
+export function applyV20ToV21CleanSheetsInit(world: {
+  playerStats?: Record<string, { cleanSheets?: number }>;
+}): { touched: boolean } {
+  if (!world.playerStats || typeof world.playerStats !== 'object') return { touched: false };
+  let touched = false;
+  for (const k of Object.keys(world.playerStats)) {
+    const s = world.playerStats[k];
+    if (s && typeof s === 'object' && s.cleanSheets === undefined) {
+      s.cleanSheets = 0;
+      touched = true;
+    }
+  }
+  return { touched };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -892,7 +912,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 20,
+      version: 21,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1204,6 +1224,12 @@ export const useGameStore = create<GameStore>()(
         // at season-end for favorite teams; default-closed.
         if (version < 20 && state?.world) {
           applyV19ToV20WindowInit(state.world as { transferWindow?: unknown });
+        }
+        // v20 → v21: backfill `cleanSheets = 0` on every PlayerSeasonStats
+        // row. Field is new for DF/GK position scoring; counts accumulate
+        // from the next simulated match onward.
+        if (version < 21 && state?.world) {
+          applyV20ToV21CleanSheetsInit(state.world as { playerStats?: Record<string, { cleanSheets?: number }> });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

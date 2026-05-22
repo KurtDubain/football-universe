@@ -280,11 +280,11 @@ export default function League() {
                     <th className="text-center px-1.5 sm:px-2 py-2 w-8 sm:w-10">#</th>
                     <th className="text-left px-1.5 sm:px-2 py-2">球队</th>
                     <th className="text-center px-1 sm:px-2 py-2">赛</th>
-                    <th className="hidden sm:table-cell text-center px-2 py-2">胜</th>
+                    <th className="text-center px-1 sm:px-2 py-2">胜</th>
                     <th className="hidden sm:table-cell text-center px-2 py-2">平</th>
                     <th className="hidden sm:table-cell text-center px-2 py-2">负</th>
                     <th className="hidden md:table-cell text-center px-2 py-2">进</th>
-                    <th className="hidden md:table-cell text-center px-2 py-2">失</th>
+                    <th className="text-center px-1 sm:px-2 py-2">失</th>
                     <th className="text-center px-1 sm:px-2 py-2">净胜</th>
                     <th className="hidden md:table-cell text-left px-2 py-2">最佳射手</th>
                     <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
@@ -336,11 +336,11 @@ export default function League() {
                           </div>
                         </td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>
-                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.won}</td>
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.won}</td>
                         <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.drawn}</td>
                         <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.lost}</td>
                         <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsFor}</td>
-                        <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.goalsAgainst}</td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
                           {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
                         </td>

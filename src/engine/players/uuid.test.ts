@@ -89,9 +89,9 @@ describe('UUID stability across transfer (integration)', () => {
     ];
 
     const playerStats: Record<string, PlayerSeasonStats> = {
-      'p-101': { playerId: 'p-101', teamId: 'weak', goals: 10, assists: 4, yellowCards: 2, redCards: 0, appearances: 30 },
-      'p-102': { playerId: 'p-102', teamId: 'weak', goals: 3, assists: 1, yellowCards: 1, redCards: 0, appearances: 28 },
-      'p-1': { playerId: 'p-1', teamId: 'elite', goals: 8, assists: 5, yellowCards: 0, redCards: 0, appearances: 30 },
+      'p-101': { playerId: 'p-101', teamId: 'weak', goals: 10, assists: 4, yellowCards: 2, redCards: 0, appearances: 30, cleanSheets: 0 },
+      'p-102': { playerId: 'p-102', teamId: 'weak', goals: 3, assists: 1, yellowCards: 1, redCards: 0, appearances: 28, cleanSheets: 0 },
+      'p-1': { playerId: 'p-1', teamId: 'elite', goals: 8, assists: 5, yellowCards: 0, redCards: 0, appearances: 30, cleanSheets: 0 },
     };
 
     return {
