@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSwipe } from '../utils/use-swipe';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
@@ -110,8 +111,17 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
     return '';
   }, [minute, finished, htShow, flashEvent]);
 
+  // Mobile — swipe down on overlay or content to close
+  const swipeRef = useSwipe<HTMLDivElement>({
+    onSwipeDown: onClose,
+    threshold: 60,
+  });
+
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[200] flex items-center justify-center p-3">
+    <div
+      ref={swipeRef}
+      className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[200] flex items-center justify-center p-3"
+    >
       <div className={`bg-slate-900 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scale-in border ${
         goalFlash ? (goalFlash === 'home' ? 'border-green-500/50' : 'border-green-500/50') : 'border-slate-800'
       } transition-colors duration-500`}>

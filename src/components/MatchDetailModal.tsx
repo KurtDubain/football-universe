@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useSwipe } from '../utils/use-swipe';
 import type { MatchFixture, MatchResult, MatchEvent } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase, TeamState } from '../types/team';
@@ -44,10 +45,14 @@ export default function MatchDetailModal({
   const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
   const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
 
+  // Mobile — swipe down to close (modal mostly attaches from bottom on mobile)
+  const swipeRef = useSwipe<HTMLDivElement>({ onSwipeDown: onClose, threshold: 60 });
+
   if (!homeTeam || !awayTeam) return null;
 
   return (
     <div
+      ref={swipeRef}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
       onClick={onClose}
     >

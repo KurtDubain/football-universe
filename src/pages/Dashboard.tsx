@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
@@ -182,24 +183,38 @@ export default function Dashboard() {
     ...(hasSeasonReview ? [{ key: 'review' as TabKey, label: `S${lastCompletedSeason}回顾` }] : []),
   ];
 
+  // Mobile swipe — left/right between tabs
+  const tabSwipeRef = useSwipe<HTMLDivElement>({
+    ignoreVertical: true,
+    onSwipeLeft: () => {
+      const idx = tabs.findIndex(t => t.key === activeTab);
+      if (idx >= 0 && idx < tabs.length - 1) setActiveTab(tabs[idx + 1].key);
+    },
+    onSwipeRight: () => {
+      const idx = tabs.findIndex(t => t.key === activeTab);
+      if (idx > 0) setActiveTab(tabs[idx - 1].key);
+    },
+  });
+
   return (
     <div className="max-w-6xl flex flex-col h-full">
       {/* ═══════ Compact Top Bar ═══════ */}
       <div className="sticky top-0 z-[210] bg-slate-900/95 backdrop-blur-sm flex items-center justify-between gap-2 pb-3 border-b border-slate-700/50 flex-wrap">
         {/* Left: season + progress */}
-        <div className="flex items-center gap-2 text-sm min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0">
           <span className="font-semibold text-slate-200">
-            第{world.seasonState.seasonNumber}赛季
+            S{world.seasonState.seasonNumber}
           </span>
           <span className="text-slate-500">·</span>
           <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
-          <span className="text-slate-500">·</span>
-          <span className="text-xs text-amber-400 font-medium">{world.coins ?? 1000} 金币</span>
+          <span className="text-slate-500 hidden sm:inline">·</span>
+          <span className="text-xs text-amber-400 font-medium hidden sm:inline">{world.coins ?? 1000} 金币</span>
+          <span className="text-[10px] text-amber-400 font-medium sm:hidden ml-1">🪙{world.coins ?? 1000}</span>
         </div>
 
         {/* Center: current window badge */}
         {currentWindow && (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 order-3 sm:order-none basis-full sm:basis-auto">
             <span
               className={`px-2 py-0.5 rounded text-[10px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}
             >
@@ -213,12 +228,12 @@ export default function Dashboard() {
         <button
           onClick={handleAdvanceClick}
           disabled={isAdvancing || !currentWindow}
-          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
+          className="px-3 sm:px-4 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
         >
           {isAdvancing
             ? '模拟中...'
             : currentWindow
-              ? `开始模拟 (${currentWindow.fixtures.length}场)`
+              ? <>开始模拟 <span className="text-[11px] opacity-80">({currentWindow.fixtures.length}场)</span></>
               : '赛季已结束'}
         </button>
       </div>
@@ -359,12 +374,12 @@ export default function Dashboard() {
       })()}
 
       {/* ═══════ Tab Bar ═══════ */}
-      <div className="flex gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
+      <div className="flex gap-2 sm:gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`pb-2 text-sm font-medium transition-colors cursor-pointer relative ${
+            className={`pb-3 pt-2 sm:pb-2 sm:pt-0 px-2 sm:px-0 text-sm font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
               activeTab === tab.key
                 ? 'text-blue-400'
                 : 'text-slate-500 hover:text-slate-300'
@@ -381,8 +396,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* ═══════ Tab Content ═══════ */}
-      <div className="flex-1 overflow-auto pt-4 pb-2 animate-tab-enter" key={activeTab}>
+      {/* ═══════ Tab Content (swipe left/right to switch tabs on mobile) ═══════ */}
+      <div ref={tabSwipeRef} className="flex-1 overflow-auto pt-4 pb-2 animate-tab-enter touch-pan-y" key={activeTab}>
         {activeTab === 'matchday' && (
           <MatchdayTab
             world={world}

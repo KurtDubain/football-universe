@@ -84,9 +84,9 @@ export default function Market() {
               <span className="font-medium text-slate-300">{o.buyerName}</span> 出价求购
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => acceptIncomingOffer(o.id)} className="text-xs px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded text-white">✅ 接受 {formatMoney(o.fee)}</button>
-              <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded text-white">💬 还价 {formatMoney(Math.round(o.fee * 1.3))} (60%成功率)</button>
-              <button onClick={() => rejectIncomingOffer(o.id)} className="text-xs px-3 py-1.5 bg-red-800 hover:bg-red-700 rounded text-white">❌ 拒绝</button>
+              <button onClick={() => acceptIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-emerald-700 hover:bg-emerald-600 rounded text-white">✅ 接受 {formatMoney(o.fee)}</button>
+              <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-amber-700 hover:bg-amber-600 rounded text-white">💬 还价 {formatMoney(Math.round(o.fee * 1.3))} (60%成功率)</button>
+              <button onClick={() => rejectIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-red-800 hover:bg-red-700 rounded text-white">❌ 拒绝</button>
             </div>
           </div>
         ))}
@@ -119,19 +119,22 @@ export default function Market() {
                 <span className="text-slate-300 ml-auto">建议 {formatMoney(t.suggestedFee)}</span>
               </div>
               <div className="flex gap-2 flex-wrap items-center">
-                <input
-                  type="number"
-                  value={currentBid}
-                  onChange={e => setBidValues({ ...bidValues, [t.id]: Math.max(1, parseInt(e.target.value) || 1) })}
-                  className="text-xs px-2 py-1 w-24 bg-slate-900 border border-slate-700 rounded text-slate-200"
-                />
-                <span className="text-[10px] text-slate-500">M €</span>
+                <div className="flex items-center gap-1 flex-1 min-w-0 sm:flex-none">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={currentBid}
+                    onChange={e => setBidValues({ ...bidValues, [t.id]: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="text-sm sm:text-xs px-2 py-2 sm:py-1 w-full sm:w-24 min-w-0 bg-slate-900 border border-slate-700 rounded text-slate-200"
+                  />
+                  <span className="text-[10px] text-slate-500 shrink-0">M €</span>
+                </div>
                 <button
                   onClick={() => bidForOutgoingTarget(t.id, currentBid)}
                   disabled={!canAfford}
-                  className="text-xs px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
+                  className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-blue-700 hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
                 >📤 报价</button>
-                <span className="text-[10px] text-slate-500 ml-auto">出价 ≥ {formatMoney(Math.round(t.suggestedFee * 0.9))} 接受概率高</span>
+                <span className="text-[10px] text-slate-500 sm:ml-auto basis-full sm:basis-auto">出价 ≥ {formatMoney(Math.round(t.suggestedFee * 0.9))} 接受概率高</span>
               </div>
               {!canAfford && (
                 <div className="text-[10px] text-red-400 mt-1">💸 现金不足</div>
@@ -158,7 +161,7 @@ export default function Market() {
         {poolPlayers.map(p => {
           const canAfford = favTeamFinances && favTeamFinances.cash >= 5;
           return (
-            <div key={p.uuid} className="flex items-center gap-2 p-2 bg-slate-800 rounded text-xs">
+            <div key={p.uuid} className="flex items-center gap-2 p-2 bg-slate-800 rounded text-xs flex-wrap">
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[p.position] ?? ''}`}>{POS_LABEL[p.position]}</span>
               <span className="text-slate-100 font-medium">{p.name ?? `${p.number}号`}</span>
               <span className="text-[10px] text-slate-500">能力 {p.rating} · {p.age ?? '?'}岁</span>
@@ -166,7 +169,7 @@ export default function Market() {
               <button
                 onClick={() => signFromFreeAgentPool(p.uuid)}
                 disabled={!canAfford}
-                className="text-[11px] px-2 py-1 bg-cyan-700 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
+                className="text-[11px] px-3 py-1.5 min-h-[32px] bg-cyan-700 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
               >签下</button>
             </div>
           );
@@ -175,21 +178,21 @@ export default function Market() {
 
       {/* Action footer */}
       <div className="sticky bottom-0 bg-slate-900/95 backdrop-blur border-t border-slate-700/50 -mx-3 px-3 py-3 flex items-center justify-between flex-wrap gap-2 z-50">
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-500 basis-full sm:basis-auto">
           {pendingOffers.length + pendingTargets.length > 0
             ? `还有 ${pendingOffers.length} 个待定报价 + ${pendingTargets.length} 个候选未操作`
             : '所有决策已完成'}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           {(pendingOffers.length + pendingTargets.length > 0) && (
             <button
               onClick={() => closeTransferWindow(true)}
-              className="text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-200"
+              className="text-xs px-3 py-2.5 min-h-[40px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 flex-1 sm:flex-none"
             >⚡ 全自动剩余</button>
           )}
           <button
             onClick={() => closeTransferWindow(false)}
-            className="text-xs px-4 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-white font-semibold"
+            className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 rounded text-white font-semibold flex-1 sm:flex-none"
           >✅ 完成转会窗口</button>
         </div>
       </div>
