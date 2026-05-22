@@ -898,10 +898,26 @@ export const useGameStore = create<GameStore>()(
         if (autoResolveRest) {
           world = autoResolveRemaining(world);
         }
-        // Clear window + advance to next season
+        // Clear window. Where we go next depends on whether the calendar
+        // still has unplayed windows (WC years append world-cup windows
+        // AFTER season_end → if we'd unconditionally initializeNewSeason
+        // here, those WC windows would be silently overwritten and the
+        // tournament skipped entirely — observed as "fatal bug: WorldCup
+        // gets skipped when favorite team controls the transfer window").
+        //
+        // Resolution:
+        //   - WC year (worldCupPhase=true at this point): just clear the
+        //     window. User advances through WC normally; finalizeWorldCup
+        //     in season-manager.ts will call initializeNewSeason after
+        //     the WC final.
+        //   - Non-WC year: initialize new season immediately (current
+        //     behavior, unchanged).
         const cleared = { ...world, transferWindow: null };
-        const initialized = initializeNewSeason(cleared);
-        set({ world: initialized, advanceTick: get().advanceTick + 1 });
+        const hasPendingWc = cleared.seasonState?.worldCupPhase === true;
+        const updated = hasPendingWc
+          ? cleared
+          : initializeNewSeason(cleared);
+        set({ world: updated, advanceTick: get().advanceTick + 1 });
       },
 
       resetGame: () => {

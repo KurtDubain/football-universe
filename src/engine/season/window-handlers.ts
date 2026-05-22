@@ -13,15 +13,32 @@ import { getSuperCupGroupFixtures, updateSuperCupGroupStandings, completeSuperCu
 import { updateWorldCupGroupStandings, completeWorldCupGroupStage, advanceWorldCupKnockout } from '../cups/world-cup';
 import { advanceContinentalCup, getContinentalCupCurrentFixtures } from '../cups/continental-cup';
 import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsId } from './helpers';
+import type { CompetitionType } from '../../types/match';
 
 /**
- * v23 — A cup match is at a neutral venue iff its round label denotes the
- * FINAL of any single-leg knockout. Two-legged finals do NOT exist in this
- * codebase (super cup final is single-leg per super-cup.ts ~line 383), so
- * any roundName "Final" / "决赛" qualifies.
+ * v23 — Decide whether a cup match should be played at a neutral venue.
+ *
+ * Single-elimination cups (league_cup, world_cup, continental_cup): every
+ * knockout round is neutral. Two-legged cups (super_cup KO except its
+ * single-leg Final): only the Final is neutral. Continental & world cup
+ * group stages and league matches always pass through as home/away.
+ *
+ * The `Final` / `决赛` short-circuit covers any future cup that lands a
+ * single-leg final regardless of competition type.
  */
-function isFinalRound(roundName: string): boolean {
-  return roundName === 'Final' || roundName === '决赛';
+function isNeutralRound(roundName: string, competitionType: CompetitionType): boolean {
+  if (roundName === 'Final' || roundName === '决赛') return true;
+  // For single-elimination cups, ALL KO rounds are neutral.
+  if (competitionType === 'league_cup'
+      || competitionType === 'world_cup'
+      || competitionType === 'continental_cup') {
+    // League cup / world cup / continental cup KO round names include
+    // R32, R16, QF, SF, 16强, etc. Group-stage matches use a different
+    // competitionType (super_cup_group / world_cup_group) and never reach
+    // this helper, so any non-empty roundName here is a KO round.
+    return true;
+  }
+  return false;
 }
 import { GameWorld, NewsItem } from './season-manager';
 
@@ -138,7 +155,7 @@ export function handleLeagueCup(
     competitionType: 'league_cup' as const,
     competitionName: '联赛杯',
     roundLabel: cf.roundName,
-    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+    ...(isNeutralRound(cf.roundName, 'league_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -163,7 +180,7 @@ export function handleLeagueCup(
         competitionType: 'league_cup' as const,
         competitionName: '联赛杯',
         roundLabel: cf.roundName,
-        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+        ...(isNeutralRound(cf.roundName, 'league_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -280,7 +297,7 @@ export function handleSuperCup(
     competitionType: 'super_cup' as const,
     competitionName: '超级杯',
     roundLabel: cf.roundName,
-    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+    ...(isNeutralRound(cf.roundName, 'super_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isFinal);
@@ -304,7 +321,7 @@ export function handleSuperCup(
         competitionType: 'super_cup' as const,
         competitionName: '超级杯',
         roundLabel: cf.roundName,
-        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+        ...(isNeutralRound(cf.roundName, 'super_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -487,7 +504,7 @@ export function handleWorldCup(
     competitionType: 'world_cup' as const,
     competitionName: '环球冠军杯',
     roundLabel: cf.roundName,
-    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+    ...(isNeutralRound(cf.roundName, 'world_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -509,7 +526,7 @@ export function handleWorldCup(
         competitionType: 'world_cup' as const,
         competitionName: '环球冠军杯',
         roundLabel: cf.roundName,
-        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+        ...(isNeutralRound(cf.roundName, 'world_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -575,7 +592,7 @@ export function handleContinentalCup(
         competitionType: 'continental_cup' as const,
         competitionName: cup.name,
         roundLabel: cf.roundName,
-        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
+        ...(isNeutralRound(cf.roundName, 'continental_cup') && { isNeutralVenue: true }),
       });
       fixtureCupMap.set(cf.id, cup);
     }
