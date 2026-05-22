@@ -1,17 +1,26 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { compressedStorage } from './compressed-storage';
+import { compressedStorage, __flushCompressedStorageForTests } from './compressed-storage';
 
 beforeEach(() => {
+  __flushCompressedStorageForTests();
   localStorage.clear();
 });
 
 describe('compressedStorage', () => {
-  it('round-trip: setItem → getItem returns the same value', () => {
+  it('round-trip: setItem → getItem returns the same value (in-memory pending)', () => {
     const value = JSON.stringify({ a: 1, b: 'hello', nested: { x: [1, 2, 3] } });
     compressedStorage.setItem('test', value);
-    const read = compressedStorage.getItem('test');
-    expect(read).toBe(value);
+    // Immediate getItem reads the pending in-memory buffer (no flush yet).
+    expect(compressedStorage.getItem('test')).toBe(value);
+  });
+
+  it('round-trip after flush: writes survive localStorage', () => {
+    const value = JSON.stringify({ a: 1, b: 'hello' });
+    compressedStorage.setItem('test', value);
+    __flushCompressedStorageForTests();
+    // Now the in-memory pending is cleared; getItem decompresses from localStorage.
+    expect(compressedStorage.getItem('test')).toBe(value);
   });
 
   it('compressed bytes on disk are significantly smaller than plaintext', () => {
@@ -39,6 +48,7 @@ describe('compressedStorage', () => {
     });
 
     compressedStorage.setItem('test', payload);
+    __flushCompressedStorageForTests();
     const onDisk = localStorage.getItem('test');
     expect(onDisk).not.toBeNull();
     // At least 2× compression on a payload this redundant
@@ -57,9 +67,23 @@ describe('compressedStorage', () => {
     expect(compressedStorage.getItem('nope')).toBeNull();
   });
 
-  it('removeItem removes the key', () => {
+  it('removeItem removes the key (and cancels any pending write)', () => {
     compressedStorage.setItem('todelete', 'value');
     compressedStorage.removeItem('todelete');
+    __flushCompressedStorageForTests();
     expect(localStorage.getItem('todelete')).toBeNull();
+  });
+
+  it('debounces rapid writes — only one compress lands per debounce window', () => {
+    // Set the same key 5 times rapidly with different values.
+    for (let i = 0; i < 5; i++) {
+      compressedStorage.setItem('debounce', JSON.stringify({ count: i }));
+    }
+    // Before flush, localStorage has nothing yet (debounced).
+    expect(localStorage.getItem('debounce')).toBeNull();
+    // After flush, only the LAST value persists.
+    __flushCompressedStorageForTests();
+    const read = compressedStorage.getItem('debounce');
+    expect(read).toBe(JSON.stringify({ count: 4 }));
   });
 });
