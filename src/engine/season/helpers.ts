@@ -41,6 +41,7 @@ export function buildSimulationContext(
     isKnockout, rng,
     homeSquad: pickMatchday(world.squads[fixture.homeTeamId]),
     awaySquad: pickMatchday(world.squads[fixture.awayTeamId]),
+    globalWindowIdx: currentWindowIdx,
   };
 }
 

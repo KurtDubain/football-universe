@@ -13,6 +13,7 @@ import { isDerby, getDerbyBoost } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents } from './events';
+import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ export interface SimulationContext {
   rng: SeededRNG;
   homeSquad?: Player[];
   awaySquad?: Player[];
+  /** Global window index — used to filter injured/suspended players from boosts. */
+  globalWindowIdx?: number;
 }
 
 export interface SimulationResult {
@@ -59,6 +62,7 @@ function calculateAdjustedStrengths(
   state: TeamState,
   coach: CoachBase | null,
   isHome: boolean,
+  playerBoosts?: PlayerBoosts,
 ): AdjustedStrengths {
   const homeBonus = isHome ? BALANCE.HOME_ADVANTAGE * 100 : 0;
   const homeSmallBonus = isHome ? 3 : 0;
@@ -66,10 +70,16 @@ function calculateAdjustedStrengths(
   const coachAttackBuff = coach ? coach.attackBuff * BALANCE.COACH_BUFF_WEIGHT : 0;
   const coachDefenseBuff = coach ? coach.defenseBuff * BALANCE.COACH_BUFF_WEIGHT : 0;
 
+  // Phase 1B — squad-derived buffs (independent of coach). See player-boosts.ts.
+  const playerAttack   = playerBoosts?.attack   ?? 0;
+  const playerMidfield = playerBoosts?.midfield ?? 0;
+  const playerDefense  = playerBoosts?.defense  ?? 0;
+
   const attack = Math.max(
     20,
     team.attack
       + coachAttackBuff
+      + playerAttack
       + homeBonus
       + state.momentum * 1.5
       - state.fatigue * 0.15
@@ -79,6 +89,7 @@ function calculateAdjustedStrengths(
   const midfield = Math.max(
     20,
     team.midfield
+      + playerMidfield
       + homeSmallBonus
       + state.momentum * 1
       - state.fatigue * 0.08,
@@ -88,6 +99,7 @@ function calculateAdjustedStrengths(
     20,
     team.defense
       + coachDefenseBuff
+      + playerDefense
       + homeSmallBonus
       - state.fatigue * 0.10
       + team.stability * 0.1,
@@ -273,9 +285,13 @@ export function simulateMatch(
 ): SimulationResult {
   const { homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, rng } = ctx;
 
+  // Phase 1B — derive per-squad buffs (filters out injured / suspended)
+  const homeBoosts = computePlayerBoosts(ctx.homeSquad, ctx.globalWindowIdx ?? 0);
+  const awayBoosts = computePlayerBoosts(ctx.awaySquad, ctx.globalWindowIdx ?? 0);
+
   // 1. Calculate adjusted strengths
-  const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, true);
-  const awayAdj = calculateAdjustedStrengths(awayTeam, awayState, awayCoach, false);
+  const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, true, homeBoosts);
+  const awayAdj = calculateAdjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts);
 
   // 2. Underdog boost — weaker team gets a small boost to enable upsets
   const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);

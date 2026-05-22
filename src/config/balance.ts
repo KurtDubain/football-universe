@@ -8,6 +8,8 @@ export const BALANCE = {
   FATIGUE_WEIGHT: 0.15,
   MOMENTUM_WEIGHT: 0.05,
   COACH_BUFF_WEIGHT: 1.0,
+  PLAYER_BOOST_WEIGHT: 1.0,   // multiplier on the player-derived squad boost (set to 0 to disable entirely)
+  PLAYER_BOOST_CAP: 15,        // ± cap per side (attack/midfield/defense) — keeps elite stacks from doubling team.overall
   UNDERDOG_BOOST: 0.06,       // weaker teams get a slight boost to make upsets possible
 
   // post-match effects

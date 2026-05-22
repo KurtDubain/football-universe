@@ -9,6 +9,7 @@ import {
 } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { formatMoney } from '../engine/economy/finance';
+import { computePlayerBoosts } from '../engine/players/player-boosts';
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 
@@ -357,8 +358,55 @@ export default function TeamDetail() {
       {/* ═══ 伤员 / 停赛 ═══ */}
       <InjuryBoard teamId={id} />
 
+      {/* ═══ 球员加成 (v3.8.1) ═══ */}
+      <PlayerBoostsCard teamId={id} />
+
       {/* ═══ 阵容名单 ═══ */}
       <SquadRoster teamId={id} />
+    </div>
+  );
+}
+
+/** Phase 1B — display the team's player-derived attack/midfield/defense
+ *  buffs alongside coach buffs. Helps the player see how injuries +
+ *  star quality affect their team's effective strength. */
+function PlayerBoostsCard({ teamId }: { teamId: string }) {
+  const world = useGameStore((s) => s.world);
+  if (!world) return null;
+  const squad = world.squads[teamId] ?? [];
+  if (squad.length === 0) return null;
+  const boosts = computePlayerBoosts(squad, world.totalElapsedWindows ?? 0);
+  const injured = squad.filter(p => (p.injuredUntilWindow ?? 0) > (world.totalElapsedWindows ?? 0)).length;
+  const suspended = squad.filter(p => (p.suspendedUntilWindow ?? 0) > (world.totalElapsedWindows ?? 0)).length;
+  const cls = (n: number) => n > 0 ? 'text-emerald-300' : n < 0 ? 'text-red-300' : 'text-slate-400';
+  const sign = (n: number) => n > 0 ? `+${n}` : `${n}`;
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          🛡️ 球员阵容加成
+        </h3>
+        <span className="text-[10px] text-slate-500">主力贡献(伤停不计) · ±15 封顶</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${cls(boosts.attack)}`}>{sign(boosts.attack)}</div>
+          <div className="text-[10px] text-slate-500">进攻</div>
+        </div>
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${cls(boosts.midfield)}`}>{sign(boosts.midfield)}</div>
+          <div className="text-[10px] text-slate-500">中场</div>
+        </div>
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${cls(boosts.defense)}`}>{sign(boosts.defense)}</div>
+          <div className="text-[10px] text-slate-500">防守</div>
+        </div>
+      </div>
+      {(injured + suspended) > 0 && (
+        <div className="mt-2 text-[10px] text-amber-400 text-center">
+          ⚠ 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''} — 加成已扣除
+        </div>
+      )}
     </div>
   );
 }

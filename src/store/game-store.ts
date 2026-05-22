@@ -1080,3 +1080,10 @@ export const useGameStore = create<GameStore>()(
     }
   )
 );
+
+
+// Dev-only: expose store on window for audit/playwright scripts.
+// Production builds tree-shake `import.meta.env.DEV` away.
+if (import.meta.env?.DEV && typeof window !== "undefined") {
+  (window as unknown as { __gameStore?: typeof useGameStore }).__gameStore = useGameStore;
+}
