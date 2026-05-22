@@ -311,7 +311,11 @@ export default function Dashboard() {
                       <span className="text-slate-500">·</span>
                       <span className="text-slate-400">
                         下场 vs <span className="text-slate-200">{getTeamName(opponentId, world.teamBases)}</span>
-                        <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
+                        {nextFixture?.isNeutralVenue ? (
+                          <span className="text-amber-400 text-[10px] ml-1">🏟️中立</span>
+                        ) : (
+                          <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
+                        )}
                       </span>
                     </>
                   )}

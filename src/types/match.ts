@@ -9,6 +9,14 @@ export interface MatchFixture {
   roundLabel: string;
   leg?: 1 | 2; // for two-legged ties
   firstLegResult?: { home: number; away: number }; // for second legs
+  /**
+   * v23 — set true for matches played at a neutral venue (cup FINALS).
+   * When true: no home advantage applied in the simulator, UI hides
+   * the (主)/(客) suffix and renders a "中立场" badge instead. The
+   * `homeTeamId` / `awayTeamId` fields are still used for stats and
+   * event attribution; "home" is just a label, not a venue.
+   */
+  isNeutralVenue?: boolean;
 }
 
 export interface MatchEvent {
@@ -71,4 +79,6 @@ export interface MatchResult {
   competitionName: string;
   roundLabel: string;
   motm?: string; // man of the match description
+  /** v23 — true if the match was at a neutral venue (cup finals). */
+  isNeutralVenue?: boolean;
 }

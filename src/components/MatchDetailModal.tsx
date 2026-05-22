@@ -149,7 +149,9 @@ function PreMatchView({
             <span className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
               综合 {homeTeam.overall}
             </span>
-            <span className="ml-1.5 text-xs text-green-400">(主)</span>
+            {!fixture.isNeutralVenue && (
+              <span className="ml-1.5 text-xs text-green-400">(主)</span>
+            )}
           </div>
 
           {/* VS */}
@@ -158,11 +160,16 @@ function PreMatchView({
             <div className="text-xs text-slate-600 mt-0.5">
               {fixture.competitionName} - {fixture.roundLabel}
             </div>
+            {fixture.isNeutralVenue && (
+              <div className="text-[10px] text-amber-400 mt-0.5 font-medium">🏟️ 中立场</div>
+            )}
           </div>
 
           {/* Away team */}
           <div className="flex-1 min-w-0 text-right">
-            <span className="mr-1.5 text-xs text-slate-500">(客)</span>
+            {!fixture.isNeutralVenue && (
+              <span className="mr-1.5 text-xs text-slate-500">(客)</span>
+            )}
             <span className="mr-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
               综合 {awayTeam.overall}
             </span>

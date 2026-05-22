@@ -300,7 +300,7 @@ export default function Layout({ children }: LayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 flex">
+    <div className="h-[100dvh] bg-slate-900 flex overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-52 bg-slate-800/80 backdrop-blur border-r border-slate-700/60 flex-col shrink-0 relative">
         <AmbientGlow height={600} />

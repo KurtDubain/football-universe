@@ -13,6 +13,16 @@ import { getSuperCupGroupFixtures, updateSuperCupGroupStandings, completeSuperCu
 import { updateWorldCupGroupStandings, completeWorldCupGroupStage, advanceWorldCupKnockout } from '../cups/world-cup';
 import { advanceContinentalCup, getContinentalCupCurrentFixtures } from '../cups/continental-cup';
 import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsId } from './helpers';
+
+/**
+ * v23 — A cup match is at a neutral venue iff its round label denotes the
+ * FINAL of any single-leg knockout. Two-legged finals do NOT exist in this
+ * codebase (super cup final is single-leg per super-cup.ts ~line 383), so
+ * any roundName "Final" / "决赛" qualifies.
+ */
+function isFinalRound(roundName: string): boolean {
+  return roundName === 'Final' || roundName === '决赛';
+}
 import { GameWorld, NewsItem } from './season-manager';
 
 // ── Public interface ────────────────────────────────────────────────
@@ -128,6 +138,7 @@ export function handleLeagueCup(
     competitionType: 'league_cup' as const,
     competitionName: '联赛杯',
     roundLabel: cf.roundName,
+    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -152,6 +163,7 @@ export function handleLeagueCup(
         competitionType: 'league_cup' as const,
         competitionName: '联赛杯',
         roundLabel: cf.roundName,
+        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
       }));
     }
   }
@@ -268,6 +280,7 @@ export function handleSuperCup(
     competitionType: 'super_cup' as const,
     competitionName: '超级杯',
     roundLabel: cf.roundName,
+    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isFinal);
@@ -291,6 +304,7 @@ export function handleSuperCup(
         competitionType: 'super_cup' as const,
         competitionName: '超级杯',
         roundLabel: cf.roundName,
+        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
       }));
     }
   }
@@ -473,6 +487,7 @@ export function handleWorldCup(
     competitionType: 'world_cup' as const,
     competitionName: '环球冠军杯',
     roundLabel: cf.roundName,
+    ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -494,6 +509,7 @@ export function handleWorldCup(
         competitionType: 'world_cup' as const,
         competitionName: '环球冠军杯',
         roundLabel: cf.roundName,
+        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
       }));
     }
   }
@@ -559,6 +575,7 @@ export function handleContinentalCup(
         competitionType: 'continental_cup' as const,
         competitionName: cup.name,
         roundLabel: cf.roundName,
+        ...(isFinalRound(cf.roundName) && { isNeutralVenue: true }),
       });
       fixtureCupMap.set(cf.id, cup);
     }

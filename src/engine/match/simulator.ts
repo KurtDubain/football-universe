@@ -289,8 +289,12 @@ export function simulateMatch(
   const homeBoosts = computePlayerBoosts(ctx.homeSquad, ctx.globalWindowIdx ?? 0);
   const awayBoosts = computePlayerBoosts(ctx.awaySquad, ctx.globalWindowIdx ?? 0);
 
-  // 1. Calculate adjusted strengths
-  const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, true, homeBoosts);
+  // 1. Calculate adjusted strengths. v23 — for neutral-venue matches
+  // (cup finals), suppress home advantage by passing isHome=false for
+  // both sides. The `homeTeamId` label is preserved for stats but the
+  // venue is neutral.
+  const isNeutral = !!fixture.isNeutralVenue;
+  const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, !isNeutral, homeBoosts);
   const awayAdj = calculateAdjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts);
 
   // 2. Underdog boost — weaker team gets a small boost to enable upsets
@@ -476,6 +480,7 @@ export function simulateMatch(
     competitionType: ctx.competitionType,
     competitionName: fixture.competitionName,
     roundLabel: fixture.roundLabel,
+    ...(isNeutral && { isNeutralVenue: true }),
   };
 
   // 8b. Compute Man of the Match (winner determined by combined regulation
