@@ -348,16 +348,17 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
 // ── v19 — Position-specific performance metric ────────────────────
 //
 // Each position has a different "shining" KPI:
-//   FW: goals per match (≥0.5/match = elite)
-//   MF: (goals+assists) per match
-//   DF: blend of personal clean-sheet rate (60%) + team's goals-conceded
-//       rate (40%) — credits individual contribution but still rewards
-//       being part of a defensive unit
-//   GK: clean-sheet rate (40% clean sheets = elite)
-// v21: DF/GK now use the individual `cleanSheets` field (incremented
-// per match a player started for the side that conceded 0). Two
-// defenders on the same team can now diverge: the one who started
-// 30/30 matches accrues a clean-sheet rate the bench DF doesn't get.
+//   FW: 0.7 × goals/match + 0.3 × bigChances/match  → rewards
+//       finishing + threat. Elite ~0.4 goals + 0.6 bigChances per game.
+//   MF: 0.7 × (goals+assists)/match + 0.3 × keyPasses/match → rewards
+//       finishing + creativity. Elite ~0.6 G+A + 0.5 keyPass per game.
+//   DF: 0.5 × cleanSheetRate + 0.3 × (keyBlocks/match × 80) + 0.2 ×
+//       teamDefense → individual blocks dominate, team context modulates.
+//   GK: 0.5 × cleanSheetRate + 0.5 × (saves/match × 50) → elite GK with
+//       35% clean rate + 0.5 saves/match = 100 score.
+// v22: every position now uses an INDIVIDUAL counter (bigChances /
+// keyPasses / keyBlocks / saves) sourced from the deny pipeline, so two
+// players on the same team can finally diverge on these metrics.
 function computePositionScore(
   player: Player,
   stats: PlayerSeasonStats | undefined,
@@ -367,7 +368,7 @@ function computePositionScore(
   rating: string;
   perGame?: number;
   label: string;
-  /** v21 — extra context line for DF/GK (e.g. "12 场零封 / 28 出场 · 球队场均失球 0.9"). */
+  /** v21/v22 — extra context line (e.g. "12 场零封 / 28 出场 · 0.3 神扑/场"). */
   detail?: string;
 } {
   const apps = stats?.appearances ?? 0;
@@ -376,17 +377,23 @@ function computePositionScore(
   if (apps === 0) return { score: 0, rating: '—', label: '本赛季未出场' };
 
   if (player.position === 'FW') {
-    const perGame = goals / apps;
-    const score = Math.min(100, perGame * 200);
-    return { score, rating: scoreToGrade(score), perGame, label: '场均进球' };
+    const bigChances = stats?.bigChances ?? goals;
+    const goalRate = goals / apps;
+    const chanceRate = bigChances / apps;
+    const score = Math.min(100, (goalRate * 0.7 + chanceRate * 0.3) * 200);
+    const detail = `进球 ${goals} · 关键射门 ${bigChances} (${chanceRate.toFixed(2)}/场)`;
+    return { score, rating: scoreToGrade(score), perGame: goalRate, label: '场均进球', detail };
   }
   if (player.position === 'MF') {
-    const perGame = (goals + assists) / apps;
-    const score = Math.min(100, perGame * 200);
-    return { score, rating: scoreToGrade(score), perGame, label: '场均传射贡献' };
+    const keyPasses = stats?.keyPasses ?? assists;
+    const gaRate = (goals + assists) / apps;
+    const keyRate = keyPasses / apps;
+    const score = Math.min(100, (gaRate * 0.7 + keyRate * 0.3) * 200);
+    const detail = `传射 ${goals + assists} (${goals}进/${assists}助) · 威胁传球 ${keyPasses}`;
+    return { score, rating: scoreToGrade(score), perGame: gaRate, label: '场均传射贡献', detail };
   }
-  // DF / GK — find the team's league goals-conceded context (only used as
-  // tiebreaker / context line; the headline number is personal cleanSheets).
+  // DF / GK — find the team's league goals-conceded context for the DF
+  // formula. GK's score is independent of team context (pure individual).
   let teamGC = 0;
   let teamMatches = 0;
   for (const st of [world.league1Standings, world.league2Standings, world.league3Standings]) {
@@ -398,17 +405,28 @@ function computePositionScore(
     }
   }
   const cleanSheets = stats?.cleanSheets ?? 0;
-  const cleanRate = cleanSheets / apps; // 0..1, individual contribution
+  const cleanRate = cleanSheets / apps; // 0..1
   const gcPerGame = teamMatches > 0 ? teamGC / teamMatches : 2;
   const teamDefenseScore = Math.max(0, 100 - gcPerGame * 25); // 0..100, team context
-  // GK headline = pure clean rate. 40% clean rate → 100; 20% → 50.
-  // DF headline = 60% personal + 40% team context.
-  const score = player.position === 'GK'
-    ? Math.min(100, cleanRate * 250)
-    : Math.min(100, cleanRate * 150 + teamDefenseScore * 0.4);
-  const label = player.position === 'GK' ? '场均零封率' : '防线贡献指数';
-  const detail = `本季 ${cleanSheets} 场零封 / ${apps} 出场 · 球队场均失球 ${gcPerGame.toFixed(2)}`;
-  return { score, rating: scoreToGrade(score), perGame: cleanRate, label, detail };
+  if (player.position === 'GK') {
+    const saves = stats?.saves ?? 0;
+    const savesPerGame = saves / apps;
+    // 50% clean rate weight (35% rate = 100) + 50% saves weight (0.5/match = 100)
+    const score = Math.min(100, cleanRate * 285 * 0.5 + savesPerGame * 100 * 0.5);
+    const detail = `零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 神扑 ${saves} (${savesPerGame.toFixed(2)}/场)`;
+    return { score, rating: scoreToGrade(score), perGame: cleanRate, label: '门将综合', detail };
+  }
+  // DF
+  const keyBlocks = stats?.keyBlocks ?? 0;
+  const blocksPerGame = keyBlocks / apps;
+  // 50% clean rate (40% = 100 score) + 30% blocks (0.2/match = ~80) + 20% team
+  const score = Math.min(100,
+    cleanRate * 250 * 0.5
+    + Math.min(100, blocksPerGame * 400) * 0.3
+    + teamDefenseScore * 0.2,
+  );
+  const detail = `零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 解围 ${keyBlocks} (${blocksPerGame.toFixed(2)}/场) · 球队失球 ${gcPerGame.toFixed(2)}/场`;
+  return { score, rating: scoreToGrade(score), perGame: cleanRate, label: '后卫综合', detail };
 }
 
 function scoreToGrade(score: number): string {
@@ -467,8 +485,8 @@ function PositionPerformanceCard({
 function positionScoreHint(pos: string): string {
   if (pos === 'FW') return '0.5球/场 = 100分';
   if (pos === 'MF') return '0.5传射/场 = 100分';
-  if (pos === 'GK') return '40%零封率 = 100分';
-  return '60%个人零封 + 40%球队防守';
+  if (pos === 'GK') return '35%零封 + 0.5神扑/场';
+  return '40%零封 + 0.2解围/场 + 球队';
 }
 
 /** Per-season career history table (v19). */

@@ -66,6 +66,10 @@ function makeStat(playerUuid: string, teamId: string, goals = 0): PlayerSeasonSt
     redCards: 0,
     appearances: 30,
     cleanSheets: 0,
+    saves: 0,
+    keyBlocks: 0,
+    bigChances: goals,
+    keyPasses: 0,
   };
 }
 

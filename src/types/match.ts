@@ -13,13 +13,34 @@ export interface MatchFixture {
 
 export interface MatchEvent {
   minute: number;
-  type: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'save' | 'miss' | 'penalty_goal' | 'penalty_miss' | 'own_goal';
+  type:
+    | 'goal'
+    | 'assist'
+    | 'yellow_card'
+    | 'red_card'
+    | 'save'
+    | 'miss'
+    | 'penalty_goal'
+    | 'penalty_miss'
+    | 'own_goal'
+    /** v22 — would-be goal denied by the goalkeeper. */
+    | 'gk_save'
+    /** v22 — would-be goal blocked on the line by a defender. */
+    | 'df_block';
   teamId: string;
   /** Holds a Player.uuid value (stable across transfers). */
   playerId?: string;
   playerNumber?: number;
   playerName?: string; // assigned player name for display
   description: string;
+  /**
+   * v22 — for `gk_save` / `df_block` events only. Points to the would-be
+   * scorer (and would-be assister, if the original goal had one) so the
+   * stats pipeline can credit `bigChances` to the attacker and `keyPasses`
+   * to the creator without affecting `goals` / `assists` counts.
+   */
+  deniedScorerId?: string;
+  deniedAssisterId?: string;
 }
 
 export interface MatchStats {

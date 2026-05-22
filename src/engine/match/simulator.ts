@@ -12,7 +12,7 @@ import { SeededRNG } from './rng';
 import { isDerby, getDerbyBoost } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
-import { generateMatchEvents } from './events';
+import { generateMatchEvents, applyDenyPipeline } from './events';
 import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
 
 // ── Public interfaces ──────────────────────────────────────────────
@@ -339,9 +339,11 @@ export function simulateMatch(
   let homeGoals = poissonSample(homeExpGoals, rng);
   let awayGoals = poissonSample(awayExpGoals, rng);
 
-  // These track regulation-time goals for the MatchResult
-  const regHomeGoals = homeGoals;
-  const regAwayGoals = awayGoals;
+  // These track regulation-time goals for the MatchResult. Mutated by
+  // the deny pipeline below — if a goal is denied we have to lower the
+  // count, so these MUST be `let` not `const`.
+  let regHomeGoals = homeGoals;
+  let regAwayGoals = awayGoals;
 
   let extraTime = false;
   let etHomeGoals: number | undefined;
@@ -380,7 +382,7 @@ export function simulateMatch(
     fixture.roundLabel === 'Final' ||
     fixture.roundLabel === '决赛' ||
     isDerby(homeTeam.id, awayTeam.id);
-  const events = generateMatchEvents(
+  const rawEvents = generateMatchEvents(
     regHomeGoals,
     regAwayGoals,
     homeTeam.id,
@@ -396,6 +398,45 @@ export function simulateMatch(
     etAwayGoals ?? 0,
     isBigMatch,
   );
+
+  // v22 — Apply deny pipeline. Goals that get denied are removed from
+  // the events list and replaced with `gk_save` / `df_block` events. We
+  // then RE-DERIVE the regulation / ET goal counts from the surviving
+  // events so the scoreline and the events array stay consistent (the
+  // invariant `homeGoals === count(events where type=='goal' &&
+  // teamId===home)` is critical for stats-pipeline correctness).
+  //
+  // CAVEAT: skip deny for knockout matches. The current pipeline runs
+  // AFTER ET / penalty-shootout decisions are made; if deny changed a
+  // pre-tied regulation into a decisive one (or vice versa) we'd end up
+  // with a knockout match that's "missing" ET or has a shootout that
+  // shouldn't have happened. League / group-stage matches don't have
+  // this problem (ties are valid outcomes) so deny is safe there.
+  const events = ctx.isKnockout
+    ? rawEvents
+    : applyDenyPipeline(
+        rawEvents,
+        homeTeam.id,
+        awayTeam.id,
+        ctx.homeSquad,
+        ctx.awaySquad,
+        rng.fork(),
+      );
+  const isHomeGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === homeTeam.id;
+  const isAwayGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === awayTeam.id;
+  regHomeGoals = events.filter(e => isHomeGoal(e) && e.minute <= 90).length;
+  regAwayGoals = events.filter(e => isAwayGoal(e) && e.minute <= 90).length;
+  if (extraTime) {
+    etHomeGoals = events.filter(e => isHomeGoal(e) && e.minute > 90 && e.minute <= 120).length;
+    etAwayGoals = events.filter(e => isAwayGoal(e) && e.minute > 90 && e.minute <= 120).length;
+  }
+  // Also re-derive the running TOTAL goal counters (reg + ET). These feed
+  // generateMatchStats and calculateStateChanges below; if we don't sync,
+  // possession / shots / form deltas will reflect the un-denied scoreline.
+  homeGoals = regHomeGoals + (etHomeGoals ?? 0);
+  awayGoals = regAwayGoals + (etAwayGoals ?? 0);
+  // Note: penalty shootout goals (minute > 120) are produced separately
+  // by the shootout simulator and never touched by deny.
 
   // 7. Generate match stats
   const stats = generateMatchStats(

@@ -500,6 +500,39 @@ export function applyV20ToV21CleanSheetsInit(world: {
   return { touched };
 }
 
+/**
+ * v21 → v22: Backfill `saves` / `keyBlocks` / `bigChances` / `keyPasses`
+ * on every existing PlayerSeasonStats row. Fields drive the new symmetric
+ * deny pipeline (see `engine/match/events.ts applyDenyPipeline`). Pure
+ * backfill — counts start at 0 on existing saves.
+ */
+export function applyV21ToV22DenyStatsInit(world: {
+  playerStats?: Record<string, {
+    saves?: number;
+    keyBlocks?: number;
+    bigChances?: number;
+    keyPasses?: number;
+    goals?: number;
+    assists?: number;
+  }>;
+}): { touched: boolean } {
+  if (!world.playerStats || typeof world.playerStats !== 'object') return { touched: false };
+  let touched = false;
+  for (const k of Object.keys(world.playerStats)) {
+    const s = world.playerStats[k];
+    if (!s || typeof s !== 'object') continue;
+    if (s.saves === undefined)      { s.saves = 0;      touched = true; }
+    if (s.keyBlocks === undefined)  { s.keyBlocks = 0;  touched = true; }
+    // bigChances / keyPasses are SUPERSETS of goals/assists. For existing
+    // saves where players already have a goal/assist history, initialise
+    // them to MATCH so the invariant `bigChances >= goals` holds without
+    // jarring "lifetime zero" displays.
+    if (s.bigChances === undefined) { s.bigChances = s.goals ?? 0;    touched = true; }
+    if (s.keyPasses === undefined)  { s.keyPasses  = s.assists ?? 0; touched = true; }
+  }
+  return { touched };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -912,7 +945,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 21,
+      version: 22,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1230,6 +1263,16 @@ export const useGameStore = create<GameStore>()(
         // from the next simulated match onward.
         if (version < 21 && state?.world) {
           applyV20ToV21CleanSheetsInit(state.world as { playerStats?: Record<string, { cleanSheets?: number }> });
+        }
+        // v21 → v22: backfill saves / keyBlocks / bigChances / keyPasses.
+        // The first two start at 0 (no historical data). bigChances /
+        // keyPasses are initialised to match goals / assists so the
+        // superset invariant holds for legacy stats.
+        if (version < 22 && state?.world) {
+          applyV21ToV22DenyStatsInit(state.world as { playerStats?: Record<string, {
+            saves?: number; keyBlocks?: number; bigChances?: number; keyPasses?: number;
+            goals?: number; assists?: number;
+          }> });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

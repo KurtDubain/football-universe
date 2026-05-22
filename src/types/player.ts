@@ -128,6 +128,26 @@ export interface PlayerSeasonStats {
    * also accumulate it, but no surface reads it for them).
    */
   cleanSheets: number;
+  /**
+   * v22 — symmetric "denied goal" credit pipeline. See `applyDenyPipeline`
+   * in `engine/match/events.ts` for the source of truth on how these are
+   * incremented; below are the consumer-side invariants:
+   *
+   *   saves       — GK only. +1 per goal the GK denies (5-18% per goal).
+   *   keyBlocks   — DF only. +1 per goal the DF denies on the line.
+   *   bigChances  — FW/MF. Counts goals + denied attempts they were
+   *                  credited as would-be scorer. ALWAYS ≥ `goals`.
+   *   keyPasses   — MF/FW. Counts assists + denied attempts they were
+   *                  credited as would-be assister. ALWAYS ≥ `assists`.
+   *
+   * Invariant: `bigChances` and `keyPasses` are derived metrics; they do
+   * NOT participate in scoreline math. `goals` and `assists` remain the
+   * sole source of truth for top-scorer tables and team box scores.
+   */
+  saves: number;
+  keyBlocks: number;
+  bigChances: number;
+  keyPasses: number;
 }
 
 /**
@@ -155,6 +175,11 @@ export interface PlayerSeasonStatsHistoryEntry {
   teamMatches: number;
   /** v21 — individual clean sheets. May be 0 for older seasons. */
   cleanSheets?: number;
+  /** v22 — see PlayerSeasonStats. Optional for older history entries. */
+  saves?: number;
+  keyBlocks?: number;
+  bigChances?: number;
+  keyPasses?: number;
 }
 
 /**

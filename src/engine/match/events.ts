@@ -610,3 +610,194 @@ export function generateMatchEvents(
 
   return events;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// v22 — Symmetric "denied goal" pipeline (post-Poisson interception)
+// ═══════════════════════════════════════════════════════════════════
+//
+// For each `goal` event the simulator already generated, this pipeline
+// rolls a `deny` chance (5-18% based on the defending team's best GK
+// rating). If denied:
+//   1. The `goal` event is REMOVED from the events array.
+//   2. The paired `assist` event (if present) is ALSO removed.
+//   3. A new `gk_save` (60%) or `df_block` (40%) event is inserted at
+//      the same minute, carrying `deniedScorerId` + `deniedAssisterId`
+//      payload so the stats pipeline can credit `bigChances` /
+//      `keyPasses` without affecting `goals` / `assists`.
+//
+// SCORE RECONCILIATION CONTRACT:
+// After this function returns, `regHomeGoals` / `etHomeGoals` etc. MUST
+// be RE-DERIVED from the returned events by the caller (simulator.ts).
+// Do NOT trust the original Poisson counts after deny applies.
+//
+// BALANCE CONTRACT:
+// Deny rate is intentionally capped at 18% (elite GK with rating 95+)
+// and floors at 5% (any GK). Total league goal count drops ~5-8% — a
+// conservative shift that yields more 1-0 / 2-1 dramatic finishes
+// without destabilising the season-wide point totals.
+
+const GK_SAVE_DESCRIPTIONS = [
+  '门将神勇扑救！必进球被化解',
+  '门将极限指尖救险，本是必入球',
+  '门将神扑！将十拿九稳的进球拒之门外',
+  '门将世界波扑救！全场起立致敬',
+  '关键扑救！门将以一己之力拒绝进球',
+];
+
+const DF_BLOCK_DESCRIPTIONS = [
+  '后卫飞身门线解围！皮球已过门将',
+  '关键时刻后卫挺身门线封堵',
+  '门线技术！后卫将必进球挡出',
+  '惊险解围！皮球离门线仅一指距离',
+  '后卫舍身堵枪眼，化解必入球',
+];
+
+/** Compute the defending team's deny probability for a single goal. */
+function denyRateForTeam(squad: Player[] | undefined): number {
+  if (!squad || squad.length === 0) return 0.05;
+  const gks = squad.filter(p => p.position === 'GK');
+  if (gks.length === 0) return 0.05;
+  // Use the highest-rated GK on the squad (i.e. the likely starter).
+  const bestGk = gks.reduce((a, b) => (a.rating > b.rating ? a : b));
+  // Base 5%, +1% per rating point above 70, hard cap at 18%.
+  const bonus = Math.max(0, bestGk.rating - 70) * 0.01;
+  return Math.min(0.18, 0.05 + bonus);
+}
+
+/** Weighted-random pick of a DF from the squad, biased toward higher rating. */
+function pickDefender(squad: Player[], rng: SeededRNG): Player | null {
+  const dfs = squad.filter(p => p.position === 'DF');
+  if (dfs.length === 0) return null;
+  // Weight = rating^2 so star defenders accumulate more blocks naturally.
+  const weights = dfs.map(d => d.rating * d.rating);
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let r = rng.next() * totalWeight;
+  for (let i = 0; i < dfs.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return dfs[i];
+  }
+  return dfs[dfs.length - 1];
+}
+
+/**
+ * Apply the deny pipeline in-place to a generated events array.
+ *
+ * Returns a NEW events array (does not mutate the input). Caller must
+ * re-derive `regHomeGoals` / `regAwayGoals` / `etHomeGoals` /
+ * `etAwayGoals` from the returned events by filtering on type==='goal'.
+ *
+ * NOTE: penalty shootout events (minute > 120) are NOT subject to deny;
+ * we don't want the dramatic "saved shootout penalty" to also count as a
+ * regular save, since shootouts are scored separately. Own goals
+ * (`own_goal` type) are also excluded — a defender can't save themselves.
+ */
+export function applyDenyPipeline(
+  events: MatchEvent[],
+  homeTeamId: string,
+  awayTeamId: string,
+  homeSquad: Player[] | undefined,
+  awaySquad: Player[] | undefined,
+  rng: SeededRNG,
+): MatchEvent[] {
+  const homeDenyRate = denyRateForTeam(awaySquad); // home goals denied by AWAY defence
+  const awayDenyRate = denyRateForTeam(homeSquad); // away goals denied by HOME defence
+  const out: MatchEvent[] = [];
+  let i = 0;
+  while (i < events.length) {
+    const ev = events[i];
+    // Only regulation/ET goals are denyable. Shootouts (>120 min) and own
+    // goals are passed through untouched.
+    const isDenyable =
+      ev.type === 'goal' &&
+      ev.minute <= 120 &&
+      (ev.teamId === homeTeamId || ev.teamId === awayTeamId);
+    if (!isDenyable) {
+      out.push(ev);
+      i++;
+      continue;
+    }
+    const isHome = ev.teamId === homeTeamId;
+    const denyRate = isHome ? homeDenyRate : awayDenyRate;
+    const defendingSquad = isHome ? awaySquad : homeSquad;
+    const roll = rng.next();
+    if (roll >= denyRate || !defendingSquad) {
+      // Goal survives. Push as-is, and push the paired assist event too
+      // (without re-rolling deny on it — it's not a goal).
+      out.push(ev);
+      i++;
+      // The event generator pushes `assist` immediately after a `goal`
+      // with the same minute + teamId. Pair them.
+      if (
+        i < events.length &&
+        events[i].type === 'assist' &&
+        events[i].teamId === ev.teamId &&
+        events[i].minute === ev.minute
+      ) {
+        out.push(events[i]);
+        i++;
+      }
+      continue;
+    }
+    // ── DENY FIRES ──────────────────────────────────────────────────
+    // Find the paired assist (if any) to carry into the save/block event.
+    let assisterId: string | undefined;
+    let consumeAssist = false;
+    if (
+      i + 1 < events.length &&
+      events[i + 1].type === 'assist' &&
+      events[i + 1].teamId === ev.teamId &&
+      events[i + 1].minute === ev.minute
+    ) {
+      assisterId = events[i + 1].playerId;
+      consumeAssist = true;
+    }
+    // Pick GK or DF for credit. 60/40 split.
+    const useGk = rng.next() < 0.6;
+    if (useGk) {
+      const gk = pickGoalkeeper(defendingSquad);
+      out.push({
+        minute: ev.minute,
+        type: 'gk_save',
+        teamId: isHome ? awayTeamId : homeTeamId, // credit DEFENDING side
+        playerId: gk.uuid,
+        playerNumber: gk.number,
+        playerName: gk.name,
+        description: rng.pick(GK_SAVE_DESCRIPTIONS),
+        deniedScorerId: ev.playerId,
+        ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
+      });
+    } else {
+      const df = pickDefender(defendingSquad, rng);
+      if (df) {
+        out.push({
+          minute: ev.minute,
+          type: 'df_block',
+          teamId: isHome ? awayTeamId : homeTeamId,
+          playerId: df.uuid,
+          playerNumber: df.number,
+          playerName: df.name,
+          description: rng.pick(DF_BLOCK_DESCRIPTIONS),
+          deniedScorerId: ev.playerId,
+          ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
+        });
+      } else {
+        // No DF available — fall back to GK so we don't lose attribution.
+        const gk = pickGoalkeeper(defendingSquad);
+        out.push({
+          minute: ev.minute,
+          type: 'gk_save',
+          teamId: isHome ? awayTeamId : homeTeamId,
+          playerId: gk.uuid,
+          playerNumber: gk.number,
+          playerName: gk.name,
+          description: rng.pick(GK_SAVE_DESCRIPTIONS),
+          deniedScorerId: ev.playerId,
+          ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
+        });
+      }
+    }
+    // Advance past the goal (and assist, if consumed).
+    i += consumeAssist ? 2 : 1;
+  }
+  return out;
+}

@@ -70,6 +70,10 @@ function makeStat(
     redCards: 0,
     appearances: apps,
     cleanSheets: 0,
+    saves: 0,
+    keyBlocks: 0,
+    bigChances: goals,
+    keyPasses: assists,
   };
 }
 

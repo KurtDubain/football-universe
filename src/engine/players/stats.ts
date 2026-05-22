@@ -21,6 +21,10 @@ export function createInitialPlayerStats(
         redCards: 0,
         appearances: 0,
         cleanSheets: 0,
+        saves: 0,
+        keyBlocks: 0,
+        bigChances: 0,
+        keyPasses: 0,
       };
     }
   }
@@ -85,10 +89,15 @@ export function updatePlayerStatsFromResults(
       }
     }
 
-    // Process events
+    // Process events. The single source of truth — `goals` / `assists`
+    // ONLY increment on `goal` / `assist` events. The derived metrics
+    // (`bigChances`, `keyPasses`, `saves`, `keyBlocks`) are populated
+    // here too, but never write back to `goals` / `assists`.
+    //
+    // INVARIANT (load-bearing): sum of `goals` across a team's squad
+    // equals `result.homeGoals` (or `awayGoals`) at all times. Tested by
+    // `stats.invariant.test.ts`.
     for (const event of result.events) {
-      if (!event.playerId || !stats[event.playerId]) continue;
-
       // Penalty shootout kicks (after the 120th minute) are NEVER counted as
       // regular goals — they decide the tie but do not inflate top-scorer
       // tables, market value, or any keep-stat aggregate downstream. The
@@ -98,11 +107,47 @@ export function updatePlayerStatsFromResults(
       // accidental future emitter at minute > 120 is also excluded.
       if (event.type === 'penalty_goal' || event.minute > 120) continue;
 
+      // ── v22 deny-pipeline credits ────────────────────────────────
+      // gk_save / df_block events carry `deniedScorerId` + optional
+      // `deniedAssisterId`. The save/block defender gets saves++ or
+      // keyBlocks++; the would-be scorer gets bigChances++; the would-be
+      // assister gets keyPasses++. None of these touch goals/assists.
+      if (event.type === 'gk_save' || event.type === 'df_block') {
+        // Credit the defender (event.playerId is the GK or DF).
+        if (event.playerId && stats[event.playerId]) {
+          const s = { ...stats[event.playerId] };
+          if (event.type === 'gk_save') s.saves++;
+          else s.keyBlocks++;
+          stats[event.playerId] = s;
+        }
+        // Credit the would-be scorer.
+        if (event.deniedScorerId && stats[event.deniedScorerId]) {
+          stats[event.deniedScorerId] = {
+            ...stats[event.deniedScorerId],
+            bigChances: stats[event.deniedScorerId].bigChances + 1,
+          };
+        }
+        // Credit the would-be assister (if the original goal had one).
+        if (event.deniedAssisterId && stats[event.deniedAssisterId]) {
+          stats[event.deniedAssisterId] = {
+            ...stats[event.deniedAssisterId],
+            keyPasses: stats[event.deniedAssisterId].keyPasses + 1,
+          };
+        }
+        continue;
+      }
+
+      // Standard goal / assist / card processing requires a playerId.
+      if (!event.playerId || !stats[event.playerId]) continue;
       const s = { ...stats[event.playerId] };
 
       switch (event.type) {
         case 'goal':
           s.goals++;
+          // v22 — bigChances is a SUPERSET of goals (= goals + denied
+          // attempts). Increment in lockstep here so an actual goal
+          // counts toward both.
+          s.bigChances++;
           break;
         case 'yellow_card':
           // Phase G: yellow/red counters are folded by the injuries module
@@ -113,6 +158,8 @@ export function updatePlayerStatsFromResults(
           break;
         case 'assist':
           s.assists++;
+          // v22 — keyPasses superset of assists. Same rationale as above.
+          s.keyPasses++;
           break;
       }
 
