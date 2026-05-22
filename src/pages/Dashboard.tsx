@@ -897,7 +897,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
             {(world.seasonBuffs ?? []).map(buff => {
               const isPositive = buff.effects.some(e => e.delta > 0);
               return (
-                <div key={buff.teamId} className={`text-xs px-2.5 py-1 rounded-lg border ${isPositive ? 'bg-emerald-900/20 border-emerald-700/30 text-emerald-400' : 'bg-red-900/20 border-red-700/30 text-red-400'}`}>
+                <div key={`${buff.teamId}-${buff.type}`} className={`text-xs px-2.5 py-1 rounded-lg border ${isPositive ? 'bg-emerald-900/20 border-emerald-700/30 text-emerald-400' : 'bg-red-900/20 border-red-700/30 text-red-400'}`}>
                   <span className="font-medium">{getTeamName(buff.teamId, world.teamBases)}</span>
                   <span className="ml-1.5 opacity-75">{buff.label}</span>
                 </div>
