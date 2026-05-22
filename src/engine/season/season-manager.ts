@@ -27,6 +27,7 @@ import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
+import { autoResolveRemaining } from '../../store/transfer-window-actions';
 import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
@@ -817,9 +818,45 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   results: MatchResult[];
   news: NewsItem[];
 } {
-  const window = getCurrentWindow(world);
+  let window = getCurrentWindow(world);
   if (!window) {
     return { world, results: [], news: [] };
+  }
+
+  // v23 — non-blocking transfer window. If a favorite-team transfer
+  // window is still open from the prior season-end, auto-resolve it
+  // BEFORE running the next window. This decouples the engine from the
+  // UI state — handleSeasonEnd never pauses, and any unhandled window
+  // is silently committed on the user's next "推进". One news item is
+  // emitted so the user sees what happened.
+  let preNews: NewsItem[] = [];
+  if (world.transferWindow && world.transferWindow.status === 'open') {
+    const tw = world.transferWindow;
+    const pendingOffers = tw.incomingOffers.filter(o => o.resolution === 'pending').length;
+    const pendingTargets = tw.outgoingTargets.filter(t => t.resolution === 'pending').length;
+    const totalPending = pendingOffers + pendingTargets;
+    if (totalPending > 0) {
+      world = autoResolveRemaining(world);
+    }
+    world = { ...world, transferWindow: null };
+    if (totalPending > 0) {
+      preNews.push({
+        id: `auto-window-s${tw.season}-${Date.now()}`,
+        seasonNumber: world.seasonState.seasonNumber,
+        windowIndex: world.seasonState.currentWindowIndex,
+        type: 'rumor',
+        title: `📋 第${tw.season}赛季转会窗口已自动结算 (${totalPending} 项)`,
+        description: `你未在赛季回顾里处理的 ${totalPending} 项转会决策已按默认策略自动完成。下次想精细操作可去「S${tw.season}回顾」打开。`,
+      });
+      world = { ...world, newsLog: [...world.newsLog, ...preNews] };
+    }
+    // After auto-resolve, getCurrentWindow result may be stale (transferWindow
+    // is gone but currentWindowIndex didn't move). Re-fetch in case the
+    // engine cares.
+    window = getCurrentWindow(world);
+    if (!window) {
+      return { world, results: [], news: preNews };
+    }
   }
 
   const rng = new SeededRNG(world.rngState);
@@ -844,18 +881,22 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
       rngState: rng.getState(),
     };
 
-    // If not a WC year (no worldCupPhase), start next season now.
-    // v20 — pause if transferWindow is open (favorite team has decisions);
-    // store will call initializeNewSeason after user closes window.
-    const windowPending = updatedWorld.transferWindow?.status === 'open';
-    if (!updatedWorld.seasonState.worldCupPhase && !windowPending) {
+    // v23 — non-blocking architecture. transferWindow no longer pauses
+    // season rollover; handleSeasonEnd may have set one for favorite
+    // team UX, but we proceed straight to the next season (or to WC
+    // windows if WC year). The window lingers on `world.transferWindow`
+    // and will be:
+    //   - presented in the Dashboard's "S{N}回顾" tab so user can handle it
+    //   - auto-resolved by the next `executeCurrentWindow` call (see
+    //     pre-window auto-resolve block at the top of this function)
+    if (!updatedWorld.seasonState.worldCupPhase) {
       updatedWorld = initializeNewSeason(updatedWorld);
     }
 
     return {
       world: updatedWorld,
       results: [],
-      news: [],
+      news: preNews,
     };
   }
 
@@ -987,13 +1028,11 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     }
   }
 
-  // WC phase just ended — finalize WC results and start next season
+  // WC phase just ended — finalize WC results and start next season.
+  // v23 — non-blocking: transferWindow no longer gates initializeNewSeason.
   if (isSeasonDone && updatedSeasonState.worldCupPhase) {
     updatedWorld = finalizeWorldCup(updatedWorld);
-    // v20 — pause if transferWindow open (same logic as season_end path)
-    if (updatedWorld.transferWindow?.status !== 'open') {
-      updatedWorld = initializeNewSeason(updatedWorld);
-    }
+    updatedWorld = initializeNewSeason(updatedWorld);
   }
 
   // Pre-populate NEXT window if it needs dynamic fixtures
@@ -1017,7 +1056,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   return {
     world: updatedWorld,
     results: windowResult.results,
-    news: [...windowResult.news, ...postMatch.news, ...injuryResult.news],
+    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news],
   };
 }
 

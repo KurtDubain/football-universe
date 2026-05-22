@@ -432,7 +432,10 @@ export default function Dashboard() {
         {activeTab === 'overview' && <OverviewTab world={world} />}
 
         {activeTab === 'review' && lastCompletedSeason && (
-          <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
+          <>
+            <TransferWindowEntry world={world} />
+            <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
+          </>
         )}
       </div>
 
@@ -1356,6 +1359,56 @@ function BettingPanel({ world, fixtures }: { world: GameWorld; fixtures: MatchFi
         })}
       </div>
       <p className="text-[11px] sm:text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于OVR差距 · 推进后自动结算</p>
+    </div>
+  );
+}
+
+/**
+ * v23 — Non-blocking transfer window entry. Shows ONLY in the season
+ * review tab when there's an unhandled favorite-team transfer window.
+ * "处理" navigates to /market for manual review; "全自动" closes with
+ * auto-resolve. If user just clicks "推进" without ever opening this,
+ * the safety net in season-manager.ts auto-resolves on the next window
+ * advance (one news item is emitted to make that visible).
+ */
+function TransferWindowEntry({ world }: { world: GameWorld }) {
+  const navigate = useNavigate();
+  const closeTransferWindow = useGameStore(s => s.closeTransferWindow);
+  if (!world.transferWindow || world.transferWindow.status !== 'open') return null;
+  const tw = world.transferWindow;
+  const pendingOffers = tw.incomingOffers.filter(o => o.resolution === 'pending').length;
+  const pendingTargets = tw.outgoingTargets.filter(t => t.resolution === 'pending').length;
+  const totalPending = pendingOffers + pendingTargets;
+  return (
+    <div className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl border border-amber-700/50 p-4 mb-4">
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="text-2xl shrink-0">🏟️</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-amber-300">第{tw.season}赛季转会窗口</div>
+          <div className="text-xs text-slate-400 mt-1">
+            {totalPending > 0
+              ? <>共 <span className="text-amber-300 font-bold">{totalPending}</span> 项待处理:
+                  <span className="text-slate-300 ml-1">{pendingOffers} 项报价</span>、
+                  <span className="text-slate-300">{pendingTargets} 项目标</span></>
+              : '所有决策已完成,点击「完成」收尾'}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-1">不处理也没关系 —— 下次「推进」时会按默认策略自动结算。</div>
+        </div>
+        <div className="flex gap-2 ml-auto shrink-0">
+          <button
+            onClick={() => navigate('/market')}
+            className="px-3 py-2 min-h-[36px] bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded cursor-pointer"
+          >
+            🛒 处理
+          </button>
+          <button
+            onClick={() => closeTransferWindow(true)}
+            className="px-3 py-2 min-h-[36px] bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded cursor-pointer"
+          >
+            ⚡ 全自动
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
