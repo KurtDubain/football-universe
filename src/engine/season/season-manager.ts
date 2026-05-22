@@ -126,6 +126,13 @@ export interface GameWorld {
    */
   transferRumors: import('../transfers/rumor-generator').TransferRumor[];
   /**
+   * v19 — per-player career stat snapshots. Each season end, the just-
+   * finished `playerStats` row is captured into history before the next
+   * season's reset. Capped at 15 entries per player (oldest dropped).
+   * Pure display data — match engine never reads it.
+   */
+  playerStatsHistory: Record<string, import('../../types/player').PlayerSeasonStatsHistoryEntry[]>;
+  /**
    * FIFO pool of recently-retired stars eligible to become future coaches.
    * Capped at 12 entries (oldest evicted on overflow). A3 will consume from
    * here when assembling new coaches; A2 only seeds the pool. Introduced in
@@ -219,6 +226,64 @@ function appendMemorableMatches(
   // Keep most recent CAP entries (drop oldest)
   return combined.length > MEMORABLE_CAP ? combined.slice(-MEMORABLE_CAP) : combined;
 }
+
+const PLAYER_STATS_HISTORY_CAP = 15;
+
+/**
+ * v19 — at season-end (called from `initializeNewSeason` before the
+ * `playerStats` reset), snapshot every player's just-finished stats
+ * into `playerStatsHistory[uuid]`. Capture team-aggregate context
+ * (goals conceded + matches) so the UI can compute DF/GK defensive
+ * proxies later.
+ */
+function snapshotPlayerStatsHistory(
+  world: GameWorld,
+  seasonJustFinished: number,
+): Record<string, import('../../types/player').PlayerSeasonStatsHistoryEntry[]> {
+  const next = { ...(world.playerStatsHistory ?? {}) };
+  if (seasonJustFinished <= 0 || !world.playerStats) return next;
+  // Build per-team aggregates from standings (whichever league each team
+  // played in). We approximate by checking the standings rows where
+  // `played > 0` — that's the team's just-played league.
+  const teamCtx: Record<string, { gc: number; matches: number }> = {};
+  const allStandings = [world.league1Standings, world.league2Standings, world.league3Standings];
+  for (const arr of allStandings) {
+    for (const s of arr ?? []) {
+      if (s.played > 0) {
+        teamCtx[s.teamId] = { gc: s.goalsAgainst, matches: s.played };
+      }
+    }
+  }
+
+  for (const [uuid, stat] of Object.entries(world.playerStats)) {
+    // Skip "didn't play" rows — keeps history clean.
+    if (stat.appearances === 0) continue;
+    // Find current Player object for position
+    const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === uuid);
+    if (!player) continue;
+    const ctx = teamCtx[stat.teamId] ?? { gc: 0, matches: 0 };
+    const entry: import('../../types/player').PlayerSeasonStatsHistoryEntry = {
+      season: seasonJustFinished,
+      teamId: stat.teamId,
+      position: player.position,
+      goals: stat.goals,
+      assists: stat.assists,
+      appearances: stat.appearances,
+      yellowCards: stat.yellowCards,
+      redCards: stat.redCards,
+      teamGoalsConceded: ctx.gc,
+      teamMatches: ctx.matches,
+    };
+    const existing = next[uuid] ?? [];
+    // Avoid double-snapshot if this exact (season,teamId) row already there
+    if (existing.some(e => e.season === seasonJustFinished && e.teamId === stat.teamId)) continue;
+    const merged = [...existing, entry];
+    next[uuid] = merged.length > PLAYER_STATS_HISTORY_CAP
+      ? merged.slice(-PLAYER_STATS_HISTORY_CAP)
+      : merged;
+  }
+  return next;
+}
 // ── Main public functions ────────────────────────────────────────
 
 /**
@@ -309,6 +374,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     retirementHistory: [],
     freeAgentPool: [],
     transferRumors: [],
+    playerStatsHistory: {},
     coachCandidatePool: [],
     coachRetirementHistory: [],
     nextCoachIdCounter: 0,
@@ -597,6 +663,12 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   // the world snapshot — see note in `processInjuriesAndSuspensions`).
   resetDisciplineForNewSeason(world.squads, world.totalElapsedWindows ?? 0);
 
+  // v19 — snapshot just-finished season's player stats into history
+  // BEFORE the reset below. We pick up team's goals-conceded total so
+  // DF/GK display can compute defensive performance proxy without
+  // needing per-player CS / saves events.
+  const playerStatsHistory = snapshotPlayerStatsHistory(world, prevSeason);
+
   return enforceStorageLimits({
     ...world,
     teamBases: buffedTeamBases,
@@ -610,6 +682,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     continentalCups,
     coachChangesThisSeason: [],
     playerStats: createInitialPlayerStats(world.squads),
+    playerStatsHistory,
     newsLog: [...(world.newsLog ?? []), ...drawNews, ...buffNews],
     rngState,
     seasonStartLevels,

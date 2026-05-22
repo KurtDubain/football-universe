@@ -444,6 +444,21 @@ export function applyV17ToV18RumorsInit(world: {
   return { touched: true };
 }
 
+/**
+ * v18 → v19: Init `world.playerStatsHistory = {}`. Pure backfill.
+ * No prior data to reconstruct — history starts populating from the
+ * next season-end forward.
+ */
+export function applyV18ToV19StatsHistoryInit(world: {
+  playerStatsHistory?: unknown;
+}): { touched: boolean } {
+  if (world.playerStatsHistory && typeof world.playerStatsHistory === 'object' && !Array.isArray(world.playerStatsHistory)) {
+    return { touched: false };
+  }
+  world.playerStatsHistory = {};
+  return { touched: true };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -741,7 +756,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 18,
+      version: 19,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1042,6 +1057,12 @@ export const useGameStore = create<GameStore>()(
         // v17 → v18: init the (transient) transferRumors array.
         if (version < 18 && state?.world) {
           applyV17ToV18RumorsInit(state.world as { transferRumors?: unknown });
+        }
+        // v18 → v19: init playerStatsHistory (per-player per-season
+        // snapshots). Empty backfill — historical data isn't available
+        // for migration; new history accumulates from next season end.
+        if (version < 19 && state?.world) {
+          applyV18ToV19StatsHistoryInit(state.world as { playerStatsHistory?: unknown });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

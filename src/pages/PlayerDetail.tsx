@@ -289,6 +289,12 @@ export default function PlayerDetail() {
       {/* Awards (career) */}
       <AwardsSection world={world} playerUuid={uuid!} />
 
+      {/* Position-specific performance card (v19) */}
+      <PositionPerformanceCard player={player} stats={stats} world={world} />
+
+      {/* Per-season career history table (v19) */}
+      <CareerHistorySection world={world} playerUuid={uuid!} />
+
       {/* Positional rivals — same league, same position, top N by rating */}
       <RivalsSection world={world} playerUuid={uuid!} />
 
@@ -334,6 +340,150 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ── v19 — Position-specific performance metric ────────────────────
+//
+// Each position has a different "shining" KPI:
+//   FW: goals per match (≥0.5/match = elite)
+//   MF: (goals+assists) per match
+//   DF: defensive proxy from team's goals conceded rate
+//   GK: same defensive proxy
+// Returns a 0-100 normalized score + a human label.
+function computePositionScore(
+  player: Player,
+  stats: PlayerSeasonStats | undefined,
+  world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>,
+): { score: number; rating: string; perGame?: number; label: string } {
+  const apps = stats?.appearances ?? 0;
+  const goals = stats?.goals ?? 0;
+  const assists = stats?.assists ?? 0;
+  if (apps === 0) return { score: 0, rating: '—', label: '本赛季未出场' };
+
+  if (player.position === 'FW') {
+    const perGame = goals / apps;
+    const score = Math.min(100, perGame * 200);
+    return { score, rating: scoreToGrade(score), perGame, label: '场均进球' };
+  }
+  if (player.position === 'MF') {
+    const perGame = (goals + assists) / apps;
+    const score = Math.min(100, perGame * 200);
+    return { score, rating: scoreToGrade(score), perGame, label: '场均传射贡献' };
+  }
+  // DF / GK: use team's goals-conceded rate as proxy
+  let teamGC = 0;
+  let teamMatches = 0;
+  for (const st of [world.league1Standings, world.league2Standings, world.league3Standings]) {
+    const row = (st ?? []).find(s => s.teamId === player.teamId);
+    if (row && row.played > 0) {
+      teamGC = row.goalsAgainst;
+      teamMatches = row.played;
+      break;
+    }
+  }
+  const gcPerGame = teamMatches > 0 ? teamGC / teamMatches : 2;
+  const score = Math.max(0, 100 - gcPerGame * 25);
+  return { score, rating: scoreToGrade(score), perGame: gcPerGame, label: '失球抑制率(球队)' };
+}
+
+function scoreToGrade(score: number): string {
+  if (score >= 85) return 'S';
+  if (score >= 70) return 'A';
+  if (score >= 55) return 'B';
+  if (score >= 40) return 'C';
+  return 'D';
+}
+
+function PositionPerformanceCard({
+  player,
+  stats,
+  world,
+}: {
+  player: Player;
+  stats: PlayerSeasonStats | undefined;
+  world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
+}) {
+  const result = computePositionScore(player, stats, world);
+  if (result.score === 0 && result.label === '本赛季未出场') return null;
+  const barColor = result.score >= 70 ? 'bg-emerald-500'
+    : result.score >= 50 ? 'bg-amber-500'
+    : result.score >= 30 ? 'bg-orange-500'
+    : 'bg-red-500';
+  const gradeColor = result.score >= 70 ? 'text-emerald-300'
+    : result.score >= 50 ? 'text-amber-300'
+    : result.score >= 30 ? 'text-orange-300'
+    : 'text-red-300';
+  return (
+    <div className="bg-gradient-to-br from-slate-800 to-slate-800/70 rounded-xl border border-slate-700/60 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          📊 位置表现 ({posLabel[player.position] ?? player.position})
+        </h3>
+        <span className={`text-2xl font-black ${gradeColor}`}>{result.rating}</span>
+      </div>
+      <div className="text-[11px] text-slate-500 mb-1">{result.label}{result.perGame !== undefined ? ` ${result.perGame.toFixed(2)}` : ''}</div>
+      <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(100, result.score)}%` }} />
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+        <span>{result.score.toFixed(0)}/100</span>
+        <span>{positionScoreHint(player.position)}</span>
+      </div>
+    </div>
+  );
+}
+
+function positionScoreHint(pos: string): string {
+  if (pos === 'FW') return '0.5球/场 = 100分';
+  if (pos === 'MF') return '0.5传射/场 = 100分';
+  return '球队场均失球决定';
+}
+
+/** Per-season career history table (v19). */
+function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
+  if (!world) return null;
+  const history = (world.playerStatsHistory ?? {})[playerUuid] ?? [];
+  if (history.length === 0) return null;
+  const sorted = [...history].sort((a, b) => b.season - a.season);
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        📈 生涯赛季数据 ({history.length})
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-slate-500 border-b border-slate-700/40">
+              <th className="text-left py-1">赛季</th>
+              <th className="text-left py-1">球队</th>
+              <th className="text-right py-1">出场</th>
+              <th className="text-right py-1">进球</th>
+              <th className="text-right py-1">助攻</th>
+              <th className="text-right py-1">黄</th>
+              <th className="text-right py-1">球队失球率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((h) => {
+              const teamName = world.teamBases[h.teamId]?.name ?? h.teamId;
+              const gcRate = h.teamMatches > 0 ? (h.teamGoalsConceded / h.teamMatches).toFixed(2) : '—';
+              return (
+                <tr key={h.season + '-' + h.teamId} className="border-b border-slate-700/20 hover:bg-slate-700/20">
+                  <td className="py-1 text-slate-400">S{h.season}</td>
+                  <td className="py-1 text-slate-300 truncate max-w-[80px]">{teamName}</td>
+                  <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}</td>
+                  <td className="py-1 text-right text-amber-300 tabular-nums">{h.goals}</td>
+                  <td className="py-1 text-right text-blue-300 tabular-nums">{h.assists}</td>
+                  <td className="py-1 text-right text-slate-500 tabular-nums">{h.yellowCards}</td>
+                  <td className="py-1 text-right text-slate-400 tabular-nums">{gcRate}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

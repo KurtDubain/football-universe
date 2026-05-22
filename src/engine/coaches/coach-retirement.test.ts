@@ -82,7 +82,7 @@ function buildWorld(args: {
     seasonStartLevels: {}, seasonBuffs: [],
     godHandUsed: false, coins: 0, bets: [],
     matchHistory: [], seasonBuffsHistory: [],
-    playerAwardsHistory: [], transferHistory: [], memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {}, freeAgentPool: [], transferRumors: [],
+    playerAwardsHistory: [], transferHistory: [], memorableMatches: [], continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null }, totalElapsedWindows: 0, teamFinances: {}, freeAgentPool: [], transferRumors: [], playerStatsHistory: {},
   };
 }
 

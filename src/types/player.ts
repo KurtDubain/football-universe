@@ -124,6 +124,31 @@ export interface PlayerSeasonStats {
 }
 
 /**
+ * v19 — historical per-season snapshot of a player's stats, captured at
+ * season-end before the current-season `playerStats` is reset. Kept FIFO
+ * at most 15 entries per player (older seasons drop off).
+ *
+ * Adds `season` + team-context (`teamGoalsConceded`, `teamMatches`) so
+ * UI can compute per-season position-aware metrics (DF/GK use team's
+ * goals-conceded rate as a proxy for defensive performance — we don't
+ * track saves/tackles per player).
+ */
+export interface PlayerSeasonStatsHistoryEntry {
+  season: number;
+  teamId: string;
+  position: PlayerPosition;
+  goals: number;
+  assists: number;
+  appearances: number;
+  yellowCards: number;
+  redCards: number;
+  /** Total league goals conceded by the player's team that season. */
+  teamGoalsConceded: number;
+  /** Total league matches the team played that season. */
+  teamMatches: number;
+}
+
+/**
  * A retired player. Captured at the season-end moment of retirement.
  *
  * The `uuid` is preserved so any historical reference (transferHistory,
