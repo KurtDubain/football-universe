@@ -148,8 +148,15 @@ export default function PlayerDetail() {
   const goalsPerApp = appearances > 0 ? (goals / appearances).toFixed(2) : '0';
   const assistsPerApp = appearances > 0 ? (assists / appearances).toFixed(2) : '0';
 
-  // Team contribution
-  const teamTotalGoals = Object.values(world.playerStats).filter(s => s.teamId === teamId).reduce((sum, s) => sum + s.goals, 0);
+  // Team contribution. v23.1 — derive teammates from the CURRENT squad
+  // (source of truth) rather than filtering playerStats by stat.teamId,
+  // so a mid-season transfer of any squad member doesn't accidentally
+  // attribute their goals to the wrong team's denominator.
+  const currentSquad = world.squads[teamId] ?? [];
+  const teamTotalGoals = currentSquad.reduce(
+    (sum, p) => sum + (world.playerStats[p.uuid]?.goals ?? 0),
+    0,
+  );
   const contribution = teamTotalGoals > 0 ? Math.round((goals / teamTotalGoals) * 100) : 0;
 
   return (

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete, initializeNewSeason } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
+import { syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
@@ -900,11 +901,16 @@ export const useGameStore = create<GameStore>()(
         }
         // v23 — non-blocking architecture. The new season was already
         // initialised at season_end time, so closing the window is just
-        // a UI commit: clear the staged decisions, nothing else to do.
-        // (See engine/season/season-manager.ts `executeCurrentWindow`
-        // for the safety-net auto-resolve that fires if the user
-        // advances without ever opening the window.)
-        const cleared = { ...world, transferWindow: null };
+        // a UI commit: clear the staged decisions.
+        // v23.1 — also reconcile playerStats teamIds as a safety net,
+        // in case any future code path forgets to sync after moving a
+        // player (avoids the "stat row pinned to old team" bug class
+        // that surfaced as misattributed top-scorers + skipped awards).
+        const cleared = {
+          ...world,
+          transferWindow: null,
+          playerStats: syncPlayerStatsTeamIds(world.playerStats, world.squads),
+        };
         set({ world: cleared, advanceTick: get().advanceTick + 1 });
       },
 

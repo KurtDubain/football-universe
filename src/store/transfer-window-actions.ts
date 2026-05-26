@@ -5,7 +5,32 @@
  * action applied. Pure (no side effects). Caller wraps in zustand set.
  */
 import type { GameWorld } from '../engine/season/season-manager';
+import type { PlayerSeasonStats } from '../types/player';
 import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../types/transfer';
+
+/**
+ * v23.1 — keep `world.playerStats[uuid].teamId` in lock-step with the
+ * player's current squad after a manual transfer. The auto-transfer
+ * path in `engine/transfers/transfer-window.ts` already does this at
+ * the END of processing, but manual offer/bid/free-agent actions used
+ * to skip it — causing UIs that group player stats by `teamId` (top
+ * scorer per team, season-end awards, team-contribution %, etc.) to
+ * misattribute transferred players to their old team for the rest of
+ * the season.
+ *
+ * Safe to call when there's no stat row for the uuid (free-agent
+ * signing of a player who never played this season): we leave the
+ * stats untouched in that case.
+ */
+function syncStatTeamId(
+  stats: Record<string, PlayerSeasonStats>,
+  uuid: string,
+  newTeamId: string,
+): Record<string, PlayerSeasonStats> {
+  const existing = stats[uuid];
+  if (!existing || existing.teamId === newTeamId) return stats;
+  return { ...stats, [uuid]: { ...existing, teamId: newTeamId } };
+}
 
 /** Move player from owner team to buyer team + book cash. Used by both
  *  acceptIncomingOffer and counterIncomingOffer paths. */
@@ -55,6 +80,7 @@ export function applyOfferTransfer(
     ...world,
     squads,
     teamFinances,
+    playerStats: syncStatTeamId(world.playerStats, player.uuid, offer.buyerId),
     transferHistory: [...(world.transferHistory ?? []), transferRecord],
   };
 }
@@ -105,6 +131,7 @@ export function applyOutgoingBid(
     ...world,
     squads,
     teamFinances,
+    playerStats: syncStatTeamId(world.playerStats, player.uuid, target.toTeamId),
     transferHistory: [...(world.transferHistory ?? []), transferRecord],
   };
 }
@@ -157,6 +184,11 @@ export function signFreeAgent(
     squads,
     teamFinances,
     freeAgentPool: newPool,
+    // Sync stat row in case the free agent had a partial-season stat
+    // entry from a prior team in the same season (rare — mostly the
+    // free-agent pool comes from contract expiries / retirements, not
+    // mid-season releases — but covers the edge case).
+    playerStats: syncStatTeamId(world.playerStats, player.uuid, toTeamId),
     transferHistory: [...(world.transferHistory ?? []), transferRecord],
   };
 }

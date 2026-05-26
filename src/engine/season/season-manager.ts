@@ -28,6 +28,7 @@ import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
 import { autoResolveRemaining } from '../../store/transfer-window-actions';
+import { syncPlayerStatsTeamIds } from '../players/stats';
 import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
@@ -838,7 +839,13 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     if (totalPending > 0) {
       world = autoResolveRemaining(world);
     }
-    world = { ...world, transferWindow: null };
+    world = {
+      ...world,
+      transferWindow: null,
+      // Safety net: keep stat.teamId in sync after the auto-resolve
+      // moved players around. Idempotent if nothing actually moved.
+      playerStats: syncPlayerStatsTeamIds(world.playerStats, world.squads),
+    };
     if (totalPending > 0) {
       preNews.push({
         id: `auto-window-s${tw.season}-${Date.now()}`,

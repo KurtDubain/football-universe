@@ -222,3 +222,38 @@ export function getTopScorerByTeam(
   }
   return out;
 }
+
+/**
+ * v23.1 — Reconcile every `playerStats[uuid].teamId` with the player's
+ * CURRENT location in `squads`. Idempotent and cheap (O(N) over squads).
+ *
+ * Why this exists: most engine paths keep `stats.teamId` in lockstep
+ * (auto-transfer in transfer-window.ts and the manual paths in
+ * transfer-window-actions.ts both call this after moving a player).
+ * This helper is the "belt" — call it whenever you suspect drift, e.g.
+ * right before computing season-end awards or before reading
+ * per-team aggregates over `playerStats`. Stat rows whose uuid no
+ * longer appears in any squad (player retired without an explicit
+ * cleanup) are passed through untouched.
+ */
+export function syncPlayerStatsTeamIds(
+  playerStats: Record<string, PlayerSeasonStats>,
+  squads: Record<string, Player[]>,
+): Record<string, PlayerSeasonStats> {
+  const uuidToTeam = new Map<string, string>();
+  for (const [tid, sq] of Object.entries(squads)) {
+    for (const p of sq) uuidToTeam.set(p.uuid, tid);
+  }
+  let touched = false;
+  const out: Record<string, PlayerSeasonStats> = {};
+  for (const [uuid, stat] of Object.entries(playerStats)) {
+    const liveTeam = uuidToTeam.get(uuid);
+    if (liveTeam && liveTeam !== stat.teamId) {
+      out[uuid] = { ...stat, teamId: liveTeam };
+      touched = true;
+    } else {
+      out[uuid] = stat;
+    }
+  }
+  return touched ? out : playerStats;
+}
