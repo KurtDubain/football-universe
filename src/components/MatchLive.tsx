@@ -3,6 +3,7 @@ import { useSwipe } from '../utils/use-swipe';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
+import { Icon, IconName } from './Icon';
 
 interface Props {
   result: MatchResult;
@@ -10,9 +11,17 @@ interface Props {
   onClose: () => void;
 }
 
-const EVENT_ICONS: Record<string, string> = {
-  goal: '⚽', penalty_goal: '⚽', own_goal: '🔴',
-  yellow_card: '🟨', red_card: '🟥', save: '🧤', miss: '💨',
+const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
+  goal:         { name: 'ball' },
+  penalty_goal: { name: 'ball', accent: '#fbbf24' },
+  own_goal:     { name: 'ball', accent: '#ef4444' },
+  yellow_card:  { name: 'warning', accent: '#facc15' },
+  red_card:     { name: 'warning', accent: '#ef4444' },
+  save:         { name: 'gloves' },
+  miss:         { name: 'x' },
+  gk_save:      { name: 'gloves', accent: '#3b82f6' },
+  df_block:     { name: 'shield', accent: '#3b82f6' },
+  assist:       { name: 'sparkle', accent: '#a78bfa' },
 };
 
 export default function MatchLive({ result, teamBases, onClose }: Props) {
@@ -229,7 +238,11 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
           ).slice(0, 6).map((e, i) => (
             <div key={i} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
               <span className="w-6 text-right font-mono text-[10px]">{e.minute}'</span>
-              <span className="text-sm">{EVENT_ICONS[e.type] ?? '•'}</span>
+              <span className="text-sm inline-flex items-center justify-center w-4 h-4">
+                {EVENT_ICONS[e.type]
+                  ? <Icon name={EVENT_ICONS[e.type].name} size={14} accent={EVENT_ICONS[e.type].accent} />
+                  : <span>•</span>}
+              </span>
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: e.teamId === result.homeTeamId ? ht?.color : at?.color }} />
               <span className="truncate">{e.description}</span>
             </div>

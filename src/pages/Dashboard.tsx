@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
+import { Icon } from '../components/Icon';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase } from '../types/team';
@@ -209,7 +210,9 @@ export default function Dashboard() {
           <span className="text-slate-500">·</span>
           <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
           <span className="text-slate-500">·</span>
-          <span className="text-xs text-amber-400 font-medium">🪙 {world.coins ?? 1000}</span>
+          <span className="text-xs text-amber-400 font-medium inline-flex items-center gap-1">
+            <Icon name="coin" size={13} accent="#fbbf24" /> {world.coins ?? 1000}
+          </span>
         </div>
 
         {/* Center: current window badge */}
@@ -245,7 +248,7 @@ export default function Dashboard() {
         if (broke.length === 0) return null;
         return (
           <div className="bg-red-950/40 border border-red-800/50 text-red-200 rounded-lg px-3 py-2 text-xs flex items-start gap-2">
-            <span className="text-red-300">⚠</span>
+            <span className="text-red-300"><Icon name="warning" size={14} /></span>
             <div className="min-w-0">
               <div className="font-semibold mb-0.5">财政告急</div>
               <div className="text-[11px] text-red-300/90">
@@ -301,18 +304,20 @@ export default function Dashboard() {
                 </div>
                 {/* Row 2 — cash / coach / next fixture. Always visible (no horizontal scroll). */}
                 <div className="flex items-center gap-2 sm:gap-3 mt-1.5 text-[11px] sm:text-xs flex-wrap pl-8">
-                  <span className={`${cashTone}`} title="球队现金 (Phase H 经济)">
-                    💰{formatMoneyChip(cash)}
+                  <span className={`inline-flex items-center gap-0.5 ${cashTone}`} title="球队现金 (Phase H 经济)">
+                    <Icon name="money" size={12} /> {formatMoneyChip(cash)}
                   </span>
                   <span className="text-slate-500">·</span>
-                  <span className="text-slate-400 truncate" title={`主帅 ${coachName}`}>👔 {coachName}</span>
+                  <span className="text-slate-400 truncate inline-flex items-center gap-0.5" title={`主帅 ${coachName}`}>
+                    <Icon name="tie" size={12} /> {coachName}
+                  </span>
                   {opponentId && (
                     <>
                       <span className="text-slate-500">·</span>
                       <span className="text-slate-400">
                         下场 vs <span className="text-slate-200">{getTeamName(opponentId, world.teamBases)}</span>
                         {nextFixture?.isNeutralVenue ? (
-                          <span className="text-amber-400 text-[10px] ml-1">🏟️中立</span>
+                          <span className="text-amber-400 text-[10px] ml-1 inline-flex items-center gap-0.5"><Icon name="stadium" size={10} /> 中立</span>
                         ) : (
                           <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
                         )}
@@ -365,7 +370,7 @@ export default function Dashboard() {
               return (
                 <div key={r.id} className={`rounded-lg border px-3 py-2 ${intensityColor}`}>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-base shrink-0">📢</span>
+                    <span className="text-base shrink-0"><Icon name="megaphone" size={16} /></span>
                     <Link to={`/team/${r.eliteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400">
                       {r.eliteTeamName}
                     </Link>
@@ -569,7 +574,7 @@ function MatchdayTab({
       {focusMatches.length > 0 && (
         <div className="bg-gradient-to-r from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-700/30 p-3">
           <h3 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
-            <span>🔥</span><span>本轮焦点战</span>
+            <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {focusMatches.map(({ fixture, importance }) => {
@@ -616,7 +621,7 @@ function MatchdayTab({
       {playerHighlights.length > 0 && (
         <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-slate-800 rounded-xl border border-purple-700/30 p-3">
           <h3 className="text-xs font-bold text-purple-300 mb-2 flex items-center gap-1.5">
-            <span>🌟</span><span>本轮焦点球员</span>
+            <Icon name="star-glow" size={16} accent="#fbbf24" /><span>本轮焦点球员</span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {playerHighlights.map((h) => {
@@ -1382,7 +1387,7 @@ function TransferWindowEntry({ world }: { world: GameWorld }) {
   return (
     <div className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl border border-amber-700/50 p-4 mb-4">
       <div className="flex items-start gap-3 flex-wrap">
-        <div className="text-2xl shrink-0">🏟️</div>
+        <div className="text-2xl shrink-0 text-amber-400"><Icon name="stadium" size={28} /></div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-amber-300">第{tw.season}赛季转会窗口</div>
           <div className="text-xs text-slate-400 mt-1">
@@ -1397,15 +1402,15 @@ function TransferWindowEntry({ world }: { world: GameWorld }) {
         <div className="flex gap-2 ml-auto shrink-0">
           <button
             onClick={() => navigate('/market')}
-            className="px-3 py-2 min-h-[36px] bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded cursor-pointer"
+            className="px-3 py-2 min-h-[36px] bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded cursor-pointer inline-flex items-center gap-1"
           >
-            🛒 处理
+            <Icon name="cart" size={14} /> 处理
           </button>
           <button
             onClick={() => closeTransferWindow(true)}
-            className="px-3 py-2 min-h-[36px] bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded cursor-pointer"
+            className="px-3 py-2 min-h-[36px] bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded cursor-pointer inline-flex items-center gap-1"
           >
-            ⚡ 全自动
+            <Icon name="bolt" size={14} /> 全自动
           </button>
         </div>
       </div>

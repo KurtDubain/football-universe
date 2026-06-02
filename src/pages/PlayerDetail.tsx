@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
+import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 
@@ -234,17 +235,17 @@ export default function PlayerDetail() {
           <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">关键先生</h3>
           <div className="grid grid-cols-3 gap-2">
             <div className="text-center">
-              <div className="text-2xl">🎯</div>
+              <div className="flex justify-center text-amber-300"><Icon name="target" size={24} accent="#f59e0b" /></div>
               <div className="text-base font-bold text-amber-300">{keyMetrics.finalGoals}</div>
               <div className="text-[10px] text-slate-500">决赛进球</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl">⚡</div>
+              <div className="flex justify-center text-amber-300"><Icon name="bolt" size={24} accent="#fbbf24" /></div>
               <div className="text-base font-bold text-amber-300">{keyMetrics.lateGoals}</div>
               <div className="text-[10px] text-slate-500">绝杀进球</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl">🎩</div>
+              <div className="flex justify-center text-amber-300"><Icon name="tophat" size={24} accent="#fbbf24" /></div>
               <div className="text-base font-bold text-amber-300">{keyMetrics.hatTricks}</div>
               <div className="text-[10px] text-slate-500">帽子戏法</div>
             </div>
@@ -276,7 +277,7 @@ export default function PlayerDetail() {
           <div className="space-y-1.5">
             {highlights.map((h, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="text-amber-400">⚽</span>
+                <span className="text-amber-400 inline-flex"><Icon name="ball" size={12} /></span>
                 <span className="text-slate-500 w-8 shrink-0">{h.minute}'</span>
                 <span className="text-slate-300 flex-1 truncate">{h.desc}</span>
                 <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[100px]">{h.window}</span>
@@ -314,11 +315,11 @@ export default function PlayerDetail() {
   );
 }
 
-const AWARD_META: Record<string, { label: string; icon: string; color: string }> = {
-  mvp:           { label: '金球奖',  icon: '🏆', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
-  golden_boot:   { label: '金靴奖',  icon: '👟', color: 'bg-orange-900/40 text-orange-300 border-orange-700/40' },
-  best_defender: { label: '最佳后卫', icon: '🛡️', color: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
-  young_player:  { label: '最佳新星', icon: '⭐', color: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
+const AWARD_META: Record<string, { label: string; icon: IconName; accent: string; color: string }> = {
+  mvp:           { label: '金球奖',  icon: 'trophy',     accent: '#fbbf24', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
+  golden_boot:   { label: '金靴奖',  icon: 'boot',       accent: '#fb923c', color: 'bg-orange-900/40 text-orange-300 border-orange-700/40' },
+  best_defender: { label: '最佳后卫', icon: 'shield',     accent: '#3b82f6', color: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
+  young_player:  { label: '最佳新星', icon: 'sparkle',    accent: '#34d399', color: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
 };
 
 /** Career awards collected by this player (uuid). */
@@ -330,17 +331,17 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   const sorted = [...awards].sort((a, b) => b.season - a.season);
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-        🏅 个人荣誉 ({awards.length})
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
+        <Icon name="medal" size={14} accent="#fbbf24" /> 个人荣誉 ({awards.length})
       </h3>
       <div className="space-y-1.5">
         {sorted.map((a, i) => {
-          const meta = AWARD_META[a.type] ?? { label: a.type, icon: '🏅', color: 'bg-slate-700/60 text-slate-300 border-slate-600/40' };
+          const meta = AWARD_META[a.type] ?? { label: a.type, icon: 'medal' as IconName, accent: '#fbbf24', color: 'bg-slate-700/60 text-slate-300 border-slate-600/40' };
           return (
             <div key={i} className="flex items-center gap-2 text-xs">
               <span className="text-slate-500 w-10 shrink-0">S{a.season}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.color} font-semibold`}>
-                {meta.icon} {meta.label}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.color} font-semibold inline-flex items-center gap-1`}>
+                <Icon name={meta.icon} size={11} accent={meta.accent} /> {meta.label}
               </span>
               <span className="text-slate-400 flex-1 truncate">{a.statLabel}</span>
               <span className="text-[10px] text-slate-500 truncate max-w-[100px]">于 {a.teamName}</span>
@@ -466,8 +467,8 @@ function PositionPerformanceCard({
   return (
     <div className="bg-gradient-to-br from-slate-800 to-slate-800/70 rounded-xl border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          📊 位置表现 ({posLabel[player.position] ?? player.position})
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
+          <Icon name="chart" size={13} /> 位置表现 ({posLabel[player.position] ?? player.position})
         </h3>
         <span className={`text-2xl font-black ${gradeColor}`}>{result.rating}</span>
       </div>
@@ -504,8 +505,8 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
   const sorted = [...history].sort((a, b) => b.season - a.season);
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-        📈 生涯赛季数据 ({history.length})
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
+        <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -551,8 +552,8 @@ function RivalsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          ⚔️ 位置之争
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
+          <Icon name="target" size={13} /> 位置之争
         </h3>
         <span className="text-[10px] text-slate-500">同位置同级别强敌</span>
       </div>
@@ -572,8 +573,8 @@ function RivalsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
               </span>
             )}
             {r.awardCount > 0 && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40">
-                🏅×{r.awardCount}
+              <span className="text-[10px] px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40 inline-flex items-center gap-0.5">
+                <Icon name="medal" size={10} accent="#fbbf24" />×{r.awardCount}
               </span>
             )}
             <span className="text-slate-300 font-bold tabular-nums ml-auto">{r.playerRating}</span>
@@ -592,8 +593,8 @@ function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeo
   const sorted = [...transfers].sort((a, b) => a.season - b.season || a.windowIndex - b.windowIndex);
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-        🔄 转会履历 ({transfers.length})
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
+        <Icon name="refresh" size={13} /> 转会履历 ({transfers.length})
       </h3>
       <div className="space-y-1.5">
         {sorted.map((t, i) => {
@@ -661,7 +662,7 @@ function InjurySection({
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">🩹 伤病记录</h3>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1"><Icon name="bandage" size={13} accent="#fca5a5" /> 伤病记录</h3>
         <div className="flex gap-1.5">
           {isInjured && (
             <span className="text-[10px] px-2 py-0.5 rounded bg-red-900/40 text-red-400 border border-red-700/40">
@@ -746,8 +747,8 @@ function RetiredPlayerView({
     <div className="max-w-2xl space-y-5">
       <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-xl border border-slate-700/60 p-5">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40 font-medium">
-            🏛️ 已退役
+          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40 font-medium inline-flex items-center gap-1">
+            <Icon name="building" size={11} /> 已退役
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">
             {posLabel[retired.position] ?? retired.position}

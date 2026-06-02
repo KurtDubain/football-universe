@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMoney } from '../engine/economy/finance';
+import { Icon } from '../components/Icon';
 
 /**
  * Phase 2 — Transfer Window page for favorite teams.
@@ -57,7 +58,7 @@ export default function Market() {
       <div className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl border border-amber-700/40 p-5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h1 className="text-2xl font-bold text-amber-300">🏟️ 转会窗口 S{tw.season}</h1>
+            <h1 className="text-2xl font-bold text-amber-300 inline-flex items-center gap-2"><Icon name="stadium" size={26} accent="#fbbf24" /> 转会窗口 S{tw.season}</h1>
             <p className="text-xs text-slate-400 mt-1">仅你的收藏球队需要决策,其他球队已自动处理</p>
           </div>
           {favTeamFinances && (
@@ -70,7 +71,7 @@ export default function Market() {
       </div>
 
       {/* Incoming offers */}
-      <Section title={`📥 收到的报价 (${pendingOffers.length})`} emptyMessage={tw.incomingOffers.length === 0 ? '本赛季无人向你的球队报价' : undefined}>
+      <Section title={<><Icon name="inbox" size={14} className="inline-block mr-1" /> 收到的报价 ({pendingOffers.length})</>} emptyMessage={tw.incomingOffers.length === 0 ? '本赛季无人向你的球队报价' : undefined}>
         {pendingOffers.map(o => (
           <div key={o.id} className="bg-slate-800 rounded-lg border border-slate-700/60 p-3">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -84,9 +85,9 @@ export default function Market() {
               <span className="font-medium text-slate-300">{o.buyerName}</span> 出价求购
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => acceptIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-emerald-700 hover:bg-emerald-600 rounded text-white">✅ 接受 {formatMoney(o.fee)}</button>
-              <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-amber-700 hover:bg-amber-600 rounded text-white">💬 还价 {formatMoney(Math.round(o.fee * 1.3))} (60%成功率)</button>
-              <button onClick={() => rejectIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-red-800 hover:bg-red-700 rounded text-white">❌ 拒绝</button>
+              <button onClick={() => acceptIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-emerald-700 hover:bg-emerald-600 rounded text-white inline-flex items-center gap-1"><Icon name="check" size={12} /> 接受 {formatMoney(o.fee)}</button>
+              <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-amber-700 hover:bg-amber-600 rounded text-white inline-flex items-center gap-1"><Icon name="speech" size={12} /> 还价 {formatMoney(Math.round(o.fee * 1.3))} (60%成功率)</button>
+              <button onClick={() => rejectIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-red-800 hover:bg-red-700 rounded text-white inline-flex items-center gap-1"><Icon name="x" size={12} /> 拒绝</button>
             </div>
           </div>
         ))}
@@ -105,7 +106,7 @@ export default function Market() {
       </Section>
 
       {/* Outgoing targets */}
-      <Section title={`🎯 你的目标 (${pendingTargets.length})`} emptyMessage={tw.outgoingTargets.length === 0 ? '无可用候选(本赛季没有合适的明星)' : undefined}>
+      <Section title={<><Icon name="target" size={14} className="inline-block mr-1" /> 你的目标 ({pendingTargets.length})</>} emptyMessage={tw.outgoingTargets.length === 0 ? '无可用候选(本赛季没有合适的明星)' : undefined}>
         {pendingTargets.map(t => {
           const currentBid = bidValues[t.id] ?? t.suggestedFee;
           const canAfford = favTeamFinances && favTeamFinances.cash >= currentBid;
@@ -133,7 +134,9 @@ export default function Market() {
                   onClick={() => bidForOutgoingTarget(t.id, currentBid)}
                   disabled={!canAfford}
                   className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-blue-700 hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
-                >📤 报价</button>
+                >
+                  <Icon name="outbox" size={12} className="inline-block mr-1" /> 报价
+                </button>
                 <span className="text-[10px] text-slate-500 sm:ml-auto basis-full sm:basis-auto">出价 ≥ {formatMoney(Math.round(t.suggestedFee * 0.9))} 接受概率高</span>
               </div>
               {!canAfford && (
@@ -157,7 +160,7 @@ export default function Market() {
       </Section>
 
       {/* Free agent pool */}
-      <Section title={`🛒 自由市场 (${poolPlayers.length})`} emptyMessage={poolPlayers.length === 0 ? '当前自由市场为空' : undefined}>
+      <Section title={<><Icon name="cart" size={14} className="inline-block mr-1" /> 自由市场 ({poolPlayers.length})</>} emptyMessage={poolPlayers.length === 0 ? '当前自由市场为空' : undefined}>
         {poolPlayers.map(p => {
           const canAfford = favTeamFinances && favTeamFinances.cash >= 5;
           return (
@@ -187,20 +190,20 @@ export default function Market() {
           {(pendingOffers.length + pendingTargets.length > 0) && (
             <button
               onClick={() => closeTransferWindow(true)}
-              className="text-xs px-3 py-2.5 min-h-[40px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 flex-1 sm:flex-none"
-            >⚡ 全自动剩余</button>
+              className="text-xs px-3 py-2.5 min-h-[40px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 flex-1 sm:flex-none inline-flex items-center justify-center gap-1"
+            ><Icon name="bolt" size={12} /> 全自动剩余</button>
           )}
           <button
             onClick={() => closeTransferWindow(false)}
-            className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 rounded text-white font-semibold flex-1 sm:flex-none"
-          >✅ 完成转会窗口</button>
+            className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 rounded text-white font-semibold flex-1 sm:flex-none inline-flex items-center justify-center gap-1"
+          ><Icon name="check" size={12} /> 完成转会窗口</button>
         </div>
       </div>
     </div>
   );
 }
 
-function Section({ title, emptyMessage, children }: { title: string; emptyMessage?: string; children: React.ReactNode }) {
+function Section({ title, emptyMessage, children }: { title: React.ReactNode; emptyMessage?: string; children: React.ReactNode }) {
   return (
     <div className="bg-slate-900/40 rounded-xl border border-slate-700/60 p-4 space-y-2">
       <h2 className="text-sm font-semibold text-slate-300">{title}</h2>
@@ -211,14 +214,17 @@ function Section({ title, emptyMessage, children }: { title: string; emptyMessag
   );
 }
 
-function resolutionLabel(r: string): string {
+function resolutionLabel(r: string): React.ReactNode {
+  const wrap = (icon: React.ReactNode, txt: string) => (
+    <span className="inline-flex items-center gap-1">{icon}{txt}</span>
+  );
   switch (r) {
-    case 'accepted': return '✅ 接受';
-    case 'rejected': return '❌ 拒绝';
-    case 'countered_accepted': return '💬 还价成功';
-    case 'countered_rejected': return '💬 还价被拒';
-    case 'bid_accepted': return '📤 报价被接受';
-    case 'bid_rejected': return '📤 报价被拒';
+    case 'accepted': return wrap(<Icon name="check" size={11} />, '接受');
+    case 'rejected': return wrap(<Icon name="x" size={11} />, '拒绝');
+    case 'countered_accepted': return wrap(<Icon name="speech" size={11} />, '还价成功');
+    case 'countered_rejected': return wrap(<Icon name="speech" size={11} />, '还价被拒');
+    case 'bid_accepted': return wrap(<Icon name="outbox" size={11} />, '报价被接受');
+    case 'bid_rejected': return wrap(<Icon name="outbox" size={11} />, '报价被拒');
     case 'skipped': return '— 跳过';
     default: return r;
   }

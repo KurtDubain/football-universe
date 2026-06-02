@@ -1,49 +1,50 @@
 import { useEffect, useState } from 'react';
 import type { Achievement } from '../engine/achievements';
+import { Icon, IconName } from './Icon';
 
 interface Props {
   achievement: Achievement;
   onDismiss: () => void;
 }
 
-const ACHIEVEMENT_EMOJI: Record<string, string> = {
+const ACHIEVEMENT_ICON: Record<string, IconName> = {
   // Statistical
-  unbeaten: '🛡️',
-  dominant: '👑',
-  centurion: '💯',
-  goal_machine: '⚽',
-  iron_wall: '🧱',
-  avalanche: '🔥',
-  massacre: '💥',
+  unbeaten: 'shield',
+  dominant: 'crown',
+  centurion: 'star',
+  goal_machine: 'ball',
+  iron_wall: 'shield',
+  avalanche: 'fire',
+  massacre: 'burst',
   // First-time
-  promotion_streak: '🚀',
-  first_promotion: '⬆️',
-  first_relegation: '⬇️',
-  first_league_title: '🏆',
-  first_cup: '🥇',
-  first_super_cup: '⭐',
-  first_world_cup: '🌍',
+  promotion_streak: 'rocket',
+  first_promotion: 'arrow-up',
+  first_relegation: 'arrow-down',
+  first_league_title: 'trophy',
+  first_cup: 'medal',
+  first_super_cup: 'star',
+  first_world_cup: 'trophy',
   // Dynasty
-  back_to_back: '👑',
-  three_peat: '👑',
-  five_peat: '🏛️',
-  cup_dynasty: '🏆',
+  back_to_back: 'crown',
+  three_peat: 'crown',
+  five_peat: 'building',
+  cup_dynasty: 'trophy',
   // Multi-crown
-  double_crown: '🏆',
-  triple_crown: '🏆',
-  quadruple: '🏆',
+  double_crown: 'trophy',
+  triple_crown: 'trophy',
+  quadruple: 'trophy',
   // Underdog
-  underdog_promo_to_top: '🌱',
-  rookie_champion: '⚡',
-  comeback: '🔥',
+  underdog_promo_to_top: 'leaf',
+  rookie_champion: 'bolt',
+  comeback: 'fire',
   // Heartbreak
-  almost_perfect: '😢',
-  rock_bottom: '💔',
-  no_wins: '😭',
+  almost_perfect: 'star',
+  rock_bottom: 'arrow-down',
+  no_wins: 'x',
   // Long-term
-  survivor_5: '🌲',
-  collector_3: '🎖️',
-  legend_team: '🌟',
+  survivor_5: 'leaf',
+  collector_3: 'medal',
+  legend_team: 'star-glow',
 };
 
 export default function AchievementToast({ achievement, onDismiss }: Props) {
@@ -56,9 +57,9 @@ export default function AchievementToast({ achievement, onDismiss }: Props) {
     return () => { clearTimeout(fadeIn); clearTimeout(fadeOut); clearTimeout(dismiss); };
   }, [achievement.id, onDismiss]);
 
-  // Get emoji from achievement id (extract base id like 'unbeaten' from 'unbeaten-teamId-S1')
+  // Get icon from achievement id (extract base id like 'unbeaten' from 'unbeaten-teamId-S1')
   const baseId = achievement.id.split('-')[0];
-  const emoji = ACHIEVEMENT_EMOJI[baseId] ?? '🏆';
+  const iconName = ACHIEVEMENT_ICON[baseId] ?? 'trophy';
 
   return (
     <div
@@ -68,7 +69,9 @@ export default function AchievementToast({ achievement, onDismiss }: Props) {
       onClick={onDismiss}
     >
       <div className="bg-gradient-to-r from-amber-900/90 via-amber-800/90 to-amber-900/90 backdrop-blur-sm border border-amber-600/50 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 cursor-pointer animate-glow-pulse">
-        <span className="text-3xl shrink-0">{emoji}</span>
+        <span className="shrink-0 text-amber-300">
+          <Icon name={iconName} size={32} accent="#fbbf24" />
+        </span>
         <div>
           <div className="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">成就解锁</div>
           <div className="text-sm font-bold text-white">{achievement.title}</div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { NewsItem } from '../engine/season/season-manager';
+import { Icon, IconName } from './Icon';
 
 const priorityMap: Record<string, number> = {
   trophy: 10, upset: 8, coach_fired: 7, coach_hired: 6, retirement: 6,
@@ -7,11 +8,18 @@ const priorityMap: Record<string, number> = {
   streak: 4, match_result: 2, rumor: 3,
 };
 
-const typeIcon: Record<string, string> = {
-  trophy: '🏆', upset: '🔥', coach_fired: '📋', coach_hired: '✅',
-  promotion: '⬆️', relegation: '⬇️', streak: '📊', match_result: '⚽',
-  retirement: '🎖️', injury: '🩹', fire_sale: '💸', prize_money: '💰',
-  rumor: '📢',
+const typeIcon: Record<string, IconName> = {
+  trophy: 'trophy', upset: 'fire', coach_fired: 'clipboard', coach_hired: 'check',
+  promotion: 'arrow-up', relegation: 'arrow-down', streak: 'chart', match_result: 'ball',
+  retirement: 'medal', injury: 'bandage', fire_sale: 'money', prize_money: 'coin',
+  rumor: 'megaphone',
+};
+
+const typeAccent: Record<string, string> = {
+  trophy: '#fbbf24', upset: '#f97316', coach_fired: '#ef4444', coach_hired: '#3b82f6',
+  promotion: '#10b981', relegation: '#f87171', streak: '#0ea5e9', match_result: '#10b981',
+  retirement: '#fcd34d', injury: '#fca5a5', fire_sale: '#fb923c', prize_money: '#eab308',
+  rumor: '#c084fc',
 };
 
 const typeBg: Record<string, string> = {
@@ -62,7 +70,9 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
         className="h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="text-xs shrink-0">{typeIcon[item.type] ?? '📰'}</span>
+        <span className="text-xs shrink-0 text-slate-300">
+          <Icon name={typeIcon[item.type] ?? 'news'} size={13} accent={typeAccent[item.type]} />
+        </span>
         <p className="text-[11px] text-slate-300 truncate flex-1 animate-slide-down" key={item.id}>
           {item.title}
         </p>
@@ -83,7 +93,9 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
               className={`flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
               onClick={() => { setIndex(i); setExpanded(false); }}
             >
-              <span className="text-xs mt-0.5 shrink-0">{typeIcon[n.type] ?? '📰'}</span>
+              <span className="text-xs mt-0.5 shrink-0 text-slate-300">
+                <Icon name={typeIcon[n.type] ?? 'news'} size={13} accent={typeAccent[n.type]} />
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-200 font-medium leading-tight">{n.title}</p>
                 {n.description && (
