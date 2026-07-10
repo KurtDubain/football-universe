@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { initializeGameWorld, executeCurrentWindow, getCurrentWindow } from './season-manager';
+import { defaultTeams } from '../../config/teams';
+import type { TeamBase } from '../../types/team';
+
+function makeCustomTeams(): TeamBase[] {
+  return defaultTeams.map((team, idx) => ({
+    ...team,
+    id: `custom_${idx}`,
+    name: `自定义${idx}`,
+    shortName: `C${idx}`,
+  }));
+}
 
 describe('initializeGameWorld', () => {
   it('returns a valid world with 32 teams + 36 coaches + non-empty calendar', () => {
@@ -37,6 +48,28 @@ describe('initializeGameWorld', () => {
     expect(Object.keys(a.squads).sort()).toEqual(Object.keys(b.squads).sort());
     // Same number of fixtures in the league cup
     expect(a.leagueCup.rounds[0].fixtures.length).toBe(b.leagueCup.rounds[0].fixtures.length);
+  });
+
+  it('generates squads and player stats from custom final teams', () => {
+    const customTeams = makeCustomTeams();
+    const customIds = customTeams.map((team) => team.id).sort();
+    const world = initializeGameWorld(2024, { gameMode: 'sandbox', customTeams });
+
+    expect(Object.keys(world.teamBases).sort()).toEqual(customIds);
+    expect(Object.keys(world.teamStates).sort()).toEqual(customIds);
+    expect(Object.keys(world.squads).sort()).toEqual(customIds);
+
+    for (const teamId of customIds) {
+      expect(world.squads[teamId]).toHaveLength(22);
+      for (const player of world.squads[teamId]) {
+        expect(player.teamId).toBe(teamId);
+        expect(world.playerStats[player.uuid]?.teamId).toBe(teamId);
+      }
+    }
+
+    for (const defaultTeam of defaultTeams) {
+      expect(world.squads[defaultTeam.id]).toBeUndefined();
+    }
   });
 });
 

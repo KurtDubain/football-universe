@@ -359,7 +359,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   const rng = new SeededRNG(seed);
 
   // 8. Generate squads (permanent, once)
-  const { squads, nextPlayerUuidCounter } = generateAllSquads(defaultTeams, seed + 7777);
+  const { squads, nextPlayerUuidCounter } = generateAllSquads(finalTeams, seed + 7777);
   const playerStats = createInitialPlayerStats(squads);
 
   // Build an initial world (partial) so initializeNewSeason can fill it out
