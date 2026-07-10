@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { initializeGameWorld, initializeNewSeason, executeCurrentWindow, getCurrentWindow } from './season-manager';
 import { defaultTeams } from '../../config/teams';
 import { playerTeamStatKey } from '../players/stats';
+import { validateWorldData } from '../validation/world-data';
 import type { StandingEntry } from '../../types/league';
 import type { TeamBase } from '../../types/team';
+import type { PlayerRetirement } from '../../types/player';
 
 function makeCustomTeams(): TeamBase[] {
   return defaultTeams.map((team, idx) => ({
@@ -128,6 +130,54 @@ describe('initializeGameWorld', () => {
     expect(history?.goals).toBe(16);
     expect(next.playerStats[player.uuid].goals).toBe(0);
   });
+
+  it('snapshots a just-retired player even after they leave the active squad', () => {
+    const world = initializeGameWorld(2024);
+    const [teamId, squad] = Object.entries(world.squads)[0];
+    const player = squad.find((p) => p.position === 'FW') ?? squad[0];
+    const retired: PlayerRetirement = {
+      uuid: player.uuid,
+      name: player.name,
+      teamId,
+      teamName: world.teamBases[teamId].name,
+      position: player.position,
+      peakRating: player.peakRating,
+      age: player.age,
+      seasonRetired: world.seasonState.seasonNumber,
+      careerGoals: 23,
+    };
+    const playerStats = {
+      ...world.playerStats,
+      [player.uuid]: {
+        ...world.playerStats[player.uuid],
+        goals: 6,
+        assists: 3,
+        appearances: 14,
+        bigChances: 8,
+        keyPasses: 4,
+      },
+    };
+
+    const next = initializeNewSeason({
+      ...world,
+      squads: {
+        ...world.squads,
+        [teamId]: squad.filter((p) => p.uuid !== player.uuid),
+      },
+      playerStats,
+      retirementHistory: [...world.retirementHistory, retired],
+      league1Standings: world.league1Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+      league2Standings: world.league2Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+      league3Standings: world.league3Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+    });
+
+    const history = next.playerStatsHistory[player.uuid]?.find((entry) => entry.season === 1);
+    expect(history).toBeDefined();
+    expect(history?.playerName).toBe(player.name);
+    expect(history?.position).toBe(player.position);
+    expect(history?.goals).toBe(6);
+    expect(next.playerStats[player.uuid]).toBeUndefined();
+  });
 });
 
 describe('executeCurrentWindow', () => {
@@ -173,5 +223,22 @@ describe('executeCurrentWindow', () => {
 
     // We should have moved at least once (probably 5 times).
     expect(world.seasonState.currentWindowIndex).not.toBe(startIdx);
+  });
+
+  it('long smoke test: advances multiple seasons without validation errors', () => {
+    let world = initializeGameWorld(2024);
+    let turns = 0;
+
+    while (world.seasonState.seasonNumber < 3 && turns < 220) {
+      const out = executeCurrentWindow(world);
+      world = out.world;
+      turns++;
+
+      const validation = validateWorldData(world);
+      expect(validation.errors.map((issue) => issue.code)).toEqual([]);
+    }
+
+    expect(world.seasonState.seasonNumber).toBeGreaterThanOrEqual(3);
+    expect(turns).toBeLessThan(220);
   });
 });

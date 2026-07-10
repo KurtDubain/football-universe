@@ -699,6 +699,69 @@ describe('handleSeasonEnd integration', () => {
     expect(result.squads['t1']).toHaveLength(positions.length);
   });
 
+  it('records career goals from finished history plus the current retiring season', () => {
+    const veteran = makePlayer('p-veteran', 't1', {
+      age: HARD_AGE_CAP,
+      peakRating: 70,
+      position: 'FW',
+      number: 9,
+    });
+    const world = buildWorld({
+      team: makeTeam('t1'),
+      squad: [veteran],
+      seasonNumber: 5,
+    });
+    world.playerStatsHistory = {
+      [veteran.uuid]: [
+        {
+          season: 3,
+          teamId: 't1',
+          position: 'FW',
+          goals: 11,
+          assists: 4,
+          appearances: 28,
+          yellowCards: 1,
+          redCards: 0,
+          teamGoalsConceded: 25,
+          teamMatches: 30,
+        },
+        {
+          season: 4,
+          teamId: 't1',
+          position: 'FW',
+          goals: 9,
+          assists: 5,
+          appearances: 24,
+          yellowCards: 0,
+          redCards: 0,
+          teamGoalsConceded: 22,
+          teamMatches: 30,
+        },
+      ],
+    };
+    world.playerStats = {
+      [veteran.uuid]: {
+        playerId: veteran.uuid,
+        teamId: 't1',
+        goals: 6,
+        assists: 2,
+        yellowCards: 0,
+        redCards: 0,
+        appearances: 18,
+        cleanSheets: 0,
+        saves: 0,
+        keyBlocks: 0,
+        bigChances: 8,
+        keyPasses: 3,
+      },
+    };
+
+    const result = processRetirements(world, new SeededRNG(1));
+    const retired = result.retirements.find((r) => r.uuid === veteran.uuid);
+
+    expect(retired?.careerGoals).toBe(26);
+  });
+
   it('retirementHistory grows but is capped at 300 entries', () => {
     // Pre-fill with 299 fake entries; force 1 new retirement; expect 300.
     const squad: Player[] = [

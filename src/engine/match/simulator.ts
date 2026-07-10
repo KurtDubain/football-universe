@@ -245,9 +245,10 @@ function updateFormArray(
 /**
  * Compute Man of the Match from generated events.
  * Weights: goal=3, assist=2, save=0.5, yellow=-1, red=-2.
- * Players on the winning side get a 1.2× multiplier; shootout kicks
- * (minute > 120) are skipped. Threshold of 3 means at least one
- * goal-equivalent contribution is required.
+ * Players on the winning side get a 1.2× multiplier. `penalty_goal` is
+ * reserved for shootouts and never contributes to MotM; regulation/ET
+ * penalties are emitted as normal `goal` events. Threshold of 3 means at
+ * least one goal-equivalent contribution is required.
  */
 export function pickMotm(
   events: MatchEvent[],
@@ -258,7 +259,7 @@ export function pickMotm(
     if (e.minute > 120) continue; // skip shootout
     if (!e.playerName) continue;
     let delta = 0;
-    if (e.type === 'goal' || e.type === 'penalty_goal') delta = 3;
+    if (e.type === 'goal') delta = 3;
     else if (e.type === 'assist') delta = 2;
     else if (e.type === 'save') delta = 0.5;
     else if (e.type === 'yellow_card') delta = -1;

@@ -228,8 +228,23 @@ describe('detectPlayerHighlights', () => {
     expect(detectPlayerHighlights([result])).toEqual([]);
   });
 
-  it('counts regulation-time penalty_goal toward late drama', () => {
-    // A late penalty (minute 90) decides a 1-0 game.
+  it('counts a regular late penalty emitted as goal toward late drama', () => {
+    // Regular and extra-time penalties are represented as `goal`; only
+    // shootout kicks use `penalty_goal`.
+    const result = mkResult({
+      homeGoals: 1,
+      awayGoals: 0,
+      events: [
+        mkEvent({ type: 'goal', teamId: 'A', playerId: 'pk-taker', playerName: '主罚', minute: 90 }),
+      ],
+    });
+    const highlights = detectPlayerHighlights([result]);
+    expect(highlights).toHaveLength(1);
+    expect(highlights[0].label).toBe('绝杀');
+    expect(highlights[0].playerId).toBe('pk-taker');
+  });
+
+  it('ignores malformed penalty_goal events inside regulation time', () => {
     const result = mkResult({
       homeGoals: 1,
       awayGoals: 0,
@@ -237,10 +252,7 @@ describe('detectPlayerHighlights', () => {
         mkEvent({ type: 'penalty_goal', teamId: 'A', playerId: 'pk-taker', playerName: '主罚', minute: 90 }),
       ],
     });
-    const highlights = detectPlayerHighlights([result]);
-    expect(highlights).toHaveLength(1);
-    expect(highlights[0].label).toBe('绝杀');
-    expect(highlights[0].playerId).toBe('pk-taker');
+    expect(detectPlayerHighlights([result])).toEqual([]);
   });
 
   it('ignores events with no playerId (regulation own goals etc.)', () => {

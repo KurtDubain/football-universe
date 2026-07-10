@@ -85,11 +85,18 @@ describe('pickMotm', () => {
     expect(pickMotm(events, 'home')).toBe('OpenPlay');
   });
 
-  it('counts ET goals (penalty_goal at minute ≤ 120) toward MotM', () => {
+  it('counts ET goals emitted as regular goal toward MotM', () => {
+    const events: MatchEvent[] = [
+      ev({ type: 'goal', teamId: 'home', playerName: 'Penaltaker', minute: 110 }),
+    ];
+    expect(pickMotm(events, 'home')).toBe('Penaltaker');
+  });
+
+  it('ignores malformed penalty_goal events inside regular or extra time', () => {
     const events: MatchEvent[] = [
       ev({ type: 'penalty_goal', teamId: 'home', playerName: 'Penaltaker', minute: 110 }),
     ];
-    expect(pickMotm(events, 'home')).toBe('Penaltaker');
+    expect(pickMotm(events, 'home')).toBeUndefined();
   });
 
   it('handles a draw (winnerTeamId = null) without applying any bonus', () => {

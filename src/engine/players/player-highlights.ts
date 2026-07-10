@@ -56,6 +56,8 @@ function aggregateByPlayer(events: MatchEvent[]): Map<string, PlayerMatchAggrega
     if (!ev.playerId || !ev.playerName) continue;
     // Skip shootout kicks — they decide ties but shouldn't count toward
     // hat-tricks / late-drama. Mirrors the rule in updatePlayerStatsFromResults.
+    // `penalty_goal` is reserved for shootouts; regulation/ET penalties are
+    // emitted as normal `goal` events by the match generator.
     if (ev.minute > 120) continue;
     let entry = agg.get(ev.playerId);
     if (!entry) {
@@ -74,7 +76,6 @@ function aggregateByPlayer(events: MatchEvent[]): Map<string, PlayerMatchAggrega
     entry.totalEvents++;
     switch (ev.type) {
       case 'goal':
-      case 'penalty_goal':
         entry.goals++;
         if (ev.minute > entry.latestGoalMinute) entry.latestGoalMinute = ev.minute;
         break;

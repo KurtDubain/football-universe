@@ -28,8 +28,11 @@ export interface MatchEvent {
     | 'red_card'
     | 'save'
     | 'miss'
+    /** Penalty shootout goal only. Regular/ET penalties use `goal`. */
     | 'penalty_goal'
+    /** Penalty shootout miss only. Regular/ET penalty misses use `miss`. */
     | 'penalty_miss'
+    /** Team scoreline event only; never credits a normal player goal. */
     | 'own_goal'
     /** v22 — would-be goal denied by the goalkeeper. */
     | 'gk_save'

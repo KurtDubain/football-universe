@@ -1,6 +1,6 @@
 import type { GameWorld } from '../season/season-manager';
 import type { Player } from '../../types/player';
-import type { MatchResult } from '../../types/match';
+import type { MatchEvent, MatchResult } from '../../types/match';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -61,7 +61,7 @@ function isKnownHistoricalPlayer(world: GameWorld, playerId: string): boolean {
 function countScorelineEvents(result: MatchResult): { home: number; away: number } {
   let home = 0;
   let away = 0;
-  const countableTypes = new Set(['goal', 'own_goal', 'penalty_goal']);
+  const countableTypes = new Set(['goal', 'own_goal']);
 
   for (const event of result.events ?? []) {
     if (!countableTypes.has(event.type)) continue;
@@ -71,6 +71,70 @@ function countScorelineEvents(result: MatchResult): { home: number; away: number
   }
 
   return { home, away };
+}
+
+function validateEventSemantics(
+  result: MatchResult,
+  event: MatchEvent,
+  activePlayers: Map<string, Player>,
+  issues: WorldDataIssue[],
+): void {
+  if (event.teamId !== result.homeTeamId && event.teamId !== result.awayTeamId) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'event_team_not_in_fixture',
+      message: `Match event team ${event.teamId} is not part of fixture ${result.fixtureId}.`,
+      teamId: event.teamId,
+      fixtureId: result.fixtureId,
+    });
+  }
+
+  if ((event.type === 'goal' || event.type === 'assist' || event.type === 'own_goal') && event.minute > 120) {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'regular_event_after_match_time',
+      message: `Match event ${event.type} at ${event.minute}' should not count after 120'.`,
+      teamId: event.teamId,
+      playerId: event.playerId,
+      fixtureId: result.fixtureId,
+    });
+  }
+
+  if ((event.type === 'penalty_goal' || event.type === 'penalty_miss') && event.minute <= 120) {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'shootout_event_inside_match_time',
+      message: `${event.type} at ${event.minute}' appears inside regulation/extra time; regular penalties should be emitted as goal/miss events.`,
+      teamId: event.teamId,
+      playerId: event.playerId,
+      fixtureId: result.fixtureId,
+    });
+  }
+
+  const player = event.playerId ? activePlayers.get(event.playerId) : undefined;
+  if (!player) return;
+
+  if ((event.type === 'save' || event.type === 'gk_save') && player.position !== 'GK') {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'invalid_goalkeeper_event_position',
+      message: `${event.type} event references non-GK player ${event.playerId}.`,
+      teamId: event.teamId,
+      playerId: event.playerId,
+      fixtureId: result.fixtureId,
+    });
+  }
+
+  if (event.type === 'df_block' && player.position !== 'DF') {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'invalid_defender_event_position',
+      message: `df_block event references non-DF player ${event.playerId}.`,
+      teamId: event.teamId,
+      playerId: event.playerId,
+      fixtureId: result.fixtureId,
+    });
+  }
 }
 
 function validateResult(
@@ -120,6 +184,8 @@ function validateResult(
         fixtureId: result.fixtureId,
       });
     }
+
+    validateEventSemantics(result, event, activePlayers, issues);
 
     const eventPlayerIds = [
       ['event_unknown_player', event.playerId],

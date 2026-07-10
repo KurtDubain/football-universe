@@ -10,9 +10,9 @@ import {
 import type { MatchResult, MatchEvent } from '../../types/match';
 import type { Player } from '../../types/player';
 
-function mkPlayer(uuid: string, teamId: string): Player {
+function mkPlayer(uuid: string, teamId: string, position: Player['position'] = 'FW'): Player {
   return {
-    uuid, teamId, name: '测试', number: 9, position: 'FW',
+    uuid, teamId, name: '测试', number: 9, position,
     rating: 80, goalScoring: 70, marketValue: 10, age: 25,
     // Test fixtures pin peak == rating + age 27 so curve-aware code paths
     // get a sensible default without needing per-test setup.
@@ -123,6 +123,42 @@ describe('updatePlayerStatsFromResults — shootout exclusion', () => {
     const updated = updatePlayerStatsFromResults(stats, [mkResult(events)], squads);
     expect(updated['p-1'].yellowCards).toBe(0);
     expect(updated['p-1'].assists).toBe(0);
+  });
+
+  it('counts regular and extra-time goals/assists, but not own goals or shootout penalties', () => {
+    const scorer = mkPlayer('scorer', 'A');
+    const assister = mkPlayer('assister', 'A', 'MF');
+    const ownGoalDefender = mkPlayer('own-goal-df', 'B', 'DF');
+    const squads = { A: [scorer, assister], B: [ownGoalDefender] };
+    const stats = createInitialPlayerStats(squads);
+    const events: MatchEvent[] = [
+      { minute: 12, type: 'goal', teamId: 'A', playerId: 'scorer', playerName: '测试', description: '常规进球' },
+      { minute: 12, type: 'assist', teamId: 'A', playerId: 'assister', playerName: '测试', description: '助攻' },
+      { minute: 108, type: 'goal', teamId: 'A', playerId: 'scorer', playerName: '测试', description: '加时进球' },
+      { minute: 108, type: 'assist', teamId: 'A', playerId: 'assister', playerName: '测试', description: '加时助攻' },
+      { minute: 74, type: 'own_goal', teamId: 'A', playerId: 'own-goal-df', playerName: '测试', description: '乌龙球' },
+      { minute: 121, type: 'penalty_goal', teamId: 'A', playerId: 'scorer', playerName: '测试', description: '点球大战命中' },
+    ];
+
+    const updated = updatePlayerStatsFromResults(
+      stats,
+      [{
+        ...mkResult(events),
+        homeTeamId: 'A',
+        awayTeamId: 'B',
+        homeGoals: 3,
+        awayGoals: 0,
+        extraTime: true,
+        etHomeGoals: 1,
+      }],
+      squads,
+    );
+
+    expect(updated.scorer.goals).toBe(2);
+    expect(updated.scorer.bigChances).toBe(2);
+    expect(updated.assister.assists).toBe(2);
+    expect(updated.assister.keyPasses).toBe(2);
+    expect(updated['own-goal-df'].goals).toBe(0);
   });
 });
 

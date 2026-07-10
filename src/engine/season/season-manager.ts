@@ -281,10 +281,15 @@ function snapshotPlayerStatsHistory(
     if (stat.appearances === 0) continue;
     // Find current Player object for frozen display identity. Prefer the
     // stat's team, then fall back to a full squad scan in case a save has
-    // stale stat.teamId drift.
+    // stale stat.teamId drift. If the player retired during season-end,
+    // they may already be absent from squads; fall back to retirementHistory
+    // so their just-finished season is not lost.
     const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === uuid)
       ?? Object.values(world.squads).flatMap(sq => sq).find(p => p.uuid === uuid);
-    if (!player) continue;
+    const retired = !player
+      ? (world.retirementHistory ?? []).find((p) => p.uuid === uuid)
+      : undefined;
+    if (!player && !retired) continue;
     const ctx = teamCtx[stat.teamId] ?? { gc: 0, matches: 0 };
     const team = world.teamBases[stat.teamId];
     const entry: import('../../types/player').PlayerSeasonStatsHistoryEntry = {
@@ -292,11 +297,11 @@ function snapshotPlayerStatsHistory(
       teamId: stat.teamId,
       teamName: team?.name ?? stat.teamId,
       teamShortName: team?.shortName,
-      playerName: player.name ?? `${player.number}号`,
-      playerNumber: player.number,
-      position: player.position,
-      rating: player.rating,
-      age: player.age,
+      playerName: player?.name ?? retired?.name ?? uuid,
+      playerNumber: player?.number,
+      position: player?.position ?? retired!.position,
+      rating: player?.rating ?? retired?.peakRating,
+      age: player?.age ?? retired?.age,
       goals: stat.goals,
       assists: stat.assists,
       appearances: stat.appearances,

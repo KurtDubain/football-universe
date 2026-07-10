@@ -3,6 +3,22 @@ import { MatchResult } from '../../types/match';
 import { pickMatchday as pickMatchdayWithDiscipline } from './injuries';
 
 /**
+ * Player-stat semantics, kept close to the update engine:
+ *
+ * - `goal` at minute <= 120 counts as a player goal and big chance. This
+ *   includes open-play goals, set pieces, regular-time penalties, and
+ *   extra-time penalties; the generator emits all of those as `goal`.
+ * - `assist` at minute <= 120 counts as a player assist and key pass.
+ * - `own_goal` is a team scoreline event only. It never increments the
+ *   named player's normal scorer table totals.
+ * - `penalty_goal` / `penalty_miss` are reserved for penalty shootouts.
+ *   They decide cup ties but never inflate season goals, highlights, MotM,
+ *   market value, or club contribution segments.
+ * - `gk_save` / `df_block` add defensive credit and denied chance credit,
+ *   but never mutate `goals` or `assists`.
+ */
+
+/**
  * Create initial empty stats for all players in all squads.
  * Stats are keyed by `Player.uuid`, which is stable across transfers.
  */

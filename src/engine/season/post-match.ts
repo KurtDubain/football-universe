@@ -286,7 +286,7 @@ export function runPostMatchProcessing(
 
   // ── Special match event news ────────────────────────────────
   for (const result of results) {
-    const goalEvents = result.events.filter(e => e.type === 'goal' || e.type === 'penalty_goal');
+    const goalEvents = result.events.filter(e => e.type === 'goal' && e.minute <= 120);
 
     // Hat trick detection (3+ goals by same player number)
     const playerGoals = new Map<string, number>();
@@ -416,7 +416,7 @@ export function runPostMatchProcessing(
     } else {
       // Last-minute decider
       const lateGoals = result.events.filter((e) =>
-        (e.type === 'goal' || e.type === 'penalty_goal') && e.minute >= 88,
+        e.type === 'goal' && e.minute >= 88 && e.minute <= 120,
       );
       if (lateGoals.length > 0 && diff === 1 && !isFinal) {
         memType = 'last_minute';

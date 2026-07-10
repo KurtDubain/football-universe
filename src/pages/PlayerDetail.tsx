@@ -5,6 +5,7 @@ import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
+import { computePlayerCareerTotals } from '../engine/players/career-totals';
 import {
   getCurrentPlayerClubStatRows,
   getCurrentPlayerStatRows,
@@ -818,9 +819,8 @@ function AttrBar({ label, value, max, color }: { label: string; value: number; m
  * here with an "已退役" badge and a pointer at the hall-of-fame page where
  * the full archive lives.
  *
- * Career stats come from `world.playerStats` because the retirement engine
- * intentionally preserves the stats record even after the player leaves
- * `world.squads` (see comment on `PlayerRetirement` in types/player.ts).
+ * Career stats come from finished-season history plus the preserved current
+ * stats row, so retired players are not reduced to their final-season totals.
  */
 function RetiredPlayerView({
   retired,
@@ -832,7 +832,8 @@ function RetiredPlayerView({
   stats: PlayerSeasonStats | undefined;
 }) {
   const team = world?.teamBases[retired.teamId];
-  const careerGoals = retired.careerGoals ?? stats?.goals ?? 0;
+  const careerTotals = world ? computePlayerCareerTotals(world, retired.uuid) : null;
+  const careerGoals = Math.max(retired.careerGoals ?? 0, careerTotals?.goals ?? stats?.goals ?? 0);
   const trophyCount = retired.careerTrophies?.length ?? 0;
   return (
     <div className="max-w-2xl space-y-5">
@@ -869,14 +870,16 @@ function RetiredPlayerView({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatBox label="生涯出场" value={careerTotals?.appearances ?? stats?.appearances ?? 0} />
         <StatBox label="生涯进球" value={careerGoals} color="text-amber-400" />
-        <StatBox label="巅峰能力" value={retired.peakRating} color="text-amber-300" />
+        <StatBox label="生涯助攻" value={careerTotals?.assists ?? stats?.assists ?? 0} color="text-blue-300" />
         <StatBox label="冠军" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
       </div>
 
       {/* Awards + transfer history for retired players too */}
       <AwardsSection world={world} playerUuid={retired.uuid} />
+      <CareerHistorySection world={world} playerUuid={retired.uuid} />
       <TransferHistorySection world={world} playerUuid={retired.uuid} />
 
       <p className="text-[11px] text-slate-500 text-center">

@@ -8,6 +8,7 @@ import { pickPlayerName } from '../../config/player-names';
 import { computeCurrentRating } from './development';
 import { computeInitialMarketValue } from '../economy/market-value';
 import { formatPlayerUuid } from './generator';
+import { computePlayerCareerTotals } from './career-totals';
 
 /**
  * Per-team retirement cap. If more than this many players on the same team
@@ -308,13 +309,14 @@ export function processRetirements(
   // retirees). Teams with no retirements keep their array reference.
   const squads: Record<string, Player[]> = { ...world.squads };
 
-  // Precompute career goals lookup per uuid.
+  // Precompute career goals lookup per uuid from finished-season history
+  // plus the current live season row. Retirements run before
+  // initializeNewSeason snapshots the just-finished season, so reading only
+  // `playerStats` would undercount every veteran's career.
   const careerGoalsLookup = new Map<string, number>();
   for (const stat of Object.values(world.playerStats ?? {})) {
     if (stat?.playerId) {
-      // Use latest snapshot — playerStats is current-season only here, but
-      // future stat-aggregation work may extend this.
-      careerGoalsLookup.set(stat.playerId, stat.goals ?? 0);
+      careerGoalsLookup.set(stat.playerId, computePlayerCareerTotals(world, stat.playerId).goals);
     }
   }
 

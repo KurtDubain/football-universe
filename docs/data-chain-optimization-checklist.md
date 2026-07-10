@@ -11,6 +11,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-10: Balanced manual transfer-window actions: accepted offers and outgoing bids now move the target player and send the buyer's weakest same-position player back as a replacement, preserving squad size/position shape. Manual transfer records and free-agent signings now use `transferWindow.season`; transfer action randomness and auto-window news ids are deterministic. Verified with transfer action tests, full Vitest suite, and production build under Node 24.
 - 2026-07-10: Expanded Player Center with creator, defender, and goalkeeper rankings backed by shared selectors. Added Node `>=22` guard via `package.json` and `.nvmrc`, and updated README React/version roadmap drift. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
 - 2026-07-10: Introduced current-season club-specific player stat segments keyed by `(playerId, teamId)`, with v23 save migration from legacy totals. `playerStats` remains the player-wide season total that follows the player after transfer; team pages, league top-scorer rows, dashboard fixture cards, and Player Detail contribution/split views now read club contribution where appropriate. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
+- 2026-07-11: Unified stat semantics for `goal`, `assist`, `own_goal`, and shootout-only `penalty_goal`; MotM, player highlights, post-match stories, player stats, and validation now share the same rule. Added event semantic validation for non-fixture teams, shootout events inside match time, regular events after 120', and GK/DF position mismatches. Career totals for retired players now derive from finished-season history plus the current retiring season, and just-retired players are snapshotted into season history even after leaving squads. Added a multi-season validation smoke test. Verified with TypeScript, full Vitest suite, and production build under Node 24.
 
 ## Current Main Concerns
 
@@ -32,10 +33,10 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Add explicit current-season stat segmentation by season scope + `playerId + teamId` if team-specific contribution is required.
 - [x] Separate current-season stats and historical-season stats.
 - [x] Separate club-specific stats from player-wide current-season totals.
-- [ ] Separate career totals from current-season and club-specific stats.
-- [ ] Define whether league, cup, super cup, extra time, and penalty shootouts count into each stat view.
-- [ ] Define how own goals are represented: team goal, own-goal stat, or excluded from player scorer tables.
-- [ ] Document all stat semantics close to the stat update engine.
+- [x] Separate career totals from current-season and club-specific stats.
+- [x] Define whether league, cup, super cup, extra time, and penalty shootouts count into each stat view.
+- [x] Define how own goals are represented: team goal, own-goal stat, or excluded from player scorer tables.
+- [x] Document all stat semantics close to the stat update engine.
 
 ## 2. Player Stat Accuracy
 
@@ -45,10 +46,10 @@ This document tracks the data-chain issues found during the initial project revi
 - [ ] Verify event players are valid active players at the time of the match.
 - [ ] Verify injured, suspended, or otherwise unavailable players are not selected into match events.
 - [x] Verify goalkeeper and defender clean sheets never exceed appearances.
-- [ ] Verify defensive and goalkeeper events are only assigned to plausible positions unless deliberately allowed.
-- [ ] Verify `penalty_goal`, regular `goal`, extra-time goal, and shootout penalty handling is consistent.
-- [ ] Verify own goals do not inflate normal top-scorer tables unless a deliberate rule says so.
-- [ ] Add audit warnings for invalid stat events instead of silently dropping or misattributing them.
+- [x] Verify defensive and goalkeeper events are only assigned to plausible positions unless deliberately allowed.
+- [x] Verify `penalty_goal`, regular `goal`, extra-time goal, and shootout penalty handling is consistent.
+- [x] Verify own goals do not inflate normal top-scorer tables unless a deliberate rule says so.
+- [x] Add audit warnings for invalid stat events instead of silently dropping or misattributing them.
 
 ## 3. Cross-Page Consistency
 
@@ -70,7 +71,7 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Store enough basic team context data for historical display: team name and goals conceded/matches.
 - [ ] Store full historical team context data: league, final rank, goals for/against.
 - [x] Make Season Review read the frozen just-finished-season snapshot.
-- [ ] Make retired-player career totals read from `playerStatsHistory + current season`, not only current season.
+- [x] Make retired-player career totals read from `playerStatsHistory + current season`, not only current season.
 - [x] Ensure transfer-window records use the season of the window, not accidentally the newly initialized season.
 - [ ] Ensure finance records related to a transfer window are attributed to the intended season.
 - [ ] Ensure news timeline entries use the same season/window identity as transfer history.
@@ -125,14 +126,15 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Audit missing player stats: active player has no stat record.
 - [x] Audit team mismatch: active squad team and stat team disagree.
 - [x] Audit invalid match events: unknown player and unknown team.
-- [ ] Audit invalid match events: impossible position and unavailable player.
+- [x] Audit invalid match events: impossible position.
+- [ ] Audit invalid match events: unavailable player at match time.
 - [x] Audit score mismatch: match result does not match countable goal events plus explicit exceptions.
 - [ ] Audit transfer mismatch: transfer history, squad movement, and finance/news do not agree.
-- [ ] Add tests for regular goal, assist, own goal, penalty goal, shootout penalty, and extra-time goal.
+- [x] Add tests for regular goal, assist, own goal, penalty goal, shootout penalty, and extra-time goal.
 - [x] Add tests for player transfer after season-end transfer window.
 - [x] Add tests for player transfer during a season.
-- [ ] Add tests for retired-player historical display and career totals.
-- [ ] Add one long-season simulation smoke test that runs multiple seasons and validates invariants.
+- [x] Add tests for retired-player historical display and career totals.
+- [x] Add one long-season simulation smoke test that runs multiple seasons and validates invariants.
 
 ## 10. Engineering Hygiene
 

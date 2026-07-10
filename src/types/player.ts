@@ -205,10 +205,11 @@ export interface PlayerSeasonStatsHistoryEntry {
  * presence in `world.squads` is removed. `playerStats` are also preserved
  * so cumulative career numbers can be looked up post-retirement.
  *
- * `careerGoals` is a snapshot at retirement time (sum across the latest
- * playerStats record). `careerTrophies` is an optional snapshot of trophies
- * the player's last team won in seasons where they were on the squad —
- * computed best-effort by the retirement engine.
+ * `careerGoals` is a snapshot at retirement time, derived from finished
+ * season history plus the current season that is about to be snapshotted.
+ * `careerTrophies` is an optional snapshot of trophies the player's last
+ * team won in seasons where they were on the squad — computed best-effort
+ * by the retirement engine.
  */
 export interface PlayerRetirement {
   uuid: string;
