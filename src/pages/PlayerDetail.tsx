@@ -5,6 +5,12 @@ import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
+import {
+  getCurrentPlayerClubStatRows,
+  getCurrentPlayerStatRows,
+  getPlayerClubStatRow,
+  type PlayerStatRow,
+} from '../engine/players/player-stat-selectors';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 
 const TAG_HINT: Record<PlayerTag, string> = {
@@ -56,17 +62,16 @@ export default function PlayerDetail() {
   // early return above the hooks.
   const posRanking = useMemo(() => {
     if (!player) return { rank: 0, total: 0 };
-    const allSamePos = Object.values(world.playerStats).filter(s => {
-      const pId = s.playerId;
-      for (const sq of Object.values(world.squads)) {
-        const p = sq.find(pp => pp.uuid === pId);
-        if (p && p.position === player.position) return true;
-      }
-      return false;
-    });
+    const allSamePos = getCurrentPlayerStatRows(world)
+      .filter(row => row.identity.position === player.position);
+    const score = (s: typeof allSamePos[number]) => {
+      if (player.position === 'FW') return s.goals * 2 + s.assists + s.bigChances * 0.3;
+      if (player.position === 'MF') return s.assists * 2 + s.goals + s.keyPasses * 0.4;
+      if (player.position === 'GK') return s.cleanSheets * 2 + s.saves * 0.5 + s.appearances * 0.1;
+      return s.cleanSheets * 2 + s.keyBlocks * 0.8 + s.appearances * 0.1;
+    };
     const sorted = [...allSamePos].sort((a, b) => {
-      if (player.position === 'FW' || player.position === 'MF') return (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists);
-      return b.appearances - a.appearances;
+      return score(b) - score(a);
     });
     const rank = sorted.findIndex(s => s.playerId === uuid) + 1;
     return { rank, total: sorted.length };
@@ -130,6 +135,42 @@ export default function PlayerDetail() {
     return { finalGoals, lateGoals, hatTricks };
   }, [world.seasonState.calendar, uuid]);
 
+  const clubStats = useMemo(
+    () => (teamId ? getPlayerClubStatRow(world, uuid, teamId) : undefined),
+    [world, uuid, teamId],
+  );
+
+  const currentTeamClubRows = useMemo(
+    () => (teamId ? getCurrentPlayerClubStatRows(world, teamId) : []),
+    [world, teamId],
+  );
+
+  const currentSeasonClubSplits = useMemo(() => {
+    const rows = getCurrentPlayerClubStatRows(world)
+      .filter((row) => row.playerId === uuid)
+      .filter((row) =>
+        row.appearances > 0
+        || row.goals > 0
+        || row.assists > 0
+        || row.cleanSheets > 0
+        || row.saves > 0
+        || row.keyBlocks > 0
+        || row.bigChances > 0
+        || row.keyPasses > 0
+      );
+
+    if (teamId && rows.some((row) => row.teamId !== teamId) && !rows.some((row) => row.teamId === teamId)) {
+      rows.push(getPlayerClubStatRow(world, uuid, teamId));
+    }
+
+    return rows.sort((a, b) =>
+      (b.teamId === teamId ? 1 : 0) - (a.teamId === teamId ? 1 : 0)
+      || b.appearances - a.appearances
+      || b.goals - a.goals
+      || a.identity.teamName.localeCompare(b.identity.teamName),
+    );
+  }, [world, uuid, teamId]);
+
   if (!player || !team || !teamId) {
     // The uuid isn't on any active squad. Before falling back to the
     // generic "未找到" dead-end, check the retirement archive — old links
@@ -149,16 +190,11 @@ export default function PlayerDetail() {
   const goalsPerApp = appearances > 0 ? (goals / appearances).toFixed(2) : '0';
   const assistsPerApp = appearances > 0 ? (assists / appearances).toFixed(2) : '0';
 
-  // Team contribution. v23.1 — derive teammates from the CURRENT squad
-  // (source of truth) rather than filtering playerStats by stat.teamId,
-  // so a mid-season transfer of any squad member doesn't accidentally
-  // attribute their goals to the wrong team's denominator.
-  const currentSquad = world.squads[teamId] ?? [];
-  const teamTotalGoals = currentSquad.reduce(
-    (sum, p) => sum + (world.playerStats[p.uuid]?.goals ?? 0),
-    0,
-  );
-  const contribution = teamTotalGoals > 0 ? Math.round((goals / teamTotalGoals) * 100) : 0;
+  // Team contribution: denominator and numerator use club-specific segments,
+  // so transferred-player totals do not leak into the current club's share.
+  const clubGoals = clubStats?.goals ?? 0;
+  const teamTotalGoals = currentTeamClubRows.reduce((sum, row) => sum + row.goals, 0);
+  const contribution = teamTotalGoals > 0 ? Math.round((clubGoals / teamTotalGoals) * 100) : 0;
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -225,9 +261,13 @@ export default function PlayerDetail() {
         </div>
         <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
           <div className={`text-lg font-bold ${contribution >= 30 ? 'text-amber-400' : 'text-slate-100'}`}>{contribution}%</div>
-          <div className="text-[10px] text-slate-500">球队进球占比</div>
+          <div className="text-[10px] text-slate-500">本队进球占比</div>
         </div>
       </div>
+
+      {currentSeasonClubSplits.length > 1 && (
+        <CurrentSeasonClubSplitSection rows={currentSeasonClubSplits} />
+      )}
 
       {/* Key Match Metrics */}
       {(keyMetrics.finalGoals > 0 || keyMetrics.lateGoals > 0 || keyMetrics.hatTricks > 0) && (
@@ -311,6 +351,57 @@ export default function PlayerDetail() {
 
       {/* Phase G — Injury record */}
       <InjurySection player={player} currentWindowIdx={world.totalElapsedWindows ?? 0} />
+    </div>
+  );
+}
+
+function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
+          <Icon name="chart" size={13} /> 本赛季球队拆分
+        </h3>
+        <span className="text-[10px] text-slate-500">效力期间贡献</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-slate-500 border-b border-slate-700/40">
+              <th className="text-left py-1">球队</th>
+              <th className="text-right py-1">出场</th>
+              <th className="text-right py-1">进球</th>
+              <th className="text-right py-1">助攻</th>
+              <th className="text-right py-1">防守</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.teamId} className="border-b border-slate-700/20 hover:bg-slate-700/20">
+                <td className="py-1 pr-2">
+                  <Link to={`/team/${row.teamId}`} className="inline-flex items-center gap-1.5 text-slate-300 hover:text-blue-300 max-w-[160px]">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: row.identity.teamColor ?? '#64748b' }}
+                    />
+                    <span className="truncate">{row.identity.teamName}</span>
+                  </Link>
+                </td>
+                <td className="py-1 text-right text-slate-300 tabular-nums">{row.appearances}</td>
+                <td className="py-1 text-right text-amber-300 tabular-nums">{row.goals}</td>
+                <td className="py-1 text-right text-blue-300 tabular-nums">{row.assists}</td>
+                <td className="py-1 text-right text-slate-400 tabular-nums">
+                  {row.identity.position === 'GK'
+                    ? `${row.cleanSheets}零封/${row.saves}扑`
+                    : row.identity.position === 'DF'
+                    ? `${row.cleanSheets}零封/${row.keyBlocks}封堵`
+                    : `${row.bigChances}射/${row.keyPasses}传`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

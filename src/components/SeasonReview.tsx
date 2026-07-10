@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord } from '../types/team';
-import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
-import { getTopScorers, getTopAssists } from '../engine/players/stats';
+import { getTeamName } from '../utils/format';
+import { getSeasonTopAssistRows, getSeasonTopScorerRows } from '../engine/players/player-stat-selectors';
 import { AWARD_META } from '../engine/awards/season-awards';
 
 interface Props {
@@ -35,8 +35,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   const mostWins = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueWon > b.leagueWon ? r : b) : null;
   const mostLosses = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueLost > b.leagueLost ? r : b) : null;
 
-  const scorers = getTopScorers(world.playerStats, 5);
-  const assisters = getTopAssists(world.playerStats, 3);
+  const scorers = getSeasonTopScorerRows(world, seasonNumber, 5);
+  const assisters = getSeasonTopAssistRows(world, seasonNumber, 3);
 
   // Season buffs for this season
   const buffs = world.seasonBuffs ?? [];
@@ -57,11 +57,12 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           const runnerRec = l1Records[1];
           const gap = champRec && runnerRec ? champRec.leaguePoints - runnerRec.leaguePoints : 0;
           const scorer = scorers[0];
-          // playerId is now a uuid — fetch the actual player to get the
-          // shirt number (legacy code parsed it out of the id string).
-          const scorerPlayer = scorer ? world.squads[scorer.teamId]?.find(p => p.uuid === scorer.playerId) : undefined;
-          const scorerNum = scorerPlayer?.number ?? '';
-          const scorerTeam = scorer ? getTeamName(scorer.teamId, tb) : '';
+          const scorerLabel = scorer
+            ? scorer.identity.playerNumber !== undefined
+              ? `${scorer.identity.playerNumber}号`
+              : scorer.identity.playerName
+            : '';
+          const scorerTeam = scorer ? scorer.identity.teamName : '';
 
           const sentences: string[] = [];
 
@@ -74,9 +75,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           }
 
           if (scorer && scorer.goals >= 15) {
-            sentences.push(`${scorerTeam}的${scorerNum}号以${scorer.goals}球的惊人数据独霸射手榜，成为万千球迷心中的英雄。`);
+            sentences.push(`${scorerTeam}的${scorerLabel}以${scorer.goals}球的惊人数据独霸射手榜，成为万千球迷心中的英雄。`);
           } else if (scorer && scorer.goals > 0) {
-            sentences.push(`射手榜上，${scorerTeam}${scorerNum}号以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
+            sentences.push(`射手榜上，${scorerTeam}${scorerLabel}以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
           }
 
           // Buff-driven storyline
@@ -228,20 +229,18 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {scorers.length > 0 && (() => {
           const king = scorers[0];
-          const kingPlayer = world.squads[king.teamId]?.find(p => p.uuid === king.playerId);
-          const kingNum = kingPlayer?.number ?? '';
-          const kingTeam = tb[king.teamId];
-          const kingName = kingPlayer?.name ?? `${kingNum}号`;
+          const kingNum = king.identity.playerNumber ?? '';
+          const kingName = king.identity.playerName;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
                 <div className="flex items-center gap-3">
-                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: kingTeam?.color ?? '#f59e0b' }}>
+                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: king.identity.teamColor ?? '#f59e0b' }}>
                     {kingNum}
                   </Link>
                   <div>
                     <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
-                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingName}</Link>
+                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
                     <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
                   </div>
                 </div>
@@ -249,13 +248,11 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               {scorers.length > 1 && (
                 <div className="p-2 space-y-0.5">
                   {scorers.slice(1).map((s, i) => {
-                    const p = world.squads[s.teamId]?.find(pp => pp.uuid === s.playerId);
-                    const nm = p?.name ?? (p ? `${p.number}号` : '球员');
                     return (
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                        <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {nm}</span>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
+                        <span className="flex-1 truncate text-slate-300">{s.identity.teamName} {s.identity.playerName}</span>
                         <span className="text-slate-200 font-bold">{s.goals}球</span>
                       </div>
                     );
@@ -268,20 +265,18 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
         {assisters.length > 0 && (() => {
           const king = assisters[0];
-          const kingPlayer = world.squads[king.teamId]?.find(p => p.uuid === king.playerId);
-          const kingNum = kingPlayer?.number ?? '';
-          const kingTeam = tb[king.teamId];
-          const kingName = kingPlayer?.name ?? `${kingNum}号`;
+          const kingNum = king.identity.playerNumber ?? '';
+          const kingName = king.identity.playerName;
           return (
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-emerald-900/20 to-slate-800 border-b border-slate-700/50">
                 <div className="flex items-center gap-3">
-                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: kingTeam?.color ?? '#10b981' }}>
+                  <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: king.identity.teamColor ?? '#10b981' }}>
                     {kingNum}
                   </Link>
                   <div>
                     <div className="text-[10px] text-emerald-400 font-semibold">赛季助攻王</div>
-                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{getTeamName(king.teamId, tb)} {kingName}</Link>
+                    <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
                     <div className="text-xs text-emerald-400 font-bold">{king.assists}助 {king.goals > 0 ? `${king.goals}球` : ''}</div>
                   </div>
                 </div>
@@ -289,13 +284,11 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               {assisters.length > 1 && (
                 <div className="p-2 space-y-0.5">
                   {assisters.slice(1).map((s, i) => {
-                    const p = world.squads[s.teamId]?.find(pp => pp.uuid === s.playerId);
-                    const nm = p?.name ?? (p ? `${p.number}号` : '球员');
                     return (
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[s.teamId]?.color ?? '#666' }} />
-                        <span className="flex-1 truncate text-slate-300">{getTeamName(s.teamId, tb)} {nm}</span>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
+                        <span className="flex-1 truncate text-slate-300">{s.identity.teamName} {s.identity.playerName}</span>
                         <span className="text-slate-200 font-bold">{s.assists}助</span>
                       </div>
                     );
@@ -324,10 +317,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             }, new Map<string, typeof scorers[0]>());
             const mvp = [...allStats.values()].sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists))[0];
             if (!mvp) return null;
-            const mvpPlayer = world.squads[mvp.teamId]?.find(p => p.uuid === mvp.playerId);
-            const mvpName = mvpPlayer?.name ?? (mvpPlayer ? `${mvpPlayer.number}号` : '球员');
             return (
-              <AwardCard emoji="🏆" title="赛季MVP" value={`${getTeamName(mvp.teamId, tb)} ${mvpName}`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
+              <AwardCard emoji="🏆" title="赛季MVP" value={`${mvp.identity.teamName} ${mvp.identity.playerName}`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
             );
           })()}
           {/* Best Coach — team with highest position vs expectation */}
@@ -350,10 +341,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           {scorers.length > 0 && (() => {
             const nonEliteScorer = scorers.find(s => (tb[s.teamId]?.overall ?? 99) < 75);
             if (!nonEliteScorer) return null;
-            const player = world.squads[nonEliteScorer.teamId]?.find(p => p.uuid === nonEliteScorer.playerId);
-            const name = player?.name ?? (player ? `${player.number}号` : '球员');
             return (
-              <AwardCard emoji="⭐" title="最佳新星" value={`${getTeamName(nonEliteScorer.teamId, tb)} ${name}`} sub={`${nonEliteScorer.goals}球`} />
+              <AwardCard emoji="⭐" title="最佳新星" value={`${nonEliteScorer.identity.teamName} ${nonEliteScorer.identity.playerName}`} sub={`${nonEliteScorer.goals}球`} />
             );
           })()}
           {/* Most Improved — team that climbed the most positions vs last season */}

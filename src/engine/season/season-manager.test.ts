@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { initializeGameWorld, executeCurrentWindow, getCurrentWindow } from './season-manager';
+import { initializeGameWorld, initializeNewSeason, executeCurrentWindow, getCurrentWindow } from './season-manager';
 import { defaultTeams } from '../../config/teams';
+import { playerTeamStatKey } from '../players/stats';
+import type { StandingEntry } from '../../types/league';
 import type { TeamBase } from '../../types/team';
 
 function makeCustomTeams(): TeamBase[] {
@@ -10,6 +12,21 @@ function makeCustomTeams(): TeamBase[] {
     name: `自定义${idx}`,
     shortName: `C${idx}`,
   }));
+}
+
+function makeStanding(teamId: string): StandingEntry {
+  return {
+    teamId,
+    played: 30,
+    won: 18,
+    drawn: 6,
+    lost: 6,
+    goalsFor: 58,
+    goalsAgainst: 24,
+    goalDifference: 34,
+    points: 60,
+    form: [],
+  };
 }
 
 describe('initializeGameWorld', () => {
@@ -39,6 +56,7 @@ describe('initializeGameWorld', () => {
       expect(world.squads[teamId].length).toBeGreaterThan(0);
     }
     expect(Object.keys(world.playerStats).length).toBeGreaterThan(0);
+    expect(Object.keys(world.playerStatSegments ?? {}).length).toBe(Object.keys(world.playerStats).length);
   });
 
   it('is deterministic for a fixed seed', () => {
@@ -64,12 +82,51 @@ describe('initializeGameWorld', () => {
       for (const player of world.squads[teamId]) {
         expect(player.teamId).toBe(teamId);
         expect(world.playerStats[player.uuid]?.teamId).toBe(teamId);
+        expect(world.playerStatSegments?.[playerTeamStatKey(player.uuid, teamId)]?.teamId).toBe(teamId);
       }
     }
 
     for (const defaultTeam of defaultTeams) {
       expect(world.squads[defaultTeam.id]).toBeUndefined();
     }
+  });
+
+  it('snapshots frozen player identity before resetting a new season', () => {
+    const world = initializeGameWorld(2024);
+    const [teamId, squad] = Object.entries(world.squads)[0];
+    const player = squad.find((p) => p.position === 'FW') ?? squad[0];
+    const playerStats = {
+      ...world.playerStats,
+      [player.uuid]: {
+        ...world.playerStats[player.uuid],
+        goals: 16,
+        assists: 7,
+        appearances: 24,
+        yellowCards: 2,
+        redCards: 0,
+        bigChances: 20,
+        keyPasses: 9,
+      },
+    };
+
+    const next = initializeNewSeason({
+      ...world,
+      playerStats,
+      league1Standings: world.league1Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+      league2Standings: world.league2Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+      league3Standings: world.league3Standings.map((row) => row.teamId === teamId ? makeStanding(teamId) : row),
+    });
+
+    const history = next.playerStatsHistory[player.uuid]?.find((entry) => entry.season === 1);
+    expect(history).toBeDefined();
+    expect(history?.playerName).toBe(player.name);
+    expect(history?.playerNumber).toBe(player.number);
+    expect(history?.teamName).toBe(world.teamBases[teamId].name);
+    expect(history?.teamShortName).toBe(world.teamBases[teamId].shortName);
+    expect(history?.rating).toBe(player.rating);
+    expect(history?.age).toBe(player.age);
+    expect(history?.goals).toBe(16);
+    expect(next.playerStats[player.uuid].goals).toBe(0);
   });
 });
 

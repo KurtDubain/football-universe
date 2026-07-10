@@ -5,7 +5,8 @@
  * action applied. Pure (no side effects). Caller wraps in zustand set.
  */
 import type { GameWorld } from '../engine/season/season-manager';
-import type { PlayerSeasonStats } from '../types/player';
+import { syncPlayerStatsTeamIds } from '../engine/players/stats';
+import type { Player, PlayerSeasonStats } from '../types/player';
 import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../types/transfer';
 
 /**
@@ -32,6 +33,152 @@ function syncStatTeamId(
   return { ...stats, [uuid]: { ...existing, teamId: newTeamId } };
 }
 
+const FREE_AGENT_SIGNING_FEE = 5;
+
+function transferSeason(world: GameWorld): number {
+  return world.transferWindow?.season ?? world.seasonState.seasonNumber;
+}
+
+function transferWindowIndex(world: GameWorld): number {
+  return world.seasonState.currentWindowIndex;
+}
+
+function pickFreeNumber(used: Set<number>, preferred: number): number {
+  if (!used.has(preferred)) return preferred;
+  for (let n = 2; n <= 99; n++) {
+    if (!used.has(n)) return n;
+  }
+  return preferred;
+}
+
+function pickReleaseCandidate(buyerSquad: Player[], incoming: Player): Player | undefined {
+  const samePosition = buyerSquad
+    .filter((p) => p.position === incoming.position)
+    .sort((a, b) => a.rating - b.rating);
+  if (samePosition.length > 0) return samePosition[0];
+  return [...buyerSquad].sort((a, b) => a.rating - b.rating)[0];
+}
+
+function creditFinance(
+  finances: GameWorld['teamFinances'],
+  teamId: string,
+  amount: number,
+): GameWorld['teamFinances'] {
+  const fin = finances[teamId];
+  if (!fin || amount <= 0) return finances;
+  return {
+    ...finances,
+    [teamId]: { ...fin, cash: fin.cash + amount, totalIncome: fin.totalIncome + amount },
+  };
+}
+
+function debitFinance(
+  finances: GameWorld['teamFinances'],
+  teamId: string,
+  amount: number,
+): GameWorld['teamFinances'] {
+  const fin = finances[teamId];
+  if (!fin || amount <= 0) return finances;
+  return {
+    ...finances,
+    [teamId]: { ...fin, cash: fin.cash - amount, totalExpense: fin.totalExpense + amount },
+  };
+}
+
+function applyBalancedTransfer(params: {
+  world: GameWorld;
+  playerId: string;
+  fromTeamId: string;
+  fromTeamName: string;
+  toTeamId: string;
+  toTeamName: string;
+  fee: number;
+  reason: string;
+}): GameWorld {
+  const { world, playerId, fromTeamId, fromTeamName, toTeamId, toTeamName, fee, reason } = params;
+  const squads = { ...world.squads };
+  const fromSquad = [...(squads[fromTeamId] ?? [])];
+  const toSquad = [...(squads[toTeamId] ?? [])];
+  const player = fromSquad.find((p) => p.uuid === playerId);
+  if (!player) return world;
+
+  const released = pickReleaseCandidate(toSquad, player);
+  const buyerSquadWithoutReleased = released
+    ? toSquad.filter((p) => p.uuid !== released.uuid)
+    : toSquad;
+  const incomingNumber = pickFreeNumber(new Set(buyerSquadWithoutReleased.map((p) => p.number)), player.number);
+  const sellerSquadWithoutPlayer = fromSquad.filter((p) => p.uuid !== player.uuid);
+  const replacementNumber = released
+    ? pickFreeNumber(new Set(sellerSquadWithoutPlayer.map((p) => p.number)), released.number)
+    : undefined;
+
+  squads[toTeamId] = [
+    ...buyerSquadWithoutReleased,
+    { ...player, teamId: toTeamId, number: incomingNumber },
+  ];
+  squads[fromTeamId] = released
+    ? [
+        ...sellerSquadWithoutPlayer,
+        { ...released, teamId: fromTeamId, number: replacementNumber! },
+      ]
+    : sellerSquadWithoutPlayer;
+
+  let teamFinances = { ...world.teamFinances };
+  teamFinances = creditFinance(teamFinances, fromTeamId, fee);
+  teamFinances = debitFinance(teamFinances, toTeamId, fee);
+  if (released) {
+    teamFinances = debitFinance(teamFinances, fromTeamId, FREE_AGENT_SIGNING_FEE);
+    teamFinances = creditFinance(teamFinances, toTeamId, FREE_AGENT_SIGNING_FEE);
+  }
+
+  const season = transferSeason(world);
+  const windowIndex = transferWindowIndex(world);
+  const transferRecord: TransferRecord = {
+    season,
+    windowIndex,
+    playerId: player.uuid,
+    playerName: player.name ?? `${player.number}号`,
+    playerNumber: incomingNumber,
+    position: player.position,
+    fromTeamId,
+    fromTeamName,
+    toTeamId,
+    toTeamName,
+    type: 'transfer',
+    fee,
+    reason,
+  };
+  const replacementRecord: TransferRecord | null = released ? {
+    season,
+    windowIndex,
+    playerId: released.uuid,
+    playerName: released.name ?? `${released.number}号`,
+    playerNumber: replacementNumber!,
+    position: released.position,
+    fromTeamId: toTeamId,
+    fromTeamName: toTeamName,
+    toTeamId: fromTeamId,
+    toTeamName: fromTeamName,
+    type: 'free_agent',
+    fee: FREE_AGENT_SIGNING_FEE,
+    reason: '买家阵容腾位，卖家补入替代球员',
+  } : null;
+  const transferRecords = replacementRecord
+    ? [transferRecord, replacementRecord]
+    : [transferRecord];
+
+  return {
+    ...world,
+    squads,
+    teamFinances,
+    playerStats: syncPlayerStatsTeamIds(
+      syncStatTeamId(syncStatTeamId(world.playerStats, player.uuid, toTeamId), released?.uuid ?? '', fromTeamId),
+      squads,
+    ),
+    transferHistory: [...(world.transferHistory ?? []), ...transferRecords],
+  };
+}
+
 /** Move player from owner team to buyer team + book cash. Used by both
  *  acceptIncomingOffer and counterIncomingOffer paths. */
 export function applyOfferTransfer(
@@ -39,50 +186,16 @@ export function applyOfferTransfer(
   offer: IncomingOffer,
   fee: number,
 ): GameWorld {
-  const squads = { ...world.squads };
-  const ownerSquad = (squads[offer.ownerTeamId] ?? []).filter(p => p.uuid !== offer.playerId);
-  const player = (world.squads[offer.ownerTeamId] ?? []).find(p => p.uuid === offer.playerId);
-  if (!player) return world;
-  squads[offer.ownerTeamId] = ownerSquad;
-  const buyerSquad = [...(squads[offer.buyerId] ?? [])];
-  const buyerNumbers = new Set(buyerSquad.map(p => p.number));
-  let newNum = player.number;
-  if (buyerNumbers.has(newNum)) {
-    for (let n = 2; n <= 99; n++) if (!buyerNumbers.has(n)) { newNum = n; break; }
-  }
-  buyerSquad.push({ ...player, teamId: offer.buyerId, number: newNum });
-  squads[offer.buyerId] = buyerSquad;
-
-  // Cash flow: buyer pays, owner receives
-  const teamFinances = { ...world.teamFinances };
-  const owner = teamFinances[offer.ownerTeamId];
-  const buyer = teamFinances[offer.buyerId];
-  if (owner) teamFinances[offer.ownerTeamId] = { ...owner, cash: owner.cash + fee, totalIncome: owner.totalIncome + fee };
-  if (buyer) teamFinances[offer.buyerId] = { ...buyer, cash: buyer.cash - fee, totalExpense: buyer.totalExpense + fee };
-
-  const transferRecord: TransferRecord = {
-    season: world.seasonState.seasonNumber,
-    windowIndex: world.seasonState.currentWindowIndex,
-    playerId: player.uuid,
-    playerName: player.name ?? `${player.number}号`,
-    playerNumber: newNum,
-    position: player.position,
+  return applyBalancedTransfer({
+    world,
+    playerId: offer.playerId,
     fromTeamId: offer.ownerTeamId,
     fromTeamName: offer.ownerTeamName,
     toTeamId: offer.buyerId,
     toTeamName: offer.buyerName,
-    type: 'transfer',
     fee,
     reason: '玩家接受报价',
-  };
-
-  return {
-    ...world,
-    squads,
-    teamFinances,
-    playerStats: syncStatTeamId(world.playerStats, player.uuid, offer.buyerId),
-    transferHistory: [...(world.transferHistory ?? []), transferRecord],
-  };
+  });
 }
 
 /** Buyer (favorite team) pays fee, gets player from seller team. */
@@ -91,52 +204,17 @@ export function applyOutgoingBid(
   target: OutgoingTarget,
   fee: number,
 ): GameWorld {
-  const squads = { ...world.squads };
-  const sellerSquad = (squads[target.fromTeamId] ?? []).filter(p => p.uuid !== target.playerId);
-  const player = (world.squads[target.fromTeamId] ?? []).find(p => p.uuid === target.playerId);
-  if (!player) return world;
-  squads[target.fromTeamId] = sellerSquad;
-  const buyerSquad = [...(squads[target.toTeamId] ?? [])];
-  const buyerNumbers = new Set(buyerSquad.map(p => p.number));
-  let newNum = player.number;
-  if (buyerNumbers.has(newNum)) {
-    for (let n = 2; n <= 99; n++) if (!buyerNumbers.has(n)) { newNum = n; break; }
-  }
-  buyerSquad.push({ ...player, teamId: target.toTeamId, number: newNum });
-  squads[target.toTeamId] = buyerSquad;
-
-  const teamFinances = { ...world.teamFinances };
-  const seller = teamFinances[target.fromTeamId];
-  const buyer = teamFinances[target.toTeamId];
-  if (seller) teamFinances[target.fromTeamId] = { ...seller, cash: seller.cash + fee, totalIncome: seller.totalIncome + fee };
-  if (buyer) teamFinances[target.toTeamId] = { ...buyer, cash: buyer.cash - fee, totalExpense: buyer.totalExpense + fee };
-
-  const transferRecord: TransferRecord = {
-    season: world.seasonState.seasonNumber,
-    windowIndex: world.seasonState.currentWindowIndex,
-    playerId: player.uuid,
-    playerName: player.name ?? `${player.number}号`,
-    playerNumber: newNum,
-    position: player.position,
+  return applyBalancedTransfer({
+    world,
+    playerId: target.playerId,
     fromTeamId: target.fromTeamId,
     fromTeamName: target.fromTeamName,
     toTeamId: target.toTeamId,
     toTeamName: world.teamBases[target.toTeamId]?.name ?? target.toTeamId,
-    type: 'transfer',
     fee,
     reason: '玩家主动报价',
-  };
-
-  return {
-    ...world,
-    squads,
-    teamFinances,
-    playerStats: syncStatTeamId(world.playerStats, player.uuid, target.toTeamId),
-    transferHistory: [...(world.transferHistory ?? []), transferRecord],
-  };
+  });
 }
-
-const FREE_AGENT_SIGNING_FEE = 5;
 
 /** Sign a free agent from the pool to the target team (typically favorite #1). */
 export function signFreeAgent(
@@ -164,8 +242,8 @@ export function signFreeAgent(
   teamFinances[toTeamId] = { ...finance, cash: finance.cash - FREE_AGENT_SIGNING_FEE, totalExpense: finance.totalExpense + FREE_AGENT_SIGNING_FEE };
 
   const transferRecord: TransferRecord = {
-    season: world.seasonState.seasonNumber,
-    windowIndex: world.seasonState.currentWindowIndex,
+    season: transferSeason(world),
+    windowIndex: transferWindowIndex(world),
     playerId: player.uuid,
     playerName: player.name ?? `${player.number}号`,
     playerNumber: num,

@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/github/last-commit/KurtDubain/football-universe?style=flat-square" alt="last commit"/>
   <img src="https://img.shields.io/github/license/KurtDubain/football-universe?style=flat-square" alt="license"/>
   <img src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=flat-square" alt="PWA"/>
-  <img src="https://img.shields.io/badge/React_18-61dafb?style=flat-square&logo=react&logoColor=black" alt="React"/>
+  <img src="https://img.shields.io/badge/React_19-61dafb?style=flat-square&logo=react&logoColor=black" alt="React"/>
   <img src="https://img.shields.io/badge/TypeScript-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/>
 </p>
 
@@ -151,7 +151,7 @@ pnpm test:ui      # Vitest UI（浏览器面板）
 | Layer | Tech |
 |-------|------|
 | Build | **Vite 8** + **vite-plugin-pwa** |
-| UI | **React 18** + **TypeScript 5** |
+| UI | **React 19** + **TypeScript 6** |
 | State | **Zustand 5** (persisted to localStorage) |
 | Styling | **Tailwind CSS 4** |
 | Routing | **React Router 7** |
@@ -196,8 +196,9 @@ src/
 - [x] 玩法模式（王朝/草根逆袭/沙盒）
 - [ ] 完整英文 i18n（UI 已部分支持，引擎层待译）
 - [ ] 球员名字系统（替代号码）
-- [ ] 转会系统
-- [ ] 球员成长 & 退役
+- [x] 转会系统
+- [x] 球员成长 & 退役
+- [ ] 俱乐部分段球员统计（转会前后贡献拆分）
 - [ ] 自动生成赛季回顾分享图
 
 ---

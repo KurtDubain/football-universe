@@ -570,3 +570,52 @@ describe("applyV16ToV17TagsAndPool (v16 → v17)", () => {
     expect(world.squads.T[0].tag).toBe('loyal');
   });
 });
+
+import { applyV22ToV23PlayerStatSegmentsInit } from "./game-store";
+import { playerTeamStatKey } from "../engine/players/stats";
+
+describe("applyV22ToV23PlayerStatSegmentsInit (v22 → v23)", () => {
+  it("backfills club-specific stat segments from legacy playerStats totals", () => {
+    const player = { uuid: 'p-1', teamId: 'A' } as import('../types/player').Player;
+    const world: {
+      squads: Record<string, import('../types/player').Player[]>;
+      playerStats: Record<string, import('../types/player').PlayerSeasonStats>;
+      playerStatSegments?: Record<string, import('../types/player').PlayerTeamSeasonStats>;
+    } = {
+      squads: { A: [player] },
+      playerStats: {
+        'p-1': {
+          playerId: 'p-1',
+          teamId: 'A',
+          goals: 7,
+          assists: 2,
+          yellowCards: 1,
+          redCards: 0,
+          appearances: 10,
+          cleanSheets: 0,
+          saves: 0,
+          keyBlocks: 0,
+          bigChances: 9,
+          keyPasses: 3,
+        },
+      },
+    };
+
+    const result = applyV22ToV23PlayerStatSegmentsInit(world);
+
+    expect(result.touched).toBe(true);
+    const key = playerTeamStatKey('p-1', 'A');
+    expect(world.playerStatSegments?.[key]).toMatchObject({
+      playerId: 'p-1',
+      teamId: 'A',
+      goals: 7,
+      assists: 2,
+      appearances: 10,
+    });
+
+    const existing = world.playerStatSegments;
+    const second = applyV22ToV23PlayerStatSegmentsInit(world);
+    expect(second.touched).toBe(false);
+    expect(world.playerStatSegments).toBe(existing);
+  });
+});

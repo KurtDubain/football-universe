@@ -1,4 +1,5 @@
 import { GameWorld } from '../season/season-manager';
+import { getCurrentPlayerStatRows } from '../players/player-stat-selectors';
 
 export type SearchEntity = 'team' | 'player' | 'coach';
 
@@ -136,32 +137,31 @@ function searchTeams(world: GameWorld, f: TeamFilters): TeamSearchResult[] {
 function searchPlayers(world: GameWorld, f: PlayerFilters): PlayerSearchResult[] {
   const results: PlayerSearchResult[] = [];
 
-  for (const [teamId, squad] of Object.entries(world.squads)) {
-    for (const player of squad) {
-      if (f.position && !f.position.includes(player.position)) continue;
-      if (f.minRating !== undefined && player.rating < f.minRating) continue;
-      if (f.maxRating !== undefined && player.rating > f.maxRating) continue;
-      if (f.maxAge !== undefined && (player.age ?? 25) > f.maxAge) continue;
-      if (f.minMarketValue !== undefined && (player.marketValue ?? 0) < f.minMarketValue) continue;
+  for (const row of getCurrentPlayerStatRows(world)) {
+    if (!row.player) continue;
+    const player = row.player;
+    const identity = row.identity;
+    const position = identity.position ?? player.position;
+    if (f.position && !f.position.includes(position)) continue;
+    if (f.minRating !== undefined && (identity.rating ?? 0) < f.minRating) continue;
+    if (f.maxRating !== undefined && (identity.rating ?? 0) > f.maxRating) continue;
+    if (f.maxAge !== undefined && (identity.age ?? 25) > f.maxAge) continue;
+    if (f.minMarketValue !== undefined && (identity.marketValue ?? player.marketValue ?? 0) < f.minMarketValue) continue;
+    if (f.minGoals !== undefined && row.goals < f.minGoals) continue;
+    if (f.minAssists !== undefined && row.assists < f.minAssists) continue;
 
-      const stats = world.playerStats[player.uuid];
-      if (f.minGoals !== undefined && (stats?.goals ?? 0) < f.minGoals) continue;
-      if (f.minAssists !== undefined && (stats?.assists ?? 0) < f.minAssists) continue;
-
-      const teamName = world.teamBases[teamId]?.name ?? teamId;
-      results.push({
-        playerId: player.uuid,
-        playerName: player.name ?? `${player.number}号`,
-        teamId,
-        teamName,
-        position: player.position,
-        rating: player.rating,
-        goals: stats?.goals ?? 0,
-        assists: stats?.assists ?? 0,
-        marketValue: player.marketValue ?? 0,
-        age: player.age ?? 25,
-      });
-    }
+    results.push({
+      playerId: row.playerId,
+      playerName: identity.playerName,
+      teamId: identity.teamId,
+      teamName: identity.teamName,
+      position,
+      rating: identity.rating ?? player.rating,
+      goals: row.goals,
+      assists: row.assists,
+      marketValue: identity.marketValue ?? player.marketValue ?? 0,
+      age: identity.age ?? player.age ?? 25,
+    });
   }
   results.sort((a, b) => b.rating - a.rating);
   return results;

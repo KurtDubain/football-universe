@@ -151,6 +151,14 @@ export interface PlayerSeasonStats {
 }
 
 /**
+ * Current-season contribution for one player while representing one team.
+ * `PlayerSeasonStats` remains the player-wide season total; this segmented
+ * form is keyed by `(playerId, teamId)` so transfer-era displays can tell
+ * "season total" from "for this club".
+ */
+export type PlayerTeamSeasonStats = PlayerSeasonStats;
+
+/**
  * v19 — historical per-season snapshot of a player's stats, captured at
  * season-end before the current-season `playerStats` is reset. Kept FIFO
  * at most 15 entries per player (older seasons drop off).
@@ -163,7 +171,14 @@ export interface PlayerSeasonStats {
 export interface PlayerSeasonStatsHistoryEntry {
   season: number;
   teamId: string;
+  /** Frozen display identity at season end. Optional for legacy history rows. */
+  teamName?: string;
+  teamShortName?: string;
+  playerName?: string;
+  playerNumber?: number;
   position: PlayerPosition;
+  rating?: number;
+  age?: number;
   goals: number;
   assists: number;
   appearances: number;

@@ -1,4 +1,4 @@
-import { Player, PlayerSeasonStats } from '../../types/player';
+import { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import { MatchResult } from '../../types/match';
 import { pickMatchday as pickMatchdayWithDiscipline } from './injuries';
 
@@ -29,6 +29,183 @@ export function createInitialPlayerStats(
     }
   }
   return stats;
+}
+
+export function playerTeamStatKey(playerId: string, teamId: string): string {
+  return `${playerId}@@${teamId}`;
+}
+
+export function emptyPlayerStat(playerId: string, teamId: string): PlayerSeasonStats {
+  return {
+    playerId,
+    teamId,
+    goals: 0,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    appearances: 0,
+    cleanSheets: 0,
+    saves: 0,
+    keyBlocks: 0,
+    bigChances: 0,
+    keyPasses: 0,
+  };
+}
+
+export function createInitialPlayerStatSegments(
+  squads: Record<string, Player[]>,
+): Record<string, PlayerTeamSeasonStats> {
+  const segments: Record<string, PlayerTeamSeasonStats> = {};
+  for (const [teamId, players] of Object.entries(squads)) {
+    for (const p of players) {
+      segments[playerTeamStatKey(p.uuid, teamId)] = emptyPlayerStat(p.uuid, teamId);
+    }
+  }
+  return segments;
+}
+
+/**
+ * Backfill current-season `(playerId, teamId)` segments from the legacy
+ * player-wide totals. Used for persisted saves created before segmented
+ * stats existed. Historical pre-migration transfers are unrecoverable, so
+ * those totals are attributed to the player's current team as the least
+ * surprising compatibility fallback.
+ */
+export function createPlayerStatSegmentsFromTotals(
+  playerStats: Record<string, PlayerSeasonStats> | undefined,
+  squads: Record<string, Player[]> | undefined,
+): Record<string, PlayerTeamSeasonStats> {
+  const segments = createInitialPlayerStatSegments(squads ?? {});
+  const activeTeamByPlayer = new Map<string, string>();
+
+  for (const [teamId, players] of Object.entries(squads ?? {})) {
+    for (const player of players ?? []) {
+      activeTeamByPlayer.set(player.uuid, teamId);
+    }
+  }
+
+  for (const stat of Object.values(playerStats ?? {})) {
+    const teamId = activeTeamByPlayer.get(stat.playerId) ?? stat.teamId;
+    segments[playerTeamStatKey(stat.playerId, teamId)] = {
+      ...stat,
+      teamId,
+    };
+  }
+
+  return segments;
+}
+
+function ensureSegment(
+  segments: Record<string, PlayerTeamSeasonStats>,
+  playerId: string | undefined,
+  teamId: string,
+): PlayerTeamSeasonStats | null {
+  if (!playerId) return null;
+  const key = playerTeamStatKey(playerId, teamId);
+  if (!segments[key]) segments[key] = emptyPlayerStat(playerId, teamId);
+  return segments[key];
+}
+
+/**
+ * Update `(playerId, teamId)` contribution segments from match results.
+ *
+ * Unlike `playerStats`, these rows are deliberately NOT re-pointed on
+ * transfer. If a player scores 8 for Team A then moves to Team B, the Team A
+ * segment keeps those 8 goals and the Team B segment starts from zero.
+ */
+export function updatePlayerStatSegmentsFromResults(
+  currentSegments: Record<string, PlayerTeamSeasonStats>,
+  results: MatchResult[],
+  squads: Record<string, Player[]>,
+  globalWindowIdx: number = 0,
+): Record<string, PlayerTeamSeasonStats> {
+  const segments: Record<string, PlayerTeamSeasonStats> = { ...currentSegments };
+
+  for (const result of results) {
+    const homeSquad = squads[result.homeTeamId];
+    const awaySquad = squads[result.awayTeamId];
+    const homeMatchday = pickMatchdayWithDiscipline(homeSquad, globalWindowIdx) ?? [];
+    const awayMatchday = pickMatchdayWithDiscipline(awaySquad, globalWindowIdx) ?? [];
+
+    for (const p of homeMatchday) {
+      const s = ensureSegment(segments, p.uuid, result.homeTeamId);
+      if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = { ...s, appearances: s.appearances + 1 };
+    }
+    for (const p of awayMatchday) {
+      const s = ensureSegment(segments, p.uuid, result.awayTeamId);
+      if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = { ...s, appearances: s.appearances + 1 };
+    }
+
+    const awayConceded = result.awayGoals + (result.etAwayGoals ?? 0);
+    const homeConceded = result.homeGoals + (result.etHomeGoals ?? 0);
+    if (awayConceded === 0) {
+      for (const p of homeMatchday) {
+        if (p.position !== 'DF' && p.position !== 'GK') continue;
+        const s = ensureSegment(segments, p.uuid, result.homeTeamId);
+        if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = { ...s, cleanSheets: s.cleanSheets + 1 };
+      }
+    }
+    if (homeConceded === 0) {
+      for (const p of awayMatchday) {
+        if (p.position !== 'DF' && p.position !== 'GK') continue;
+        const s = ensureSegment(segments, p.uuid, result.awayTeamId);
+        if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = { ...s, cleanSheets: s.cleanSheets + 1 };
+      }
+    }
+
+    for (const event of result.events) {
+      if (event.type === 'penalty_goal' || event.minute > 120) continue;
+      if (event.type === 'gk_save' || event.type === 'df_block') {
+        const defender = ensureSegment(segments, event.playerId, event.teamId);
+        if (defender) {
+          const key = playerTeamStatKey(defender.playerId, defender.teamId);
+          segments[key] = event.type === 'gk_save'
+            ? { ...defender, saves: defender.saves + 1 }
+            : { ...defender, keyBlocks: defender.keyBlocks + 1 };
+        }
+        const attackingTeamId = event.teamId === result.homeTeamId
+          ? result.awayTeamId
+          : result.homeTeamId;
+        const scorer = ensureSegment(segments, event.deniedScorerId, attackingTeamId);
+        if (scorer) {
+          segments[playerTeamStatKey(scorer.playerId, scorer.teamId)] = {
+            ...scorer,
+            bigChances: scorer.bigChances + 1,
+          };
+        }
+        const assister = ensureSegment(segments, event.deniedAssisterId, attackingTeamId);
+        if (assister) {
+          segments[playerTeamStatKey(assister.playerId, assister.teamId)] = {
+            ...assister,
+            keyPasses: assister.keyPasses + 1,
+          };
+        }
+        continue;
+      }
+
+      const segment = ensureSegment(segments, event.playerId, event.teamId);
+      if (!segment) continue;
+      const key = playerTeamStatKey(segment.playerId, segment.teamId);
+      switch (event.type) {
+        case 'goal':
+          segments[key] = {
+            ...segment,
+            goals: segment.goals + 1,
+            bigChances: segment.bigChances + 1,
+          };
+          break;
+        case 'assist':
+          segments[key] = {
+            ...segment,
+            assists: segment.assists + 1,
+            keyPasses: segment.keyPasses + 1,
+          };
+          break;
+      }
+    }
+  }
+
+  return segments;
 }
 
 /**
@@ -221,6 +398,21 @@ export function getTopScorerByTeam(
     }
   }
   return out;
+}
+
+/**
+ * Build a `teamId → top scorer` map from club-specific current-season
+ * contribution segments. Falls back to the legacy player-wide totals when
+ * a migrated save has not yet populated `playerStatSegments`.
+ */
+export function getTopScorerByTeamFromSegments(
+  segments: Record<string, PlayerTeamSeasonStats> | undefined,
+  fallbackStats: Record<string, PlayerSeasonStats> = {},
+): Record<string, PlayerSeasonStats> {
+  const source = segments && Object.keys(segments).length > 0
+    ? segments
+    : fallbackStats;
+  return getTopScorerByTeam(source);
 }
 
 /**

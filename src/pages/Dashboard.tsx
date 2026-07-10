@@ -17,7 +17,7 @@ import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
-import { getTopScorerByTeam } from '../engine/players/stats';
+import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
@@ -512,11 +512,11 @@ function MatchdayTab({
     });
   }, [lastResults, world.squads]);
 
-  // Per-team top scorer map — recomputed only when playerStats changes.
+  // Per-team top scorer map — recomputed when club segments or fallback totals change.
   // Used by the FixtureCard "射手 X N球" lines on each side.
   const teamTopScorers = useMemo(
-    () => getTopScorerByTeam(world.playerStats),
-    [world.playerStats],
+    () => getTopScorerByTeamFromSegments(world.playerStatSegments, world.playerStats),
+    [world.playerStatSegments, world.playerStats],
   );
 
   if (!currentWindow) {
@@ -1168,10 +1168,10 @@ function FixtureCard({
         const awayScorer = teamTopScorers[fixture.awayTeamId];
         if (!homeScorer && !awayScorer) return null;
         const homePlayer = homeScorer
-          ? world.squads[fixture.homeTeamId]?.find(p => p.uuid === homeScorer.playerId)
+          ? Object.values(world.squads).flatMap((squad) => squad).find(p => p.uuid === homeScorer.playerId)
           : null;
         const awayPlayer = awayScorer
-          ? world.squads[fixture.awayTeamId]?.find(p => p.uuid === awayScorer.playerId)
+          ? Object.values(world.squads).flatMap((squad) => squad).find(p => p.uuid === awayScorer.playerId)
           : null;
         return (
           <div className="flex items-center justify-between text-[9px] text-slate-500 mb-1 gap-1">

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete, initializeNewSeason } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
-import { syncPlayerStatsTeamIds } from '../engine/players/stats';
+import { createPlayerStatSegmentsFromTotals, syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
@@ -15,6 +15,7 @@ import { pickPlayerName } from '../config/player-names';
 import { computeInitialMarketValue } from '../engine/economy/market-value';
 import { initTeamFinances } from '../engine/economy/finance';
 import { computeCurrentRating } from '../engine/players/development';
+import type { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../types/player';
 
 interface GameStore {
   world: GameWorld | null;
@@ -63,6 +64,20 @@ interface GameStore {
   getTeamsByLeague: (level: 1 | 2 | 3) => string[];
   isGameOver: () => boolean;
   trimStorage: () => void;
+}
+
+function hashActionSeed(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash | 0;
+}
+
+function transferActionRng(world: GameWorld, actionKey: string): SeededRNG {
+  const season = world.transferWindow?.season ?? world.seasonState.seasonNumber;
+  return new SeededRNG(world.rngState ^ hashActionSeed(`${season}:${actionKey}`));
 }
 
 /**
@@ -534,6 +549,28 @@ export function applyV21ToV22DenyStatsInit(world: {
   return { touched };
 }
 
+/**
+ * v22 → v23: initialise current-season `(playerId, teamId)` contribution
+ * segments. Existing saves only have player-wide season totals, so the
+ * compatibility backfill attributes each total row to the player's current
+ * team. From the next simulated match onward, transfer-era contributions
+ * are tracked precisely per club.
+ */
+export function applyV22ToV23PlayerStatSegmentsInit(world: {
+  playerStatSegments?: unknown;
+  playerStats?: Record<string, PlayerSeasonStats>;
+  squads?: Record<string, Player[]>;
+}): { touched: boolean } {
+  if (world.playerStatSegments && typeof world.playerStatSegments === 'object' && !Array.isArray(world.playerStatSegments)) {
+    return { touched: false };
+  }
+  world.playerStatSegments = createPlayerStatSegmentsFromTotals(
+    world.playerStats,
+    world.squads,
+  ) as Record<string, PlayerTeamSeasonStats>;
+  return { touched: true };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -827,7 +864,7 @@ export const useGameStore = create<GameStore>()(
         if (!offer || offer.resolution !== 'pending') return;
         const counterFee = Math.round(offer.fee * 1.3);
         // 60% chance the buyer accepts the counter
-        const rng = new SeededRNG(world.rngState ^ Date.now());
+        const rng = transferActionRng(world, `counter:${offerId}:${offer.counterFee ?? offer.fee}`);
         const accepts = rng.next() < 0.6;
         if (accepts) {
           const newWorld = applyOfferTransfer(world, offer, counterFee);
@@ -860,7 +897,7 @@ export const useGameStore = create<GameStore>()(
         }
         // AI decision: accept if bid >= suggestedFee × 0.9
         // Otherwise 40% chance to accept anyway (greedy seller)
-        const rng = new SeededRNG(world.rngState ^ Date.now());
+        const rng = transferActionRng(world, `bid:${targetId}:${fee}`);
         const meetsAsk = fee >= target.suggestedFee * 0.9;
         const accepted = meetsAsk || rng.next() < 0.4;
         if (accepted) {
@@ -955,7 +992,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 22,
+      version: 23,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1283,6 +1320,16 @@ export const useGameStore = create<GameStore>()(
             saves?: number; keyBlocks?: number; bigChances?: number; keyPasses?: number;
             goals?: number; assists?: number;
           }> });
+        }
+        // v22 → v23: init club-specific current-season contribution
+        // segments. Legacy totals are attributed to the current club because
+        // pre-v23 saves did not retain enough data to split past transfers.
+        if (version < 23 && state?.world) {
+          applyV22ToV23PlayerStatSegmentsInit(state.world as {
+            playerStatSegments?: unknown;
+            playerStats?: Record<string, PlayerSeasonStats>;
+            squads?: Record<string, Player[]>;
+          });
         }
         // SAFETY: by this point all migration steps above have backfilled the
         // fields required by current GameStore; non-persisted fields (action

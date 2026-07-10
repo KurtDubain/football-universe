@@ -7,26 +7,32 @@ This document tracks the data-chain issues found during the initial project revi
 ## Progress Log
 
 - 2026-07-09: Added `validateWorldData(world)` and validation tests for missing/orphan/mismatched player stats, scoreline/event mismatches, and impossible aggregate stats. Fixed fresh-world squad generation to use final/custom teams. Verified with full Vitest suite under Node 24 and TypeScript build.
+- 2026-07-10: Added shared player-stat display selectors, switched Player Center, Team Detail roster, Advanced Search, Player Detail ranking, and Season Review to the shared read model. Season Review now reads frozen season-history rows instead of reset current stats. Season-end snapshots now store frozen player/team display identity. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
+- 2026-07-10: Balanced manual transfer-window actions: accepted offers and outgoing bids now move the target player and send the buyer's weakest same-position player back as a replacement, preserving squad size/position shape. Manual transfer records and free-agent signings now use `transferWindow.season`; transfer action randomness and auto-window news ids are deterministic. Verified with transfer action tests, full Vitest suite, and production build under Node 24.
+- 2026-07-10: Expanded Player Center with creator, defender, and goalkeeper rankings backed by shared selectors. Added Node `>=22` guard via `package.json` and `.nvmrc`, and updated README React/version roadmap drift. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
+- 2026-07-10: Introduced current-season club-specific player stat segments keyed by `(playerId, teamId)`, with v23 save migration from legacy totals. `playerStats` remains the player-wide season total that follows the player after transfer; team pages, league top-scorer rows, dashboard fixture cards, and Player Detail contribution/split views now read club contribution where appropriate. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
 
 ## Current Main Concerns
 
-- [ ] Player goals, assists, defensive events, and goalkeeper stats may not have one clear source of truth across pages.
-- [ ] Player Center, Team Detail, Advanced Search, and Season Review may read similar data with different assumptions.
-- [ ] Transferred players can make current-season stats look like they all belong to the current team.
-- [ ] Season Review may read `world.playerStats` after new-season reset instead of a frozen previous-season snapshot.
-- [ ] Defensive players and goalkeepers are underrepresented in UI metrics compared with attackers.
+- [x] Player goals, assists, defensive events, and goalkeeper stats may not have one clear source of truth across pages.
+- [x] Player Center, Team Detail, Advanced Search, and Season Review may read similar data with different assumptions.
+- [x] Transferred players can make current-season stats look like they all belong to the current team.
+- [x] Season Review may read `world.playerStats` after new-season reset instead of a frozen previous-season snapshot.
+- [x] Defensive players and goalkeepers are underrepresented in UI metrics compared with attackers.
 - [x] Custom/sandbox team initialization may still generate squads from default teams in some paths.
-- [ ] Manual transfer flow does not fully match the automatic transfer pipeline.
-- [ ] Some random paths use wall-clock time, which weakens reproducibility.
+- [x] Manual transfer flow does not fully match the automatic transfer pipeline.
+- [x] Some random paths use wall-clock time, which weakens reproducibility.
 
 ## 1. Source Of Truth And Data Semantics
 
-- [ ] Define the canonical meaning of `world.playerStats`: current season live totals only.
-- [ ] Define the canonical meaning of `world.playerStatsHistory`: immutable historical season snapshots.
-- [ ] Define whether a player's current-season total follows the player after a transfer.
-- [ ] Define whether team pages show "player season total" or "contribution for this team".
-- [ ] Add explicit stat segmentation by `season + playerId + teamId` if team-specific contribution is required.
-- [ ] Separate current-season stats, club-specific stats, historical-season stats, and career totals.
+- [x] Define the canonical meaning of `world.playerStats`: current season live totals only.
+- [x] Define the canonical meaning of `world.playerStatsHistory`: immutable historical season snapshots.
+- [x] Define whether a player's current-season total follows the player after a transfer.
+- [x] Define whether team pages show "player season total" or "contribution for this team".
+- [x] Add explicit current-season stat segmentation by season scope + `playerId + teamId` if team-specific contribution is required.
+- [x] Separate current-season stats and historical-season stats.
+- [x] Separate club-specific stats from player-wide current-season totals.
+- [ ] Separate career totals from current-season and club-specific stats.
 - [ ] Define whether league, cup, super cup, extra time, and penalty shootouts count into each stat view.
 - [ ] Define how own goals are represented: team goal, own-goal stat, or excluded from player scorer tables.
 - [ ] Document all stat semantics close to the stat update engine.
@@ -46,40 +52,43 @@ This document tracks the data-chain issues found during the initial project revi
 
 ## 3. Cross-Page Consistency
 
-- [ ] Centralize stat display selectors for Player Center, Team Detail, Player Detail, Advanced Search, and Season Review.
+- [x] Centralize stat display selectors for Player Center, Team Detail, Player Detail, Advanced Search, and Season Review.
 - [ ] Make Player Center resolve players from active squads, retired history, and frozen historical snapshots.
-- [ ] Avoid rendering `-` for historical or transferred players when a frozen player name is available.
-- [ ] Ensure Team Detail does not accidentally attribute all transferred-player season totals to the current club.
-- [ ] Ensure Advanced Search uses the same player-stat selector as Player Center.
-- [ ] Ensure Player Detail ranking uses the same stat semantics as Player Center.
-- [ ] Ensure Season Review uses the finished season's frozen data, not the newly reset current-season stats.
-- [ ] Add page labels such as "season total", "for current club", and "career total" where needed.
-- [ ] Add selector tests to prove the same player has the same displayed totals across relevant pages.
+- [x] Avoid rendering `-` for historical or transferred players when a frozen player name is available.
+- [x] Ensure Team Detail does not accidentally attribute all transferred-player season totals to the current club.
+- [x] Ensure Advanced Search uses the same player-stat selector as Player Center.
+- [x] Ensure Player Detail ranking uses the same stat semantics as Player Center.
+- [x] Ensure Season Review uses the finished season's frozen data, not the newly reset current-season stats.
+- [x] Add page labels such as "season total", "for current club", and "career total" where needed for changed views.
+- [x] Add selector tests to prove the same player has the same displayed totals across relevant pages.
 
 ## 4. Season Boundary And History
 
-- [ ] Freeze player stats before `initializeNewSeason` resets current-season stats.
-- [ ] Store enough frozen player identity data: name, age, position, rating, teamId, teamName, and season.
+- [x] Freeze player stats before `initializeNewSeason` resets current-season stats.
+- [x] Store enough frozen player identity data: name, age, position, rating, teamId, teamName, and season.
 - [ ] Store enough team context data for historical display: team name, league, final rank, goals for/against.
-- [ ] Make Season Review read the frozen just-finished-season snapshot.
+- [x] Store enough basic team context data for historical display: team name and goals conceded/matches.
+- [ ] Store full historical team context data: league, final rank, goals for/against.
+- [x] Make Season Review read the frozen just-finished-season snapshot.
 - [ ] Make retired-player career totals read from `playerStatsHistory + current season`, not only current season.
-- [ ] Ensure transfer-window records use the season of the window, not accidentally the newly initialized season.
+- [x] Ensure transfer-window records use the season of the window, not accidentally the newly initialized season.
 - [ ] Ensure finance records related to a transfer window are attributed to the intended season.
 - [ ] Ensure news timeline entries use the same season/window identity as transfer history.
-- [ ] Add tests covering season rollover, stat snapshotting, reset, and review rendering.
+- [x] Add tests covering season rollover, stat snapshotting, reset, and selector-based review data.
 
 ## 5. Transfers And Stat Ownership
 
 - [ ] Make automatic and manual transfer flows call one shared transfer-application pipeline.
-- [ ] In manual offer acceptance, match automatic behavior for squad balance, weak-player release, and replacements.
-- [ ] After every transfer, synchronize squad membership, player stat team references, transfer history, finance, and news.
-- [ ] Do not rewrite old team contribution into the new team if segmented stats are introduced.
-- [ ] Track transferred-player contribution by club for the same season.
+- [x] In manual offer acceptance, match automatic behavior for squad balance, weak-player release, and replacements.
+- [x] After manual transfer-window actions, synchronize squad membership, player stat team references, transfer history, and finance.
+- [ ] Add manual transfer-window news entries or a deliberate no-news policy.
+- [x] Do not rewrite old team contribution into the new team if segmented stats are introduced.
+- [x] Track transferred-player contribution by club for the same season.
 - [ ] Keep a clear state for free agents, released players, and retired players.
-- [ ] Validate squad size after every transfer.
-- [ ] Validate positional balance after every transfer.
-- [ ] Ensure transfer history season equals `transferWindow.season`.
-- [ ] Remove `Date.now()` from transfer/random news paths to preserve deterministic seed replay.
+- [x] Validate squad size after every manual transfer-window action.
+- [x] Validate positional balance after every manual transfer-window action.
+- [x] Ensure transfer history season equals `transferWindow.season`.
+- [x] Remove `Date.now()` from transfer/random news paths to preserve deterministic seed replay.
 
 ## 6. Custom Teams And Initialization
 
@@ -92,20 +101,20 @@ This document tracks the data-chain issues found during the initial project revi
 
 ## 7. Defensive And Goalkeeper Metrics
 
-- [ ] Add Player Center tabs or rankings for defenders and goalkeepers.
-- [ ] Surface clean sheets, saves, key blocks, and possibly goals prevented for defensive players.
-- [ ] Surface key passes, big chances, and chance creation for midfielders.
-- [ ] Make Team Detail roster chips position-aware instead of only goals/assists.
-- [ ] Make Player Detail position ranking score use position-appropriate metrics.
+- [x] Add Player Center tabs or rankings for defenders and goalkeepers.
+- [x] Surface clean sheets, saves, key blocks, and possibly goals prevented for defensive players.
+- [x] Surface key passes, big chances, and chance creation for midfielders.
+- [x] Make Team Detail roster chips position-aware instead of only goals/assists.
+- [x] Make Player Detail position ranking score use position-appropriate metrics.
 - [ ] Decide whether team defensive context should include only league matches or all competitions.
 - [ ] Make labels explicit when a defensive score mixes player stats with team standings data.
 
 ## 8. UI Labeling And User Trust
 
-- [ ] Label stat blocks clearly: "Current season", "For this club", "Career", or "Last season".
-- [ ] Show transferred-player split stats where helpful, for example "Team A: 8 goals, Team B: 3 goals".
-- [ ] For historical rows, display frozen team/player names even when the live object no longer exists.
-- [ ] Avoid showing zeroed current-season stats inside previous-season review components.
+- [ ] Label all stat blocks clearly: "Current season", "For this club", "Career", or "Last season".
+- [x] Show transferred-player split stats where helpful, for example "Team A: 8 goals, Team B: 3 goals".
+- [x] For historical rows, display frozen team/player names even when the live object no longer exists.
+- [x] Avoid showing zeroed current-season stats inside previous-season review components.
 - [ ] Add empty/error states that explain when data is unavailable because the season just started.
 - [ ] Add a lightweight data-health panel for development builds if useful.
 
@@ -120,28 +129,29 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Audit score mismatch: match result does not match countable goal events plus explicit exceptions.
 - [ ] Audit transfer mismatch: transfer history, squad movement, and finance/news do not agree.
 - [ ] Add tests for regular goal, assist, own goal, penalty goal, shootout penalty, and extra-time goal.
-- [ ] Add tests for player transfer during a season and after season-end transfer window.
+- [x] Add tests for player transfer after season-end transfer window.
+- [x] Add tests for player transfer during a season.
 - [ ] Add tests for retired-player historical display and career totals.
 - [ ] Add one long-season simulation smoke test that runs multiple seasons and validates invariants.
 
 ## 10. Engineering Hygiene
 
-- [ ] Add a Node version guard in `package.json` or `.nvmrc`; the README says Node 22+.
-- [ ] Update README roadmap so implemented transfer/growth/retirement features are not still marked as TODO.
-- [ ] Keep `pnpm exec tsc -b` passing after each data-chain change.
-- [ ] Re-run the full test suite after fixing the local Node runtime issue.
+- [x] Add a Node version guard in `package.json` or `.nvmrc`; the README says Node 22+.
+- [x] Update README roadmap so implemented transfer/growth/retirement features are not still marked as TODO.
+- [x] Keep `pnpm exec tsc -b` passing after each data-chain change.
+- [x] Re-run the full test suite after fixing the local Node runtime issue.
 - [ ] Keep changes small and reviewable: selectors first, data model next, UI labels last.
 
 ## Suggested Execution Order
 
 - [x] Step 1: Add audit helpers and invariant tests without changing behavior.
 - [x] Step 2: Fix initialization issues around final teams versus default teams.
-- [ ] Step 3: Centralize player-stat selectors used by all display pages.
-- [ ] Step 4: Fix season-end snapshot and Season Review data source.
-- [ ] Step 5: Fix transfer application and transfer-season attribution.
-- [ ] Step 6: Introduce segmented player stats if needed for club-specific contribution.
-- [ ] Step 7: Expand defensive, goalkeeper, and midfielder metrics in the UI.
-- [ ] Step 8: Update docs, Node version constraints, and final regression tests.
+- [x] Step 3: Centralize player-stat selectors used by all display pages.
+- [x] Step 4: Fix season-end snapshot and Season Review data source.
+- [x] Step 5: Fix transfer application and transfer-season attribution.
+- [x] Step 6: Introduce segmented player stats if needed for club-specific contribution.
+- [x] Step 7: Expand defensive, goalkeeper, and midfielder metrics in the UI.
+- [x] Step 8: Update docs, Node version constraints, and final regression tests.
 
 ## Notes From Initial Code Review
 

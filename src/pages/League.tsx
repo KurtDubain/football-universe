@@ -7,7 +7,7 @@ import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import MatchDetailModal from '../components/MatchDetailModal';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
-import { getTopScorerByTeam } from '../engine/players/stats';
+import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import {
   getTeamName,
   formatForm,
@@ -29,13 +29,14 @@ export default function League() {
   const leagueLevel = parseInt(level ?? '1', 10) as 1 | 2 | 3;
 
   // Per-team top individual scorer — used by the "最佳射手" column.
-  // Memoised so we walk playerStats once per render rather than per row.
+  // Memoised so we walk club segments once per render rather than per row.
   // Hook is declared BEFORE the early returns so the call order stays
   // stable across renders even before the world has loaded.
   const playerStats = world?.playerStats;
+  const playerStatSegments = world?.playerStatSegments;
   const teamTopScorers = useMemo(
-    () => (playerStats ? getTopScorerByTeam(playerStats) : {}),
-    [playerStats],
+    () => (playerStats ? getTopScorerByTeamFromSegments(playerStatSegments, playerStats) : {}),
+    [playerStatSegments, playerStats],
   );
 
   if (!world) {
@@ -348,7 +349,7 @@ export default function League() {
                           {(() => {
                             const scorer = teamTopScorers[entry.teamId];
                             if (!scorer) return <span className="text-slate-600 text-xs">—</span>;
-                            const player = world.squads[entry.teamId]?.find(p => p.uuid === scorer.playerId);
+                            const player = Object.values(world.squads).flatMap((squad) => squad).find(p => p.uuid === scorer.playerId);
                             if (!player) return <span className="text-slate-600 text-xs">—</span>;
                             return (
                               <Link

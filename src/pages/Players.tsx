@@ -1,10 +1,18 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTopScorers, getTopAssists } from '../engine/players/stats';
-import type { Player, PlayerPosition, PlayerSeasonStats } from '../types/player';
+import {
+  getCurrentCreatorRows,
+  getCurrentDefenderRows,
+  getCurrentDisciplineRows,
+  getCurrentGoalkeeperRows,
+  getCurrentTopAssistRows,
+  getCurrentTopScorerRows,
+  type PlayerStatRow,
+} from '../engine/players/player-stat-selectors';
+import type { PlayerPosition } from '../types/player';
 
-type Tab = 'scorers' | 'assists' | 'discipline';
+type Tab = 'scorers' | 'assists' | 'creation' | 'defense' | 'keepers' | 'discipline';
 
 const positionLabel: Record<PlayerPosition, string> = {
   GK: '门将',
@@ -27,43 +35,33 @@ const rankBadge = (rank: number) => {
   return 'text-slate-500';
 };
 
-function findPlayer(
-  squads: Record<string, Player[]>,
-  playerUuid: string,
-): Player | undefined {
-  // playerUuid is a stable Player.uuid (post-v8). Walk every squad — the
-  // search is O(players) but the active squad list is < 1000 entries so
-  // this is cheap and avoids needing a separate uuid → player index.
-  for (const squad of Object.values(squads)) {
-    const found = squad.find((p) => p.uuid === playerUuid);
-    if (found) return found;
-  }
-  return undefined;
-}
-
 export default function Players() {
   const world = useGameStore((s) => s.world);
   const [tab, setTab] = useState<Tab>('scorers');
 
   const topScorers = useMemo(
-    () => (world ? getTopScorers(world.playerStats, 20) : []),
+    () => (world ? getCurrentTopScorerRows(world, 20) : []),
     [world],
   );
   const topAssists = useMemo(
-    () => (world ? getTopAssists(world.playerStats, 20) : []),
+    () => (world ? getCurrentTopAssistRows(world, 20) : []),
     [world],
   );
   const topDiscipline = useMemo(() => {
-    if (!world) return [];
-    return Object.values(world.playerStats)
-      .filter((s) => s.yellowCards + s.redCards > 0)
-      .sort(
-        (a, b) =>
-          b.yellowCards + b.redCards - (a.yellowCards + a.redCards) ||
-          b.redCards - a.redCards,
-      )
-      .slice(0, 20);
+    return world ? getCurrentDisciplineRows(world, 20) : [];
   }, [world]);
+  const topCreators = useMemo(
+    () => (world ? getCurrentCreatorRows(world, 20) : []),
+    [world],
+  );
+  const topDefenders = useMemo(
+    () => (world ? getCurrentDefenderRows(world, 20) : []),
+    [world],
+  );
+  const topKeepers = useMemo(
+    () => (world ? getCurrentGoalkeeperRows(world, 20) : []),
+    [world],
+  );
 
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -74,17 +72,23 @@ export default function Players() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'scorers', label: '射手榜' },
     { key: 'assists', label: '助攻榜' },
+    { key: 'creation', label: '创造力' },
+    { key: 'defense', label: '防守榜' },
+    { key: 'keepers', label: '门将榜' },
     { key: 'discipline', label: '纪律' },
   ];
 
   const renderRow = (
-    stat: PlayerSeasonStats,
+    stat: PlayerStatRow,
     index: number,
     mode: Tab,
   ) => {
-    const player = findPlayer(world.squads, stat.playerId);
-    const teamBase = world.teamBases[stat.teamId];
+    const identity = stat.identity;
+    const teamBase = world.teamBases[identity.teamId];
     const rank = index + 1;
+    const playerNumber = identity.playerNumber;
+    const playerName = identity.playerName;
+    const position = identity.position;
 
     return (
       <tr
@@ -102,17 +106,17 @@ export default function Players() {
 
         {/* Number */}
         <td className="px-2 py-2 text-center text-sm text-slate-300 font-mono hidden sm:table-cell">
-          {player ? `${player.number}号` : '-'}
+          {playerNumber !== undefined ? `${playerNumber}号` : '-'}
         </td>
 
         {/* Name */}
         <td className="px-2 py-2">
-          {player ? (
+          {playerName ? (
             <Link
               to={`/player/${stat.playerId}`}
               className="text-sm text-slate-200 hover:text-blue-300 truncate block max-w-[100px] sm:max-w-none"
             >
-              {player.name ?? `${player.number}号`}
+              {playerName}
             </Link>
           ) : (
             <span className="text-sm text-slate-500">-</span>
@@ -135,15 +139,15 @@ export default function Players() {
               </span>
             </Link>
           ) : (
-            <span className="text-sm text-slate-500">{stat.teamId}</span>
+            <span className="text-sm text-slate-500">{identity.teamName}</span>
           )}
         </td>
 
         {/* Position */}
         <td className="px-2 py-2 text-center hidden sm:table-cell">
-          {player ? (
-            <span className={`text-xs font-medium ${positionColor[player.position]}`}>
-              {positionLabel[player.position]}
+          {position ? (
+            <span className={`text-xs font-medium ${positionColor[position]}`}>
+              {positionLabel[position]}
             </span>
           ) : (
             <span className="text-xs text-slate-500">-</span>
@@ -167,6 +171,36 @@ export default function Players() {
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
               {stat.appearances}
+            </td>
+          </>
+        ) : mode === 'defense' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-sm text-blue-300 font-semibold">{stat.cleanSheets}</span>
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.keyBlocks}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+              {stat.appearances}
+            </td>
+          </>
+        ) : mode === 'keepers' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-sm text-amber-300 font-semibold">{stat.cleanSheets}</span>
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.saves}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+              {stat.appearances}
+            </td>
+          </>
+        ) : mode === 'creation' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-sm text-emerald-300 font-semibold">{stat.keyPasses}</span>
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.assists}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+              {stat.goals + stat.assists}
             </td>
           </>
         ) : (
@@ -193,7 +227,13 @@ export default function Players() {
       ? topScorers
       : tab === 'assists'
         ? topAssists
-        : topDiscipline;
+        : tab === 'creation'
+          ? topCreators
+          : tab === 'defense'
+            ? topDefenders
+            : tab === 'keepers'
+              ? topKeepers
+              : topDiscipline;
 
   return (
     <div className="max-w-4xl space-y-4">
@@ -208,12 +248,12 @@ export default function Players() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60">
+      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
+            className={`min-w-16 sm:min-w-0 sm:flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
               tab === t.key
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
@@ -243,6 +283,30 @@ export default function Players() {
                     <th className="px-2 py-2.5 text-center">红牌</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                       出场
+                    </th>
+                  </>
+                ) : tab === 'defense' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center">零封</th>
+                    <th className="px-2 py-2.5 text-center">封堵</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                      出场
+                    </th>
+                  </>
+                ) : tab === 'keepers' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center">零封</th>
+                    <th className="px-2 py-2.5 text-center">扑救</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                      出场
+                    </th>
+                  </>
+                ) : tab === 'creation' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center">关键传</th>
+                    <th className="px-2 py-2.5 text-center">助攻</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                      传射
                     </th>
                   </>
                 ) : (

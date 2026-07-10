@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialPlayerStats, updatePlayerStatsFromResults } from './stats';
+import {
+  createInitialPlayerStatSegments,
+  createInitialPlayerStats,
+  getTopScorerByTeamFromSegments,
+  playerTeamStatKey,
+  updatePlayerStatSegmentsFromResults,
+  updatePlayerStatsFromResults,
+} from './stats';
 import type { MatchResult, MatchEvent } from '../../types/match';
 import type { Player } from '../../types/player';
 
@@ -27,6 +34,37 @@ function mkResult(events: MatchEvent[]): MatchResult {
     },
     competitionType: 'league_cup',
     competitionName: '联赛杯', roundLabel: 'Final',
+  };
+}
+
+function mkLeagueResult(
+  homeTeamId: string,
+  awayTeamId: string,
+  homeGoals: number,
+  awayGoals: number,
+  events: MatchEvent[],
+): MatchResult {
+  return {
+    fixtureId: `${homeTeamId}-${awayTeamId}`,
+    homeTeamId,
+    awayTeamId,
+    homeGoals,
+    awayGoals,
+    extraTime: false,
+    penalties: false,
+    events,
+    stats: {
+      possession: [50, 50],
+      shots: [10, 10],
+      shotsOnTarget: [5, 5],
+      corners: [4, 4],
+      fouls: [10, 10],
+      yellowCards: [0, 0],
+      redCards: [0, 0],
+    },
+    competitionType: 'league',
+    competitionName: '测试联赛',
+    roundLabel: 'R1',
   };
 }
 
@@ -85,5 +123,71 @@ describe('updatePlayerStatsFromResults — shootout exclusion', () => {
     const updated = updatePlayerStatsFromResults(stats, [mkResult(events)], squads);
     expect(updated['p-1'].yellowCards).toBe(0);
     expect(updated['p-1'].assists).toBe(0);
+  });
+});
+
+describe('player stat segments', () => {
+  it('keeps old-club and new-club contribution split after a transfer', () => {
+    const playerAtA = mkPlayer('p-1', 'A');
+    const initialSquads = { A: [playerAtA], B: [] };
+    let totals = createInitialPlayerStats(initialSquads);
+    let segments = createInitialPlayerStatSegments(initialSquads);
+
+    const firstGoal: MatchEvent = {
+      minute: 23,
+      type: 'goal',
+      teamId: 'A',
+      playerId: 'p-1',
+      playerName: '测试',
+      description: 'A队进球',
+    };
+    const first = mkLeagueResult('A', 'B', 1, 0, [firstGoal]);
+    totals = updatePlayerStatsFromResults(totals, [first], initialSquads);
+    segments = updatePlayerStatSegmentsFromResults(segments, [first], initialSquads);
+
+    const playerAtB = { ...playerAtA, teamId: 'B', number: 10 };
+    const transferredSquads = { A: [], B: [playerAtB] };
+    totals = {
+      ...totals,
+      'p-1': {
+        ...totals['p-1'],
+        teamId: 'B',
+      },
+    };
+
+    const secondGoal: MatchEvent = {
+      minute: 51,
+      type: 'goal',
+      teamId: 'B',
+      playerId: 'p-1',
+      playerName: '测试',
+      description: 'B队进球',
+    };
+    const second = mkLeagueResult('B', 'A', 1, 0, [secondGoal]);
+    totals = updatePlayerStatsFromResults(totals, [second], transferredSquads);
+    segments = updatePlayerStatSegmentsFromResults(segments, [second], transferredSquads);
+
+    expect(totals['p-1'].teamId).toBe('B');
+    expect(totals['p-1'].goals).toBe(2);
+    expect(totals['p-1'].appearances).toBe(2);
+
+    expect(segments[playerTeamStatKey('p-1', 'A')]).toMatchObject({
+      playerId: 'p-1',
+      teamId: 'A',
+      goals: 1,
+      appearances: 1,
+    });
+    expect(segments[playerTeamStatKey('p-1', 'B')]).toMatchObject({
+      playerId: 'p-1',
+      teamId: 'B',
+      goals: 1,
+      appearances: 1,
+    });
+
+    const topByTeam = getTopScorerByTeamFromSegments(segments, totals);
+    expect(topByTeam.A?.playerId).toBe('p-1');
+    expect(topByTeam.A?.goals).toBe(1);
+    expect(topByTeam.B?.playerId).toBe('p-1');
+    expect(topByTeam.B?.goals).toBe(1);
   });
 });

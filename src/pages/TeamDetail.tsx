@@ -10,6 +10,7 @@ import {
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { formatMoney } from '../engine/economy/finance';
 import { computePlayerBoosts } from '../engine/players/player-boosts';
+import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 
@@ -549,6 +550,11 @@ function SquadRoster({ teamId }: { teamId: string }) {
     return { grouped: g, starIds: stars };
   }, [world, teamId]);
 
+  const statRows = useMemo(
+    () => (world ? getPlayerClubStatRowMap(world, teamId) : new Map()),
+    [world, teamId],
+  );
+
   if (!world) return null;
 
   const squad = world.squads[teamId] ?? [];
@@ -559,9 +565,12 @@ function SquadRoster({ teamId }: { teamId: string }) {
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       <div className="px-4 py-2.5 border-b border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-200">
-          阵容名单 ({squad.length}人)
-        </h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-200">
+            阵容名单 ({squad.length}人)
+          </h3>
+          <span className="text-[10px] text-slate-500">本赛季效力本队期间</span>
+        </div>
       </div>
 
       <div className="divide-y divide-slate-700/40">
@@ -580,7 +589,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
 
               {/* Player rows */}
               {players.map((player) => {
-                const stats = world.playerStats[player.uuid];
+                const stats = statRows.get(player.uuid);
                 const isStar = starIds.has(player.uuid);
                 const injuredUntil = player.injuredUntilWindow ?? 0;
                 const suspendedUntil = player.suspendedUntilWindow ?? 0;
@@ -664,6 +673,26 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           {stats.assists > 0 && (
                             <span className="text-slate-300">
                               {stats.assists}助
+                            </span>
+                          )}
+                          {(player.position === 'GK' || player.position === 'DF') && stats.cleanSheets > 0 && (
+                            <span className="text-blue-300">
+                              {stats.cleanSheets}零封
+                            </span>
+                          )}
+                          {player.position === 'GK' && stats.saves > 0 && (
+                            <span className="text-amber-300">
+                              {stats.saves}扑
+                            </span>
+                          )}
+                          {player.position === 'DF' && stats.keyBlocks > 0 && (
+                            <span className="text-blue-400">
+                              {stats.keyBlocks}封堵
+                            </span>
+                          )}
+                          {(player.position === 'MF' || player.position === 'FW') && stats.keyPasses > stats.assists && (
+                            <span className="text-emerald-300 hidden sm:inline">
+                              {stats.keyPasses}关键传
                             </span>
                           )}
                           {stats.yellowCards > 0 && (

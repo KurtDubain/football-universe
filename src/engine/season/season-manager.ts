@@ -16,9 +16,14 @@ import { initLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { initSuperCup, getSuperCupGroupFixtures } from '../cups/super-cup';
 import { initContinentalCup } from '../cups/continental-cup';
 import { generateAllSquads } from '../players/generator';
-import { createInitialPlayerStats, updatePlayerStatsFromResults } from '../players/stats';
+import {
+  createInitialPlayerStatSegments,
+  createInitialPlayerStats,
+  updatePlayerStatSegmentsFromResults,
+  updatePlayerStatsFromResults,
+} from '../players/stats';
 import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
-import { getTeamIdsByLeague, getAllTeamIds } from './helpers';
+import { getTeamIdsByLeague, getAllTeamIds, createNewsId } from './helpers';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
 import { leagueConfigs, superCupConfig } from '../../config/competitions';
@@ -101,6 +106,13 @@ export interface GameWorld {
   coachChangesThisSeason: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];
   squads: Record<string, Player[]>;
   playerStats: Record<string, PlayerSeasonStats>;
+  /**
+   * Current-season player contribution split by `(playerId, teamId)`.
+   * `playerStats` remains the player-wide season total and follows the
+   * player's current club for existing consumers; this segmented record keeps
+   * old-club contribution intact after transfers.
+   */
+  playerStatSegments?: Record<string, import('../../types/player').PlayerTeamSeasonStats>;
   /**
    * Monotonic counter for assigning new Player.uuid values. Persisted on the
    * world so future generator calls (e.g. youth promotions) can keep handing
@@ -267,14 +279,24 @@ function snapshotPlayerStatsHistory(
   for (const [uuid, stat] of Object.entries(world.playerStats)) {
     // Skip "didn't play" rows — keeps history clean.
     if (stat.appearances === 0) continue;
-    // Find current Player object for position
-    const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === uuid);
+    // Find current Player object for frozen display identity. Prefer the
+    // stat's team, then fall back to a full squad scan in case a save has
+    // stale stat.teamId drift.
+    const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === uuid)
+      ?? Object.values(world.squads).flatMap(sq => sq).find(p => p.uuid === uuid);
     if (!player) continue;
     const ctx = teamCtx[stat.teamId] ?? { gc: 0, matches: 0 };
+    const team = world.teamBases[stat.teamId];
     const entry: import('../../types/player').PlayerSeasonStatsHistoryEntry = {
       season: seasonJustFinished,
       teamId: stat.teamId,
+      teamName: team?.name ?? stat.teamId,
+      teamShortName: team?.shortName,
+      playerName: player.name ?? `${player.number}号`,
+      playerNumber: player.number,
       position: player.position,
+      rating: player.rating,
+      age: player.age,
       goals: stat.goals,
       assists: stat.assists,
       appearances: stat.appearances,
@@ -361,6 +383,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   // 8. Generate squads (permanent, once)
   const { squads, nextPlayerUuidCounter } = generateAllSquads(finalTeams, seed + 7777);
   const playerStats = createInitialPlayerStats(squads);
+  const playerStatSegments = createInitialPlayerStatSegments(squads);
 
   // Build an initial world (partial) so initializeNewSeason can fill it out
   const world: GameWorld = {
@@ -384,6 +407,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     coachChangesThisSeason: [],
     squads,
     playerStats,
+    playerStatSegments,
     nextPlayerUuidCounter,
     retirementHistory: [],
     freeAgentPool: [],
@@ -697,6 +721,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     continentalCups,
     coachChangesThisSeason: [],
     playerStats: createInitialPlayerStats(world.squads),
+    playerStatSegments: createInitialPlayerStatSegments(world.squads),
     playerStatsHistory,
     newsLog: [...(world.newsLog ?? []), ...drawNews, ...buffNews],
     rngState,
@@ -848,7 +873,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     };
     if (totalPending > 0) {
       preNews.push({
-        id: `auto-window-s${tw.season}-${Date.now()}`,
+        id: createNewsId(tw.season, world.seasonState.currentWindowIndex, 'auto-window'),
         seasonNumber: world.seasonState.seasonNumber,
         windowIndex: world.seasonState.currentWindowIndex,
         type: 'rumor',
@@ -955,6 +980,9 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   const updatedPlayerStats = windowResult.results.length > 0
     ? updatePlayerStatsFromResults(world.playerStats, windowResult.results, world.squads, totalElapsedWindowsAfter)
     : world.playerStats;
+  const updatedPlayerStatSegments = windowResult.results.length > 0
+    ? updatePlayerStatSegmentsFromResults(world.playerStatSegments ?? {}, windowResult.results, world.squads, totalElapsedWindowsAfter)
+    : world.playerStatSegments;
 
   // Phase G — injury rolls + suspension folding. Mutates `world.squads`
   // (in place — we are crossing the immutability fence intentionally here:
@@ -1013,6 +1041,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     coachCareers: postMatch.coachCareers,
     coachChangesThisSeason: postMatch.coachChanges,
     playerStats: updatedPlayerStats,
+    playerStatSegments: updatedPlayerStatSegments,
     activeEvents: postMatch.activeEvents,
     newsLog: [...world.newsLog, ...windowResult.news, ...postMatch.news, ...injuryResult.news],
     memorableMatches: appendMemorableMatches(world.memorableMatches, postMatch.memorableMatches),
