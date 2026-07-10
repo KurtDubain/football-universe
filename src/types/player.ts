@@ -163,10 +163,9 @@ export type PlayerTeamSeasonStats = PlayerSeasonStats;
  * season-end before the current-season `playerStats` is reset. Kept FIFO
  * at most 15 entries per player (older seasons drop off).
  *
- * Adds `season` + team-context (`teamGoalsConceded`, `teamMatches`) so
- * UI can compute per-season position-aware metrics (DF/GK use team's
- * goals-conceded rate as a proxy for defensive performance — we don't
- * track saves/tackles per player).
+ * Adds `season` + frozen team context so UI can compute per-season
+ * position-aware metrics and show the team environment as it was then,
+ * not as the live team looks today.
  */
 export interface PlayerSeasonStatsHistoryEntry {
   season: number;
@@ -188,6 +187,12 @@ export interface PlayerSeasonStatsHistoryEntry {
   teamGoalsConceded: number;
   /** Total league matches the team played that season. */
   teamMatches: number;
+  /** Frozen league context for the player's team that season. */
+  teamLeagueLevel?: 1 | 2 | 3;
+  teamLeaguePosition?: number;
+  teamGoalsFor?: number;
+  teamGoalsAgainst?: number;
+  teamPoints?: number;
   /** v21 — individual clean sheets. May be 0 for older seasons. */
   cleanSheets?: number;
   /** v22 — see PlayerSeasonStats. Optional for older history entries. */

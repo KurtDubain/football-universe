@@ -266,12 +266,32 @@ function snapshotPlayerStatsHistory(
   // Build per-team aggregates from standings (whichever league each team
   // played in). We approximate by checking the standings rows where
   // `played > 0` — that's the team's just-played league.
-  const teamCtx: Record<string, { gc: number; matches: number }> = {};
-  const allStandings = [world.league1Standings, world.league2Standings, world.league3Standings];
-  for (const arr of allStandings) {
-    for (const s of arr ?? []) {
+  const teamCtx: Record<string, {
+    gc: number;
+    matches: number;
+    leagueLevel?: 1 | 2 | 3;
+    leaguePosition?: number;
+    goalsFor?: number;
+    goalsAgainst?: number;
+    points?: number;
+  }> = {};
+  const allStandings = [
+    { level: 1 as const, rows: world.league1Standings },
+    { level: 2 as const, rows: world.league2Standings },
+    { level: 3 as const, rows: world.league3Standings },
+  ];
+  for (const { level, rows } of allStandings) {
+    for (const [idx, s] of (rows ?? []).entries()) {
       if (s.played > 0) {
-        teamCtx[s.teamId] = { gc: s.goalsAgainst, matches: s.played };
+        teamCtx[s.teamId] = {
+          gc: s.goalsAgainst,
+          matches: s.played,
+          leagueLevel: level,
+          leaguePosition: idx + 1,
+          goalsFor: s.goalsFor,
+          goalsAgainst: s.goalsAgainst,
+          points: s.points,
+        };
       }
     }
   }
@@ -309,6 +329,11 @@ function snapshotPlayerStatsHistory(
       redCards: stat.redCards,
       teamGoalsConceded: ctx.gc,
       teamMatches: ctx.matches,
+      teamLeagueLevel: ctx.leagueLevel,
+      teamLeaguePosition: ctx.leaguePosition,
+      teamGoalsFor: ctx.goalsFor,
+      teamGoalsAgainst: ctx.goalsAgainst,
+      teamPoints: ctx.points,
       cleanSheets: stat.cleanSheets,
       saves: stat.saves,
       keyBlocks: stat.keyBlocks,

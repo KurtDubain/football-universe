@@ -12,6 +12,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-10: Expanded Player Center with creator, defender, and goalkeeper rankings backed by shared selectors. Added Node `>=22` guard via `package.json` and `.nvmrc`, and updated README React/version roadmap drift. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
 - 2026-07-10: Introduced current-season club-specific player stat segments keyed by `(playerId, teamId)`, with v23 save migration from legacy totals. `playerStats` remains the player-wide season total that follows the player after transfer; team pages, league top-scorer rows, dashboard fixture cards, and Player Detail contribution/split views now read club contribution where appropriate. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
 - 2026-07-11: Unified stat semantics for `goal`, `assist`, `own_goal`, and shootout-only `penalty_goal`; MotM, player highlights, post-match stories, player stats, and validation now share the same rule. Added event semantic validation for non-fixture teams, shootout events inside match time, regular events after 120', and GK/DF position mismatches. Career totals for retired players now derive from finished-season history plus the current retiring season, and just-retired players are snapshotted into season history even after leaving squads. Added a multi-season validation smoke test. Verified with TypeScript, full Vitest suite, and production build under Node 24.
+- 2026-07-11: Expanded frozen player-season history with league level, final rank, goals for/against, and points; Player Detail now displays that historical team context. Player Center now includes career scorer/assist tabs backed by shared selectors that resolve active, retired, and history-only identities. `validateWorldData` now warns on event-player team mismatches and injury-history unavailable players appearing in match events. Verified with TypeScript, targeted selector/validation/season tests, full Vitest suite, and production build under Node 24.
 
 ## Current Main Concerns
 
@@ -43,8 +44,10 @@ This document tracks the data-chain issues found during the initial project revi
 - [ ] Audit generation of `goals`, `assists`, `appearances`, `cleanSheets`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses`.
 - [x] Verify every completed match can explain its scoreline through match events plus explicit own-goal/penalty semantics.
 - [ ] Verify goals and assists are never assigned to players who did not appear.
-- [ ] Verify event players are valid active players at the time of the match.
-- [ ] Verify injured, suspended, or otherwise unavailable players are not selected into match events.
+- [x] Verify event players resolve to known players and a plausible fixture-side team association.
+- [ ] Verify event players are valid active players at the exact match window after mid-season transfers.
+- [x] Verify injured players with active injury history are not silently accepted into match events.
+- [ ] Verify suspended or otherwise unavailable players are not selected into match events.
 - [x] Verify goalkeeper and defender clean sheets never exceed appearances.
 - [x] Verify defensive and goalkeeper events are only assigned to plausible positions unless deliberately allowed.
 - [x] Verify `penalty_goal`, regular `goal`, extra-time goal, and shootout penalty handling is consistent.
@@ -54,7 +57,7 @@ This document tracks the data-chain issues found during the initial project revi
 ## 3. Cross-Page Consistency
 
 - [x] Centralize stat display selectors for Player Center, Team Detail, Player Detail, Advanced Search, and Season Review.
-- [ ] Make Player Center resolve players from active squads, retired history, and frozen historical snapshots.
+- [x] Make Player Center resolve players from active squads, retired history, and frozen historical snapshots.
 - [x] Avoid rendering `-` for historical or transferred players when a frozen player name is available.
 - [x] Ensure Team Detail does not accidentally attribute all transferred-player season totals to the current club.
 - [x] Ensure Advanced Search uses the same player-stat selector as Player Center.
@@ -67,9 +70,9 @@ This document tracks the data-chain issues found during the initial project revi
 
 - [x] Freeze player stats before `initializeNewSeason` resets current-season stats.
 - [x] Store enough frozen player identity data: name, age, position, rating, teamId, teamName, and season.
-- [ ] Store enough team context data for historical display: team name, league, final rank, goals for/against.
+- [x] Store enough team context data for historical display: team name, league, final rank, goals for/against.
 - [x] Store enough basic team context data for historical display: team name and goals conceded/matches.
-- [ ] Store full historical team context data: league, final rank, goals for/against.
+- [x] Store full historical team context data: league, final rank, goals for/against.
 - [x] Make Season Review read the frozen just-finished-season snapshot.
 - [x] Make retired-player career totals read from `playerStatsHistory + current season`, not only current season.
 - [x] Ensure transfer-window records use the season of the window, not accidentally the newly initialized season.
@@ -127,7 +130,9 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Audit team mismatch: active squad team and stat team disagree.
 - [x] Audit invalid match events: unknown player and unknown team.
 - [x] Audit invalid match events: impossible position.
-- [ ] Audit invalid match events: unavailable player at match time.
+- [x] Audit invalid match events: implausible player/team association.
+- [x] Audit invalid match events: injured player unavailable at match time.
+- [ ] Audit invalid match events: suspended/non-injury unavailable player at match time.
 - [x] Audit score mismatch: match result does not match countable goal events plus explicit exceptions.
 - [ ] Audit transfer mismatch: transfer history, squad movement, and finance/news do not agree.
 - [x] Add tests for regular goal, assist, own goal, penalty goal, shootout penalty, and extra-time goal.

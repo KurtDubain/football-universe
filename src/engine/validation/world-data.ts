@@ -1,6 +1,7 @@
 import type { GameWorld } from '../season/season-manager';
 import type { Player } from '../../types/player';
 import type { MatchEvent, MatchResult } from '../../types/match';
+import { playerTeamStatKey } from '../players/stats';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -58,6 +59,42 @@ function isKnownHistoricalPlayer(world: GameWorld, playerId: string): boolean {
   return (world.retirementHistory ?? []).some((p) => p.uuid === playerId);
 }
 
+function isKnownPlayer(
+  world: GameWorld,
+  playerId: string,
+  activePlayers: Map<string, Player>,
+): boolean {
+  return activePlayers.has(playerId)
+    || Boolean(world.playerStats[playerId])
+    || isKnownHistoricalPlayer(world, playerId);
+}
+
+function playerHasKnownTeamAssociation(
+  world: GameWorld,
+  playerId: string,
+  teamId: string,
+  activePlayerTeams: Map<string, string>,
+): boolean {
+  if (activePlayerTeams.get(playerId) === teamId) return true;
+  if (world.playerStats[playerId]?.teamId === teamId) return true;
+  if (world.playerStatSegments?.[playerTeamStatKey(playerId, teamId)]) return true;
+  if ((world.playerStatsHistory?.[playerId] ?? []).some((entry) => entry.teamId === teamId)) return true;
+  return (world.retirementHistory ?? []).some((player) => player.uuid === playerId && player.teamId === teamId);
+}
+
+function getOpposingTeamId(result: MatchResult, teamId: string): string | undefined {
+  if (teamId === result.homeTeamId) return result.awayTeamId;
+  if (teamId === result.awayTeamId) return result.homeTeamId;
+  return undefined;
+}
+
+function isPlayerInjuredAtWindow(player: Player, globalWindowIdx: number): boolean {
+  return (player.injuryHistory ?? []).some((injury) =>
+    globalWindowIdx > injury.startWindow
+    && globalWindowIdx <= injury.startWindow + injury.durationMatches
+  );
+}
+
 function countScorelineEvents(result: MatchResult): { home: number; away: number } {
   let home = 0;
   let away = 0;
@@ -74,12 +111,16 @@ function countScorelineEvents(result: MatchResult): { home: number; away: number
 }
 
 function validateEventSemantics(
+  world: GameWorld,
   result: MatchResult,
   event: MatchEvent,
   activePlayers: Map<string, Player>,
+  activePlayerTeams: Map<string, string>,
   issues: WorldDataIssue[],
+  resultGlobalWindowIdx?: number,
 ): void {
-  if (event.teamId !== result.homeTeamId && event.teamId !== result.awayTeamId) {
+  const eventTeamInFixture = event.teamId === result.homeTeamId || event.teamId === result.awayTeamId;
+  if (!eventTeamInFixture) {
     pushIssue(issues, {
       severity: 'error',
       code: 'event_team_not_in_fixture',
@@ -87,6 +128,62 @@ function validateEventSemantics(
       teamId: event.teamId,
       fixtureId: result.fixtureId,
     });
+  }
+
+  if (
+    event.playerId
+    && event.type !== 'own_goal'
+    && eventTeamInFixture
+    && isKnownPlayer(world, event.playerId, activePlayers)
+    && !playerHasKnownTeamAssociation(world, event.playerId, event.teamId, activePlayerTeams)
+  ) {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'event_player_team_mismatch',
+      message: `Match event player ${event.playerId} is not associated with event team ${event.teamId}.`,
+      teamId: event.teamId,
+      playerId: event.playerId,
+      fixtureId: result.fixtureId,
+    });
+  }
+
+  const attackingTeamId = event.type === 'gk_save' || event.type === 'df_block'
+    ? getOpposingTeamId(result, event.teamId)
+    : undefined;
+  const deniedPlayerIds = [event.deniedScorerId, event.deniedAssisterId].filter(Boolean) as string[];
+  if (attackingTeamId) {
+    for (const playerId of deniedPlayerIds) {
+      if (!isKnownPlayer(world, playerId, activePlayers)) continue;
+      if (playerHasKnownTeamAssociation(world, playerId, attackingTeamId, activePlayerTeams)) continue;
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'event_denied_player_team_mismatch',
+        message: `Denied attacking player ${playerId} is not associated with attacking team ${attackingTeamId}.`,
+        teamId: attackingTeamId,
+        playerId,
+        fixtureId: result.fixtureId,
+      });
+    }
+  }
+
+  if (resultGlobalWindowIdx !== undefined) {
+    const unavailableChecks = [
+      { playerId: event.playerId, code: 'event_player_unavailable' },
+      ...deniedPlayerIds.map((playerId) => ({ playerId, code: 'event_denied_player_unavailable' })),
+    ] as const;
+    for (const check of unavailableChecks) {
+      if (!check.playerId) continue;
+      const checkPlayer = activePlayers.get(check.playerId);
+      if (!checkPlayer || !isPlayerInjuredAtWindow(checkPlayer, resultGlobalWindowIdx)) continue;
+      pushIssue(issues, {
+        severity: 'warning',
+        code: check.code,
+        message: `Match event references player ${check.playerId} while injury history says they were unavailable at global window ${resultGlobalWindowIdx}.`,
+        teamId: event.teamId,
+        playerId: check.playerId,
+        fixtureId: result.fixtureId,
+      });
+    }
   }
 
   if ((event.type === 'goal' || event.type === 'assist' || event.type === 'own_goal') && event.minute > 120) {
@@ -141,7 +238,9 @@ function validateResult(
   world: GameWorld,
   result: MatchResult,
   activePlayers: Map<string, Player>,
+  activePlayerTeams: Map<string, string>,
   issues: WorldDataIssue[],
+  resultGlobalWindowIdx?: number,
 ): void {
   if (!world.teamBases[result.homeTeamId]) {
     pushIssue(issues, {
@@ -185,7 +284,15 @@ function validateResult(
       });
     }
 
-    validateEventSemantics(result, event, activePlayers, issues);
+    validateEventSemantics(
+      world,
+      result,
+      event,
+      activePlayers,
+      activePlayerTeams,
+      issues,
+      resultGlobalWindowIdx,
+    );
 
     const eventPlayerIds = [
       ['event_unknown_player', event.playerId],
@@ -215,6 +322,14 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
   const teamStateIds = new Set(Object.keys(world.teamStates ?? {}));
   const squadTeamIds = new Set(Object.keys(world.squads ?? {}));
   const { activePlayers, activePlayerTeams, duplicatePlayerIds } = indexActivePlayers(world.squads);
+  const completedResultWindowCount = (world.seasonState?.calendar ?? [])
+    .filter((window) => (window.results?.length ?? 0) > 0)
+    .length;
+  const currentSeasonStartGlobalIdx = Math.max(
+    0,
+    (world.totalElapsedWindows ?? completedResultWindowCount) - completedResultWindowCount,
+  );
+  let completedResultWindowOrdinal = 0;
 
   for (const teamId of teamBaseIds) {
     if (!teamStateIds.has(teamId)) {
@@ -426,9 +541,14 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
         });
       }
     }
+    const hasResults = (window.results?.length ?? 0) > 0;
+    const resultGlobalWindowIdx = hasResults
+      ? currentSeasonStartGlobalIdx + completedResultWindowOrdinal + 1
+      : undefined;
     for (const result of window.results ?? []) {
-      validateResult(world, result, activePlayers, issues);
+      validateResult(world, result, activePlayers, activePlayerTeams, issues, resultGlobalWindowIdx);
     }
+    if (hasResults) completedResultWindowOrdinal++;
   }
 
   const errors = issues.filter((issue) => issue.severity === 'error');

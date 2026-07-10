@@ -207,6 +207,13 @@ describe('validateWorldData', () => {
           description: 'Forward somehow makes a defender block.',
         },
         {
+          minute: 55,
+          type: 'assist',
+          teamId: homeTeamId,
+          playerId: awayForward.uuid,
+          description: 'Away player incorrectly credited to the home team.',
+        },
+        {
           minute: 60,
           type: 'miss',
           teamId: unrelatedTeamId,
@@ -249,5 +256,80 @@ describe('validateWorldData', () => {
     expect(codes).toContain('invalid_goalkeeper_event_position');
     expect(codes).toContain('invalid_defender_event_position');
     expect(codes).toContain('event_team_not_in_fixture');
+    expect(codes).toContain('event_player_team_mismatch');
+  });
+
+  it('reports match events for players injured before the match window', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const homeForward = world.squads[homeTeamId].find((p) => p.position === 'FW') ?? world.squads[homeTeamId][0];
+    const injuredForward = {
+      ...homeForward,
+      injuredUntilWindow: 4,
+      injuryHistory: [
+        {
+          type: 'major' as const,
+          startSeason: 1,
+          startWindow: 0,
+          durationMatches: 3,
+          reason: '膝伤',
+        },
+      ],
+    };
+    const result: MatchResult = {
+      fixtureId: 'unavailable-player-fixture',
+      homeTeamId,
+      awayTeamId,
+      homeGoals: 1,
+      awayGoals: 0,
+      extraTime: false,
+      penalties: false,
+      events: [
+        {
+          minute: 31,
+          type: 'goal',
+          teamId: homeTeamId,
+          playerId: homeForward.uuid,
+          description: 'Injured player is incorrectly credited with a goal.',
+        },
+      ],
+      stats: {
+        possession: [50, 50],
+        shots: [1, 1],
+        shotsOnTarget: [1, 1],
+        corners: [0, 0],
+        fouls: [0, 0],
+        yellowCards: [0, 0],
+        redCards: [0, 0],
+      },
+      competitionType: 'league',
+      competitionName: 'Audit League',
+      roundLabel: 'R1',
+    };
+
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      squads: {
+        ...world.squads,
+        [homeTeamId]: world.squads[homeTeamId].map((player) =>
+          player.uuid === homeForward.uuid ? injuredForward : player,
+        ),
+      },
+      seasonState: {
+        ...world.seasonState,
+        calendar: [
+          {
+            ...world.seasonState.calendar[0],
+            completed: true,
+            results: [result],
+          },
+          ...world.seasonState.calendar.slice(1),
+        ],
+      },
+    });
+
+    expect(validation.errors).toHaveLength(0);
+    expect(issueCodes(validation)).toContain('event_player_unavailable');
   });
 });

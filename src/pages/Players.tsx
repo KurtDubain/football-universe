@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import {
+  getCareerTopAssistRows,
+  getCareerTopScorerRows,
   getCurrentCreatorRows,
   getCurrentDefenderRows,
   getCurrentDisciplineRows,
@@ -12,7 +14,7 @@ import {
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
 
-type Tab = 'scorers' | 'assists' | 'creation' | 'defense' | 'keepers' | 'discipline';
+type Tab = 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
 
 const positionLabel: Record<PlayerPosition, string> = {
   GK: '门将',
@@ -47,6 +49,14 @@ export default function Players() {
     () => (world ? getCurrentTopAssistRows(world, 20) : []),
     [world],
   );
+  const careerScorers = useMemo(
+    () => (world ? getCareerTopScorerRows(world, 20) : []),
+    [world],
+  );
+  const careerAssists = useMemo(
+    () => (world ? getCareerTopAssistRows(world, 20) : []),
+    [world],
+  );
   const topDiscipline = useMemo(() => {
     return world ? getCurrentDisciplineRows(world, 20) : [];
   }, [world]);
@@ -72,6 +82,8 @@ export default function Players() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'scorers', label: '射手榜' },
     { key: 'assists', label: '助攻榜' },
+    { key: 'careerScorers', label: '生涯射手' },
+    { key: 'careerAssists', label: '生涯助攻' },
     { key: 'creation', label: '创造力' },
     { key: 'defense', label: '防守榜' },
     { key: 'keepers', label: '门将榜' },
@@ -89,6 +101,11 @@ export default function Players() {
     const playerNumber = identity.playerNumber;
     const playerName = identity.playerName;
     const position = identity.position;
+    const sourceLabel =
+      identity.source === 'retired' ? '退役'
+      : identity.source === 'history' ? '历史'
+      : identity.source === 'stat' ? '档案'
+      : null;
 
     return (
       <tr
@@ -112,12 +129,19 @@ export default function Players() {
         {/* Name */}
         <td className="px-2 py-2">
           {playerName ? (
-            <Link
-              to={`/player/${stat.playerId}`}
-              className="text-sm text-slate-200 hover:text-blue-300 truncate block max-w-[100px] sm:max-w-none"
-            >
-              {playerName}
-            </Link>
+            <>
+              <Link
+                to={`/player/${stat.playerId}`}
+                className="text-sm text-slate-200 hover:text-blue-300 truncate block max-w-[100px] sm:max-w-none"
+              >
+                {playerName}
+              </Link>
+              {sourceLabel && (
+                <span className="mt-0.5 inline-block text-[9px] px-1 py-0.5 rounded bg-slate-700/60 text-slate-500">
+                  {sourceLabel}
+                </span>
+              )}
+            </>
           ) : (
             <span className="text-sm text-slate-500">-</span>
           )}
@@ -203,6 +227,20 @@ export default function Players() {
               {stat.goals + stat.assists}
             </td>
           </>
+        ) : mode === 'careerScorers' || mode === 'careerAssists' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-sm text-slate-100 font-bold">
+                {mode === 'careerScorers' ? stat.goals : stat.assists}
+              </span>
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400">
+              {mode === 'careerScorers' ? stat.assists : stat.goals}
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+              {stat.appearances}
+            </td>
+          </>
         ) : (
           <>
             <td className="px-2 py-2 text-center">
@@ -227,13 +265,17 @@ export default function Players() {
       ? topScorers
       : tab === 'assists'
         ? topAssists
-        : tab === 'creation'
-          ? topCreators
-          : tab === 'defense'
-            ? topDefenders
-            : tab === 'keepers'
-              ? topKeepers
-              : topDiscipline;
+        : tab === 'careerScorers'
+          ? careerScorers
+          : tab === 'careerAssists'
+            ? careerAssists
+            : tab === 'creation'
+              ? topCreators
+              : tab === 'defense'
+                ? topDefenders
+                : tab === 'keepers'
+                  ? topKeepers
+                  : topDiscipline;
 
   return (
     <div className="max-w-4xl space-y-4">
@@ -243,7 +285,9 @@ export default function Players() {
           球员中心
         </h2>
         <span className="text-xs text-slate-500">
-          第 {seasonNumber} 赛季
+          {tab === 'careerScorers' || tab === 'careerAssists'
+            ? '生涯总计'
+            : `第 ${seasonNumber} 赛季 · 当前赛季总计`}
         </span>
       </div>
 
@@ -309,6 +353,18 @@ export default function Players() {
                       传射
                     </th>
                   </>
+                ) : tab === 'careerScorers' || tab === 'careerAssists' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center">
+                      {tab === 'careerScorers' ? '生涯进球' : '生涯助攻'}
+                    </th>
+                    <th className="px-2 py-2.5 text-center">
+                      {tab === 'careerScorers' ? '生涯助攻' : '生涯进球'}
+                    </th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                      生涯出场
+                    </th>
+                  </>
                 ) : (
                   <>
                     <th className="px-2 py-2.5 text-center">
@@ -331,7 +387,9 @@ export default function Players() {
                     colSpan={8}
                     className="py-10 text-center text-sm text-slate-500"
                   >
-                    暂无数据
+                    {tab === 'careerScorers' || tab === 'careerAssists'
+                      ? '暂无生涯数据'
+                      : '本赛季暂无数据'}
                   </td>
                 </tr>
               ) : (

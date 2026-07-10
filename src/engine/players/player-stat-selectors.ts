@@ -7,6 +7,7 @@ import type {
   PlayerSeasonStatsHistoryEntry,
 } from '../../types/player';
 import { emptyPlayerStat, playerTeamStatKey } from './stats';
+import { computePlayerCareerTotals } from './career-totals';
 
 export type PlayerIdentitySource = 'active' | 'retired' | 'history' | 'stat';
 
@@ -246,6 +247,64 @@ export function getSeasonPlayerStatRows(world: GameWorld, seasonNumber: number):
   return [];
 }
 
+function latestHistoryEntry(
+  entries: PlayerSeasonStatsHistoryEntry[] | undefined,
+): PlayerSeasonStatsHistoryEntry | undefined {
+  return [...(entries ?? [])].sort((a, b) => b.season - a.season)[0];
+}
+
+export function getCareerPlayerStatRows(world: GameWorld): PlayerStatRow[] {
+  const activePlayers = indexActivePlayers(world.squads);
+  const retiredPlayers = indexRetiredPlayers(world.retirementHistory);
+  const playerIds = new Set<string>();
+
+  for (const playerId of Object.keys(world.playerStats ?? {})) playerIds.add(playerId);
+  for (const playerId of Object.keys(world.playerStatsHistory ?? {})) playerIds.add(playerId);
+  for (const retired of world.retirementHistory ?? []) playerIds.add(retired.uuid);
+  for (const { player } of activePlayers.values()) playerIds.add(player.uuid);
+
+  const rows: PlayerStatRow[] = [];
+  for (const playerId of playerIds) {
+    const totals = computePlayerCareerTotals(world, playerId);
+    if (
+      totals.appearances === 0
+      && totals.goals === 0
+      && totals.assists === 0
+      && totals.cleanSheets === 0
+      && totals.saves === 0
+      && totals.keyBlocks === 0
+    ) {
+      continue;
+    }
+    const history = latestHistoryEntry(world.playerStatsHistory?.[playerId]);
+    const active = activePlayers.get(playerId);
+    const historyForIdentity = active ? undefined : history;
+    const teamId = world.playerStats?.[playerId]?.teamId
+      ?? active?.teamId
+      ?? history?.teamId
+      ?? retiredPlayers.get(playerId)?.teamId
+      ?? activePlayers.get(playerId)?.teamId
+      ?? 'unknown';
+    const stat: PlayerSeasonStats = {
+      playerId,
+      teamId,
+      goals: totals.goals,
+      assists: totals.assists,
+      yellowCards: totals.yellowCards,
+      redCards: totals.redCards,
+      appearances: totals.appearances,
+      cleanSheets: totals.cleanSheets,
+      saves: totals.saves,
+      keyBlocks: totals.keyBlocks,
+      bigChances: totals.bigChances,
+      keyPasses: totals.keyPasses,
+    };
+    rows.push(rowFromStat(world, stat, activePlayers, retiredPlayers, historyForIdentity));
+  }
+
+  return rows;
+}
+
 export function sortRowsByGoals(rows: PlayerStatRow[]): PlayerStatRow[] {
   return [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.appearances - a.appearances);
 }
@@ -340,4 +399,12 @@ export function getSeasonTopScorerRows(world: GameWorld, seasonNumber: number, l
 
 export function getSeasonTopAssistRows(world: GameWorld, seasonNumber: number, limit = 20): PlayerStatRow[] {
   return sortRowsByAssists(getSeasonPlayerStatRows(world, seasonNumber).filter((row) => row.assists > 0)).slice(0, limit);
+}
+
+export function getCareerTopScorerRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+  return sortRowsByGoals(getCareerPlayerStatRows(world).filter((row) => row.goals > 0)).slice(0, limit);
+}
+
+export function getCareerTopAssistRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+  return sortRowsByAssists(getCareerPlayerStatRows(world).filter((row) => row.assists > 0)).slice(0, limit);
 }

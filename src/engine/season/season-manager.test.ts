@@ -125,6 +125,11 @@ describe('initializeGameWorld', () => {
     expect(history?.playerNumber).toBe(player.number);
     expect(history?.teamName).toBe(world.teamBases[teamId].name);
     expect(history?.teamShortName).toBe(world.teamBases[teamId].shortName);
+    expect(history?.teamLeagueLevel).toBe(1);
+    expect(history?.teamLeaguePosition).toBeGreaterThan(0);
+    expect(history?.teamGoalsFor).toBe(58);
+    expect(history?.teamGoalsAgainst).toBe(24);
+    expect(history?.teamPoints).toBe(60);
     expect(history?.rating).toBe(player.rating);
     expect(history?.age).toBe(player.age);
     expect(history?.goals).toBe(16);

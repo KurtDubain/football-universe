@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { initializeGameWorld } from '../season/season-manager';
 import {
+  getCareerPlayerStatRows,
+  getCareerTopAssistRows,
+  getCareerTopScorerRows,
   getCurrentPlayerClubStatRows,
   getCurrentCreatorRows,
   getCurrentDefenderRows,
@@ -110,6 +113,126 @@ describe('player stat selectors', () => {
     expect(top.identity.playerName).toBe('冻结射手');
     expect(top.identity.playerNumber).toBe(99);
     expect(top.identity.teamName).toBe('冻结球队');
+  });
+
+  it('builds career rows from retired and frozen historical identities', () => {
+    const world = initializeGameWorld(2024);
+    const [[teamId, squad], [secondTeamId]] = Object.entries(world.squads);
+    const activePlayer = squad[0];
+    const retiredHistory: PlayerSeasonStatsHistoryEntry = {
+      season: 1,
+      teamId: secondTeamId,
+      teamName: '退役旧队',
+      teamShortName: '退',
+      playerName: '退役射手',
+      playerNumber: 9,
+      position: 'FW',
+      rating: 91,
+      age: 35,
+      goals: 999,
+      assists: 7,
+      appearances: 34,
+      yellowCards: 1,
+      redCards: 0,
+      teamGoalsConceded: 28,
+      teamMatches: 30,
+      bigChances: 1003,
+      keyPasses: 9,
+    };
+    const historyOnly: PlayerSeasonStatsHistoryEntry = {
+      season: 1,
+      teamId: secondTeamId,
+      teamName: '历史旧队',
+      teamShortName: '历',
+      playerName: '历史组织者',
+      playerNumber: 10,
+      position: 'MF',
+      rating: 88,
+      age: 29,
+      goals: 800,
+      assists: 1000,
+      appearances: 33,
+      yellowCards: 0,
+      redCards: 0,
+      teamGoalsConceded: 30,
+      teamMatches: 30,
+      bigChances: 805,
+      keyPasses: 1005,
+    };
+    const activeHistoricalIdentity: PlayerSeasonStatsHistoryEntry = {
+      season: 1,
+      teamId: secondTeamId,
+      teamName: '上一季旧队',
+      teamShortName: '旧',
+      playerName: '上一季旧名',
+      playerNumber: 77,
+      position: activePlayer.position,
+      rating: activePlayer.rating,
+      age: activePlayer.age - 1,
+      goals: 3,
+      assists: 2,
+      appearances: 11,
+      yellowCards: 0,
+      redCards: 0,
+      teamGoalsConceded: 30,
+      teamMatches: 30,
+      bigChances: 4,
+      keyPasses: 3,
+    };
+    const patchedWorld = {
+      ...world,
+      playerStats: {
+        ...world.playerStats,
+        [activePlayer.uuid]: {
+          ...world.playerStats[activePlayer.uuid],
+          goals: 5,
+          assists: 1,
+          appearances: 12,
+          bigChances: 5,
+          keyPasses: 1,
+        },
+      },
+      playerStatsHistory: {
+        ...world.playerStatsHistory,
+        [activePlayer.uuid]: [activeHistoricalIdentity],
+        'retired-career-player': [retiredHistory],
+        'history-only-career-player': [historyOnly],
+      },
+      retirementHistory: [
+        ...(world.retirementHistory ?? []),
+        {
+          uuid: 'retired-career-player',
+          name: '退役档案名',
+          teamId: secondTeamId,
+          teamName: '退役档案队',
+          position: 'FW' as const,
+          peakRating: 90,
+          age: 36,
+          seasonRetired: 2,
+          careerGoals: 999,
+        },
+      ],
+    };
+
+    const activeCareerRow = getCareerPlayerStatRows(patchedWorld)
+      .find((row) => row.playerId === activePlayer.uuid);
+    expect(activeCareerRow?.identity.source).toBe('active');
+    expect(activeCareerRow?.identity.playerName).toBe(activePlayer.name);
+    expect(activeCareerRow?.identity.teamId).toBe(teamId);
+    expect(activeCareerRow?.identity.teamName).toBe(world.teamBases[teamId].name);
+
+    const scorerRows = getCareerTopScorerRows(patchedWorld, 2);
+    expect(scorerRows[0].playerId).toBe('retired-career-player');
+    expect(scorerRows[0].goals).toBe(999);
+    expect(scorerRows[0].identity.source).toBe('retired');
+    expect(scorerRows[0].identity.playerName).toBe('退役射手');
+    expect(scorerRows[0].identity.teamName).toBe('退役旧队');
+
+    const assistRows = getCareerTopAssistRows(patchedWorld, 1);
+    expect(assistRows[0].playerId).toBe('history-only-career-player');
+    expect(assistRows[0].assists).toBe(1000);
+    expect(assistRows[0].identity.source).toBe('history');
+    expect(assistRows[0].identity.playerName).toBe('历史组织者');
   });
 
   it('ranks defenders, goalkeepers, and creators by position-specific metrics', () => {

@@ -606,26 +606,34 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
             <tr className="text-slate-500 border-b border-slate-700/40">
               <th className="text-left py-1">赛季</th>
               <th className="text-left py-1">球队</th>
+              <th className="text-right py-1">联赛</th>
               <th className="text-right py-1">出场</th>
               <th className="text-right py-1">进球</th>
               <th className="text-right py-1">助攻</th>
               <th className="text-right py-1">黄</th>
-              <th className="text-right py-1">球队失球率</th>
+              <th className="text-right py-1">进/失</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((h) => {
-              const teamName = world.teamBases[h.teamId]?.name ?? h.teamId;
+              const teamName = h.teamShortName ?? world.teamBases[h.teamId]?.shortName ?? h.teamName ?? h.teamId;
               const gcRate = h.teamMatches > 0 ? (h.teamGoalsConceded / h.teamMatches).toFixed(2) : '—';
+              const rank = h.teamLeagueLevel && h.teamLeaguePosition
+                ? `${h.teamLeagueLevel}级#${h.teamLeaguePosition}`
+                : '—';
+              const teamLine = h.teamGoalsFor !== undefined && h.teamGoalsAgainst !== undefined
+                ? `${h.teamGoalsFor}/${h.teamGoalsAgainst} · ${gcRate}`
+                : gcRate;
               return (
                 <tr key={h.season + '-' + h.teamId} className="border-b border-slate-700/20 hover:bg-slate-700/20">
                   <td className="py-1 text-slate-400">S{h.season}</td>
                   <td className="py-1 text-slate-300 truncate max-w-[80px]">{teamName}</td>
+                  <td className="py-1 text-right text-slate-400 tabular-nums">{rank}</td>
                   <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}</td>
                   <td className="py-1 text-right text-amber-300 tabular-nums">{h.goals}</td>
                   <td className="py-1 text-right text-blue-300 tabular-nums">{h.assists}</td>
                   <td className="py-1 text-right text-slate-500 tabular-nums">{h.yellowCards}</td>
-                  <td className="py-1 text-right text-slate-400 tabular-nums">{gcRate}</td>
+                  <td className="py-1 text-right text-slate-400 tabular-nums">{teamLine}</td>
                 </tr>
               );
             })}
