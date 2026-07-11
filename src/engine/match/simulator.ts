@@ -14,7 +14,7 @@ import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents, applyDenyPipeline } from './events';
 import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
-import { pickMatchday } from '../players/injuries';
+import { selectMatchday } from '../players/injuries';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -287,8 +287,10 @@ export function simulateMatch(
 ): SimulationResult {
   const { homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, rng } = ctx;
   const globalWindowIdx = ctx.globalWindowIdx ?? 0;
-  const homeMatchdaySquad = pickMatchday(ctx.homeSquad, globalWindowIdx);
-  const awayMatchdaySquad = pickMatchday(ctx.awaySquad, globalWindowIdx);
+  const homeSelection = selectMatchday(ctx.homeSquad, globalWindowIdx);
+  const awaySelection = selectMatchday(ctx.awaySquad, globalWindowIdx);
+  const homeMatchdaySquad = homeSelection?.players;
+  const awayMatchdaySquad = awaySelection?.players;
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
   const homeBoosts = computePlayerBoosts(homeMatchdaySquad, globalWindowIdx);
@@ -485,6 +487,26 @@ export function simulateMatch(
     competitionType: ctx.competitionType,
     competitionName: fixture.competitionName,
     roundLabel: fixture.roundLabel,
+    ...(homeSelection && {
+      homeMatchday: {
+        players: homeSelection.players.map((player) => ({
+          playerId: player.uuid,
+          position: player.position,
+        })),
+        emergencyFloor: homeSelection.emergencyFloor,
+        availableCount: homeSelection.availableCount,
+      },
+    }),
+    ...(awaySelection && {
+      awayMatchday: {
+        players: awaySelection.players.map((player) => ({
+          playerId: player.uuid,
+          position: player.position,
+        })),
+        emergencyFloor: awaySelection.emergencyFloor,
+        availableCount: awaySelection.availableCount,
+      },
+    }),
     ...(isNeutral && { isNeutralVenue: true }),
   };
 

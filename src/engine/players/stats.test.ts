@@ -69,6 +69,29 @@ function mkLeagueResult(
 }
 
 describe('updatePlayerStatsFromResults — shootout exclusion', () => {
+  it('uses persisted matchday snapshots instead of recomputing from the live squad', () => {
+    const defender = mkPlayer('historical-df', 'A', 'DF');
+    const stats = createInitialPlayerStats({ A: [defender], B: [] });
+    const result: MatchResult = {
+      ...mkLeagueResult('A', 'B', 1, 0, []),
+      homeMatchday: {
+        players: [{ playerId: defender.uuid, position: defender.position }],
+        emergencyFloor: false,
+        availableCount: 14,
+      },
+      awayMatchday: {
+        players: [],
+        emergencyFloor: false,
+        availableCount: 14,
+      },
+    };
+
+    const updated = updatePlayerStatsFromResults(stats, [result], { A: [], B: [] });
+
+    expect(updated[defender.uuid].appearances).toBe(1);
+    expect(updated[defender.uuid].cleanSheets).toBe(1);
+  });
+
   it('counts only regulation goals, not shootout penalty_goal kicks', () => {
     const p = mkPlayer('p-1', 'A');
     const squads = { A: [p], B: [] };

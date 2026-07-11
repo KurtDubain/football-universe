@@ -18,6 +18,9 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-11: Fixed manual transfer-window finance attribution for already-archived transfer seasons: cash still moves immediately, but archived season `transferIncome` / `transferExpense` and `endCash` are updated instead of polluting the new season's running totals. Manual accepted offers, outgoing bids, replacement signings, and free-agent signings now emit deterministic transfer news. `validateWorldData` now audits latest transfer destination, free-agent/retired/active overlap, archived transfer finance coverage, and manual transfer-news links. Verified with TypeScript and targeted transfer/validation/finance tests under Node 24.
 - 2026-07-11: Clarified user-facing stat scopes across Player Center, Player Detail, Team Detail, and Advanced Search. Player totals are labeled as current-season all-competition data, club contribution is labeled separately, and the defender score explicitly mixes individual all-competition stats with league-only team defensive context. Renamed deny-pipeline counters to `神扑`, `关键封堵`, and `威胁传球`, and added explanatory season-start empty states. Verified with TypeScript, 413 Vitest tests, production build, and desktop/mobile browser checks under Node 24.
 - 2026-07-11: Added a shared pure transfer-application pipeline for automatic and manual windows. Automatic poaching, free-agent distribution, contract/wanderer releases, accepted/countered offers, outgoing bids, and manual free-agent signings now share roster mutation, shirt-number allocation, player/team identity updates, current-stat ownership sync, and transfer-record construction. Finance and news remain in their appropriate season-end or interactive orchestration layers. Verified with dedicated pipeline tests, TypeScript, 417 Vitest tests, and production build under Node 24.
+- 2026-07-11: Added persisted suspension intervals and matchday-selection diagnostics. World validation now distinguishes invalid injured/suspended event players from explicit emergency-floor exceptions when fewer than 11 players are available, and validates transferred players against their team at the exact season window. Added a development-only data-health panel to Settings with error/warning counts and expandable issue details. Verified with TypeScript, 421 Vitest tests, production build, and desktop/mobile browser checks under Node 24.
+- 2026-07-11: Persisted exact home/away matchday snapshots on every new match result, including player positions, emergency-floor status, and available-player counts. Appearance, clean-sheet, club-segment, and post-match injury processing now consume the persisted snapshot instead of recomputing from a potentially changed live squad. `validateWorldData` performs strict appearance/clean-sheet audits only when the current season has complete snapshot coverage, preserving compatibility with legacy saves. Verified with TypeScript, 423 Vitest tests including the multi-season smoke test, and production build under Node 24.
+- 2026-07-11: Hardened persisted matchday snapshots with audits for oversized squads, duplicate/unknown players, position drift, emergency-count contradictions, and transfer-window team mismatches. Moved the development data-health panel behind a development-only dynamic import so production neither executes nor bundles the validation UI; verified by inspecting production assets. Verified with TypeScript, 424 Vitest tests, multi-season smoke coverage, production build, and a development lazy-load browser check under Node 24.
 
 ## Current Main Concerns
 
@@ -47,14 +50,14 @@ This document tracks the data-chain issues found during the initial project revi
 ## 2. Player Stat Accuracy
 
 - [x] Audit event-derived generation of `goals`, `assists`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses`.
-- [ ] Audit `appearances` and `cleanSheets` against persisted matchday/team context once lineups are stored historically.
+- [x] Audit `appearances` and `cleanSheets` against persisted matchday/team context once lineups are stored historically.
 - [x] Verify every completed match can explain its scoreline through match events plus explicit own-goal/penalty semantics.
 - [x] Verify generated goals and assists are assigned only to players in the fixture matchday squad.
 - [x] Verify event players resolve to known players and a plausible fixture-side team association.
-- [ ] Verify event players are valid active players at the exact match window after mid-season transfers.
+- [x] Verify event players are valid active players at the exact match window after mid-season transfers.
 - [x] Verify injured players with active injury history are not silently accepted into match events.
 - [x] Use matchday-filtered squads for generated events so injured/suspended players are not selected when enough players are available.
-- [ ] Define and audit emergency-floor exceptions where unavailable players are used because fewer than 11 players are available.
+- [x] Define and audit emergency-floor exceptions where unavailable players are used because fewer than 11 players are available.
 - [x] Verify goalkeeper and defender clean sheets never exceed appearances.
 - [x] Verify defensive and goalkeeper events are only assigned to plausible positions unless deliberately allowed.
 - [x] Verify `penalty_goal`, regular `goal`, extra-time goal, and shootout penalty handling is consistent.
@@ -127,7 +130,7 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] For historical rows, display frozen team/player names even when the live object no longer exists.
 - [x] Avoid showing zeroed current-season stats inside previous-season review components.
 - [x] Add empty/error states that explain when data is unavailable because the season just started.
-- [ ] Add a lightweight data-health panel for development builds if useful.
+- [x] Add a lightweight data-health panel for development builds if useful.
 
 ## 9. Audit Tools And Tests
 
@@ -140,7 +143,7 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Audit invalid match events: implausible player/team association.
 - [x] Audit invalid match events: injured player unavailable at match time.
 - [x] Audit invalid match events: active event player not in fixture matchday squad.
-- [ ] Audit invalid match events: suspended/non-injury unavailable player at match time.
+- [x] Audit invalid match events: suspended/non-injury unavailable player at match time.
 - [x] Audit event-derived player stats against completed match events.
 - [x] Audit event-derived club stat segments against completed match events.
 - [x] Audit score mismatch: match result does not match countable goal events plus explicit exceptions.
@@ -157,7 +160,7 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Update README roadmap so implemented transfer/growth/retirement features are not still marked as TODO.
 - [x] Keep `pnpm exec tsc -b` passing after each data-chain change.
 - [x] Re-run the full test suite after fixing the local Node runtime issue.
-- [ ] Keep changes small and reviewable: selectors first, data model next, UI labels last.
+- [x] Keep changes small and reviewable: selectors first, data model next, UI labels last.
 
 ## Suggested Execution Order
 

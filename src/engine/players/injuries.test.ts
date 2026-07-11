@@ -6,6 +6,7 @@ import {
   aggregateMatchDiscipline,
   computeSuspensionFromCounters,
   pickMatchday,
+  selectMatchday,
   appendInjuryHistory,
   hasActiveLongTermInjury,
   resetDisciplineForNewSeason,
@@ -220,6 +221,20 @@ describe('pickMatchday — filtering', () => {
     expect(md).toHaveLength(14);
     // Top 14 by rating ignores the filter — p-0 (highest rating) is included
     expect(md.find((p) => p.uuid === 'p-0')).toBeDefined();
+    const selection = selectMatchday(squad, 10)!;
+    expect(selection.emergencyFloor).toBe(true);
+    expect(selection.availableCount).toBe(10);
+    expect(selection.unavailablePlayerIds.has('p-0')).toBe(true);
+  });
+
+  it('still filters unavailable players from a small squad when at least 11 remain', () => {
+    const squad = buildSquad().slice(0, 14);
+    squad[0].suspendedUntilWindow = 20;
+    const selection = selectMatchday(squad, 10)!;
+
+    expect(selection.emergencyFloor).toBe(false);
+    expect(selection.players).toHaveLength(13);
+    expect(selection.players.some((player) => player.uuid === 'p-0')).toBe(false);
   });
 
   it('returns the squad as-is when length <= 14', () => {
@@ -470,6 +485,14 @@ describe('processInjuriesAndSuspensions', () => {
       rng: new SeededRNG(1),
     });
     expect(squad[0].suspendedUntilWindow).toBeGreaterThan(10);
+    expect(squad[0].suspensionHistory?.at(-1)).toMatchObject({
+      startSeason: 1,
+      startWindow: 10,
+      unavailableFromWindow: 11,
+      suspendedUntilWindow: 12,
+      banWindows: 1,
+      reason: 'yellow_cards',
+    });
     // Yellow counter was reset post-gate
     expect(playerStats['p-0'].yellowCards).toBe(0);
   });
@@ -489,6 +512,12 @@ describe('processInjuriesAndSuspensions', () => {
       rng: new SeededRNG(2),
     });
     expect(squad[0].suspendedUntilWindow).toBe(20 + 1 + 2);
+    expect(squad[0].suspensionHistory?.at(-1)).toMatchObject({
+      unavailableFromWindow: 21,
+      suspendedUntilWindow: 23,
+      banWindows: 2,
+      reason: 'red_cards',
+    });
     expect(ret.news.length).toBeGreaterThanOrEqual(1);
     expect(ret.news[0].type).toBe('injury');
   });

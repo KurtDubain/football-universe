@@ -82,6 +82,18 @@ export interface MatchResult {
   competitionName: string;
   roundLabel: string;
   motm?: string; // man of the match description
+  /** Exact squad selected by the simulator; optional for legacy saves. */
+  homeMatchday?: MatchdaySnapshot;
+  awayMatchday?: MatchdaySnapshot;
   /** v23 — true if the match was at a neutral venue (cup finals). */
   isNeutralVenue?: boolean;
+}
+
+export interface MatchdaySnapshot {
+  players: Array<{
+    playerId: string;
+    position: 'GK' | 'DF' | 'MF' | 'FW';
+  }>;
+  emergencyFloor: boolean;
+  availableCount: number;
 }

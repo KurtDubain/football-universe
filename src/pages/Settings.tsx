@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { lazy, Suspense, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/game-store';
 import { getTeamName } from '../utils/format';
@@ -6,6 +6,10 @@ import { defaultTeams } from '../config/teams';
 import { APP_VERSION } from '../version';
 import { setLanguage } from '../i18n';
 import { BALANCE } from '../config/balance';
+
+const DevDataHealthPanel = import.meta.env.DEV
+  ? lazy(() => import('../components/DataHealthPanel'))
+  : null;
 
 export default function Settings() {
   const { i18n } = useTranslation();
@@ -216,6 +220,12 @@ export default function Settings() {
             <StatCard label="卫冕冠军" value={stats.currentChampion} small />
           </div>
         </div>
+      )}
+
+      {DevDataHealthPanel && (
+        <Suspense fallback={null}>
+          <DevDataHealthPanel world={world} />
+        </Suspense>
       )}
 
       {/* Game Guide */}

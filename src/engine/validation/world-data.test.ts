@@ -55,6 +55,26 @@ function makeResult(homeTeamId: string, awayTeamId: string): MatchResult {
   };
 }
 
+function makeSingleGoalResult(
+  fixtureId: string,
+  homeTeamId: string,
+  awayTeamId: string,
+  playerId: string,
+): MatchResult {
+  return {
+    ...makeResult(homeTeamId, awayTeamId),
+    fixtureId,
+    homeGoals: 1,
+    events: [{
+      minute: 30,
+      type: 'goal',
+      teamId: homeTeamId,
+      playerId,
+      description: 'Eligibility audit goal.',
+    }],
+  };
+}
+
 describe('validateWorldData', () => {
   it('accepts a freshly initialized world', () => {
     const world = initializeGameWorld(2024);
@@ -334,6 +354,182 @@ describe('validateWorldData', () => {
     expect(issueCodes(validation)).toContain('event_player_unavailable');
   });
 
+  it('reports match events for players whose suspension history covers the match window', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const suspendedPlayer = world.squads[homeTeamId][0];
+    const result = makeSingleGoalResult(
+      'suspended-player-fixture',
+      homeTeamId,
+      awayTeamId,
+      suspendedPlayer.uuid,
+    );
+    const squads = {
+      ...world.squads,
+      [homeTeamId]: world.squads[homeTeamId].map((player) =>
+        player.uuid === suspendedPlayer.uuid
+          ? {
+              ...player,
+              suspendedUntilWindow: 3,
+              suspensionHistory: [{
+                startSeason: 1,
+                startWindow: 0,
+                unavailableFromWindow: 1,
+                suspendedUntilWindow: 3,
+                banWindows: 2,
+                reason: 'red_cards' as const,
+              }],
+            }
+          : player,
+      ),
+    };
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      squads,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+
+    expect(issueCodes(validation)).toContain('event_player_suspended');
+    expect(issueCodes(validation)).not.toContain('event_player_emergency_exception');
+  });
+
+  it('labels unavailable event players as emergency exceptions when fewer than 11 are available', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const unavailableCount = Math.max(1, world.squads[homeTeamId].length - 10);
+    const emergencyPlayers = new Set(
+      world.squads[homeTeamId].slice(0, unavailableCount).map((player) => player.uuid),
+    );
+    const eventPlayer = world.squads[homeTeamId]
+      .filter((player) => emergencyPlayers.has(player.uuid))
+      .sort((a, b) => b.rating - a.rating)[0];
+    const result = makeSingleGoalResult(
+      'emergency-floor-fixture',
+      homeTeamId,
+      awayTeamId,
+      eventPlayer.uuid,
+    );
+    const squads = {
+      ...world.squads,
+      [homeTeamId]: world.squads[homeTeamId].map((player) =>
+        emergencyPlayers.has(player.uuid)
+          ? {
+              ...player,
+              injuredUntilWindow: 4,
+              injuryHistory: [{
+                type: 'major' as const,
+                startSeason: 1,
+                startWindow: 0,
+                durationMatches: 3,
+                reason: '应急测试伤病',
+              }],
+            }
+          : player,
+      ),
+    };
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      squads,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).toContain('event_player_emergency_exception');
+    expect(codes).not.toContain('event_player_unavailable');
+    expect(codes).not.toContain('event_player_suspended');
+  });
+
+  it('validates transferred event players against their team at the exact season window', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const transferred = world.squads[homeTeamId][0];
+    const movedPlayer = { ...transferred, teamId: awayTeamId };
+    const squads = {
+      ...world.squads,
+      [homeTeamId]: world.squads[homeTeamId].filter((player) => player.uuid !== transferred.uuid),
+      [awayTeamId]: [...world.squads[awayTeamId], movedPlayer],
+    };
+    const transferHistory = [{
+      season: 1,
+      windowIndex: 2,
+      playerId: transferred.uuid,
+      playerName: transferred.name ?? transferred.uuid,
+      playerNumber: transferred.number,
+      position: transferred.position,
+      fromTeamId: homeTeamId,
+      fromTeamName: world.teamBases[homeTeamId].name,
+      toTeamId: awayTeamId,
+      toTeamName: world.teamBases[awayTeamId].name,
+      type: 'transfer' as const,
+      reason: 'mid-season audit transfer',
+    }];
+    const base = {
+      ...world,
+      squads,
+      playerStats: {
+        ...world.playerStats,
+        [transferred.uuid]: {
+          ...world.playerStats[transferred.uuid],
+          teamId: awayTeamId,
+        },
+      },
+      transferHistory,
+    };
+    const result = makeSingleGoalResult(
+      'transfer-window-fixture',
+      homeTeamId,
+      awayTeamId,
+      transferred.uuid,
+    );
+    const beforeTransfer = validateWorldData({
+      ...base,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+
+    expect(issueCodes(beforeTransfer)).not.toContain('event_player_team_at_window_mismatch');
+
+    const calendarAfterTransfer = [...world.seasonState.calendar];
+    calendarAfterTransfer[3] = {
+      ...calendarAfterTransfer[3],
+      completed: true,
+      results: [result],
+    };
+    const afterTransfer = validateWorldData({
+      ...base,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: calendarAfterTransfer,
+      },
+    });
+
+    expect(issueCodes(afterTransfer)).toContain('event_player_team_at_window_mismatch');
+  });
+
   it('reports event players that are not in the fixture matchday squad', () => {
     const world = initializeGameWorld(2024);
     const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
@@ -493,6 +689,87 @@ describe('validateWorldData', () => {
     expect(validation.errors).toHaveLength(0);
     expect(codes).toContain('player_stat_event_mismatch');
     expect(codes).toContain('player_segment_event_mismatch');
+  });
+
+  it('audits appearances and clean sheets from complete persisted matchday snapshots', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const homeDefender = world.squads[homeTeamId].find((player) => player.position === 'DF')!;
+    const awayKeeper = world.squads[awayTeamId].find((player) => player.position === 'GK')!;
+    const result: MatchResult = {
+      ...makeSingleGoalResult('matchday-stat-audit', homeTeamId, awayTeamId, world.squads[homeTeamId][0].uuid),
+      homeMatchday: {
+        players: [{ playerId: homeDefender.uuid, position: homeDefender.position }],
+        emergencyFloor: false,
+        availableCount: 14,
+      },
+      awayMatchday: {
+        players: [{ playerId: awayKeeper.uuid, position: awayKeeper.position }],
+        emergencyFloor: false,
+        availableCount: 14,
+      },
+    };
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).toContain('player_appearance_matchday_mismatch');
+    expect(codes).toContain('player_clean_sheet_matchday_mismatch');
+    expect(codes).toContain('player_segment_appearance_matchday_mismatch');
+    expect(codes).toContain('player_segment_clean_sheet_matchday_mismatch');
+  });
+
+  it('rejects malformed persisted matchday snapshots before trusting their stats', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const knownPlayer = world.squads[homeTeamId][0];
+    const malformedPlayers = Array.from({ length: 15 }, () => ({
+      playerId: knownPlayer.uuid,
+      position: knownPlayer.position === 'GK' ? 'FW' as const : 'GK' as const,
+    }));
+    malformedPlayers[14] = { playerId: 'unknown-snapshot-player', position: 'GK' };
+    const result: MatchResult = {
+      ...makeSingleGoalResult('malformed-matchday', homeTeamId, awayTeamId, knownPlayer.uuid),
+      homeMatchday: {
+        players: malformedPlayers,
+        emergencyFloor: true,
+        availableCount: 12,
+      },
+      awayMatchday: {
+        players: [],
+        emergencyFloor: false,
+        availableCount: 14,
+      },
+    };
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).toContain('matchday_snapshot_too_large');
+    expect(codes).toContain('matchday_snapshot_duplicate_player');
+    expect(codes).toContain('matchday_snapshot_emergency_mismatch');
+    expect(codes).toContain('matchday_snapshot_unknown_player');
+    expect(codes).toContain('matchday_snapshot_position_mismatch');
   });
 
   it('reports transfer history, finance, news, and roster-state inconsistencies', () => {

@@ -1,4 +1,4 @@
-import { Player, Injury, InjurySeverity } from '../../types/player';
+import { Player, Injury, InjurySeverity, Suspension } from '../../types/player';
 import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 
@@ -39,6 +39,7 @@ export const INJURY_ROLL_CHANCE = 0.02;
 
 /** Cap on `injuryHistory` per player (FIFO, oldest evicted on overflow). */
 export const INJURY_HISTORY_CAP = 10;
+export const SUSPENSION_HISTORY_CAP = 10;
 
 /**
  * Reasons keyed by severity. Picked uniformly via SeededRNG.pick. Major /
@@ -226,12 +227,18 @@ export function computeSuspensionFromCounters(
  * `currentWindowIdx` is the GLOBAL counter (`world.totalElapsedWindows`),
  * NOT the per-season `seasonState.currentWindowIndex`.
  */
-export function pickMatchday(
+export interface MatchdaySelection {
+  players: Player[];
+  emergencyFloor: boolean;
+  availableCount: number;
+  unavailablePlayerIds: Set<string>;
+}
+
+export function selectMatchday(
   squad: Player[] | undefined,
   currentWindowIdx: number,
-): Player[] | undefined {
-  if (!squad) return squad;
-  if (squad.length <= 14) return squad;
+): MatchdaySelection | undefined {
+  if (!squad) return undefined;
 
   const isAvailable = (p: Player): boolean => {
     const inj = p.injuredUntilWindow ?? 0;
@@ -240,12 +247,41 @@ export function pickMatchday(
   };
 
   const available = squad.filter(isAvailable);
+  const unavailablePlayerIds = new Set(
+    squad.filter((player) => !isAvailable(player)).map((player) => player.uuid),
+  );
+
+  if (squad.length <= 14 && available.length === squad.length) {
+    return {
+      players: squad,
+      emergencyFloor: squad.length < 11,
+      availableCount: available.length,
+      unavailablePlayerIds,
+    };
+  }
 
   if (available.length < 11) {
     // Emergency floor: too many unavailable to field 11 — relax restrictions.
-    return [...squad].sort((a, b) => b.rating - a.rating).slice(0, 14);
+    return {
+      players: [...squad].sort((a, b) => b.rating - a.rating).slice(0, 14),
+      emergencyFloor: true,
+      availableCount: available.length,
+      unavailablePlayerIds,
+    };
   }
-  return available.sort((a, b) => b.rating - a.rating).slice(0, 14);
+  return {
+    players: available.sort((a, b) => b.rating - a.rating).slice(0, 14),
+    emergencyFloor: false,
+    availableCount: available.length,
+    unavailablePlayerIds,
+  };
+}
+
+export function pickMatchday(
+  squad: Player[] | undefined,
+  currentWindowIdx: number,
+): Player[] | undefined {
+  return selectMatchday(squad, currentWindowIdx)?.players;
 }
 
 /**
@@ -261,6 +297,16 @@ export function appendInjuryHistory(
     return merged.slice(-INJURY_HISTORY_CAP);
   }
   return merged;
+}
+
+export function appendSuspensionHistory(
+  history: Suspension[] | undefined,
+  next: Suspension,
+): Suspension[] {
+  const merged = history ? [...history, next] : [next];
+  return merged.length > SUSPENSION_HISTORY_CAP
+    ? merged.slice(-SUSPENSION_HISTORY_CAP)
+    : merged;
 }
 
 /**
@@ -397,6 +443,19 @@ export function processInjuriesAndSuspensions(args: {
         const cur = player.suspendedUntilWindow ?? 0;
         const newUntil = Math.max(cur, globalWindowIdx + 1 + gate.banWindows);
         player.suspendedUntilWindow = newUntil;
+        const reason: Suspension['reason'] = gate.resetYellow && gate.resetRed
+          ? 'mixed_discipline'
+          : gate.resetRed || delta.directRed
+            ? 'red_cards'
+            : 'yellow_cards';
+        player.suspensionHistory = appendSuspensionHistory(player.suspensionHistory, {
+          startSeason: seasonNumber,
+          startWindow: globalWindowIdx,
+          unavailableFromWindow: globalWindowIdx + 1,
+          suspendedUntilWindow: newUntil,
+          banWindows: gate.banWindows,
+          reason,
+        });
         suspensionsApplied.push({ playerId: uuid, banWindows: gate.banWindows, teamId });
 
         // News for direct red in finals / for favorite-team players
@@ -435,8 +494,18 @@ export function processInjuriesAndSuspensions(args: {
   for (const result of results) {
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
-    const homeMatchday = pickMatchday(homeSquad, globalWindowIdx);
-    const awayMatchday = pickMatchday(awaySquad, globalWindowIdx);
+    const playersFromSnapshot = (
+      squad: Player[] | undefined,
+      snapshot: MatchResult['homeMatchday'],
+    ): Player[] | undefined => {
+      if (!snapshot) return pickMatchday(squad, globalWindowIdx);
+      const playersById = new Map((squad ?? []).map((player) => [player.uuid, player]));
+      return snapshot.players
+        .map((entry) => playersById.get(entry.playerId))
+        .filter(Boolean) as Player[];
+    };
+    const homeMatchday = playersFromSnapshot(homeSquad, result.homeMatchday);
+    const awayMatchday = playersFromSnapshot(awaySquad, result.awayMatchday);
 
     const rollFor = (md: Player[] | undefined, teamId: string): void => {
       if (!md) return;

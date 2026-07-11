@@ -3,7 +3,7 @@ import type { Player, PlayerSeasonStats } from '../../types/player';
 import type { MatchEvent, MatchResult } from '../../types/match';
 import type { TransferRecord } from '../../types/transfer';
 import { playerTeamStatKey } from '../players/stats';
-import { pickMatchday } from '../players/injuries';
+import { selectMatchday } from '../players/injuries';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -84,6 +84,28 @@ function playerHasKnownTeamAssociation(
   return (world.retirementHistory ?? []).some((player) => player.uuid === playerId && player.teamId === teamId);
 }
 
+function resolvePlayerTeamAtWindow(
+  world: GameWorld,
+  playerId: string,
+  season: number,
+  windowIndex: number,
+): { hasTransferEvidence: boolean; teamId?: string } {
+  const records = (world.transferHistory ?? [])
+    .filter((record) => record.playerId === playerId && record.season === season)
+    .sort((a, b) => a.windowIndex - b.windowIndex);
+  if (records.length === 0) return { hasTransferEvidence: false };
+
+  const latestCompletedMove = records
+    .filter((record) => record.windowIndex <= windowIndex)
+    .at(-1);
+  const nextMove = records.find((record) => record.windowIndex > windowIndex);
+  const teamId = latestCompletedMove?.toTeamId ?? nextMove?.fromTeamId;
+  return {
+    hasTransferEvidence: true,
+    teamId: teamId === '__free_market__' ? undefined : teamId,
+  };
+}
+
 function getOpposingTeamId(result: MatchResult, teamId: string): string | undefined {
   if (teamId === result.homeTeamId) return result.awayTeamId;
   if (teamId === result.awayTeamId) return result.homeTeamId;
@@ -97,16 +119,158 @@ function isPlayerInjuredAtWindow(player: Player, globalWindowIdx: number): boole
   );
 }
 
+function isPlayerSuspendedAtWindow(player: Player, globalWindowIdx: number): boolean {
+  return (player.suspensionHistory ?? []).some((suspension) =>
+    globalWindowIdx >= suspension.unavailableFromWindow
+    && globalWindowIdx < suspension.suspendedUntilWindow
+  );
+}
+
+interface MatchdayAuditContext {
+  playerIds: Set<string>;
+  unavailablePlayerIds: Set<string>;
+  emergencyFloor: boolean;
+  availableCount: number;
+}
+
+function validateMatchdaySnapshot(
+  world: GameWorld,
+  result: MatchResult,
+  teamId: string,
+  snapshot: NonNullable<MatchResult['homeMatchday']>,
+  activePlayers: Map<string, Player>,
+  issues: WorldDataIssue[],
+  resultSeason?: number,
+  resultWindowIndex?: number,
+): void {
+  const playerIds = snapshot.players.map((player) => player.playerId);
+  const uniquePlayerIds = new Set(playerIds);
+  if (snapshot.players.length > 14) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'matchday_snapshot_too_large',
+      message: `Fixture ${result.fixtureId} stores ${snapshot.players.length} matchday players for ${teamId}; maximum is 14.`,
+      teamId,
+      fixtureId: result.fixtureId,
+      season: resultSeason,
+    });
+  }
+  if (uniquePlayerIds.size !== playerIds.length) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'matchday_snapshot_duplicate_player',
+      message: `Fixture ${result.fixtureId} stores duplicate player ids in ${teamId}'s matchday snapshot.`,
+      teamId,
+      fixtureId: result.fixtureId,
+      season: resultSeason,
+    });
+  }
+  if (
+    snapshot.availableCount < 0
+    || (snapshot.emergencyFloor && snapshot.availableCount >= 11)
+    || (!snapshot.emergencyFloor && snapshot.availableCount < 11)
+  ) {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'matchday_snapshot_emergency_mismatch',
+      message: `Fixture ${result.fixtureId} has emergencyFloor=${snapshot.emergencyFloor} with availableCount=${snapshot.availableCount} for ${teamId}.`,
+      teamId,
+      fixtureId: result.fixtureId,
+      season: resultSeason,
+    });
+  }
+
+  for (const entry of snapshot.players) {
+    if (!isKnownPlayer(world, entry.playerId, activePlayers)) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'matchday_snapshot_unknown_player',
+        message: `Fixture ${result.fixtureId} matchday snapshot references unknown player ${entry.playerId}.`,
+        teamId,
+        playerId: entry.playerId,
+        fixtureId: result.fixtureId,
+        season: resultSeason,
+      });
+      continue;
+    }
+    const activePlayer = activePlayers.get(entry.playerId);
+    if (activePlayer && activePlayer.position !== entry.position) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'matchday_snapshot_position_mismatch',
+        message: `Fixture ${result.fixtureId} stores ${entry.playerId} as ${entry.position}, but the player position is ${activePlayer.position}.`,
+        teamId,
+        playerId: entry.playerId,
+        fixtureId: result.fixtureId,
+        season: resultSeason,
+      });
+    }
+    if (resultSeason !== undefined && resultWindowIndex !== undefined) {
+      const exactTeam = resolvePlayerTeamAtWindow(
+        world,
+        entry.playerId,
+        resultSeason,
+        resultWindowIndex,
+      );
+      if (exactTeam.hasTransferEvidence && exactTeam.teamId !== teamId) {
+        pushIssue(issues, {
+          severity: 'warning',
+          code: 'matchday_snapshot_team_at_window_mismatch',
+          message: `Fixture ${result.fixtureId} stores ${entry.playerId} for ${teamId}, but transfer history resolves them to ${exactTeam.teamId ?? 'the free market'} at S${resultSeason} W${resultWindowIndex}.`,
+          teamId,
+          playerId: entry.playerId,
+          fixtureId: result.fixtureId,
+          season: resultSeason,
+        });
+      }
+    }
+  }
+}
+
 function buildMatchdayPlayerIds(
   world: GameWorld,
   result: MatchResult,
   resultGlobalWindowIdx: number | undefined,
-): Map<string, Set<string>> {
-  const idsByTeam = new Map<string, Set<string>>();
-  if (resultGlobalWindowIdx === undefined) return idsByTeam;
-  for (const teamId of [result.homeTeamId, result.awayTeamId]) {
-    const matchday = pickMatchday(world.squads[teamId], resultGlobalWindowIdx) ?? [];
-    idsByTeam.set(teamId, new Set(matchday.map((player) => player.uuid)));
+  activePlayers: Map<string, Player>,
+): Map<string, MatchdayAuditContext> {
+  const idsByTeam = new Map<string, MatchdayAuditContext>();
+  for (const [side, teamId] of [
+    ['home', result.homeTeamId],
+    ['away', result.awayTeamId],
+  ] as const) {
+    const snapshot = side === 'home' ? result.homeMatchday : result.awayMatchday;
+    if (snapshot) {
+      const playerIds = new Set(snapshot.players.map((player) => player.playerId));
+      const unavailablePlayerIds = new Set<string>();
+      if (resultGlobalWindowIdx !== undefined) {
+        for (const playerId of playerIds) {
+          const player = activePlayers.get(playerId);
+          if (
+            player
+            && (isPlayerInjuredAtWindow(player, resultGlobalWindowIdx)
+              || isPlayerSuspendedAtWindow(player, resultGlobalWindowIdx))
+          ) {
+            unavailablePlayerIds.add(playerId);
+          }
+        }
+      }
+      idsByTeam.set(teamId, {
+        playerIds,
+        unavailablePlayerIds,
+        emergencyFloor: snapshot.emergencyFloor,
+        availableCount: snapshot.availableCount,
+      });
+      continue;
+    }
+    if (resultGlobalWindowIdx === undefined) continue;
+    const selection = selectMatchday(world.squads[teamId], resultGlobalWindowIdx);
+    if (!selection) continue;
+    idsByTeam.set(teamId, {
+      playerIds: new Set(selection.players.map((player) => player.uuid)),
+      unavailablePlayerIds: selection.unavailablePlayerIds,
+      emergencyFloor: selection.emergencyFloor,
+      availableCount: selection.availableCount,
+    });
   }
   return idsByTeam;
 }
@@ -258,6 +422,95 @@ function validateEventDerivedStats(
       teamId,
       playerId,
     });
+  }
+}
+
+interface MatchdayDerivedStats {
+  appearances: number;
+  cleanSheets: number;
+}
+
+function incrementMatchdayDerived(
+  map: Map<string, MatchdayDerivedStats>,
+  key: string,
+  cleanSheet: boolean,
+): void {
+  const current = map.get(key) ?? { appearances: 0, cleanSheets: 0 };
+  map.set(key, {
+    appearances: current.appearances + 1,
+    cleanSheets: current.cleanSheets + (cleanSheet ? 1 : 0),
+  });
+}
+
+function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]): void {
+  const results = (world.seasonState.calendar ?? []).flatMap((window) => window.results ?? []);
+  if (results.length === 0) return;
+  if (results.some((result) => !result.homeMatchday || !result.awayMatchday)) return;
+
+  const expectedByPlayer = new Map<string, MatchdayDerivedStats>();
+  const expectedBySegment = new Map<string, MatchdayDerivedStats>();
+
+  for (const result of results) {
+    const homeClean = result.awayGoals + (result.etAwayGoals ?? 0) === 0;
+    const awayClean = result.homeGoals + (result.etHomeGoals ?? 0) === 0;
+    for (const [teamId, snapshot, clean] of [
+      [result.homeTeamId, result.homeMatchday!, homeClean],
+      [result.awayTeamId, result.awayMatchday!, awayClean],
+    ] as const) {
+      for (const player of snapshot.players) {
+        const earnsCleanSheet = clean && (player.position === 'DF' || player.position === 'GK');
+        incrementMatchdayDerived(expectedByPlayer, player.playerId, earnsCleanSheet);
+        incrementMatchdayDerived(
+          expectedBySegment,
+          playerTeamStatKey(player.playerId, teamId),
+          earnsCleanSheet,
+        );
+      }
+    }
+  }
+
+  for (const [playerId, stat] of Object.entries(world.playerStats ?? {})) {
+    const expected = expectedByPlayer.get(playerId) ?? { appearances: 0, cleanSheets: 0 };
+    if (stat.appearances !== expected.appearances) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'player_appearance_matchday_mismatch',
+        message: `Player ${playerId} has ${stat.appearances} appearances, but persisted matchday squads explain ${expected.appearances}.`,
+        teamId: stat.teamId,
+        playerId,
+      });
+    }
+    if (stat.cleanSheets !== expected.cleanSheets) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'player_clean_sheet_matchday_mismatch',
+        message: `Player ${playerId} has ${stat.cleanSheets} clean sheets, but persisted matchday squads explain ${expected.cleanSheets}.`,
+        teamId: stat.teamId,
+        playerId,
+      });
+    }
+  }
+
+  for (const [segmentKey, stat] of Object.entries(world.playerStatSegments ?? {})) {
+    const expected = expectedBySegment.get(segmentKey) ?? { appearances: 0, cleanSheets: 0 };
+    if (stat.appearances !== expected.appearances) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'player_segment_appearance_matchday_mismatch',
+        message: `Player segment ${segmentKey} has ${stat.appearances} appearances, but persisted matchday squads explain ${expected.appearances}.`,
+        teamId: stat.teamId,
+        playerId: stat.playerId,
+      });
+    }
+    if (stat.cleanSheets !== expected.cleanSheets) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'player_segment_clean_sheet_matchday_mismatch',
+        message: `Player segment ${segmentKey} has ${stat.cleanSheets} clean sheets, but persisted matchday squads explain ${expected.cleanSheets}.`,
+        teamId: stat.teamId,
+        playerId: stat.playerId,
+      });
+    }
   }
 }
 
@@ -513,9 +766,11 @@ function validateEventSemantics(
   event: MatchEvent,
   activePlayers: Map<string, Player>,
   activePlayerTeams: Map<string, string>,
-  matchdayPlayerIdsByTeam: Map<string, Set<string>>,
+  matchdayPlayerIdsByTeam: Map<string, MatchdayAuditContext>,
   issues: WorldDataIssue[],
   resultGlobalWindowIdx?: number,
+  resultSeason?: number,
+  resultWindowIndex?: number,
 ): void {
   const eventTeamInFixture = event.teamId === result.homeTeamId || event.teamId === result.awayTeamId;
   if (!eventTeamInFixture) {
@@ -545,12 +800,53 @@ function validateEventSemantics(
     });
   }
 
+  if (
+    event.playerId
+    && event.type !== 'own_goal'
+    && eventTeamInFixture
+    && resultSeason !== undefined
+    && resultWindowIndex !== undefined
+  ) {
+    const exactTeam = resolvePlayerTeamAtWindow(
+      world,
+      event.playerId,
+      resultSeason,
+      resultWindowIndex,
+    );
+    if (exactTeam.hasTransferEvidence && exactTeam.teamId !== event.teamId) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'event_player_team_at_window_mismatch',
+        message: `Match event player ${event.playerId} belonged to ${exactTeam.teamId ?? 'the free market'} at S${resultSeason} W${resultWindowIndex}, not ${event.teamId}.`,
+        teamId: event.teamId,
+        playerId: event.playerId,
+        fixtureId: result.fixtureId,
+        season: resultSeason,
+      });
+    }
+  }
+
   const attackingTeamId = event.type === 'gk_save' || event.type === 'df_block'
     ? getOpposingTeamId(result, event.teamId)
     : undefined;
   const deniedPlayerIds = [event.deniedScorerId, event.deniedAssisterId].filter(Boolean) as string[];
   if (attackingTeamId) {
     for (const playerId of deniedPlayerIds) {
+      if (resultSeason !== undefined && resultWindowIndex !== undefined) {
+        const exactTeam = resolvePlayerTeamAtWindow(world, playerId, resultSeason, resultWindowIndex);
+        if (exactTeam.hasTransferEvidence && exactTeam.teamId !== attackingTeamId) {
+          pushIssue(issues, {
+            severity: 'warning',
+            code: 'event_denied_player_team_at_window_mismatch',
+            message: `Denied attacking player ${playerId} belonged to ${exactTeam.teamId ?? 'the free market'} at S${resultSeason} W${resultWindowIndex}, not ${attackingTeamId}.`,
+            teamId: attackingTeamId,
+            playerId,
+            fixtureId: result.fixtureId,
+            season: resultSeason,
+          });
+          continue;
+        }
+      }
       if (!isKnownPlayer(world, playerId, activePlayers)) continue;
       if (playerHasKnownTeamAssociation(world, playerId, attackingTeamId, activePlayerTeams)) continue;
       pushIssue(issues, {
@@ -566,18 +862,35 @@ function validateEventSemantics(
 
   if (resultGlobalWindowIdx !== undefined) {
     const unavailableChecks = [
-      { playerId: event.playerId, code: 'event_player_unavailable' },
-      ...deniedPlayerIds.map((playerId) => ({ playerId, code: 'event_denied_player_unavailable' })),
-    ] as const;
+      { playerId: event.playerId, teamId: event.teamId, denied: false },
+      ...deniedPlayerIds.map((playerId) => ({ playerId, teamId: attackingTeamId, denied: true })),
+    ];
     for (const check of unavailableChecks) {
-      if (!check.playerId) continue;
+      if (!check.playerId || !check.teamId) continue;
       const checkPlayer = activePlayers.get(check.playerId);
-      if (!checkPlayer || !isPlayerInjuredAtWindow(checkPlayer, resultGlobalWindowIdx)) continue;
+      if (!checkPlayer) continue;
+      const injured = isPlayerInjuredAtWindow(checkPlayer, resultGlobalWindowIdx);
+      const suspended = isPlayerSuspendedAtWindow(checkPlayer, resultGlobalWindowIdx);
+      if (!injured && !suspended) continue;
+      const matchday = matchdayPlayerIdsByTeam.get(check.teamId);
+      const emergencyException = Boolean(
+        matchday?.emergencyFloor
+        && matchday.playerIds.has(check.playerId)
+        && matchday.unavailablePlayerIds.has(check.playerId),
+      );
+      const subject = check.denied ? 'denied attacking player' : 'match event player';
+      const availabilityReason = injured ? 'injury' : 'suspension';
       pushIssue(issues, {
         severity: 'warning',
-        code: check.code,
-        message: `Match event references player ${check.playerId} while injury history says they were unavailable at global window ${resultGlobalWindowIdx}.`,
-        teamId: event.teamId,
+        code: emergencyException
+          ? (check.denied ? 'event_denied_player_emergency_exception' : 'event_player_emergency_exception')
+          : suspended
+            ? (check.denied ? 'event_denied_player_suspended' : 'event_player_suspended')
+            : (check.denied ? 'event_denied_player_unavailable' : 'event_player_unavailable'),
+        message: emergencyException
+          ? `Fixture ${result.fixtureId} used ${subject} ${check.playerId} despite ${availabilityReason} because only ${matchday?.availableCount ?? 0} players were available.`
+          : `Fixture ${result.fixtureId} references ${subject} ${check.playerId} while ${availabilityReason} history says they were unavailable at global window ${resultGlobalWindowIdx}.`,
+        teamId: check.teamId,
         playerId: check.playerId,
         fixtureId: result.fixtureId,
       });
@@ -586,7 +899,7 @@ function validateEventSemantics(
 
   if (eventTeamInFixture && event.playerId && event.type !== 'own_goal') {
     const activeTeamId = activePlayerTeams.get(event.playerId);
-    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(event.teamId);
+    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(event.teamId)?.playerIds;
     if (
       activeTeamId === event.teamId
       && matchdayPlayerIds
@@ -604,7 +917,7 @@ function validateEventSemantics(
   }
 
   if (attackingTeamId) {
-    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(attackingTeamId);
+    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(attackingTeamId)?.playerIds;
     for (const playerId of deniedPlayerIds) {
       if (!matchdayPlayerIds) continue;
       if (activePlayerTeams.get(playerId) !== attackingTeamId) continue;
@@ -675,8 +988,39 @@ function validateResult(
   activePlayerTeams: Map<string, string>,
   issues: WorldDataIssue[],
   resultGlobalWindowIdx?: number,
+  resultSeason?: number,
+  resultWindowIndex?: number,
 ): void {
-  const matchdayPlayerIdsByTeam = buildMatchdayPlayerIds(world, result, resultGlobalWindowIdx);
+  const matchdayPlayerIdsByTeam = buildMatchdayPlayerIds(
+    world,
+    result,
+    resultGlobalWindowIdx,
+    activePlayers,
+  );
+  if (result.homeMatchday) {
+    validateMatchdaySnapshot(
+      world,
+      result,
+      result.homeTeamId,
+      result.homeMatchday,
+      activePlayers,
+      issues,
+      resultSeason,
+      resultWindowIndex,
+    );
+  }
+  if (result.awayMatchday) {
+    validateMatchdaySnapshot(
+      world,
+      result,
+      result.awayTeamId,
+      result.awayMatchday,
+      activePlayers,
+      issues,
+      resultSeason,
+      resultWindowIndex,
+    );
+  }
 
   if (!world.teamBases[result.homeTeamId]) {
     pushIssue(issues, {
@@ -729,6 +1073,8 @@ function validateResult(
       matchdayPlayerIdsByTeam,
       issues,
       resultGlobalWindowIdx,
+      resultSeason,
+      resultWindowIndex,
     );
 
     const eventPlayerIds = [
@@ -959,7 +1305,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
     }
   }
 
-  for (const window of world.seasonState?.calendar ?? []) {
+  for (const [windowIndex, window] of (world.seasonState?.calendar ?? []).entries()) {
     for (const fixture of window.fixtures ?? []) {
       if (!teamBaseIds.has(fixture.homeTeamId)) {
         pushIssue(issues, {
@@ -985,13 +1331,23 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       ? currentSeasonStartGlobalIdx + completedResultWindowOrdinal + 1
       : undefined;
     for (const result of window.results ?? []) {
-      validateResult(world, result, activePlayers, activePlayerTeams, issues, resultGlobalWindowIdx);
+      validateResult(
+        world,
+        result,
+        activePlayers,
+        activePlayerTeams,
+        issues,
+        resultGlobalWindowIdx,
+        world.seasonState.seasonNumber,
+        windowIndex,
+      );
       collectEventDerivedStats(result, eventDerivedByPlayer, eventDerivedBySegment);
     }
     if (hasResults) completedResultWindowOrdinal++;
   }
 
   validateEventDerivedStats(world, eventDerivedByPlayer, eventDerivedBySegment, issues);
+  validateMatchdayDerivedStats(world, issues);
   validateTransferConsistency(world, activePlayerTeams, issues);
 
   const errors = issues.filter((issue) => issue.severity === 'error');

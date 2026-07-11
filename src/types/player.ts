@@ -60,6 +60,8 @@ export interface Player {
    * all bans).
    */
   suspendedUntilWindow?: number;
+  /** Historical suspension intervals used to audit past match eligibility. */
+  suspensionHistory?: Suspension[];
   /**
    * Career injury log. FIFO-capped at the last 10 entries. Used by the
    * UI (PlayerDetail) and by retirement (long-term injuries boost retire
@@ -110,6 +112,18 @@ export interface Injury {
   durationMatches: number;
   /** Chinese-language reason, e.g. 膝伤 / 脚踝扭伤 / 肌肉拉伤 / 头部撞击. */
   reason: string;
+}
+
+export interface Suspension {
+  /** Season and global match window where the ban was imposed. */
+  startSeason: number;
+  startWindow: number;
+  /** First global match window where the player cannot be selected. */
+  unavailableFromWindow: number;
+  /** Player becomes selectable again when the global window reaches this value. */
+  suspendedUntilWindow: number;
+  banWindows: number;
+  reason: 'yellow_cards' | 'red_cards' | 'mixed_discipline';
 }
 
 export interface PlayerSeasonStats {

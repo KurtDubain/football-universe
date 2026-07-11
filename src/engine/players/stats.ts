@@ -122,6 +122,24 @@ function ensureSegment(
   return segments[key];
 }
 
+type StatMatchdayPlayer = Pick<Player, 'uuid' | 'position'>;
+
+function resolveResultMatchday(
+  result: MatchResult,
+  side: 'home' | 'away',
+  squad: Player[] | undefined,
+  globalWindowIdx: number,
+): StatMatchdayPlayer[] {
+  const snapshot = side === 'home' ? result.homeMatchday : result.awayMatchday;
+  if (snapshot) {
+    return snapshot.players.map((player) => ({
+      uuid: player.playerId,
+      position: player.position,
+    }));
+  }
+  return pickMatchdayWithDiscipline(squad, globalWindowIdx) ?? [];
+}
+
 /**
  * Update `(playerId, teamId)` contribution segments from match results.
  *
@@ -140,8 +158,8 @@ export function updatePlayerStatSegmentsFromResults(
   for (const result of results) {
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
-    const homeMatchday = pickMatchdayWithDiscipline(homeSquad, globalWindowIdx) ?? [];
-    const awayMatchday = pickMatchdayWithDiscipline(awaySquad, globalWindowIdx) ?? [];
+    const homeMatchday = resolveResultMatchday(result, 'home', homeSquad, globalWindowIdx);
+    const awayMatchday = resolveResultMatchday(result, 'away', awaySquad, globalWindowIdx);
 
     for (const p of homeMatchday) {
       const s = ensureSegment(segments, p.uuid, result.homeTeamId);
@@ -245,8 +263,8 @@ export function updatePlayerStatsFromResults(
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
 
-    const homeMatchday = pickMatchdayWithDiscipline(homeSquad, globalWindowIdx) ?? [];
-    const awayMatchday = pickMatchdayWithDiscipline(awaySquad, globalWindowIdx) ?? [];
+    const homeMatchday = resolveResultMatchday(result, 'home', homeSquad, globalWindowIdx);
+    const awayMatchday = resolveResultMatchday(result, 'away', awaySquad, globalWindowIdx);
 
     for (const p of homeMatchday) {
       if (!stats[p.uuid]) continue;
