@@ -2,6 +2,13 @@ import { GameWorld } from '../season/season-manager';
 import { Player, PlayerSeasonStats, PlayerPosition } from '../../types/player';
 import { TransferRecord } from '../../types/transfer';
 import { SeededRNG } from '../match/rng';
+import {
+  applyTransferMove,
+  createTransferRecord,
+  FREE_AGENT_SIGNING_FEE,
+  FREE_MARKET_TEAM_ID,
+  pickTransferReleaseCandidate,
+} from './transfer-application';
 
 /**
  * End-of-season transfer window (v2 — 4-position support + free agent pool).
@@ -43,7 +50,6 @@ import { SeededRNG } from '../match/rng';
 const POACH_PROBABILITY = 0.30;
 const ELITE_OVERALL_THRESHOLD = 82;
 const NON_ELITE_OVERALL_THRESHOLD = 80;  // candidates can be from teams below this
-const FREE_AGENT_SIGNING_FEE = 5;        // €M, charged to recipient
 const FW_GOALS_MIN = 6;
 const MF_CONTRIB_MIN = 6;                 // goals + assists
 const DF_GK_APPEARANCES_MIN = 20;
@@ -124,14 +130,6 @@ function buildCandidates(world: GameWorld): Candidate[] {
   return [...byPos.FW, ...byPos.MF, ...byPos.DF, ...byPos.GK];
 }
 
-function pickFreeNumber(used: Set<number>, preferred: number): number {
-  if (!used.has(preferred)) return preferred;
-  for (let n = 2; n <= 99; n++) {
-    if (!used.has(n)) return n;
-  }
-  return preferred;
-}
-
 /** Position with the FEWEST players at-or-above some rating threshold.
  *  Used to decide which free agent best fills a squad gap. */
 function findWeakestPosition(squad: Player[]): PlayerPosition {
@@ -169,8 +167,9 @@ export function processTransferWindow(
   const pendingOffers: import('../../types/transfer').IncomingOffer[] = [];
   const pendingTargets: import('../../types/transfer').OutgoingTarget[] = [];
   const transfers: TransferRecord[] = [];
-  const squads: Record<string, Player[]> = { ...world.squads };
+  let squads: Record<string, Player[]> = { ...world.squads };
   for (const tid of Object.keys(squads)) squads[tid] = [...squads[tid]];
+  let playerStats = world.playerStats;
 
   const eliteTeamIds = Object.values(world.teamBases)
     .filter(t => t.overall >= ELITE_OVERALL_THRESHOLD)
@@ -223,11 +222,8 @@ export function processTransferWindow(
     const incomingPlayer = candPlayer;
     if (!incomingPlayer) continue;
 
-    const sameRolePool = toSquad
-      .filter(p => p.position === incomingPlayer.position)
-      .sort((a, b) => a.rating - b.rating);
-    if (sameRolePool.length === 0) continue;
-    const released = sameRolePool[0];
+    const released = pickTransferReleaseCandidate(toSquad, incomingPlayer, false);
+    if (!released) continue;
     if (released.rating >= incomingPlayer.rating) continue;
 
     const fee = Math.round((incomingPlayer.rating - 60) * 1.2);
@@ -257,23 +253,22 @@ export function processTransferWindow(
       continue;
     }
 
-    const buyerNumbersUsed = new Set(toSquad.filter(p => p.uuid !== released.uuid).map(p => p.number));
-    const incomingNumber = pickFreeNumber(buyerNumbersUsed, incomingPlayer.number);
+    const applied = applyTransferMove({
+      squads,
+      playerStats,
+      player: incomingPlayer,
+      fromTeamId: cand.teamId,
+      toTeamId: buyerId,
+      displacedPlayerId: released.uuid,
+    });
+    if (!applied || !applied.displacedPlayer) continue;
+    squads = applied.squads;
+    playerStats = applied.playerStats;
 
-    const movedToElite: Player = { ...incomingPlayer, teamId: buyerId, number: incomingNumber };
-    // Released stays as-is for now — buyer's number for the released player
-    // doesn't matter because they're leaving the squad.
-
-    squads[cand.teamId] = fromSquad.filter(p => p.uuid !== incomingPlayer.uuid);
-    squads[buyerId] = toSquad.filter(p => p.uuid !== released.uuid).concat(movedToElite);
-
-    transfers.push({
+    transfers.push(createTransferRecord({
       season: seasonNumber,
       windowIndex,
-      playerId: incomingPlayer.uuid,
-      playerName: incomingPlayer.name ?? `${incomingPlayer.number}号`,
-      playerNumber: incomingNumber,
-      position: incomingPlayer.position,
+      player: applied.movedPlayer,
       fromTeamId: cand.teamId,
       fromTeamName: fromTeam?.name ?? cand.teamId,
       toTeamId: buyerId,
@@ -281,9 +276,9 @@ export function processTransferWindow(
       type: 'transfer',
       fee: fee > 0 ? fee : undefined,
       reason: `${cand.sortKey | 0}${cand.position === 'FW' ? '球' : cand.position === 'MF' ? '贡献' : '场'}身价飙升`,
-    });
+    }));
 
-    freeAgentPool.push({ player: released, releasedFromTeamId: buyerId });
+    freeAgentPool.push({ player: applied.displacedPlayer, releasedFromTeamId: buyerId });
     sellersNeedReplacement.add(cand.teamId);
     sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
     buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
@@ -362,19 +357,23 @@ export function processTransferWindow(
     let pickIdx = freeAgentPool.findIndex(fa => fa.player.position === gap);
     if (pickIdx < 0) pickIdx = 0;
     const { player, releasedFromTeamId } = freeAgentPool.splice(pickIdx, 1)[0];
-    const usedNums = new Set(recipientSquad.map(p => p.number));
-    const newNumber = pickFreeNumber(usedNums, player.number);
-    squads[recipient] = [...recipientSquad, { ...player, teamId: recipient, number: newNumber }];
+    const applied = applyTransferMove({
+      squads,
+      playerStats,
+      player,
+      fromTeamId: FREE_MARKET_TEAM_ID,
+      toTeamId: recipient,
+    });
+    if (!applied) continue;
+    squads = applied.squads;
+    playerStats = applied.playerStats;
 
     const releasedFromTeam = world.teamBases[releasedFromTeamId];
     const recipientTeam = world.teamBases[recipient];
-    transfers.push({
+    transfers.push(createTransferRecord({
       season: seasonNumber,
       windowIndex,
-      playerId: player.uuid,
-      playerName: player.name ?? `${player.number}号`,
-      playerNumber: newNumber,
-      position: player.position,
+      player: applied.movedPlayer,
       fromTeamId: releasedFromTeamId,
       fromTeamName: releasedFromTeam?.name ?? releasedFromTeamId,
       toTeamId: recipient,
@@ -382,7 +381,7 @@ export function processTransferWindow(
       type: 'free_agent',
       fee: FREE_AGENT_SIGNING_FEE,
       reason: '自由转会签约',
-    });
+    }));
   }
 
   // ── Step 2.5: Random churn — each non-elite team has a small chance
@@ -402,23 +401,29 @@ export function processTransferWindow(
     const sortedByRating = [...sq].sort((a, b) => a.rating - b.rating);
     const candidate = sortedByRating.find(p => p.tag !== 'loyal');
     if (!candidate) continue;
-    squads[tid] = sq.filter(p => p.uuid !== candidate.uuid);
-    freeAgentPool.push({ player: candidate, releasedFromTeamId: tid });
+    const applied = applyTransferMove({
+      squads,
+      playerStats,
+      player: candidate,
+      fromTeamId: tid,
+      toTeamId: FREE_MARKET_TEAM_ID,
+    });
+    if (!applied) continue;
+    squads = applied.squads;
+    playerStats = applied.playerStats;
+    freeAgentPool.push({ player: applied.movedPlayer, releasedFromTeamId: tid });
     const teamName = world.teamBases[tid]?.name ?? tid;
-    transfers.push({
+    transfers.push(createTransferRecord({
       season: seasonNumber,
       windowIndex,
-      playerId: candidate.uuid,
-      playerName: candidate.name ?? `${candidate.number}号`,
-      playerNumber: candidate.number,
-      position: candidate.position,
+      player: applied.movedPlayer,
       fromTeamId: tid,
       fromTeamName: teamName,
-      toTeamId: '__free_market__',
+      toTeamId: FREE_MARKET_TEAM_ID,
       toTeamName: '自由市场',
       type: 'free',
       reason: '合同到期未续约',
-    });
+    }));
   }
 
   // ── Step 2.7: Wanderer tag — voluntary departure ────────────────
@@ -433,23 +438,29 @@ export function processTransferWindow(
     for (const w of wanderers) {
       if (rng.next() >= WANDERER_RELEASE_CHANCE) continue;
       if (squads[tid].length <= MIN_SQUAD_AFTER_RELEASE) break;
-      squads[tid] = squads[tid].filter(p => p.uuid !== w.uuid);
-      freeAgentPool.push({ player: w, releasedFromTeamId: tid });
+      const applied = applyTransferMove({
+        squads,
+        playerStats,
+        player: w,
+        fromTeamId: tid,
+        toTeamId: FREE_MARKET_TEAM_ID,
+      });
+      if (!applied) continue;
+      squads = applied.squads;
+      playerStats = applied.playerStats;
+      freeAgentPool.push({ player: applied.movedPlayer, releasedFromTeamId: tid });
       const teamName = world.teamBases[tid]?.name ?? tid;
-      transfers.push({
+      transfers.push(createTransferRecord({
         season: seasonNumber,
         windowIndex,
-        playerId: w.uuid,
-        playerName: w.name ?? `${w.number}号`,
-        playerNumber: w.number,
-        position: w.position,
+        player: applied.movedPlayer,
         fromTeamId: tid,
         fromTeamName: teamName,
-        toTeamId: '__free_market__',
+        toTeamId: FREE_MARKET_TEAM_ID,
         toTeamName: '自由市场',
         type: 'free',
         reason: '🎒 浪子情怀，自请离队',
-      });
+      }));
     }
   }
 
@@ -498,28 +509,9 @@ export function processTransferWindow(
   }
   const newFreeAgentPool = stillInPool;
 
-  // ── Step 4: Refresh playerStats teamId for moved players ─────
-  // Always rebuild to a fresh object IF anything happened (transfers OR
-  // retirees), so the caller sees a new reference and can detect change.
+  // ── Step 4: Return the shared pipeline's synchronized stat ownership ──
   if (transfers.length === 0 && freeAgentRetirees.length === 0 && newFreeAgentPool.length === (world.freeAgentPool ?? []).length) {
     return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: newFreeAgentPool, pendingOffers, pendingTargets };
   }
-  const uuidToTeam = new Map<string, string>();
-  for (const [tid, sq] of Object.entries(squads)) {
-    for (const p of sq) uuidToTeam.set(p.uuid, tid);
-  }
-  const updatedStats: Record<string, PlayerSeasonStats> = {};
-  for (const [uuid, stat] of Object.entries(world.playerStats)) {
-    const newTeam = uuidToTeam.get(uuid);
-    if (newTeam && newTeam !== stat.teamId) {
-      updatedStats[uuid] = { ...stat, teamId: newTeam };
-    } else if (!newTeam) {
-      // Player vanished (retired free agent) — drop their stats
-      continue;
-    } else {
-      updatedStats[uuid] = stat;
-    }
-  }
-
-  return { squads, transfers, playerStats: updatedStats, freeAgentRetirees, freeAgentPool: newFreeAgentPool, pendingOffers, pendingTargets };
+  return { squads, transfers, playerStats, freeAgentRetirees, freeAgentPool: newFreeAgentPool, pendingOffers, pendingTargets };
 }

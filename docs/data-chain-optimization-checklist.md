@@ -17,6 +17,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-11: Added event-derived stat audits in `validateWorldData`: completed match events now explain `goals`, `assists`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses` in both player-wide current-season totals and club-specific segments. Verified with TypeScript and targeted validation/stat/deny/simulator tests under Node 24.
 - 2026-07-11: Fixed manual transfer-window finance attribution for already-archived transfer seasons: cash still moves immediately, but archived season `transferIncome` / `transferExpense` and `endCash` are updated instead of polluting the new season's running totals. Manual accepted offers, outgoing bids, replacement signings, and free-agent signings now emit deterministic transfer news. `validateWorldData` now audits latest transfer destination, free-agent/retired/active overlap, archived transfer finance coverage, and manual transfer-news links. Verified with TypeScript and targeted transfer/validation/finance tests under Node 24.
 - 2026-07-11: Clarified user-facing stat scopes across Player Center, Player Detail, Team Detail, and Advanced Search. Player totals are labeled as current-season all-competition data, club contribution is labeled separately, and the defender score explicitly mixes individual all-competition stats with league-only team defensive context. Renamed deny-pipeline counters to `神扑`, `关键封堵`, and `威胁传球`, and added explanatory season-start empty states. Verified with TypeScript, 413 Vitest tests, production build, and desktop/mobile browser checks under Node 24.
+- 2026-07-11: Added a shared pure transfer-application pipeline for automatic and manual windows. Automatic poaching, free-agent distribution, contract/wanderer releases, accepted/countered offers, outgoing bids, and manual free-agent signings now share roster mutation, shirt-number allocation, player/team identity updates, current-stat ownership sync, and transfer-record construction. Finance and news remain in their appropriate season-end or interactive orchestration layers. Verified with dedicated pipeline tests, TypeScript, 417 Vitest tests, and production build under Node 24.
 
 ## Current Main Concerns
 
@@ -88,7 +89,7 @@ This document tracks the data-chain issues found during the initial project revi
 
 ## 5. Transfers And Stat Ownership
 
-- [ ] Make automatic and manual transfer flows call one shared transfer-application pipeline.
+- [x] Make automatic and manual transfer flows call one shared transfer-application pipeline.
 - [x] In manual offer acceptance, match automatic behavior for squad balance, weak-player release, and replacements.
 - [x] After manual transfer-window actions, synchronize squad membership, player stat team references, transfer history, and finance.
 - [x] Add manual transfer-window news entries or a deliberate no-news policy.
