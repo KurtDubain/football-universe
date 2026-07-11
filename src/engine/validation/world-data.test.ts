@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initializeGameWorld } from '../season/season-manager';
 import { validateWorldData } from './world-data';
+import { pickMatchday } from '../players/injuries';
 import type { MatchResult } from '../../types/match';
 import type { PlayerSeasonStats } from '../../types/player';
 
@@ -331,5 +332,166 @@ describe('validateWorldData', () => {
 
     expect(validation.errors).toHaveLength(0);
     expect(issueCodes(validation)).toContain('event_player_unavailable');
+  });
+
+  it('reports event players that are not in the fixture matchday squad', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const homeMatchday = pickMatchday(world.squads[homeTeamId], 1) ?? [];
+    const awayMatchday = pickMatchday(world.squads[awayTeamId], 1) ?? [];
+    const homeMatchdayIds = new Set(homeMatchday.map((player) => player.uuid));
+    const awayMatchdayIds = new Set(awayMatchday.map((player) => player.uuid));
+    const homeBenchPlayer = world.squads[homeTeamId].find((player) => !homeMatchdayIds.has(player.uuid))!;
+    const awayBenchPlayer = world.squads[awayTeamId].find((player) => !awayMatchdayIds.has(player.uuid))!;
+    const homeKeeper = homeMatchday.find((player) => player.position === 'GK') ?? homeMatchday[0];
+    const result: MatchResult = {
+      fixtureId: 'matchday-audit-fixture',
+      homeTeamId,
+      awayTeamId,
+      homeGoals: 1,
+      awayGoals: 0,
+      extraTime: false,
+      penalties: false,
+      events: [
+        {
+          minute: 24,
+          type: 'goal',
+          teamId: homeTeamId,
+          playerId: homeBenchPlayer.uuid,
+          description: 'Bench player is incorrectly credited with a goal.',
+        },
+        {
+          minute: 64,
+          type: 'gk_save',
+          teamId: homeTeamId,
+          playerId: homeKeeper.uuid,
+          deniedScorerId: awayBenchPlayer.uuid,
+          description: 'Bench attacker is incorrectly credited with a denied goal.',
+        },
+      ],
+      stats: {
+        possession: [50, 50],
+        shots: [1, 1],
+        shotsOnTarget: [1, 1],
+        corners: [0, 0],
+        fouls: [0, 0],
+        yellowCards: [0, 0],
+        redCards: [0, 0],
+      },
+      competitionType: 'league',
+      competitionName: 'Audit League',
+      roundLabel: 'R1',
+    };
+
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [
+          {
+            ...world.seasonState.calendar[0],
+            completed: true,
+            results: [result],
+          },
+          ...world.seasonState.calendar.slice(1),
+        ],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(validation.errors).toHaveLength(0);
+    expect(codes).toContain('event_player_not_in_matchday');
+    expect(codes).toContain('event_denied_player_not_in_matchday');
+  });
+
+  it('reports player stat counters that drift from completed match events', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const homeMatchday = pickMatchday(world.squads[homeTeamId], 1) ?? [];
+    const awayMatchday = pickMatchday(world.squads[awayTeamId], 1) ?? [];
+    const scorer = homeMatchday.find((player) => player.position === 'FW') ?? homeMatchday[0];
+    const assister = homeMatchday.find((player) => player.position === 'MF' && player.uuid !== scorer.uuid)
+      ?? homeMatchday.find((player) => player.uuid !== scorer.uuid)
+      ?? scorer;
+    const awayKeeper = awayMatchday.find((player) => player.position === 'GK') ?? awayMatchday[0];
+    const awayDefender = awayMatchday.find((player) => player.position === 'DF' && player.uuid !== awayKeeper.uuid)
+      ?? awayMatchday.find((player) => player.uuid !== awayKeeper.uuid)
+      ?? awayKeeper;
+    const result: MatchResult = {
+      fixtureId: 'event-stat-audit-fixture',
+      homeTeamId,
+      awayTeamId,
+      homeGoals: 1,
+      awayGoals: 0,
+      extraTime: false,
+      penalties: false,
+      events: [
+        {
+          minute: 18,
+          type: 'goal',
+          teamId: homeTeamId,
+          playerId: scorer.uuid,
+          description: 'Goal should update scorer totals.',
+        },
+        {
+          minute: 18,
+          type: 'assist',
+          teamId: homeTeamId,
+          playerId: assister.uuid,
+          description: 'Assist should update creator totals.',
+        },
+        {
+          minute: 41,
+          type: 'gk_save',
+          teamId: awayTeamId,
+          playerId: awayKeeper.uuid,
+          deniedScorerId: scorer.uuid,
+          deniedAssisterId: assister.uuid,
+          description: 'Denied chance should update keeper and attackers.',
+        },
+        {
+          minute: 73,
+          type: 'df_block',
+          teamId: awayTeamId,
+          playerId: awayDefender.uuid,
+          deniedScorerId: scorer.uuid,
+          description: 'Block should update defender and attacker.',
+        },
+      ],
+      stats: {
+        possession: [50, 50],
+        shots: [1, 1],
+        shotsOnTarget: [1, 1],
+        corners: [0, 0],
+        fouls: [0, 0],
+        yellowCards: [0, 0],
+        redCards: [0, 0],
+      },
+      competitionType: 'league',
+      competitionName: 'Audit League',
+      roundLabel: 'R1',
+    };
+
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      seasonState: {
+        ...world.seasonState,
+        calendar: [
+          {
+            ...world.seasonState.calendar[0],
+            completed: true,
+            results: [result],
+          },
+          ...world.seasonState.calendar.slice(1),
+        ],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(validation.errors).toHaveLength(0);
+    expect(codes).toContain('player_stat_event_mismatch');
+    expect(codes).toContain('player_segment_event_mismatch');
   });
 });

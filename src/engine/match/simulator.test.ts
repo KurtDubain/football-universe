@@ -4,6 +4,8 @@ import { SeededRNG } from './rng';
 import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
 import { MatchFixture } from '../../types/match';
+import type { Player, PlayerPosition } from '../../types/player';
+import { pickMatchday } from '../players/injuries';
 
 // ─── Test fixtures ────────────────────────────────────────────────
 
@@ -56,6 +58,48 @@ function makeCoach(id: string): CoachBase {
     stabilityBuff: 5,
     age: 50,
   };
+}
+
+function makePlayer(
+  teamId: string,
+  index: number,
+  position: PlayerPosition,
+  rating: number,
+  goalScoring: number,
+): Player {
+  return {
+    uuid: `${teamId}-player-${index}`,
+    teamId,
+    name: `${teamId} ${index}`,
+    number: index + 1,
+    position,
+    rating,
+    goalScoring,
+    marketValue: rating,
+    age: 25,
+    peakRating: rating,
+    peakAge: 27,
+  };
+}
+
+function makeDeepSquad(teamId: string): Player[] {
+  const positions: PlayerPosition[] = [
+    'GK',
+    'DF', 'DF', 'DF', 'DF', 'DF',
+    'MF', 'MF', 'MF', 'MF', 'MF',
+    'FW', 'FW', 'FW',
+    'FW', 'FW', 'MF', 'MF', 'DF', 'DF', 'GK', 'FW',
+  ];
+  return positions.map((position, index) => {
+    const inMatchdayBand = index < 14;
+    return makePlayer(
+      teamId,
+      index,
+      position,
+      inMatchdayBand ? 92 - index : 45 - index,
+      inMatchdayBand ? 5 : 100,
+    );
+  });
 }
 
 function makeFixture(): MatchFixture {
@@ -168,6 +212,46 @@ describe('simulateMatch', () => {
       expect(sim.awayStateChanges.fatigue).toBeGreaterThan(10); // baseline + match fatigue
       expect(typeof sim.homePressureChange).toBe('number');
       expect(typeof sim.awayPressureChange).toBe('number');
+    });
+
+    it('generates player events only from the matchday squad when given full squads', () => {
+      for (let seed = 1; seed <= 40; seed++) {
+        const homeSquad = makeDeepSquad('home');
+        const awaySquad = makeDeepSquad('away');
+        const ctx = {
+          ...buildContext(seed),
+          homeTeam: makeTeam('home', 95),
+          awayTeam: makeTeam('away', 88),
+          homeSquad,
+          awaySquad,
+          globalWindowIdx: 12,
+        };
+        const result = simulateMatch(ctx, makeFixture()).matchResult;
+        const homeMatchdayIds = new Set((pickMatchday(homeSquad, 12) ?? []).map((player) => player.uuid));
+        const awayMatchdayIds = new Set((pickMatchday(awaySquad, 12) ?? []).map((player) => player.uuid));
+        const eventPlayerIds = result.events
+          .filter((event) => event.playerId)
+          .map((event) => ({
+            teamId: event.teamId,
+            playerId: event.playerId!,
+          }));
+
+        expect(eventPlayerIds.length).toBeGreaterThan(0);
+        for (const eventPlayer of eventPlayerIds) {
+          const allowedIds = eventPlayer.teamId === 'home' ? homeMatchdayIds : awayMatchdayIds;
+          expect(allowedIds.has(eventPlayer.playerId)).toBe(true);
+        }
+        for (const event of result.events) {
+          if (event.deniedScorerId) {
+            const attackingIds = event.teamId === 'home' ? awayMatchdayIds : homeMatchdayIds;
+            expect(attackingIds.has(event.deniedScorerId)).toBe(true);
+          }
+          if (event.deniedAssisterId) {
+            const attackingIds = event.teamId === 'home' ? awayMatchdayIds : homeMatchdayIds;
+            expect(attackingIds.has(event.deniedAssisterId)).toBe(true);
+          }
+        }
+      }
     });
   });
 });

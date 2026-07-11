@@ -14,6 +14,7 @@ import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents, applyDenyPipeline } from './events';
 import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
+import { pickMatchday } from '../players/injuries';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -285,10 +286,13 @@ export function simulateMatch(
   fixture: MatchFixture,
 ): SimulationResult {
   const { homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, rng } = ctx;
+  const globalWindowIdx = ctx.globalWindowIdx ?? 0;
+  const homeMatchdaySquad = pickMatchday(ctx.homeSquad, globalWindowIdx);
+  const awayMatchdaySquad = pickMatchday(ctx.awaySquad, globalWindowIdx);
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
-  const homeBoosts = computePlayerBoosts(ctx.homeSquad, ctx.globalWindowIdx ?? 0);
-  const awayBoosts = computePlayerBoosts(ctx.awaySquad, ctx.globalWindowIdx ?? 0);
+  const homeBoosts = computePlayerBoosts(homeMatchdaySquad, globalWindowIdx);
+  const awayBoosts = computePlayerBoosts(awayMatchdaySquad, globalWindowIdx);
 
   // 1. Calculate adjusted strengths. v23 — for neutral-venue matches
   // (cup finals), suppress home advantage by passing isHome=false for
@@ -397,8 +401,8 @@ export function simulateMatch(
     extraTime,
     penaltyHome,
     penaltyAway,
-    ctx.homeSquad,
-    ctx.awaySquad,
+    homeMatchdaySquad,
+    awayMatchdaySquad,
     etHomeGoals ?? 0,
     etAwayGoals ?? 0,
     isBigMatch,
@@ -423,8 +427,8 @@ export function simulateMatch(
         rawEvents,
         homeTeam.id,
         awayTeam.id,
-        ctx.homeSquad,
-        ctx.awaySquad,
+        homeMatchdaySquad,
+        awayMatchdaySquad,
         rng.fork(),
       );
   const isHomeGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === homeTeam.id;

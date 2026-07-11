@@ -13,6 +13,8 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-10: Introduced current-season club-specific player stat segments keyed by `(playerId, teamId)`, with v23 save migration from legacy totals. `playerStats` remains the player-wide season total that follows the player after transfer; team pages, league top-scorer rows, dashboard fixture cards, and Player Detail contribution/split views now read club contribution where appropriate. Verified with TypeScript, targeted tests, full Vitest suite, and production build under Node 24.
 - 2026-07-11: Unified stat semantics for `goal`, `assist`, `own_goal`, and shootout-only `penalty_goal`; MotM, player highlights, post-match stories, player stats, and validation now share the same rule. Added event semantic validation for non-fixture teams, shootout events inside match time, regular events after 120', and GK/DF position mismatches. Career totals for retired players now derive from finished-season history plus the current retiring season, and just-retired players are snapshotted into season history even after leaving squads. Added a multi-season validation smoke test. Verified with TypeScript, full Vitest suite, and production build under Node 24.
 - 2026-07-11: Expanded frozen player-season history with league level, final rank, goals for/against, and points; Player Detail now displays that historical team context. Player Center now includes career scorer/assist tabs backed by shared selectors that resolve active, retired, and history-only identities. `validateWorldData` now warns on event-player team mismatches and injury-history unavailable players appearing in match events. Verified with TypeScript, targeted selector/validation/season tests, full Vitest suite, and production build under Node 24.
+- 2026-07-11: Tightened match event generation so simulator calls use the filtered matchday squad for goals, assists, cards, misses, saves, shootouts, and deny-pipeline credits. `validateWorldData` now warns when active event players or denied attackers are not in the fixture matchday squad. Verified with TypeScript and targeted simulator/validation/deny-pipeline tests under Node 24.
+- 2026-07-11: Added event-derived stat audits in `validateWorldData`: completed match events now explain `goals`, `assists`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses` in both player-wide current-season totals and club-specific segments. Verified with TypeScript and targeted validation/stat/deny/simulator tests under Node 24.
 
 ## Current Main Concerns
 
@@ -41,13 +43,15 @@ This document tracks the data-chain issues found during the initial project revi
 
 ## 2. Player Stat Accuracy
 
-- [ ] Audit generation of `goals`, `assists`, `appearances`, `cleanSheets`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses`.
+- [x] Audit event-derived generation of `goals`, `assists`, `saves`, `keyBlocks`, `bigChances`, and `keyPasses`.
+- [ ] Audit `appearances` and `cleanSheets` against persisted matchday/team context once lineups are stored historically.
 - [x] Verify every completed match can explain its scoreline through match events plus explicit own-goal/penalty semantics.
-- [ ] Verify goals and assists are never assigned to players who did not appear.
+- [x] Verify generated goals and assists are assigned only to players in the fixture matchday squad.
 - [x] Verify event players resolve to known players and a plausible fixture-side team association.
 - [ ] Verify event players are valid active players at the exact match window after mid-season transfers.
 - [x] Verify injured players with active injury history are not silently accepted into match events.
-- [ ] Verify suspended or otherwise unavailable players are not selected into match events.
+- [x] Use matchday-filtered squads for generated events so injured/suspended players are not selected when enough players are available.
+- [ ] Define and audit emergency-floor exceptions where unavailable players are used because fewer than 11 players are available.
 - [x] Verify goalkeeper and defender clean sheets never exceed appearances.
 - [x] Verify defensive and goalkeeper events are only assigned to plausible positions unless deliberately allowed.
 - [x] Verify `penalty_goal`, regular `goal`, extra-time goal, and shootout penalty handling is consistent.
@@ -132,7 +136,10 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Audit invalid match events: impossible position.
 - [x] Audit invalid match events: implausible player/team association.
 - [x] Audit invalid match events: injured player unavailable at match time.
+- [x] Audit invalid match events: active event player not in fixture matchday squad.
 - [ ] Audit invalid match events: suspended/non-injury unavailable player at match time.
+- [x] Audit event-derived player stats against completed match events.
+- [x] Audit event-derived club stat segments against completed match events.
 - [x] Audit score mismatch: match result does not match countable goal events plus explicit exceptions.
 - [ ] Audit transfer mismatch: transfer history, squad movement, and finance/news do not agree.
 - [x] Add tests for regular goal, assist, own goal, penalty goal, shootout penalty, and extra-time goal.

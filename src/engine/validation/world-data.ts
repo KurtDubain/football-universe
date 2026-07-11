@@ -1,7 +1,8 @@
 import type { GameWorld } from '../season/season-manager';
-import type { Player } from '../../types/player';
+import type { Player, PlayerSeasonStats } from '../../types/player';
 import type { MatchEvent, MatchResult } from '../../types/match';
 import { playerTeamStatKey } from '../players/stats';
+import { pickMatchday } from '../players/injuries';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -95,6 +96,170 @@ function isPlayerInjuredAtWindow(player: Player, globalWindowIdx: number): boole
   );
 }
 
+function buildMatchdayPlayerIds(
+  world: GameWorld,
+  result: MatchResult,
+  resultGlobalWindowIdx: number | undefined,
+): Map<string, Set<string>> {
+  const idsByTeam = new Map<string, Set<string>>();
+  if (resultGlobalWindowIdx === undefined) return idsByTeam;
+  for (const teamId of [result.homeTeamId, result.awayTeamId]) {
+    const matchday = pickMatchday(world.squads[teamId], resultGlobalWindowIdx) ?? [];
+    idsByTeam.set(teamId, new Set(matchday.map((player) => player.uuid)));
+  }
+  return idsByTeam;
+}
+
+type EventDerivedStatField =
+  | 'goals'
+  | 'assists'
+  | 'saves'
+  | 'keyBlocks'
+  | 'bigChances'
+  | 'keyPasses';
+
+type EventDerivedStats = Record<EventDerivedStatField, number>;
+
+const EVENT_DERIVED_FIELDS: EventDerivedStatField[] = [
+  'goals',
+  'assists',
+  'saves',
+  'keyBlocks',
+  'bigChances',
+  'keyPasses',
+];
+
+function emptyEventDerivedStats(): EventDerivedStats {
+  return {
+    goals: 0,
+    assists: 0,
+    saves: 0,
+    keyBlocks: 0,
+    bigChances: 0,
+    keyPasses: 0,
+  };
+}
+
+function hasEventDerivedStats(stats: EventDerivedStats): boolean {
+  return EVENT_DERIVED_FIELDS.some((field) => stats[field] > 0);
+}
+
+function addEventDerivedStats(
+  playerStats: Map<string, EventDerivedStats>,
+  segmentStats: Map<string, EventDerivedStats>,
+  playerId: string | undefined,
+  teamId: string | undefined,
+  updates: Partial<EventDerivedStats>,
+): void {
+  if (!playerId || !teamId) return;
+
+  const playerCurrent = playerStats.get(playerId) ?? emptyEventDerivedStats();
+  const segmentKey = playerTeamStatKey(playerId, teamId);
+  const segmentCurrent = segmentStats.get(segmentKey) ?? emptyEventDerivedStats();
+  for (const field of EVENT_DERIVED_FIELDS) {
+    const delta = updates[field] ?? 0;
+    if (delta === 0) continue;
+    playerCurrent[field] += delta;
+    segmentCurrent[field] += delta;
+  }
+  playerStats.set(playerId, playerCurrent);
+  segmentStats.set(segmentKey, segmentCurrent);
+}
+
+function collectEventDerivedStats(
+  result: MatchResult,
+  playerStats: Map<string, EventDerivedStats>,
+  segmentStats: Map<string, EventDerivedStats>,
+): void {
+  for (const event of result.events ?? []) {
+    if (event.minute > 120) continue;
+    if (event.type === 'penalty_goal' || event.type === 'penalty_miss') continue;
+
+    if (event.type === 'goal') {
+      addEventDerivedStats(playerStats, segmentStats, event.playerId, event.teamId, {
+        goals: 1,
+        bigChances: 1,
+      });
+      continue;
+    }
+
+    if (event.type === 'assist') {
+      addEventDerivedStats(playerStats, segmentStats, event.playerId, event.teamId, {
+        assists: 1,
+        keyPasses: 1,
+      });
+      continue;
+    }
+
+    if (event.type !== 'gk_save' && event.type !== 'df_block') continue;
+
+    addEventDerivedStats(playerStats, segmentStats, event.playerId, event.teamId, {
+      saves: event.type === 'gk_save' ? 1 : 0,
+      keyBlocks: event.type === 'df_block' ? 1 : 0,
+    });
+
+    const attackingTeamId = getOpposingTeamId(result, event.teamId);
+    addEventDerivedStats(playerStats, segmentStats, event.deniedScorerId, attackingTeamId, {
+      bigChances: 1,
+    });
+    addEventDerivedStats(playerStats, segmentStats, event.deniedAssisterId, attackingTeamId, {
+      keyPasses: 1,
+    });
+  }
+}
+
+function eventDerivedMismatchDetails(
+  expected: EventDerivedStats,
+  actual: Pick<PlayerSeasonStats, EventDerivedStatField> | undefined,
+): string[] {
+  if (!actual) {
+    return EVENT_DERIVED_FIELDS
+      .filter((field) => expected[field] > 0)
+      .map((field) => `${field} expected ${expected[field]} but row is missing`);
+  }
+  return EVENT_DERIVED_FIELDS
+    .filter((field) => expected[field] !== actual[field])
+    .map((field) => `${field} expected ${expected[field]} but found ${actual[field]}`);
+}
+
+function validateEventDerivedStats(
+  world: GameWorld,
+  eventDerivedByPlayer: Map<string, EventDerivedStats>,
+  eventDerivedBySegment: Map<string, EventDerivedStats>,
+  issues: WorldDataIssue[],
+): void {
+  for (const [playerId, expected] of eventDerivedByPlayer.entries()) {
+    if (!hasEventDerivedStats(expected)) continue;
+    const actual = world.playerStats[playerId];
+    const details = eventDerivedMismatchDetails(expected, actual);
+    if (details.length === 0) continue;
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'player_stat_event_mismatch',
+      message: `playerStats row ${playerId} does not match completed match events: ${details.join(', ')}.`,
+      teamId: actual?.teamId,
+      playerId,
+    });
+  }
+
+  if (Object.keys(world.playerStatSegments ?? {}).length === 0) return;
+
+  for (const [segmentKey, expected] of eventDerivedBySegment.entries()) {
+    if (!hasEventDerivedStats(expected)) continue;
+    const [playerId, teamId] = segmentKey.split('@@');
+    const actual = world.playerStatSegments?.[segmentKey];
+    const details = eventDerivedMismatchDetails(expected, actual);
+    if (details.length === 0) continue;
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'player_segment_event_mismatch',
+      message: `playerStatSegments row ${segmentKey} does not match completed match events: ${details.join(', ')}.`,
+      teamId,
+      playerId,
+    });
+  }
+}
+
 function countScorelineEvents(result: MatchResult): { home: number; away: number } {
   let home = 0;
   let away = 0;
@@ -116,6 +281,7 @@ function validateEventSemantics(
   event: MatchEvent,
   activePlayers: Map<string, Player>,
   activePlayerTeams: Map<string, string>,
+  matchdayPlayerIdsByTeam: Map<string, Set<string>>,
   issues: WorldDataIssue[],
   resultGlobalWindowIdx?: number,
 ): void {
@@ -186,6 +352,42 @@ function validateEventSemantics(
     }
   }
 
+  if (eventTeamInFixture && event.playerId && event.type !== 'own_goal') {
+    const activeTeamId = activePlayerTeams.get(event.playerId);
+    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(event.teamId);
+    if (
+      activeTeamId === event.teamId
+      && matchdayPlayerIds
+      && !matchdayPlayerIds.has(event.playerId)
+    ) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'event_player_not_in_matchday',
+        message: `Match event player ${event.playerId} is associated with ${event.teamId} but was not in that fixture's matchday squad.`,
+        teamId: event.teamId,
+        playerId: event.playerId,
+        fixtureId: result.fixtureId,
+      });
+    }
+  }
+
+  if (attackingTeamId) {
+    const matchdayPlayerIds = matchdayPlayerIdsByTeam.get(attackingTeamId);
+    for (const playerId of deniedPlayerIds) {
+      if (!matchdayPlayerIds) continue;
+      if (activePlayerTeams.get(playerId) !== attackingTeamId) continue;
+      if (matchdayPlayerIds.has(playerId)) continue;
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'event_denied_player_not_in_matchday',
+        message: `Denied attacking player ${playerId} is associated with ${attackingTeamId} but was not in that fixture's matchday squad.`,
+        teamId: attackingTeamId,
+        playerId,
+        fixtureId: result.fixtureId,
+      });
+    }
+  }
+
   if ((event.type === 'goal' || event.type === 'assist' || event.type === 'own_goal') && event.minute > 120) {
     pushIssue(issues, {
       severity: 'warning',
@@ -242,6 +444,8 @@ function validateResult(
   issues: WorldDataIssue[],
   resultGlobalWindowIdx?: number,
 ): void {
+  const matchdayPlayerIdsByTeam = buildMatchdayPlayerIds(world, result, resultGlobalWindowIdx);
+
   if (!world.teamBases[result.homeTeamId]) {
     pushIssue(issues, {
       severity: 'error',
@@ -290,6 +494,7 @@ function validateResult(
       event,
       activePlayers,
       activePlayerTeams,
+      matchdayPlayerIdsByTeam,
       issues,
       resultGlobalWindowIdx,
     );
@@ -318,6 +523,8 @@ function validateResult(
 
 export function validateWorldData(world: GameWorld): WorldDataValidationResult {
   const issues: WorldDataIssue[] = [];
+  const eventDerivedByPlayer = new Map<string, EventDerivedStats>();
+  const eventDerivedBySegment = new Map<string, EventDerivedStats>();
   const teamBaseIds = new Set(Object.keys(world.teamBases ?? {}));
   const teamStateIds = new Set(Object.keys(world.teamStates ?? {}));
   const squadTeamIds = new Set(Object.keys(world.squads ?? {}));
@@ -547,9 +754,12 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       : undefined;
     for (const result of window.results ?? []) {
       validateResult(world, result, activePlayers, activePlayerTeams, issues, resultGlobalWindowIdx);
+      collectEventDerivedStats(result, eventDerivedByPlayer, eventDerivedBySegment);
     }
     if (hasResults) completedResultWindowOrdinal++;
   }
+
+  validateEventDerivedStats(world, eventDerivedByPlayer, eventDerivedBySegment, issues);
 
   const errors = issues.filter((issue) => issue.severity === 'error');
   const warnings = issues.filter((issue) => issue.severity === 'warning');
