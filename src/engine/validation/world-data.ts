@@ -1,6 +1,7 @@
 import type { GameWorld } from '../season/season-manager';
 import type { Player, PlayerSeasonStats } from '../../types/player';
 import type { MatchEvent, MatchResult } from '../../types/match';
+import type { TransferRecord } from '../../types/transfer';
 import { playerTeamStatKey } from '../players/stats';
 import { pickMatchday } from '../players/injuries';
 
@@ -258,6 +259,237 @@ function validateEventDerivedStats(
       playerId,
     });
   }
+}
+
+function isFreeMarketTeam(teamId: string): boolean {
+  return teamId === '__free_market__';
+}
+
+function isFeeBearingTransfer(record: TransferRecord): boolean {
+  return (record.type === 'transfer' || record.type === 'free_agent') && (record.fee ?? 0) > 0;
+}
+
+function transferOrder(record: TransferRecord): number {
+  return record.season * 10000 + record.windowIndex;
+}
+
+function validateFreeAgentAndRetirementState(
+  world: GameWorld,
+  activePlayerTeams: Map<string, string>,
+  issues: WorldDataIssue[],
+): void {
+  const freeAgentIds = new Set((world.freeAgentPool ?? []).map((player) => player.uuid));
+  const retiredIds = new Set((world.retirementHistory ?? []).map((player) => player.uuid));
+
+  for (const player of world.freeAgentPool ?? []) {
+    const activeTeamId = activePlayerTeams.get(player.uuid);
+    if (activeTeamId) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'free_agent_active_overlap',
+        message: `Free agent ${player.uuid} is also active in squad ${activeTeamId}.`,
+        teamId: activeTeamId,
+        playerId: player.uuid,
+      });
+    }
+    if (retiredIds.has(player.uuid)) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'free_agent_retired_overlap',
+        message: `Free agent ${player.uuid} also appears in retirement history.`,
+        teamId: player.teamId,
+        playerId: player.uuid,
+      });
+    }
+  }
+
+  for (const retired of world.retirementHistory ?? []) {
+    const activeTeamId = activePlayerTeams.get(retired.uuid);
+    if (activeTeamId) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'retired_player_active_overlap',
+        message: `Retired player ${retired.uuid} is also active in squad ${activeTeamId}.`,
+        teamId: activeTeamId,
+        playerId: retired.uuid,
+      });
+    }
+    if (freeAgentIds.has(retired.uuid)) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'retired_player_free_agent_overlap',
+        message: `Retired player ${retired.uuid} also appears in the free agent pool.`,
+        teamId: retired.teamId,
+        playerId: retired.uuid,
+      });
+    }
+  }
+}
+
+function validateLatestTransferDestinations(
+  world: GameWorld,
+  activePlayerTeams: Map<string, string>,
+  issues: WorldDataIssue[],
+): void {
+  const latestByPlayer = new Map<string, TransferRecord>();
+  for (const record of world.transferHistory ?? []) {
+    const existing = latestByPlayer.get(record.playerId);
+    if (!existing || transferOrder(record) >= transferOrder(existing)) {
+      latestByPlayer.set(record.playerId, record);
+    }
+  }
+
+  const freeAgentIds = new Set((world.freeAgentPool ?? []).map((player) => player.uuid));
+  const retiredIds = new Set((world.retirementHistory ?? []).map((player) => player.uuid));
+
+  for (const record of latestByPlayer.values()) {
+    const activeTeamId = activePlayerTeams.get(record.playerId);
+    if (isFreeMarketTeam(record.toTeamId)) {
+      if (activeTeamId) {
+        pushIssue(issues, {
+          severity: 'warning',
+          code: 'transfer_latest_free_market_but_active',
+          message: `Latest transfer sends ${record.playerId} to the free market, but they are active in ${activeTeamId}.`,
+          teamId: activeTeamId,
+          playerId: record.playerId,
+          season: record.season,
+        });
+      }
+      if (!activeTeamId && !freeAgentIds.has(record.playerId) && !retiredIds.has(record.playerId)) {
+        pushIssue(issues, {
+          severity: 'warning',
+          code: 'transfer_latest_destination_unresolved',
+          message: `Latest transfer sends ${record.playerId} to the free market, but they are neither in freeAgentPool nor retired.`,
+          teamId: record.toTeamId,
+          playerId: record.playerId,
+          season: record.season,
+        });
+      }
+      continue;
+    }
+
+    if (activeTeamId && activeTeamId !== record.toTeamId) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'transfer_latest_squad_mismatch',
+        message: `Latest transfer sends ${record.playerId} to ${record.toTeamId}, but active squad is ${activeTeamId}.`,
+        teamId: record.toTeamId,
+        playerId: record.playerId,
+        season: record.season,
+      });
+      continue;
+    }
+
+    if (!activeTeamId && !retiredIds.has(record.playerId) && !freeAgentIds.has(record.playerId)) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'transfer_latest_destination_unresolved',
+        message: `Latest transfer sends ${record.playerId} to ${record.toTeamId}, but no active, retired, or free-agent state resolves them.`,
+        teamId: record.toTeamId,
+        playerId: record.playerId,
+        season: record.season,
+      });
+    }
+  }
+}
+
+function validateTransferFinanceHistory(
+  world: GameWorld,
+  issues: WorldDataIssue[],
+): void {
+  const expected = new Map<string, { season: number; teamId: string; income: number; expense: number }>();
+  const ensure = (season: number, teamId: string) => {
+    const key = `${season}@@${teamId}`;
+    const current = expected.get(key) ?? { season, teamId, income: 0, expense: 0 };
+    expected.set(key, current);
+    return current;
+  };
+
+  for (const record of world.transferHistory ?? []) {
+    if (!isFeeBearingTransfer(record)) continue;
+    const fee = record.fee ?? 0;
+    if (!isFreeMarketTeam(record.fromTeamId)) ensure(record.season, record.fromTeamId).income += fee;
+    if (!isFreeMarketTeam(record.toTeamId)) ensure(record.season, record.toTeamId).expense += fee;
+  }
+
+  for (const row of expected.values()) {
+    const finance = world.teamFinances[row.teamId];
+    const history = finance?.history.find((entry) => entry.season === row.season);
+    if (!history) continue;
+    const missingIncome = history.transferIncome < row.income;
+    const missingExpense = history.transferExpense < row.expense;
+    if (!missingIncome && !missingExpense) continue;
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'transfer_finance_history_mismatch',
+      message: `Finance history for ${row.teamId} S${row.season} has transfer income/expense ${history.transferIncome}/${history.transferExpense}, below transferHistory expectation ${row.income}/${row.expense}.`,
+      teamId: row.teamId,
+      season: row.season,
+    });
+  }
+}
+
+function parseManualTransferNewsId(id: string): {
+  season: number;
+  windowIndex: number;
+  playerId: string;
+  toTeamId: string;
+} | null {
+  const match = /^manual-transfer:S(\d+):W(\d+):(.+):([^:]+)$/.exec(id);
+  if (!match) return null;
+  return {
+    season: Number(match[1]),
+    windowIndex: Number(match[2]),
+    playerId: match[3],
+    toTeamId: match[4],
+  };
+}
+
+function validateTransferNewsLinks(
+  world: GameWorld,
+  issues: WorldDataIssue[],
+): void {
+  for (const news of world.newsLog ?? []) {
+    const parsed = parseManualTransferNewsId(news.id);
+    if (!parsed) continue;
+    if (news.seasonNumber !== parsed.season || news.windowIndex !== parsed.windowIndex) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'transfer_news_identity_mismatch',
+        message: `Transfer news ${news.id} has season/window ${news.seasonNumber}/${news.windowIndex}, but its id encodes ${parsed.season}/${parsed.windowIndex}.`,
+        teamId: parsed.toTeamId,
+        playerId: parsed.playerId,
+        season: parsed.season,
+      });
+    }
+
+    const hasTransfer = (world.transferHistory ?? []).some((record) =>
+      record.season === parsed.season
+      && record.windowIndex === parsed.windowIndex
+      && record.playerId === parsed.playerId
+      && record.toTeamId === parsed.toTeamId
+    );
+    if (hasTransfer) continue;
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'transfer_news_history_mismatch',
+      message: `Transfer news ${news.id} does not resolve to a matching transferHistory record.`,
+      teamId: parsed.toTeamId,
+      playerId: parsed.playerId,
+      season: parsed.season,
+    });
+  }
+}
+
+function validateTransferConsistency(
+  world: GameWorld,
+  activePlayerTeams: Map<string, string>,
+  issues: WorldDataIssue[],
+): void {
+  validateFreeAgentAndRetirementState(world, activePlayerTeams, issues);
+  validateLatestTransferDestinations(world, activePlayerTeams, issues);
+  validateTransferFinanceHistory(world, issues);
+  validateTransferNewsLinks(world, issues);
 }
 
 function countScorelineEvents(result: MatchResult): { home: number; away: number } {
@@ -760,6 +992,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
   }
 
   validateEventDerivedStats(world, eventDerivedByPlayer, eventDerivedBySegment, issues);
+  validateTransferConsistency(world, activePlayerTeams, issues);
 
   const errors = issues.filter((issue) => issue.severity === 'error');
   const warnings = issues.filter((issue) => issue.severity === 'warning');

@@ -6,6 +6,7 @@
  */
 import type { GameWorld } from '../engine/season/season-manager';
 import { syncPlayerStatsTeamIds } from '../engine/players/stats';
+import type { NewsItem } from '../engine/season/season-manager';
 import type { Player, PlayerSeasonStats } from '../types/player';
 import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../types/transfer';
 
@@ -43,6 +44,22 @@ function transferWindowIndex(world: GameWorld): number {
   return world.seasonState.currentWindowIndex;
 }
 
+function transferNewsId(record: TransferRecord, suffix = record.toTeamId): string {
+  return `manual-transfer:S${record.season}:W${record.windowIndex}:${record.playerId}:${suffix}`;
+}
+
+function newsFromTransferRecord(record: TransferRecord, titlePrefix = '转会'): NewsItem {
+  const feeText = record.fee ? `，费用约€${record.fee}M` : '';
+  return {
+    id: transferNewsId(record),
+    seasonNumber: record.season,
+    windowIndex: record.windowIndex,
+    type: 'trophy',
+    title: `${titlePrefix}: ${record.playerName} 加盟 ${record.toTeamName}`,
+    description: `${record.playerName} 从 ${record.fromTeamName} 前往 ${record.toTeamName}${feeText}。${record.reason}。`,
+  };
+}
+
 function pickFreeNumber(used: Set<number>, preferred: number): number {
   if (!used.has(preferred)) return preferred;
   for (let n = 2; n <= 99; n++) {
@@ -59,16 +76,66 @@ function pickReleaseCandidate(buyerSquad: Player[], incoming: Player): Player | 
   return [...buyerSquad].sort((a, b) => a.rating - b.rating)[0];
 }
 
+function withTransferIncome(
+  fin: NonNullable<GameWorld['teamFinances'][string]>,
+  amount: number,
+  season: number,
+  currentSeason: number,
+): NonNullable<GameWorld['teamFinances'][string]> {
+  const historyIndex = fin.history.findIndex((entry) => entry.season === season);
+  if (historyIndex >= 0) {
+    const history = [...fin.history];
+    const record = history[historyIndex];
+    history[historyIndex] = {
+      ...record,
+      endCash: record.endCash + amount,
+      transferIncome: record.transferIncome + amount,
+    };
+    return { ...fin, cash: fin.cash + amount, history };
+  }
+  return {
+    ...fin,
+    cash: fin.cash + amount,
+    totalIncome: season === currentSeason ? fin.totalIncome + amount : fin.totalIncome,
+  };
+}
+
+function withTransferExpense(
+  fin: NonNullable<GameWorld['teamFinances'][string]>,
+  amount: number,
+  season: number,
+  currentSeason: number,
+): NonNullable<GameWorld['teamFinances'][string]> {
+  const historyIndex = fin.history.findIndex((entry) => entry.season === season);
+  if (historyIndex >= 0) {
+    const history = [...fin.history];
+    const record = history[historyIndex];
+    history[historyIndex] = {
+      ...record,
+      endCash: record.endCash - amount,
+      transferExpense: record.transferExpense + amount,
+    };
+    return { ...fin, cash: fin.cash - amount, history };
+  }
+  return {
+    ...fin,
+    cash: fin.cash - amount,
+    totalExpense: season === currentSeason ? fin.totalExpense + amount : fin.totalExpense,
+  };
+}
+
 function creditFinance(
   finances: GameWorld['teamFinances'],
   teamId: string,
   amount: number,
+  season: number,
+  currentSeason: number,
 ): GameWorld['teamFinances'] {
   const fin = finances[teamId];
   if (!fin || amount <= 0) return finances;
   return {
     ...finances,
-    [teamId]: { ...fin, cash: fin.cash + amount, totalIncome: fin.totalIncome + amount },
+    [teamId]: withTransferIncome(fin, amount, season, currentSeason),
   };
 }
 
@@ -76,12 +143,14 @@ function debitFinance(
   finances: GameWorld['teamFinances'],
   teamId: string,
   amount: number,
+  season: number,
+  currentSeason: number,
 ): GameWorld['teamFinances'] {
   const fin = finances[teamId];
   if (!fin || amount <= 0) return finances;
   return {
     ...finances,
-    [teamId]: { ...fin, cash: fin.cash - amount, totalExpense: fin.totalExpense + amount },
+    [teamId]: withTransferExpense(fin, amount, season, currentSeason),
   };
 }
 
@@ -123,15 +192,16 @@ function applyBalancedTransfer(params: {
       ]
     : sellerSquadWithoutPlayer;
 
+  const season = transferSeason(world);
+  const currentSeason = world.seasonState.seasonNumber;
   let teamFinances = { ...world.teamFinances };
-  teamFinances = creditFinance(teamFinances, fromTeamId, fee);
-  teamFinances = debitFinance(teamFinances, toTeamId, fee);
+  teamFinances = creditFinance(teamFinances, fromTeamId, fee, season, currentSeason);
+  teamFinances = debitFinance(teamFinances, toTeamId, fee, season, currentSeason);
   if (released) {
-    teamFinances = debitFinance(teamFinances, fromTeamId, FREE_AGENT_SIGNING_FEE);
-    teamFinances = creditFinance(teamFinances, toTeamId, FREE_AGENT_SIGNING_FEE);
+    teamFinances = debitFinance(teamFinances, fromTeamId, FREE_AGENT_SIGNING_FEE, season, currentSeason);
+    teamFinances = creditFinance(teamFinances, toTeamId, FREE_AGENT_SIGNING_FEE, season, currentSeason);
   }
 
-  const season = transferSeason(world);
   const windowIndex = transferWindowIndex(world);
   const transferRecord: TransferRecord = {
     season,
@@ -176,6 +246,11 @@ function applyBalancedTransfer(params: {
       squads,
     ),
     transferHistory: [...(world.transferHistory ?? []), ...transferRecords],
+    newsLog: [
+      ...(world.newsLog ?? []),
+      newsFromTransferRecord(transferRecord, reason === '玩家主动报价' ? '主动引援' : '接受报价'),
+      ...(replacementRecord ? [newsFromTransferRecord(replacementRecord, '阵容补位')] : []),
+    ],
   };
 }
 
@@ -238,11 +313,19 @@ export function signFreeAgent(
   toSquad.push({ ...player, teamId: toTeamId, number: num });
   squads[toTeamId] = toSquad;
 
-  const teamFinances = { ...world.teamFinances };
-  teamFinances[toTeamId] = { ...finance, cash: finance.cash - FREE_AGENT_SIGNING_FEE, totalExpense: finance.totalExpense + FREE_AGENT_SIGNING_FEE };
+  const season = transferSeason(world);
+  const teamFinances = {
+    ...world.teamFinances,
+    [toTeamId]: withTransferExpense(
+      finance,
+      FREE_AGENT_SIGNING_FEE,
+      season,
+      world.seasonState.seasonNumber,
+    ),
+  };
 
   const transferRecord: TransferRecord = {
-    season: transferSeason(world),
+    season,
     windowIndex: transferWindowIndex(world),
     playerId: player.uuid,
     playerName: player.name ?? `${player.number}号`,
@@ -268,6 +351,7 @@ export function signFreeAgent(
     // mid-season releases — but covers the edge case).
     playerStats: syncStatTeamId(world.playerStats, player.uuid, toTeamId),
     transferHistory: [...(world.transferHistory ?? []), transferRecord],
+    newsLog: [...(world.newsLog ?? []), newsFromTransferRecord(transferRecord, '自由签约')],
   };
 }
 

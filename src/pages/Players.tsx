@@ -78,6 +78,7 @@ export default function Players() {
   }
 
   const seasonNumber = world.seasonState.seasonNumber;
+  const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'scorers', label: '射手榜' },
@@ -287,7 +288,7 @@ export default function Players() {
         <span className="text-xs text-slate-500">
           {tab === 'careerScorers' || tab === 'careerAssists'
             ? '生涯总计'
-            : `第 ${seasonNumber} 赛季 · 当前赛季总计`}
+            : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
         </span>
       </div>
 
@@ -332,7 +333,7 @@ export default function Players() {
                 ) : tab === 'defense' ? (
                   <>
                     <th className="px-2 py-2.5 text-center">零封</th>
-                    <th className="px-2 py-2.5 text-center">封堵</th>
+                    <th className="px-2 py-2.5 text-center">关键封堵</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                       出场
                     </th>
@@ -340,14 +341,14 @@ export default function Players() {
                 ) : tab === 'keepers' ? (
                   <>
                     <th className="px-2 py-2.5 text-center">零封</th>
-                    <th className="px-2 py-2.5 text-center">扑救</th>
+                    <th className="px-2 py-2.5 text-center">神扑</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                       出场
                     </th>
                   </>
                 ) : tab === 'creation' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">关键传</th>
+                    <th className="px-2 py-2.5 text-center">威胁传球</th>
                     <th className="px-2 py-2.5 text-center">助攻</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                       传射
@@ -389,7 +390,9 @@ export default function Players() {
                   >
                     {tab === 'careerScorers' || tab === 'careerAssists'
                       ? '暂无生涯数据'
-                      : '本赛季暂无数据'}
+                      : hasCompletedMatches
+                        ? '本赛季尚无符合该榜单的数据'
+                        : '赛季尚未开始，完成首场比赛后生成当前赛季数据'}
                   </td>
                 </tr>
               ) : (

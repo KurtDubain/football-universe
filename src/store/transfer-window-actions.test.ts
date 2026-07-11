@@ -63,7 +63,16 @@ function makeFinance(cash = 100): FinanceState {
     cash,
     totalIncome: 0,
     totalExpense: 0,
-    history: [],
+    history: [{
+      season: 3,
+      startCash: cash,
+      endCash: cash,
+      prizeMoney: 0,
+      tvSponsor: 0,
+      transferIncome: 0,
+      salaries: 0,
+      transferExpense: 0,
+    }],
   };
 }
 
@@ -192,13 +201,36 @@ describe('transfer-window store actions', () => {
       type: 'free_agent',
       fee: 5,
     });
+    expect(out.newsLog).toHaveLength(2);
+    expect(out.newsLog.every((n) => n.seasonNumber === 3)).toBe(true);
+    expect(out.newsLog.every((n) => n.windowIndex === world.seasonState.currentWindowIndex)).toBe(true);
+    expect(out.newsLog[0]).toMatchObject({
+      id: 'manual-transfer:S3:W0:p-sell:buyer',
+      type: 'trophy',
+    });
+    expect(out.newsLog[1]).toMatchObject({
+      id: 'manual-transfer:S3:W0:p-release:seller',
+      type: 'trophy',
+    });
 
     expect(out.teamFinances.seller.cash).toBe(135);
-    expect(out.teamFinances.seller.totalIncome).toBe(40);
-    expect(out.teamFinances.seller.totalExpense).toBe(5);
+    expect(out.teamFinances.seller.totalIncome).toBe(0);
+    expect(out.teamFinances.seller.totalExpense).toBe(0);
+    expect(out.teamFinances.seller.history.at(-1)).toMatchObject({
+      season: 3,
+      endCash: 135,
+      transferIncome: 40,
+      transferExpense: 5,
+    });
     expect(out.teamFinances.buyer.cash).toBe(65);
-    expect(out.teamFinances.buyer.totalIncome).toBe(5);
-    expect(out.teamFinances.buyer.totalExpense).toBe(40);
+    expect(out.teamFinances.buyer.totalIncome).toBe(0);
+    expect(out.teamFinances.buyer.totalExpense).toBe(0);
+    expect(out.teamFinances.buyer.history.at(-1)).toMatchObject({
+      season: 3,
+      endCash: 65,
+      transferIncome: 5,
+      transferExpense: 40,
+    });
   });
 
   it('attributes free-agent signings to transferWindow.season', () => {
@@ -222,6 +254,19 @@ describe('transfer-window store actions', () => {
       playerId: 'p-free',
       toTeamId: 'buyer',
       type: 'free_agent',
+    });
+    expect(out!.newsLog.at(-1)).toMatchObject({
+      id: 'manual-transfer:S3:W0:p-free:buyer',
+      seasonNumber: 3,
+      windowIndex: world.seasonState.currentWindowIndex,
+      type: 'trophy',
+    });
+    expect(out!.teamFinances.buyer.cash).toBe(95);
+    expect(out!.teamFinances.buyer.totalExpense).toBe(0);
+    expect(out!.teamFinances.buyer.history.at(-1)).toMatchObject({
+      season: 3,
+      endCash: 95,
+      transferExpense: 5,
     });
   });
 });

@@ -196,6 +196,7 @@ export default function PlayerDetail() {
   const clubGoals = clubStats?.goals ?? 0;
   const teamTotalGoals = currentTeamClubRows.reduce((sum, row) => sum + row.goals, 0);
   const contribution = teamTotalGoals > 0 ? Math.round((clubGoals / teamTotalGoals) * 100) : 0;
+  const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -242,27 +243,44 @@ export default function PlayerDetail() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatBox label="出场" value={appearances} />
-        <StatBox label="进球" value={goals} color="text-amber-400" />
-        <StatBox label="助攻" value={assists} color="text-blue-400" />
-        <StatBox label="黄牌" value={stats?.yellowCards ?? 0} color="text-yellow-400" />
+      {/* Current-season player-wide totals across all competitions. */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">当前赛季数据</h3>
+          <span className="text-[10px] text-slate-500">全赛事 · 球员总计</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatBox label="出场" value={appearances} />
+          <StatBox label="进球" value={goals} color="text-amber-400" />
+          <StatBox label="助攻" value={assists} color="text-blue-400" />
+          <StatBox label="黄牌" value={stats?.yellowCards ?? 0} color="text-yellow-400" />
+        </div>
+        {!hasCompletedMatches && (
+          <p className="text-[11px] text-slate-500 text-center">
+            赛季尚未开始，完成首场比赛后生成当前赛季统计。
+          </p>
+        )}
       </div>
 
-      {/* Efficiency & Contribution */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-          <div className="text-lg font-bold text-slate-100">{goalsPerApp}</div>
-          <div className="text-[10px] text-slate-500">场均进球</div>
+      {/* Efficiency & current-club contribution */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">效率与球队贡献</h3>
+          <span className="text-[10px] text-slate-500">效率为赛季总计 · 占比仅计当前俱乐部</span>
         </div>
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-          <div className="text-lg font-bold text-slate-100">{assistsPerApp}</div>
-          <div className="text-[10px] text-slate-500">场均助攻</div>
-        </div>
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-          <div className={`text-lg font-bold ${contribution >= 30 ? 'text-amber-400' : 'text-slate-100'}`}>{contribution}%</div>
-          <div className="text-[10px] text-slate-500">本队进球占比</div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
+            <div className="text-lg font-bold text-slate-100">{goalsPerApp}</div>
+            <div className="text-[10px] text-slate-500">赛季场均进球</div>
+          </div>
+          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
+            <div className="text-lg font-bold text-slate-100">{assistsPerApp}</div>
+            <div className="text-[10px] text-slate-500">赛季场均助攻</div>
+          </div>
+          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
+            <div className={`text-lg font-bold ${contribution >= 30 ? 'text-amber-400' : 'text-slate-100'}`}>{contribution}%</div>
+            <div className="text-[10px] text-slate-500">效力本队进球占比</div>
+          </div>
         </div>
       </div>
 
@@ -393,10 +411,10 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
                 <td className="py-1 text-right text-blue-300 tabular-nums">{row.assists}</td>
                 <td className="py-1 text-right text-slate-400 tabular-nums">
                   {row.identity.position === 'GK'
-                    ? `${row.cleanSheets}零封/${row.saves}扑`
+                    ? `${row.cleanSheets}零封/${row.saves}神扑`
                     : row.identity.position === 'DF'
-                    ? `${row.cleanSheets}零封/${row.keyBlocks}封堵`
-                    : `${row.bigChances}射/${row.keyPasses}传`}
+                    ? `${row.cleanSheets}零封/${row.keyBlocks}关键封堵`
+                    : `${row.bigChances}关键射门/${row.keyPasses}威胁传球`}
                 </td>
               </tr>
             ))}
@@ -492,8 +510,9 @@ function computePositionScore(
     const detail = `传射 ${goals + assists} (${goals}进/${assists}助) · 威胁传球 ${keyPasses}`;
     return { score, rating: scoreToGrade(score), perGame: gaRate, label: '场均传射贡献', detail };
   }
-  // DF / GK — find the team's league goals-conceded context for the DF
-  // formula. GK's score is independent of team context (pure individual).
+  // DF / GK — the team context deliberately uses league standings only.
+  // Individual stats remain current-season totals across all competitions;
+  // the UI labels this mixed scope explicitly. GK score has no team context.
   let teamGC = 0;
   let teamMatches = 0;
   for (const st of [world.league1Standings, world.league2Standings, world.league3Standings]) {
@@ -525,7 +544,7 @@ function computePositionScore(
     + Math.min(100, blocksPerGame * 400) * 0.3
     + teamDefenseScore * 0.2,
   );
-  const detail = `零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 解围 ${keyBlocks} (${blocksPerGame.toFixed(2)}/场) · 球队失球 ${gcPerGame.toFixed(2)}/场`;
+  const detail = `全赛事零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 关键封堵 ${keyBlocks} (${blocksPerGame.toFixed(2)}/场) · 球队联赛失球 ${gcPerGame.toFixed(2)}/场`;
   return { score, rating: scoreToGrade(score), perGame: cleanRate, label: '后卫综合', detail };
 }
 
@@ -568,6 +587,9 @@ function PositionPerformanceCard({
         {result.label}
         {result.perGame !== undefined ? ` ${player.position === 'GK' || player.position === 'DF' ? (result.perGame * 100).toFixed(0) + '%' : result.perGame.toFixed(2)}` : ''}
       </div>
+      {player.position === 'DF' && (
+        <div className="text-[10px] text-slate-500 mb-1">评分口径: 个人全赛事数据 + 球队联赛防守背景</div>
+      )}
       {result.detail && (
         <div className="text-[10px] text-slate-400 mb-2">{result.detail}</div>
       )}
@@ -586,7 +608,7 @@ function positionScoreHint(pos: string): string {
   if (pos === 'FW') return '0.5球/场 = 100分';
   if (pos === 'MF') return '0.5传射/场 = 100分';
   if (pos === 'GK') return '35%零封 + 0.5神扑/场';
-  return '40%零封 + 0.2解围/场 + 球队';
+  return '40%零封 + 0.2关键封堵/场 + 联赛球队防守';
 }
 
 /** Per-season career history table (v19). */

@@ -494,4 +494,69 @@ describe('validateWorldData', () => {
     expect(codes).toContain('player_stat_event_mismatch');
     expect(codes).toContain('player_segment_event_mismatch');
   });
+
+  it('reports transfer history, finance, news, and roster-state inconsistencies', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const player = world.squads[homeTeamId][0];
+    const financeHistory = {
+      season: 1,
+      startCash: 100,
+      endCash: 100,
+      prizeMoney: 0,
+      tvSponsor: 0,
+      transferIncome: 0,
+      salaries: 0,
+      transferExpense: 0,
+    };
+
+    const validation = validateWorldData({
+      ...world,
+      freeAgentPool: [player],
+      transferHistory: [
+        {
+          season: 1,
+          windowIndex: 5,
+          playerId: player.uuid,
+          playerName: player.name,
+          playerNumber: player.number,
+          position: player.position,
+          fromTeamId: homeTeamId,
+          fromTeamName: world.teamBases[homeTeamId].name,
+          toTeamId: awayTeamId,
+          toTeamName: world.teamBases[awayTeamId].name,
+          type: 'transfer',
+          fee: 20,
+          reason: '测试转会记录',
+        },
+      ],
+      teamFinances: {
+        ...world.teamFinances,
+        [homeTeamId]: {
+          ...world.teamFinances[homeTeamId],
+          history: [financeHistory],
+        },
+        [awayTeamId]: {
+          ...world.teamFinances[awayTeamId],
+          history: [financeHistory],
+        },
+      },
+      newsLog: [
+        {
+          id: `manual-transfer:S1:W5:missing-player:${awayTeamId}`,
+          seasonNumber: 1,
+          windowIndex: 5,
+          type: 'trophy',
+          title: '孤立转会新闻',
+          description: '这条新闻没有对应的转会记录。',
+        },
+      ],
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).toContain('free_agent_active_overlap');
+    expect(codes).toContain('transfer_latest_squad_mismatch');
+    expect(codes).toContain('transfer_finance_history_mismatch');
+    expect(codes).toContain('transfer_news_history_mismatch');
+  });
 });

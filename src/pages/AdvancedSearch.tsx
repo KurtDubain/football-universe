@@ -354,8 +354,8 @@ function PlayerResults({ rows, world }: { rows: PlayerSearchResult[]; world: Non
           <th className="px-3 py-2 text-center">位置</th>
           <th className="px-3 py-2 text-center">能力</th>
           <th className="px-3 py-2 text-center">年龄</th>
-          <th className="px-3 py-2 text-center">进球</th>
-          <th className="px-3 py-2 text-center">助攻</th>
+          <th className="px-3 py-2 text-center" title="当前赛季全赛事">赛季进球</th>
+          <th className="px-3 py-2 text-center" title="当前赛季全赛事">赛季助攻</th>
           <th className="px-3 py-2 text-center">市值</th>
         </tr>
       </thead>

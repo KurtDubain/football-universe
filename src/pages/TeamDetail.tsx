@@ -682,17 +682,17 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           )}
                           {player.position === 'GK' && stats.saves > 0 && (
                             <span className="text-amber-300">
-                              {stats.saves}扑
+                              {stats.saves}神扑
                             </span>
                           )}
                           {player.position === 'DF' && stats.keyBlocks > 0 && (
                             <span className="text-blue-400">
-                              {stats.keyBlocks}封堵
+                              {stats.keyBlocks}关键封堵
                             </span>
                           )}
                           {(player.position === 'MF' || player.position === 'FW') && stats.keyPasses > stats.assists && (
                             <span className="text-emerald-300 hidden sm:inline">
-                              {stats.keyPasses}关键传
+                              {stats.keyPasses}威胁传球
                             </span>
                           )}
                           {stats.yellowCards > 0 && (
@@ -707,7 +707,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           )}
                         </>
                       ) : (
-                        <span className="text-slate-600 text-[10px]">--</span>
+                        <span className="text-slate-600 text-[10px]">本季尚未出场</span>
                       )}
                     </div>
                   </div>
