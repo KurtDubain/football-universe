@@ -5,6 +5,7 @@ import {
   TRANSFER_HISTORY_SEASONS,
   PLAYER_AWARDS_SEASONS,
   TEAM_SEASON_RECORDS_PER_TEAM,
+  PLAYER_STATS_HISTORY_SEASONS,
 } from './storage-limits';
 import type { GameWorld, MatchHistoryEntry } from './season-manager';
 import type { TransferRecord } from '../../types/transfer';
@@ -190,6 +191,22 @@ describe('enforceStorageLimits', () => {
     // teamB unchanged (under cap)
     expect(out.teamSeasonRecords.teamB).toHaveLength(20);
     expect(out.teamSeasonRecords.teamB).toBe(teamSeasonRecords.teamB);
+  });
+
+  it('drops orphaned player-history keys outside the global history window', () => {
+    const makeHistory = (season: number) => ({ season }) as import('../../types/player').PlayerSeasonStatsHistoryEntry;
+    const world = buildWorld({
+      playerStatsHistory: {
+        retiredLongAgo: [makeHistory(1)],
+        recentPlayer: Array.from({ length: 30 }, (_, index) => makeHistory(index + 1)),
+      },
+    });
+
+    const out = enforceStorageLimits(world);
+
+    expect(out.playerStatsHistory.retiredLongAgo).toBeUndefined();
+    expect(out.playerStatsHistory.recentPlayer).toHaveLength(PLAYER_STATS_HISTORY_SEASONS);
+    expect(out.playerStatsHistory.recentPlayer[0].season).toBe(6);
   });
 
   it('does not crash on empty/undefined arrays', () => {

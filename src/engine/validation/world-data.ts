@@ -139,6 +139,7 @@ function validateMatchdaySnapshot(
   teamId: string,
   snapshot: NonNullable<MatchResult['homeMatchday']>,
   activePlayers: Map<string, Player>,
+  activePlayerTeams: Map<string, string>,
   issues: WorldDataIssue[],
   resultSeason?: number,
   resultWindowIndex?: number,
@@ -179,6 +180,17 @@ function validateMatchdaySnapshot(
       season: resultSeason,
     });
   }
+  const expectedNonEmergencySize = Math.min(14, snapshot.availableCount);
+  if (!snapshot.emergencyFloor && snapshot.players.length !== expectedNonEmergencySize) {
+    pushIssue(issues, {
+      severity: 'warning',
+      code: 'matchday_snapshot_size_mismatch',
+      message: `Fixture ${result.fixtureId} stores ${snapshot.players.length} matchday players for ${teamId}, but ${snapshot.availableCount} available players require ${expectedNonEmergencySize}.`,
+      teamId,
+      fixtureId: result.fixtureId,
+      season: resultSeason,
+    });
+  }
 
   for (const entry of snapshot.players) {
     if (!isKnownPlayer(world, entry.playerId, activePlayers)) {
@@ -212,7 +224,10 @@ function validateMatchdaySnapshot(
         resultSeason,
         resultWindowIndex,
       );
-      if (exactTeam.hasTransferEvidence && exactTeam.teamId !== teamId) {
+      const associationMismatch = exactTeam.hasTransferEvidence
+        ? exactTeam.teamId !== teamId
+        : !playerHasKnownTeamAssociation(world, entry.playerId, teamId, activePlayerTeams);
+      if (associationMismatch) {
         pushIssue(issues, {
           severity: 'warning',
           code: 'matchday_snapshot_team_at_window_mismatch',
@@ -305,10 +320,6 @@ function emptyEventDerivedStats(): EventDerivedStats {
   };
 }
 
-function hasEventDerivedStats(stats: EventDerivedStats): boolean {
-  return EVENT_DERIVED_FIELDS.some((field) => stats[field] > 0);
-}
-
 function addEventDerivedStats(
   playerStats: Map<string, EventDerivedStats>,
   segmentStats: Map<string, EventDerivedStats>,
@@ -393,8 +404,14 @@ function validateEventDerivedStats(
   eventDerivedBySegment: Map<string, EventDerivedStats>,
   issues: WorldDataIssue[],
 ): void {
-  for (const [playerId, expected] of eventDerivedByPlayer.entries()) {
-    if (!hasEventDerivedStats(expected)) continue;
+  const playerIds = new Set([
+    ...eventDerivedByPlayer.keys(),
+    ...Object.entries(world.playerStats)
+      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => stat[field] > 0))
+      .map(([playerId]) => playerId),
+  ]);
+  for (const playerId of playerIds) {
+    const expected = eventDerivedByPlayer.get(playerId) ?? emptyEventDerivedStats();
     const actual = world.playerStats[playerId];
     const details = eventDerivedMismatchDetails(expected, actual);
     if (details.length === 0) continue;
@@ -409,8 +426,14 @@ function validateEventDerivedStats(
 
   if (Object.keys(world.playerStatSegments ?? {}).length === 0) return;
 
-  for (const [segmentKey, expected] of eventDerivedBySegment.entries()) {
-    if (!hasEventDerivedStats(expected)) continue;
+  const segmentKeys = new Set([
+    ...eventDerivedBySegment.keys(),
+    ...Object.entries(world.playerStatSegments ?? {})
+      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => stat[field] > 0))
+      .map(([segmentKey]) => segmentKey),
+  ]);
+  for (const segmentKey of segmentKeys) {
+    const expected = eventDerivedBySegment.get(segmentKey) ?? emptyEventDerivedStats();
     const [playerId, teamId] = segmentKey.split('@@');
     const actual = world.playerStatSegments?.[segmentKey];
     const details = eventDerivedMismatchDetails(expected, actual);
@@ -445,12 +468,14 @@ function incrementMatchdayDerived(
 function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]): void {
   const results = (world.seasonState.calendar ?? []).flatMap((window) => window.results ?? []);
   if (results.length === 0) return;
-  if (results.some((result) => !result.homeMatchday || !result.awayMatchday)) return;
+  const hasLegacyResults = results.some((result) => !result.homeMatchday || !result.awayMatchday);
+  const auditableResults = results.filter((result) => result.homeMatchday && result.awayMatchday);
+  if (auditableResults.length === 0) return;
 
   const expectedByPlayer = new Map<string, MatchdayDerivedStats>();
   const expectedBySegment = new Map<string, MatchdayDerivedStats>();
 
-  for (const result of results) {
+  for (const result of auditableResults) {
     const homeClean = result.awayGoals + (result.etAwayGoals ?? 0) === 0;
     const awayClean = result.homeGoals + (result.etHomeGoals ?? 0) === 0;
     for (const [teamId, snapshot, clean] of [
@@ -471,7 +496,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
 
   for (const [playerId, stat] of Object.entries(world.playerStats ?? {})) {
     const expected = expectedByPlayer.get(playerId) ?? { appearances: 0, cleanSheets: 0 };
-    if (stat.appearances !== expected.appearances) {
+    if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'player_appearance_matchday_mismatch',
@@ -480,7 +505,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         playerId,
       });
     }
-    if (stat.cleanSheets !== expected.cleanSheets) {
+    if (hasLegacyResults ? stat.cleanSheets < expected.cleanSheets : stat.cleanSheets !== expected.cleanSheets) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'player_clean_sheet_matchday_mismatch',
@@ -493,7 +518,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
 
   for (const [segmentKey, stat] of Object.entries(world.playerStatSegments ?? {})) {
     const expected = expectedBySegment.get(segmentKey) ?? { appearances: 0, cleanSheets: 0 };
-    if (stat.appearances !== expected.appearances) {
+    if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'player_segment_appearance_matchday_mismatch',
@@ -502,7 +527,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         playerId: stat.playerId,
       });
     }
-    if (stat.cleanSheets !== expected.cleanSheets) {
+    if (hasLegacyResults ? stat.cleanSheets < expected.cleanSheets : stat.cleanSheets !== expected.cleanSheets) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'player_segment_clean_sheet_matchday_mismatch',
@@ -594,6 +619,7 @@ function validateLatestTransferDestinations(
 
   const freeAgentIds = new Set((world.freeAgentPool ?? []).map((player) => player.uuid));
   const retiredIds = new Set((world.retirementHistory ?? []).map((player) => player.uuid));
+  const unresolvedCutoffSeason = Math.max(1, world.seasonState.seasonNumber - 1);
 
   for (const record of latestByPlayer.values()) {
     const activeTeamId = activePlayerTeams.get(record.playerId);
@@ -608,7 +634,12 @@ function validateLatestTransferDestinations(
           season: record.season,
         });
       }
-      if (!activeTeamId && !freeAgentIds.has(record.playerId) && !retiredIds.has(record.playerId)) {
+      if (
+        record.season >= unresolvedCutoffSeason
+        && !activeTeamId
+        && !freeAgentIds.has(record.playerId)
+        && !retiredIds.has(record.playerId)
+      ) {
         pushIssue(issues, {
           severity: 'warning',
           code: 'transfer_latest_destination_unresolved',
@@ -633,7 +664,12 @@ function validateLatestTransferDestinations(
       continue;
     }
 
-    if (!activeTeamId && !retiredIds.has(record.playerId) && !freeAgentIds.has(record.playerId)) {
+    if (
+      record.season >= unresolvedCutoffSeason
+      && !activeTeamId
+      && !retiredIds.has(record.playerId)
+      && !freeAgentIds.has(record.playerId)
+    ) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'transfer_latest_destination_unresolved',
@@ -1004,6 +1040,7 @@ function validateResult(
       result.homeTeamId,
       result.homeMatchday,
       activePlayers,
+      activePlayerTeams,
       issues,
       resultSeason,
       resultWindowIndex,
@@ -1016,6 +1053,7 @@ function validateResult(
       result.awayTeamId,
       result.awayMatchday,
       activePlayers,
+      activePlayerTeams,
       issues,
       resultSeason,
       resultWindowIndex,
@@ -1328,7 +1366,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
     }
     const hasResults = (window.results?.length ?? 0) > 0;
     const resultGlobalWindowIdx = hasResults
-      ? currentSeasonStartGlobalIdx + completedResultWindowOrdinal + 1
+      ? currentSeasonStartGlobalIdx + completedResultWindowOrdinal
       : undefined;
     for (const result of window.results ?? []) {
       validateResult(

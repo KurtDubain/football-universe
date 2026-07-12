@@ -231,8 +231,8 @@ describe('simulateMatch', () => {
         const awayMatchdayIds = new Set((pickMatchday(awaySquad, 12) ?? []).map((player) => player.uuid));
         expect(new Set(result.homeMatchday?.players.map((player) => player.playerId))).toEqual(homeMatchdayIds);
         expect(new Set(result.awayMatchday?.players.map((player) => player.playerId))).toEqual(awayMatchdayIds);
-        expect(result.homeMatchday?.availableCount).toBeGreaterThanOrEqual(11);
-        expect(result.awayMatchday?.availableCount).toBeGreaterThanOrEqual(11);
+        expect(result.homeMatchday?.availableCount).toBe(homeSquad.length);
+        expect(result.awayMatchday?.availableCount).toBe(awaySquad.length);
         const eventPlayerIds = result.events
           .filter((event) => event.playerId)
           .map((event) => ({

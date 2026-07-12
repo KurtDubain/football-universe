@@ -86,6 +86,7 @@ import { ContinentalCupState } from '../../types/cup';
 import { SeededRNG } from '../match/rng';
 import { TransferRecord } from '../../types/transfer';
 import { createNewsId } from '../season/helpers';
+import { pickFreeSquadNumber, pickTransferReleaseCandidate } from '../transfers/transfer-application';
 
 // ── Tunable parameters (chosen via 20-season sim, see TUNE_LOG above) ──
 
@@ -781,20 +782,20 @@ export function attemptFireSale(
     const buyer = rng.pick(eligibleBuyers);
     usedBuyers.add(buyer.id);
 
-    // Move player. Pick a free shirt number on buyer side; reuse the same
-    // strategy as transfer-window.
+    // Exchange the buyer's weakest same-position player back to the seller.
+    // Fire sales still move the star for cash, but neither club's roster size
+    // or positional shape is allowed to drift.
     const buyerSquad = nextSquads[buyer.id] ?? [];
-    const buyerNums = new Set(buyerSquad.map(p => p.number));
-    let newNum = seller.player.number;
-    if (buyerNums.has(newNum)) {
-      for (let n = 2; n <= 99; n++) {
-        if (!buyerNums.has(n)) { newNum = n; break; }
-      }
-    }
-
+    const replacement = pickTransferReleaseCandidate(buyerSquad, seller.player, false);
+    if (!replacement) continue;
+    const buyerWithoutReplacement = buyerSquad.filter((player) => player.uuid !== replacement.uuid);
+    const newNum = pickFreeSquadNumber(new Set(buyerWithoutReplacement.map((player) => player.number)), seller.player.number);
     const movedPlayer: Player = { ...seller.player, teamId: buyer.id, number: newNum };
-    nextSquads[seller.teamId] = nextSquads[seller.teamId].filter(p => p.uuid !== seller.player.uuid);
-    nextSquads[buyer.id] = [...nextSquads[buyer.id], movedPlayer];
+    const sellerWithoutStar = nextSquads[seller.teamId].filter(p => p.uuid !== seller.player.uuid);
+    const replacementNumber = pickFreeSquadNumber(new Set(sellerWithoutStar.map((player) => player.number)), replacement.number);
+    const movedReplacement = { ...replacement, teamId: seller.teamId, number: replacementNumber };
+    nextSquads[seller.teamId] = [...sellerWithoutStar, movedReplacement];
+    nextSquads[buyer.id] = [...buyerWithoutReplacement, movedPlayer];
 
     // Update finances
     nextFinances[seller.teamId].cash += price;
@@ -819,6 +820,20 @@ export function attemptFireSale(
       type: 'transfer',
       fee: price,
       reason: '财政告急 — 200% 高溢价转会',
+    });
+    transfers.push({
+      season, windowIndex,
+      playerId: replacement.uuid,
+      playerName: replacement.name,
+      playerNumber: replacementNumber,
+      position: replacement.position,
+      fromTeamId: buyer.id,
+      fromTeamName: buyerName,
+      toTeamId: seller.teamId,
+      toTeamName: sellerName,
+      type: 'transfer',
+      fee: 0,
+      reason: '财政甩卖阵容平衡交换',
     });
 
     news.push({

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { compressedStorage, __flushCompressedStorageForTests } from './compressed-storage';
 
 beforeEach(() => {
@@ -85,5 +85,24 @@ describe('compressedStorage', () => {
     __flushCompressedStorageForTests();
     const read = compressedStorage.getItem('debounce');
     expect(read).toBe(JSON.stringify({ count: 4 }));
+  });
+
+  it('retains the newest pending save and emits an error when disk quota fails', () => {
+    const value = JSON.stringify({ season: 42 });
+    const onError = vi.fn();
+    window.addEventListener('football-save-error', onError);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+
+    compressedStorage.setItem('quota-save', value);
+    __flushCompressedStorageForTests();
+
+    expect(compressedStorage.getItem('quota-save')).toBe(value);
+    expect(onError).toHaveBeenCalledOnce();
+    setItem.mockRestore();
+    __flushCompressedStorageForTests();
+    expect(compressedStorage.getItem('quota-save')).toBe(value);
+    window.removeEventListener('football-save-error', onError);
   });
 });

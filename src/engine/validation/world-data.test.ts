@@ -291,7 +291,7 @@ describe('validateWorldData', () => {
         {
           type: 'major' as const,
           startSeason: 1,
-          startWindow: 0,
+          startWindow: -1,
           durationMatches: 3,
           reason: '膝伤',
         },
@@ -373,9 +373,9 @@ describe('validateWorldData', () => {
               suspendedUntilWindow: 3,
               suspensionHistory: [{
                 startSeason: 1,
-                startWindow: 0,
-                unavailableFromWindow: 1,
-                suspendedUntilWindow: 3,
+                startWindow: -1,
+                unavailableFromWindow: 0,
+                suspendedUntilWindow: 2,
                 banWindows: 2,
                 reason: 'red_cards' as const,
               }],
@@ -427,7 +427,7 @@ describe('validateWorldData', () => {
               injuryHistory: [{
                 type: 'major' as const,
                 startSeason: 1,
-                startWindow: 0,
+                startWindow: -1,
                 durationMatches: 3,
                 reason: '应急测试伤病',
               }],
@@ -691,6 +691,20 @@ describe('validateWorldData', () => {
     expect(codes).toContain('player_segment_event_mismatch');
   });
 
+  it('reports event-derived counters that exist without any explaining event', () => {
+    const world = initializeGameWorld(2024);
+    const [playerId, stat] = Object.entries(world.playerStats)[0];
+    const validation = validateWorldData({
+      ...world,
+      playerStats: {
+        ...world.playerStats,
+        [playerId]: { ...stat, goals: 1, bigChances: 1 },
+      },
+    });
+
+    expect(issueCodes(validation)).toContain('player_stat_event_mismatch');
+  });
+
   it('audits appearances and clean sheets from complete persisted matchday snapshots', () => {
     const world = initializeGameWorld(2024);
     const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
@@ -733,11 +747,13 @@ describe('validateWorldData', () => {
     const world = initializeGameWorld(2024);
     const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
     const knownPlayer = world.squads[homeTeamId][0];
-    const malformedPlayers = Array.from({ length: 15 }, () => ({
+    const foreignPlayer = world.squads[awayTeamId][0];
+    const malformedPlayers: NonNullable<MatchResult['homeMatchday']>['players'] = Array.from({ length: 15 }, () => ({
       playerId: knownPlayer.uuid,
       position: knownPlayer.position === 'GK' ? 'FW' as const : 'GK' as const,
     }));
     malformedPlayers[14] = { playerId: 'unknown-snapshot-player', position: 'GK' };
+    malformedPlayers[13] = { playerId: foreignPlayer.uuid, position: foreignPlayer.position };
     const result: MatchResult = {
       ...makeSingleGoalResult('malformed-matchday', homeTeamId, awayTeamId, knownPlayer.uuid),
       homeMatchday: {
@@ -770,6 +786,8 @@ describe('validateWorldData', () => {
     expect(codes).toContain('matchday_snapshot_emergency_mismatch');
     expect(codes).toContain('matchday_snapshot_unknown_player');
     expect(codes).toContain('matchday_snapshot_position_mismatch');
+    expect(codes).toContain('matchday_snapshot_size_mismatch');
+    expect(codes).toContain('matchday_snapshot_team_at_window_mismatch');
   });
 
   it('reports transfer history, finance, news, and roster-state inconsistencies', () => {

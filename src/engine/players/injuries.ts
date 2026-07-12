@@ -1,4 +1,4 @@
-import { Player, Injury, InjurySeverity, Suspension } from '../../types/player';
+import { Player, Injury, InjurySeverity, Suspension, PlayerTeamSeasonStats } from '../../types/player';
 import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 
@@ -234,6 +234,17 @@ export interface MatchdaySelection {
   unavailablePlayerIds: Set<string>;
 }
 
+function selectBalancedTop14(players: Player[]): Player[] {
+  const selected = [...players].sort((a, b) => b.rating - a.rating).slice(0, 14);
+  if (selected.some((player) => player.position === 'GK')) return selected;
+  const goalkeeper = [...players]
+    .filter((player) => player.position === 'GK')
+    .sort((a, b) => b.rating - a.rating)[0];
+  if (!goalkeeper || selected.length === 0) return selected;
+  selected[selected.length - 1] = goalkeeper;
+  return selected;
+}
+
 export function selectMatchday(
   squad: Player[] | undefined,
   currentWindowIdx: number,
@@ -263,14 +274,14 @@ export function selectMatchday(
   if (available.length < 11) {
     // Emergency floor: too many unavailable to field 11 — relax restrictions.
     return {
-      players: [...squad].sort((a, b) => b.rating - a.rating).slice(0, 14),
+      players: selectBalancedTop14(squad),
       emergencyFloor: true,
       availableCount: available.length,
       unavailablePlayerIds,
     };
   }
   return {
-    players: available.sort((a, b) => b.rating - a.rating).slice(0, 14),
+    players: selectBalancedTop14(available),
     emergencyFloor: false,
     availableCount: available.length,
     unavailablePlayerIds,
@@ -395,6 +406,7 @@ export function processInjuriesAndSuspensions(args: {
   results: MatchResult[];
   squads: Record<string, Player[]>;
   playerStats: Record<string, import('../../types/player').PlayerSeasonStats>;
+  playerStatSegments?: Record<string, PlayerTeamSeasonStats>;
   teamBases: Record<string, import('../../types/team').TeamBase>;
   seasonNumber: number;
   globalWindowIdx: number;
@@ -403,7 +415,7 @@ export function processInjuriesAndSuspensions(args: {
   favoriteTeamIds?: string[];
 }): PostMatchInjuryResult {
   const {
-    results, squads, playerStats, teamBases,
+    results, squads, playerStats, playerStatSegments, teamBases,
     seasonNumber, globalWindowIdx, windowIndex, rng, favoriteTeamIds,
   } = args;
   const injuriesApplied: PostMatchInjuryResult['injuriesApplied'] = [];
@@ -482,6 +494,15 @@ export function processInjuriesAndSuspensions(args: {
         yellowCards: gate.resetYellow ? 0 : newYellow,
         redCards: gate.resetRed ? 0 : newRed,
       };
+      const segmentKey = `${uuid}@@${teamId}`;
+      const segment = playerStatSegments?.[segmentKey];
+      if (segment && playerStatSegments) {
+        playerStatSegments[segmentKey] = {
+          ...segment,
+          yellowCards: gate.resetYellow ? 0 : (segment.yellowCards ?? 0) + delta.yellows,
+          redCards: gate.resetRed ? 0 : (segment.redCards ?? 0) + delta.reds,
+        };
+      }
     }
   }
 

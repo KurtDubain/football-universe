@@ -39,10 +39,12 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   const assisters = getSeasonTopAssistRows(world, seasonNumber, 3);
 
   // Season buffs for this season
-  const buffs = world.seasonBuffs ?? [];
+  const buffs = world.seasonBuffsHistory?.find((entry) => entry.season === seasonNumber)?.buffs
+    ?? (world.seasonState.seasonNumber === seasonNumber ? world.seasonBuffs : [])
+    ?? [];
 
   // Prediction
-  const prediction = world.prediction;
+  const prediction = world.predictionHistory?.find((entry) => entry.season === seasonNumber);
 
   return (
     <div className="space-y-4">
@@ -132,19 +134,19 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       </div>
 
       {/* Prediction result */}
-      {prediction?.settled && (
+      {prediction && (
         <div className={`rounded-xl border p-3 ${prediction.correctCount && prediction.correctCount > 0 ? 'bg-emerald-900/15 border-emerald-700/30' : 'bg-slate-800 border-slate-700'}`}>
           <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季竞猜结果</h3>
           <div className="flex flex-wrap gap-4 text-xs">
             <div>
               <span className="text-slate-500">冠军预测: </span>
               <span className="text-slate-200">{getTeamName(prediction.champion, tb)}</span>
-              <span className="ml-1">{prediction.champion === honor.league1Champion ? '✅' : '❌'}</span>
+              <span className="ml-1">{prediction.championCorrect ? '✅' : '❌'}</span>
             </div>
             <div>
               <span className="text-slate-500">降级预测: </span>
               <span className="text-slate-200">{getTeamName(prediction.relegated, tb)}</span>
-              <span className="ml-1">{honor.relegated.some(r => r.teamId === prediction.relegated) ? '✅' : '❌'}</span>
+              <span className="ml-1">{prediction.relegatedCorrect ? '✅' : '❌'}</span>
             </div>
           </div>
         </div>
@@ -300,27 +302,12 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         })()}
       </div>
 
-      {/* Season Awards */}
+      {/* Derived team/coach observations; official player awards are above. */}
       <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-purple-900/15 rounded-xl border border-purple-700/30 overflow-hidden">
         <div className="px-4 py-3 border-b border-purple-700/20">
-          <h3 className="text-sm font-bold text-purple-300">赛季颁奖典礼</h3>
+          <h3 className="text-sm font-bold text-purple-300">球队与教练观察</h3>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-700/30">
-          {/* MVP — best goals+assists combined */}
-          {scorers.length > 0 && (() => {
-            const allStats = [...scorers, ...assisters].reduce((map, s) => {
-              const key = s.playerId;
-              const existing = map.get(key);
-              if (existing) { existing.goals = Math.max(existing.goals, s.goals); existing.assists = Math.max(existing.assists, s.assists); }
-              else map.set(key, { ...s });
-              return map;
-            }, new Map<string, typeof scorers[0]>());
-            const mvp = [...allStats.values()].sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists))[0];
-            if (!mvp) return null;
-            return (
-              <AwardCard emoji="🏆" title="赛季MVP" value={`${mvp.identity.teamName} ${mvp.identity.playerName}`} sub={`${mvp.goals}球 ${mvp.assists}助`} />
-            );
-          })()}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-700/30">
           {/* Best Coach — team with highest position vs expectation */}
           {l1Records.length > 0 && (() => {
             const bestCoach = l1Records.reduce((best, r) => {
@@ -335,14 +322,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             const coachName = world.coachBases[bestCoach.coachId]?.name ?? '未知';
             return (
               <AwardCard emoji="👔" title="最佳教练" value={coachName} sub={`${getTeamName(bestCoach.teamId, tb)} 第${bestCoach.leaguePosition}名`} />
-            );
-          })()}
-          {/* Best Newcomer — top scorer from non-L1 team, or lowest-OVR team's scorer */}
-          {scorers.length > 0 && (() => {
-            const nonEliteScorer = scorers.find(s => (tb[s.teamId]?.overall ?? 99) < 75);
-            if (!nonEliteScorer) return null;
-            return (
-              <AwardCard emoji="⭐" title="最佳新星" value={`${nonEliteScorer.identity.teamName} ${nonEliteScorer.identity.playerName}`} sub={`${nonEliteScorer.goals}球`} />
             );
           })()}
           {/* Most Improved — team that climbed the most positions vs last season */}
@@ -472,15 +451,13 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       {/* Continental Season Report */}
       {(() => {
         const contStats: Record<string, { wins: number; draws: number; losses: number; goals: number; champion?: string }> = {};
-        // Scan current season results for cross-continent matches
-        for (const w of world.seasonState.calendar) {
-          if (!w.completed || !w.results) continue;
-          for (const r of w.results) {
-            const hCont = tb[r.homeTeamId]?.region?.split('+')[0];
-            const aCont = tb[r.awayTeamId]?.region?.split('+')[0];
+        // Reviews use the archived season, never the live next-season calendar.
+        for (const r of (world.matchHistory ?? []).filter((match) => match.season === seasonNumber)) {
+            const hCont = tb[r.homeId]?.region?.split('+')[0];
+            const aCont = tb[r.awayId]?.region?.split('+')[0];
             if (!hCont || !aCont || hCont === aCont) continue;
-            const totalH = r.homeGoals + (r.etHomeGoals ?? 0);
-            const totalA = r.awayGoals + (r.etAwayGoals ?? 0);
+            const totalH = r.homeGoals;
+            const totalA = r.awayGoals;
             for (const cont of [hCont, aCont]) {
               if (!contStats[cont]) contStats[cont] = { wins: 0, draws: 0, losses: 0, goals: 0 };
             }
@@ -489,7 +466,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             else { contStats[hCont].draws++; contStats[aCont].draws++; }
             contStats[hCont].goals += totalH;
             contStats[aCont].goals += totalA;
-          }
         }
         // Find champion continent
         const l1ChampCont = tb[honor.league1Champion]?.region?.split('+')[0];

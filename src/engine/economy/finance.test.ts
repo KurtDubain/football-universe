@@ -286,7 +286,7 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     const { teamBases, teamFinances, squads } = buildScenario();
     const rng = new SeededRNG(7);
     const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, rng);
-    expect(r.transfers).toHaveLength(1);
+    expect(r.transfers).toHaveLength(2);
     const t = r.transfers[0];
     expect(t.fromTeamId).toBe('POOR');
     expect(['ELITE', 'ELITE2']).toContain(t.toTeamId);
@@ -297,8 +297,13 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     expect(r.teamFinances[t.toTeamId].cash).toBe(200 - 100);
     expect(r.teamFinances[t.toTeamId].totalExpense).toBe(100);
     // Squad arrays are reshuffled
-    expect(r.squads.POOR).toHaveLength(0);
-    expect(r.squads[t.toTeamId]).toHaveLength(2);
+    expect(r.squads.POOR).toHaveLength(1);
+    expect(r.squads[t.toTeamId]).toHaveLength(1);
+    expect(r.transfers[1]).toMatchObject({
+      fromTeamId: t.toTeamId,
+      toTeamId: 'POOR',
+      fee: 0,
+    });
     // News
     expect(r.news).toHaveLength(1);
     expect(r.news[0].type).toBe('fire_sale');
@@ -336,8 +341,8 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     squads.POOR.push(mkPlayer({ uuid: 'p-extra', teamId: 'POOR', marketValue: 40, number: 8 }));
     const rng = new SeededRNG(19);
     const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, rng);
-    expect(r.transfers).toHaveLength(1);
-    expect(r.squads.POOR).toHaveLength(1); // one player remains
+    expect(r.transfers).toHaveLength(2);
+    expect(r.squads.POOR).toHaveLength(2);
   });
 });
 

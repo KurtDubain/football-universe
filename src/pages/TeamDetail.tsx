@@ -599,7 +599,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                 return (
                   <div
                     key={player.uuid}
-                    className={`flex items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors ${isInjured ? 'opacity-70' : ''}`}
+                    className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors ${isInjured ? 'opacity-70' : ''}`}
                   >
                     {/* Number badge — clickable */}
                     <Link to={`/player/${player.uuid}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors relative">
@@ -654,7 +654,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                     </div>
 
                     {/* Season stats */}
-                    <div className="flex items-center gap-2 sm:gap-3 text-[11px] shrink-0">
+                    <div className="flex w-full sm:w-auto items-center justify-end sm:justify-start flex-wrap gap-2 sm:gap-3 text-[11px] sm:shrink-0 pl-10 sm:pl-0">
                       {player.marketValue !== undefined && player.marketValue > 0 && (
                         <span className="text-emerald-400 hidden sm:inline">
                           €{player.marketValue >= 10 ? Math.round(player.marketValue) : player.marketValue.toFixed(1)}M

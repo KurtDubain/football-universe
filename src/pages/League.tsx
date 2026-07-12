@@ -28,7 +28,7 @@ export default function League() {
 
   const leagueLevel = parseInt(level ?? '1', 10) as 1 | 2 | 3;
 
-  // Per-team top individual scorer — used by the "最佳射手" column.
+  // Per-team all-competition scorer; the column label makes this scope clear.
   // Memoised so we walk club segments once per render rather than per row.
   // Hook is declared BEFORE the early returns so the call order stays
   // stable across renders even before the world has loaded.
@@ -287,7 +287,7 @@ export default function League() {
                     <th className="hidden md:table-cell text-center px-2 py-2">进</th>
                     <th className="text-center px-1 sm:px-2 py-2">失</th>
                     <th className="text-center px-1 sm:px-2 py-2">净胜</th>
-                    <th className="hidden md:table-cell text-left px-2 py-2">最佳射手</th>
+                    <th className="hidden md:table-cell text-left px-2 py-2">全赛事队内射手</th>
                     <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
                     <th className="text-center px-1 sm:px-2 py-2">近况</th>
                   </tr>

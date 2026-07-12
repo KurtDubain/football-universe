@@ -173,7 +173,7 @@ describe('pickMatchday — filtering', () => {
   function buildSquad(): Player[] {
     const squad: Player[] = [];
     for (let i = 0; i < 22; i++) {
-      squad.push(makePlayer(`p-${i}`, { number: i + 1, rating: 99 - i }));
+      squad.push(makePlayer(`p-${i}`, { number: i + 1, rating: 99 - i, position: i === 21 ? 'GK' : 'FW' }));
     }
     return squad;
   }
@@ -182,6 +182,7 @@ describe('pickMatchday — filtering', () => {
     const squad = buildSquad();
     const md = pickMatchday(squad, 10)!;
     expect(md).toHaveLength(14);
+    expect(md.some((player) => player.position === 'GK')).toBe(true);
     // Highest-rated should be in the matchday
     expect(md[0].rating).toBeGreaterThan(md[13].rating);
   });
@@ -477,10 +478,11 @@ describe('processInjuriesAndSuspensions', () => {
     // Pre-existing 4 yellows → +1 yellow → 5 → 1-game ban
     const stat = makeStat('p-0', { yellowCards: 4 });
     const playerStats = { 'p-0': stat };
+    const playerStatSegments = { 'p-0@@t1': { ...stat, teamId: 't1' } };
     const teamBases = { t1: makeTeamBase('t1'), t2: makeTeamBase('t2') };
     const result = makeResult([makeEvent('p-0', 'yellow_card')]);
     processInjuriesAndSuspensions({
-      results: [result], squads, playerStats, teamBases,
+      results: [result], squads, playerStats, playerStatSegments, teamBases,
       seasonNumber: 1, globalWindowIdx: 10, windowIndex: 5,
       rng: new SeededRNG(1),
     });
@@ -495,6 +497,9 @@ describe('processInjuriesAndSuspensions', () => {
     });
     // Yellow counter was reset post-gate
     expect(playerStats['p-0'].yellowCards).toBe(0);
+    expect(playerStatSegments['p-0@@t1'].yellowCards).toBe(0);
+    expect(selectMatchday(squad, 11)?.players.some((player) => player.uuid === 'p-0')).toBe(false);
+    expect(selectMatchday(squad, 12)?.players.some((player) => player.uuid === 'p-0')).toBe(true);
   });
 
   it('direct red → 2-game ban + emits news for star or favorite-team players', () => {

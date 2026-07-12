@@ -182,6 +182,14 @@ export interface GameWorld {
   seasonStartLevels: Record<string, 1 | 2 | 3>;
   seasonBuffs: SeasonBuff[];
   prediction?: { champion: string; relegated: string; settled?: boolean; correctCount?: number };
+  predictionHistory?: Array<{
+    season: number;
+    champion: string;
+    relegated: string;
+    championCorrect: boolean;
+    relegatedCorrect: boolean;
+    correctCount: number;
+  }>;
   godHandUsed: boolean;
   coins: number;
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
@@ -248,7 +256,8 @@ function appendMemorableMatches(
   return combined.length > MEMORABLE_CAP ? combined.slice(-MEMORABLE_CAP) : combined;
 }
 
-const PLAYER_STATS_HISTORY_CAP = 15;
+// Covers a full plausible 17-to-41 career while keeping each player bounded.
+const PLAYER_STATS_HISTORY_CAP = 25;
 
 /**
  * v19 — at season-end (called from `initializeNewSeason` before the
@@ -304,18 +313,22 @@ function snapshotPlayerStatsHistory(
     // stale stat.teamId drift. If the player retired during season-end,
     // they may already be absent from squads; fall back to retirementHistory
     // so their just-finished season is not lost.
+    const clubSegments = Object.values(world.playerStatSegments ?? {})
+      .filter((segment) => segment.playerId === uuid && segment.appearances > 0)
+      .sort((a, b) => b.appearances - a.appearances || b.goals - a.goals);
+    const seasonTeamId = clubSegments[0]?.teamId ?? stat.teamId;
     const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === uuid)
       ?? Object.values(world.squads).flatMap(sq => sq).find(p => p.uuid === uuid);
     const retired = !player
       ? (world.retirementHistory ?? []).find((p) => p.uuid === uuid)
       : undefined;
     if (!player && !retired) continue;
-    const ctx = teamCtx[stat.teamId] ?? { gc: 0, matches: 0 };
-    const team = world.teamBases[stat.teamId];
+    const ctx = teamCtx[seasonTeamId] ?? { gc: 0, matches: 0 };
+    const team = world.teamBases[seasonTeamId];
     const entry: import('../../types/player').PlayerSeasonStatsHistoryEntry = {
       season: seasonJustFinished,
-      teamId: stat.teamId,
-      teamName: team?.name ?? stat.teamId,
+      teamId: seasonTeamId,
+      teamName: team?.name ?? seasonTeamId,
       teamShortName: team?.shortName,
       playerName: player?.name ?? retired?.name ?? uuid,
       playerNumber: player?.number,
@@ -342,7 +355,7 @@ function snapshotPlayerStatsHistory(
     };
     const existing = next[uuid] ?? [];
     // Avoid double-snapshot if this exact (season,teamId) row already there
-    if (existing.some(e => e.season === seasonJustFinished && e.teamId === stat.teamId)) continue;
+    if (existing.some(e => e.season === seasonJustFinished && e.teamId === seasonTeamId)) continue;
     const merged = [...existing, entry];
     next[uuid] = merged.length > PLAYER_STATS_HISTORY_CAP
       ? merged.slice(-PLAYER_STATS_HISTORY_CAP)
@@ -454,6 +467,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     rngState: rng.getState(),
     seasonStartLevels: {},
     seasonBuffs: [],
+    predictionHistory: [],
     godHandUsed: false,
     coins: 1000,
     bets: [],
@@ -978,11 +992,9 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     world.continentalCups,
   );
 
-  // Phase G — bump the global window counter the moment we know this window
-  // produced match results. Both the injury/suspension processor and the
-  // stats updater below need to read the POST-bump value so the writes they
-  // produce (injuredUntilWindow, suspendedUntilWindow) are expressed in a
-  // consistent absolute scale.
+  // Advance the persistent counter after this window. Matchday snapshots make
+  // stat credit independent of this value; new injury/suspension intervals
+  // are anchored to the just-played (pre-bump) index below.
   const totalElapsedWindowsAfter = (world.totalElapsedWindows ?? 0)
     + (windowResult.results.length > 0 ? 1 : 0);
 
@@ -1028,9 +1040,10 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
         results: windowResult.results,
         squads: world.squads,
         playerStats: updatedPlayerStats,
+        playerStatSegments: updatedPlayerStatSegments,
         teamBases: postMatch.teamBases,
         seasonNumber,
-        globalWindowIdx: totalElapsedWindowsAfter,
+        globalWindowIdx: world.totalElapsedWindows ?? 0,
         windowIndex,
         rng,
       })

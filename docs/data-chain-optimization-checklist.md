@@ -21,6 +21,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-11: Added persisted suspension intervals and matchday-selection diagnostics. World validation now distinguishes invalid injured/suspended event players from explicit emergency-floor exceptions when fewer than 11 players are available, and validates transferred players against their team at the exact season window. Added a development-only data-health panel to Settings with error/warning counts and expandable issue details. Verified with TypeScript, 421 Vitest tests, production build, and desktop/mobile browser checks under Node 24.
 - 2026-07-11: Persisted exact home/away matchday snapshots on every new match result, including player positions, emergency-floor status, and available-player counts. Appearance, clean-sheet, club-segment, and post-match injury processing now consume the persisted snapshot instead of recomputing from a potentially changed live squad. `validateWorldData` performs strict appearance/clean-sheet audits only when the current season has complete snapshot coverage, preserving compatibility with legacy saves. Verified with TypeScript, 423 Vitest tests including the multi-season smoke test, and production build under Node 24.
 - 2026-07-11: Hardened persisted matchday snapshots with audits for oversized squads, duplicate/unknown players, position drift, emergency-count contradictions, and transfer-window team mismatches. Moved the development data-health panel behind a development-only dynamic import so production neither executes nor bundles the validation UI; verified by inspecting production assets. Verified with TypeScript, 424 Vitest tests, multi-season smoke coverage, production build, and a development lazy-load browser check under Node 24.
+- 2026-07-12: Completed a four-agent second-pass audit across match simulation, season/transfer/finance/persistence, cross-page semantics, and the deployed desktop/mobile experience. Fixed injury/suspension window anchoring, discipline segment updates, balanced matchday goalkeeper selection, single-pass roster selection, bid/fire-sale ownership, prediction and season-review history, long-save bounds, reverse stat audits, late-drama wording, reset confirmation, and mobile touch/roster layout. Verified with TypeScript, 428 Vitest tests, production build, a clean development health panel after live play, and a deterministic 35-season/1,832-window stress run with zero validation errors or warnings.
 
 ## Current Main Concerns
 
@@ -161,6 +162,55 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Keep `pnpm exec tsc -b` passing after each data-chain change.
 - [x] Re-run the full test suite after fixing the local Node runtime issue.
 - [x] Keep changes small and reviewable: selectors first, data model next, UI labels last.
+
+## 11. Second-Pass Audit (2026-07-12)
+
+### Match And Player Data
+
+- [x] Anchor injury and suspension intervals to the just-played pre-increment global window so a 1-match absence lasts exactly one following match window.
+- [x] Add consecutive-window tests proving suspended players are excluded exactly for the declared interval and return on the boundary.
+- [x] Synchronize yellow/red discipline counters into current-club stat segments, including suspension-driven resets.
+- [x] Ensure one authoritative matchday selection receives the full squad and persists the true `availableCount`.
+- [x] Guarantee every non-empty matchday selection contains a goalkeeper when one is available.
+- [x] Audit event-derived stats in both directions, including counters that exist without any explaining event.
+- [x] Validate normal matchday snapshot size, player ownership without transfer evidence, and partial legacy snapshot coverage.
+- [x] Correct validation's result-to-global-window mapping so post-match injuries do not invalidate the match in which they occurred.
+
+### Transfers, Seasons, And Persistence
+
+- [x] Freeze finished-season player identity against the club with the largest actual contribution segment, not an offseason destination.
+- [x] Route fiscal fire sales through roster-balancing semantics, synchronize player-stat ownership, and persist the balancing exchange.
+- [x] Prevent multiple favorite teams from receiving duplicate targets for the same player and never display a failed second move as accepted.
+- [x] Age, rerate, and revalue persistent free agents each offseason; use full career totals when they retire.
+- [x] Add v24 migration to repair stale `playerStats.teamId` ownership and initialize durable prediction history.
+- [x] Persist season predictions with separate champion/relegation correctness and show them in Dashboard and Season Review after rollover.
+- [x] Bound player history globally to 25 completed seasons and remove empty retired-player keys; retain 25 rows per player to cover a plausible full career.
+- [x] Apply storage limits to batch/fast-forward paths and retain pending writes after quota failure.
+- [x] Surface save-write failures visibly in the UI instead of only logging and silently dropping the queued state.
+- [x] Make season-based storage caps retain the latest distinct completed seasons without rollover off-by-one behavior.
+
+### Review Pages And Experience
+
+- [x] Make Season Review read archived season buffs, predictions, and continental results instead of live next-season state.
+- [x] Remove the duplicate inferred MVP/newcomer ceremony so official archived player awards remain authoritative.
+- [x] Clarify the League scorer column as all-competition club scoring rather than league-only scoring.
+- [x] Restrict "绝杀" to a late goal by the final winning side in a one-goal match; label late draw goals "绝平" and do not call 85-90' stoppage time.
+- [x] Include continental finals in Player Detail final-goal counts and align its late-winner metric with the same semantics.
+- [x] Do not render dead detail links for history-only/stat-only player identities.
+- [x] Label position ranking as current-season position performance rather than raw ability.
+- [x] Add reset confirmation to the sidebar path as well as Settings.
+- [x] Raise mobile navigation/advance/menu controls to 44px touch targets and add accessible names.
+- [x] Prevent dense Team Detail stat rows from collapsing or overlapping at 390px and reserve content space when the floating advance button is enabled.
+- [x] Use unique development health-panel keys so repeated issue types never generate React reconciliation errors.
+
+### Final Verification
+
+- [x] Full test suite: 38 files, 428 tests passed under Node 24.
+- [x] TypeScript project build passed.
+- [x] Vite production/PWA build passed.
+- [x] Local live play: three windows, development data health `0 errors / 0 warnings`, no console warnings/errors.
+- [x] Mobile `390x844`: no page overflow, no roster-row overlap, all header actions at least 44px.
+- [x] Deterministic stress run: 35 seasons, 1,832 match-bearing windows, every season and final world at `0 errors / 0 warnings`.
 
 ## Suggested Execution Order
 

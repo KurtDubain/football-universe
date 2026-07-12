@@ -112,24 +112,14 @@ export default function PlayerDetail() {
         // Hat trick (3+ goals in single match)
         if (myGoals.length >= 3) hatTricks++;
         // Final goals (in cup finals)
-        const isFinal = (r.competitionType === 'super_cup' || r.competitionType === 'world_cup' || r.competitionType === 'league_cup')
+        const isFinal = (r.competitionType === 'super_cup' || r.competitionType === 'world_cup' || r.competitionType === 'league_cup' || r.competitionType === 'continental_cup')
           && (r.roundLabel === 'Final' || r.roundLabel.includes('决赛'));
         if (isFinal) finalGoals += myGoals.length;
-        // Late drama: walk events chronologically, track running score, check
-        // diff AT THE GOAL TIME (not at final whistle)
-        const myGoalMinutes = new Set(myGoals.filter(g => g.minute >= 85 && g.minute <= 90).map(g => g.minute));
-        if (myGoalMinutes.size === 0) continue;
-        let runHome = 0, runAway = 0;
-        const sortedEvents = [...r.events]
-          .filter(e => (e.type === 'goal' || e.type === 'own_goal') && e.minute <= 120)
-          .sort((a, b) => a.minute - b.minute);
-        for (const e of sortedEvents) {
-          const isHomeGoal = e.teamId === r.homeTeamId;
-          if (isHomeGoal) runHome++; else runAway++;
-          if (e.playerId === uuid && myGoalMinutes.has(e.minute)) {
-            // At THIS moment, diff should be ≤ 1 to count as late drama
-            if (Math.abs(runHome - runAway) <= 1) lateGoals++;
-          }
+        const totalHome = r.homeGoals + (r.etHomeGoals ?? 0);
+        const totalAway = r.awayGoals + (r.etAwayGoals ?? 0);
+        const winnerTeamId = totalHome > totalAway ? r.homeTeamId : totalAway > totalHome ? r.awayTeamId : null;
+        if (winnerTeamId && Math.abs(totalHome - totalAway) === 1) {
+          lateGoals += myGoals.filter((goal) => goal.teamId === winnerTeamId && goal.minute >= 85 && goal.minute <= 120).length;
         }
       }
     }
@@ -236,7 +226,7 @@ export default function PlayerDetail() {
                 <span className="text-xs text-emerald-400 font-semibold">市值 {formatMarketValue(player.marketValue)}</span>
               )}
               {posRanking.rank > 0 && (
-                <span className="text-[10px] text-slate-500">同位置第{posRanking.rank}/{posRanking.total}</span>
+                <span className="text-[10px] text-slate-500">本季同位置表现第{posRanking.rank}/{posRanking.total}</span>
               )}
             </div>
           </div>

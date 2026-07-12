@@ -53,7 +53,7 @@ export function computeInitialMarketValue(player: Player): number {
   return Math.max(0.3, Math.round(base * posMul * ageMul * tagMul * 10) / 10);
 }
 
-function ageMultiplier(age: number): number {
+export function ageMultiplier(age: number): number {
   if (age <= 19) return 1.15; // wonderkid
   if (age <= 22) return 1.10; // young
   if (age <= 25) return 1.05; // rising

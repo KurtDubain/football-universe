@@ -323,21 +323,29 @@ export function runPostMatchProcessing(
       }
     }
 
-    // Late drama (goal at 85+ min that changed the result)
+    // Late drama: only the final winner's late goal can be a winner; in a
+    // draw, the final late scorer is an equalizer. Minutes 85-90 are late
+    // regulation, not automatically stoppage time.
     const lateGoals = goalEvents.filter(e => e.minute >= 85 && e.minute <= 90);
     if (lateGoals.length > 0) {
       const totalHome = result.homeGoals;
       const totalAway = result.awayGoals;
-      const diff = Math.abs(totalHome - totalAway);
-      if (diff <= 1) {
-        const scorer = lateGoals[lateGoals.length - 1];
+      const winnerTeamId = totalHome > totalAway
+        ? result.homeTeamId
+        : totalAway > totalHome ? result.awayTeamId : null;
+      const scorer = lateGoals[lateGoals.length - 1];
+      const isWinner = winnerTeamId === scorer.teamId && Math.abs(totalHome - totalAway) === 1;
+      const isEqualizer = winnerTeamId === null;
+      if (isWinner || isEqualizer) {
         const teamName = world.teamBases[scorer.teamId]?.name ?? scorer.teamId;
         const scorerLabel = scorer.playerName ?? (scorer.playerNumber ? `${scorer.playerNumber}号` : '');
+        const drama = isWinner ? '绝杀' : '绝平';
+        const timing = scorer.minute > 90 ? '补时' : '终场前';
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `latedrama-${result.fixtureId}`),
           seasonNumber, windowIndex, type: 'match_result',
-          title: `绝杀! ${teamName} ${scorerLabel}补时建功`,
-          description: `${teamName}在第${scorer.minute}分钟打入关键进球，上演绝杀好戏！`,
+          title: `${drama}! ${teamName} ${scorerLabel}${timing}建功`,
+          description: `${teamName}在第${scorer.minute}分钟打入关键进球，上演${drama}好戏！`,
         });
       }
     }
@@ -418,9 +426,11 @@ export function runPostMatchProcessing(
       const lateGoals = result.events.filter((e) =>
         e.type === 'goal' && e.minute >= 88 && e.minute <= 120,
       );
-      if (lateGoals.length > 0 && diff === 1 && !isFinal) {
+      const winnerTeamId = totalH > totalA ? result.homeTeamId : result.awayTeamId;
+      const winningLateGoals = lateGoals.filter((event) => event.teamId === winnerTeamId);
+      if (winningLateGoals.length > 0 && diff === 1 && !isFinal) {
         memType = 'last_minute';
-        label = `${lateGoals[lateGoals.length - 1].minute}'绝杀`;
+        label = `${winningLateGoals[winningLateGoals.length - 1].minute}'绝杀`;
       }
       // Upset (only check league + cup KO matches)
       if (!memType) {

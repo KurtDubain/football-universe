@@ -9,6 +9,9 @@ import {
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from './transfer-application';
+import { ageMultiplier, computeInitialMarketValue } from '../economy/market-value';
+import { computeCurrentRating } from '../players/development';
+import { computePlayerCareerTotals } from '../players/career-totals';
 
 /**
  * End-of-season transfer window (v2 — 4-position support + free agent pool).
@@ -300,12 +303,14 @@ export function processTransferWindow(
   // is the candidate's current team (can't bid on own player).
   if (favoriteSet.size > 0) {
     const poachedUuids = new Set(pendingOffers.map(o => o.playerId).concat(transfers.map(t => t.playerId)));
+    const targetedUuids = new Set<string>();
     for (const favId of favoriteSet) {
       const favTeam = world.teamBases[favId];
       if (!favTeam) continue;
       const candidatesForFav = candidates
         .filter(c => c.teamId !== favId)
         .filter(c => !poachedUuids.has(c.playerUuid))
+        .filter(c => !targetedUuids.has(c.playerUuid))
         .slice(0, 4);
       for (const c of candidatesForFav) {
         const sellerSquad = squads[c.teamId] ?? [];
@@ -324,6 +329,7 @@ export function processTransferWindow(
           suggestedFee,
           resolution: 'pending',
         });
+        targetedUuids.add(c.playerUuid);
       }
     }
   }
@@ -470,13 +476,27 @@ export function processTransferWindow(
   // we never balloon player count past control.
   const FREE_AGENT_POOL_CAP = 40;
   const FREE_AGENT_MAX_AGE = 36;
-  const remainingPlayers = freeAgentPool.map(fa => fa.player);
+  const remainingPlayers = freeAgentPool.map(({ player }) => {
+    const oldAge = player.age ?? 28;
+    const age = oldAge + 1;
+    const rating = typeof player.peakRating === 'number' && typeof player.peakAge === 'number'
+      ? computeCurrentRating(player.peakRating, age, player.peakAge)
+      : player.rating;
+    const value = (player.marketValue ?? computeInitialMarketValue(player))
+      * (ageMultiplier(age) / ageMultiplier(oldAge));
+    return {
+      ...player,
+      age,
+      rating,
+      marketValue: Math.max(0.2, Math.min(150, Math.round(value * 10) / 10)),
+    };
+  });
   // Age-out retirees (anyone > FREE_AGENT_MAX_AGE — no team would sign)
   const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }> = [];
   const stillInPool: Player[] = [];
   for (const player of remainingPlayers) {
     if ((player.age ?? 28) > FREE_AGENT_MAX_AGE) {
-      const stat = world.playerStats[player.uuid];
+      const career = computePlayerCareerTotals(world, player.uuid);
       freeAgentRetirees.push({
         uuid: player.uuid,
         name: player.name ?? `${player.number}号`,
@@ -485,7 +505,7 @@ export function processTransferWindow(
         position: player.position,
         peakRating: player.peakRating ?? player.rating,
         age: player.age ?? 28,
-        careerGoals: stat?.goals ?? 0,
+        careerGoals: career.goals,
       });
     } else {
       stillInPool.push(player);
@@ -495,7 +515,7 @@ export function processTransferWindow(
   stillInPool.sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
   while (stillInPool.length > FREE_AGENT_POOL_CAP) {
     const oldest = stillInPool.shift()!;
-    const stat = world.playerStats[oldest.uuid];
+    const career = computePlayerCareerTotals(world, oldest.uuid);
     freeAgentRetirees.push({
       uuid: oldest.uuid,
       name: oldest.name ?? `${oldest.number}号`,
@@ -504,7 +524,7 @@ export function processTransferWindow(
       position: oldest.position,
       peakRating: oldest.peakRating ?? oldest.rating,
       age: oldest.age ?? 28,
-      careerGoals: stat?.goals ?? 0,
+      careerGoals: career.goals,
     });
   }
   const newFreeAgentPool = stillInPool;

@@ -16,6 +16,7 @@ import { computeInitialMarketValue } from '../engine/economy/market-value';
 import { initTeamFinances } from '../engine/economy/finance';
 import { computeCurrentRating } from '../engine/players/development';
 import type { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../types/player';
+import { enforceStorageLimits } from '../engine/season/storage-limits';
 
 interface GameStore {
   world: GameWorld | null;
@@ -571,6 +572,25 @@ export function applyV22ToV23PlayerStatSegmentsInit(world: {
   return { touched: true };
 }
 
+/** v23 -> v24: repair current stat ownership and initialise durable predictions. */
+export function applyV23ToV24DataOwnership(world: {
+  playerStats?: Record<string, PlayerSeasonStats>;
+  squads?: Record<string, Player[]>;
+  predictionHistory?: unknown;
+}): { touched: boolean } {
+  let touched = false;
+  if (world.playerStats && world.squads) {
+    const synced = syncPlayerStatsTeamIds(world.playerStats, world.squads);
+    touched = Object.keys(synced).some((key) => synced[key].teamId !== world.playerStats?.[key]?.teamId);
+    world.playerStats = synced;
+  }
+  if (!Array.isArray(world.predictionHistory)) {
+    world.predictionHistory = [];
+    touched = true;
+  }
+  return { touched };
+}
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -647,6 +667,7 @@ export const useGameStore = create<GameStore>()(
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
+          world = enforceStorageLimits(world);
           set({ world, lastResults: allResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in batch advance:', e);
@@ -675,6 +696,7 @@ export const useGameStore = create<GameStore>()(
             safety++;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
+          world = enforceStorageLimits(world);
           set({ world, lastResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in advanceUntil:', e);
@@ -902,8 +924,9 @@ export const useGameStore = create<GameStore>()(
         const accepted = meetsAsk || rng.next() < 0.4;
         if (accepted) {
           const newWorld = applyOutgoingBid(world, target, fee);
+          const resolution = newWorld === world ? 'skipped' as const : 'bid_accepted' as const;
           const updatedTargets = tw.outgoingTargets.map(t => t.id === targetId
-            ? { ...t, bidFee: fee, resolution: 'bid_accepted' as const }
+            ? { ...t, bidFee: fee, resolution }
             : t);
           set({ world: { ...newWorld, transferWindow: { ...tw, outgoingTargets: updatedTargets } }, advanceTick: get().advanceTick + 1 });
         } else {
@@ -992,7 +1015,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 23,
+      version: 24,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
@@ -1329,6 +1352,13 @@ export const useGameStore = create<GameStore>()(
             playerStatSegments?: unknown;
             playerStats?: Record<string, PlayerSeasonStats>;
             squads?: Record<string, Player[]>;
+          });
+        }
+        if (version < 24 && state?.world) {
+          applyV23ToV24DataOwnership(state.world as {
+            playerStats?: Record<string, PlayerSeasonStats>;
+            squads?: Record<string, Player[]>;
+            predictionHistory?: unknown;
           });
         }
         // SAFETY: by this point all migration steps above have backfilled the

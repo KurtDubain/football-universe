@@ -31,7 +31,7 @@ export default function DataHealthPanel({ world }: { world: GameWorld }) {
           </summary>
           <div className="max-h-72 overflow-y-auto border-t border-slate-700/40 divide-y divide-slate-700/30">
             {result.issues.slice(0, 100).map((issue, index) => (
-              <div key={`${issue.code}-${issue.playerId ?? issue.teamId ?? issue.fixtureId ?? index}`} className="px-4 py-2 text-[11px]">
+              <div key={`${issue.code}-${issue.fixtureId ?? 'world'}-${issue.playerId ?? issue.teamId ?? 'global'}-${index}`} className="px-4 py-2 text-[11px]">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className={issue.severity === 'error' ? 'text-red-300' : 'text-amber-300'}>
                     {issue.severity === 'error' ? '错误' : '警告'}

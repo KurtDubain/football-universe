@@ -951,15 +951,18 @@ function OverviewTab({ world }: { world: GameWorld }) {
       })()}
 
       {/* Prediction result — settled */}
-      {world.prediction?.settled && pct < 10 && (
+      {world.predictionHistory?.at(-1) && pct < 10 && (() => {
+        const previousPrediction = world.predictionHistory!.at(-1)!;
+        return (
         <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
           <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">上赛季竞猜结果</h4>
           <div className="flex gap-3 text-xs">
-            <span>冠军预测: {getTeamName(world.prediction.champion, world.teamBases)} {world.prediction.correctCount !== undefined && world.prediction.correctCount > 0 ? '✅' : '❌'}</span>
-            <span>降级预测: {getTeamName(world.prediction.relegated, world.teamBases)} {world.prediction.correctCount !== undefined && world.prediction.correctCount >= 2 ? '✅' : '❌'}</span>
+            <span>冠军预测: {getTeamName(previousPrediction.champion, world.teamBases)} {previousPrediction.championCorrect ? '✅' : '❌'}</span>
+            <span>降级预测: {getTeamName(previousPrediction.relegated, world.teamBases)} {previousPrediction.relegatedCorrect ? '✅' : '❌'}</span>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* God's Hand */}
       {!(world.godHandUsed ?? false) && (

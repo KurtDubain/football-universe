@@ -4,7 +4,6 @@ import type { SimulationContext } from '../match/simulator';
 import type { SeededRNG } from '../match/rng';
 import type { GameWorld } from './season-manager';
 import { getTeamCoachId } from '../coaches/coach-lookup';
-import { pickMatchday as pickMatchdayWithDiscipline } from '../players/injuries';
 
 export function buildSimulationContext(
   fixture: MatchFixture,
@@ -26,21 +25,17 @@ export function buildSimulationContext(
     || fixture.competitionType === 'super_cup'
     || fixture.competitionType === 'continental_cup';
 
-  // Phase G — pickMatchday now filters out injured / suspended players via
-  // `world.totalElapsedWindows`. Falls back to the legacy top-14 if the
-  // counter isn't present (in-flight migration; tests sometimes build
-  // synthetic worlds without the field).
+  // Pass complete squads through. The simulator owns the one authoritative
+  // matchday selection so its persisted availableCount describes the actual
+  // roster rather than an already-truncated top 14.
   const currentWindowIdx = world.totalElapsedWindows ?? 0;
-  const pickMatchday = (squad: import('../../types/player').Player[] | undefined) => {
-    return pickMatchdayWithDiscipline(squad, currentWindowIdx);
-  };
 
   return {
     homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
     competitionType: fixture.competitionType,
     isKnockout, rng,
-    homeSquad: pickMatchday(world.squads[fixture.homeTeamId]),
-    awaySquad: pickMatchday(world.squads[fixture.awayTeamId]),
+    homeSquad: world.squads[fixture.homeTeamId],
+    awaySquad: world.squads[fixture.awayTeamId],
     globalWindowIdx: currentWindowIdx,
   };
 }

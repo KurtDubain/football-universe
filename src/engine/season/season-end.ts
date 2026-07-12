@@ -23,6 +23,7 @@ import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
+import { syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
 import {
@@ -810,6 +811,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     );
     teamFinances = fireSaleResult.teamFinances;
     squads = fireSaleResult.squads;
+    playerStats = syncPlayerStatsTeamIds(playerStats, squads);
     if (fireSaleResult.transfers.length > 0) {
       transferHistory = [...(transferHistory ?? []), ...fireSaleResult.transfers];
       // Book the cash flows in the breakdown (cash already moved by
@@ -1335,12 +1337,21 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
 
   // ── Settle prediction ──
   let prediction = world.prediction;
+  let predictionHistory = world.predictionHistory ?? [];
   if (prediction && !prediction.settled) {
     const relegatedTeamIds = actualRelegated.map(r => r.teamId);
-    let correct = 0;
-    if (prediction.champion === league1Champion) correct++;
-    if (relegatedTeamIds.includes(prediction.relegated)) correct++;
+    const championCorrect = prediction.champion === league1Champion;
+    const relegatedCorrect = relegatedTeamIds.includes(prediction.relegated);
+    const correct = Number(championCorrect) + Number(relegatedCorrect);
     prediction = { ...prediction, settled: true, correctCount: correct };
+    predictionHistory = [...predictionHistory.filter((entry) => entry.season !== seasonNumber), {
+      season: seasonNumber,
+      champion: prediction.champion,
+      relegated: prediction.relegated,
+      championCorrect,
+      relegatedCorrect,
+      correctCount: correct,
+    }];
   }
 
   // ── Coach age aging ──────────────────────────────────────────
@@ -1381,6 +1392,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     honorHistory,
     achievements,
     prediction,
+    predictionHistory,
     squads,
     playerStats,
     playerAwardsHistory,

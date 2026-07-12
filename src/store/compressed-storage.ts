@@ -43,7 +43,7 @@ let lastCompressedOutput: string | null = null;
 
 function flushWrites(): void {
   flushTimer = null;
-  for (const [name, value] of writeQueue) {
+  for (const [name, value] of [...writeQueue]) {
     let compressed: string;
     if (name === lastCompressedKey && value === lastCompressedValue && lastCompressedOutput != null) {
       compressed = lastCompressedOutput;
@@ -55,13 +55,16 @@ function flushWrites(): void {
     }
     try {
       localStorage.setItem(name, compressed);
+      if (writeQueue.get(name) === value) writeQueue.delete(name);
     } catch (e) {
       // Quota exceeded or storage unavailable — surface to console so the
       // user/dev sees it rather than silently losing the save.
       console.error('[compressed-storage] write failed for', name, e);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('football-save-error', { detail: { name } }));
+      }
     }
   }
-  writeQueue.clear();
 }
 
 function scheduleFlush(): void {

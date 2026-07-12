@@ -571,7 +571,7 @@ describe("applyV16ToV17TagsAndPool (v16 → v17)", () => {
   });
 });
 
-import { applyV22ToV23PlayerStatSegmentsInit } from "./game-store";
+import { applyV22ToV23PlayerStatSegmentsInit, applyV23ToV24DataOwnership } from "./game-store";
 import { playerTeamStatKey } from "../engine/players/stats";
 
 describe("applyV22ToV23PlayerStatSegmentsInit (v22 → v23)", () => {
@@ -617,5 +617,26 @@ describe("applyV22ToV23PlayerStatSegmentsInit (v22 → v23)", () => {
     const second = applyV22ToV23PlayerStatSegmentsInit(world);
     expect(second.touched).toBe(false);
     expect(world.playerStatSegments).toBe(existing);
+  });
+});
+
+describe('applyV23ToV24DataOwnership (v23 -> v24)', () => {
+  it('repairs stale current-team ownership and initialises prediction history', () => {
+    const player = { uuid: 'p-1', teamId: 'B' } as import('../types/player').Player;
+    const stat = { playerId: 'p-1', teamId: 'A' } as import('../types/player').PlayerSeasonStats;
+    const world: {
+      squads: Record<string, import('../types/player').Player[]>;
+      playerStats: Record<string, import('../types/player').PlayerSeasonStats>;
+      predictionHistory?: unknown;
+    } = {
+      squads: { A: [], B: [player] },
+      playerStats: { 'p-1': stat },
+    };
+
+    const result = applyV23ToV24DataOwnership(world);
+
+    expect(result.touched).toBe(true);
+    expect(world.playerStats['p-1'].teamId).toBe('B');
+    expect(world.predictionHistory).toEqual([]);
   });
 });

@@ -27,14 +27,17 @@ export const TRANSFER_HISTORY_SEASONS = 20;
 export const PLAYER_AWARDS_SEASONS = 50;
 /** Per-team season-record cap (most recent N entries kept). */
 export const TEAM_SEASON_RECORDS_PER_TEAM = 40;
+/** Keep player season rows only for this many recent completed seasons. */
+export const PLAYER_STATS_HISTORY_SEASONS = 25;
 
 function currentSeasonOf(world: GameWorld): number {
   return world.seasonState?.seasonNumber ?? 0;
 }
 
 /**
- * Slice an array of `{ season }` entries to keep only those from
- * `currentSeason - windowSeasons + 1` onward (inclusive).
+ * Slice completed-season entries while the world is already positioned in
+ * the next season. A world in S4 has completed S1-S3, so a 3-season window
+ * starts at S1.
  *
  * - Empty/undefined input returns []
  * - Already-trimmed arrays are returned untouched (referential equality)
@@ -42,11 +45,13 @@ function currentSeasonOf(world: GameWorld): number {
  */
 function trimBySeason<T extends { season: number }>(
   arr: T[] | undefined,
-  currentSeason: number,
+  _currentSeason: number,
   windowSeasons: number,
 ): T[] {
   if (!arr || arr.length === 0) return arr ?? [];
-  const minSeason = currentSeason - windowSeasons + 1;
+  const seasons = [...new Set(arr.map((entry) => entry.season))].sort((a, b) => a - b);
+  if (seasons.length <= windowSeasons) return arr;
+  const minSeason = seasons[seasons.length - windowSeasons];
   // Fast path: nothing to drop
   if (arr[0].season >= minSeason) return arr;
   const filtered = arr.filter((e) => e.season >= minSeason);
@@ -100,6 +105,19 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     teamSeasonRecords[teamId] = trimmed;
   }
 
+  const historySeasons = Object.values(world.playerStatsHistory ?? {})
+    .flatMap((entries) => entries.map((entry) => entry.season));
+  const latestHistorySeason = historySeasons.length > 0 ? Math.max(...historySeasons) : 0;
+  const minPlayerHistorySeason = latestHistorySeason - PLAYER_STATS_HISTORY_SEASONS + 1;
+  let playerHistoryChanged = false;
+  const playerStatsHistory: GameWorld['playerStatsHistory'] = {};
+  for (const [playerId, entries] of Object.entries(world.playerStatsHistory ?? {})) {
+    const trimmed = entries.filter((entry) => entry.season >= minPlayerHistorySeason);
+    if (trimmed.length !== entries.length) playerHistoryChanged = true;
+    if (trimmed.length > 0) playerStatsHistory[playerId] = trimmed;
+    else playerHistoryChanged = true;
+  }
+
   // Avoid spinning a fresh world if nothing actually changed. We treat the
   // input as "unchanged" only when the original array reference is identical
   // to what trim returned AND it was already an array (undefined → [] is a
@@ -107,7 +125,7 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
   const matchUnchanged = world.matchHistory !== undefined && world.matchHistory === matchHistory;
   const transferUnchanged = world.transferHistory !== undefined && world.transferHistory === transferHistory;
   const awardsUnchanged = world.playerAwardsHistory !== undefined && world.playerAwardsHistory === playerAwardsHistory;
-  if (matchUnchanged && transferUnchanged && awardsUnchanged && !teamRecordsChanged) {
+  if (matchUnchanged && transferUnchanged && awardsUnchanged && !teamRecordsChanged && !playerHistoryChanged) {
     return world;
   }
 
@@ -117,5 +135,6 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     transferHistory,
     playerAwardsHistory,
     teamSeasonRecords,
+    playerStatsHistory,
   };
 }
