@@ -212,6 +212,23 @@ This document tracks the data-chain issues found during the initial project revi
 - [x] Mobile `390x844`: no page overflow, no roster-row overlap, all header actions at least 44px.
 - [x] Deterministic stress run: 35 seasons, 1,832 match-bearing windows, every season and final world at `0 errors / 0 warnings`.
 
+## 12. Current-Schema Reliability Pass (2026-07-13)
+
+Scope: only saves created by the current schema are supported and audited; historical save migration is not part of this acceptance boundary.
+
+- [x] Remove every conditional React Hook call from current routes and controlled match-detail UI.
+- [x] Make swipe handlers update outside render and keep celebration particles stable across rerenders.
+- [x] Export the current compressed runtime save as readable standard JSON.
+- [x] Import only a structurally valid current-schema JSON save and synchronously replace any pending persisted write.
+- [x] Replace old-save browser audits with a fixed-seed, current-schema audit using the live store and `validateWorldData`.
+- [x] Smoke-test 18 current routes after a long simulation and fail on browser console or page errors.
+- [x] Make season-buff news IDs unique by season, team, and buff type.
+- [x] Targeted ESLint for all touched runtime and audit files passed.
+- [x] Full test suite: 39 files, 431 tests passed under Node 24.
+- [x] TypeScript project build and Vite production/PWA build passed.
+- [x] Current-schema browser audit: 10 seasons, 520 advances, every rollover at `0 errors / 0 warnings`.
+- [x] Route audit: 18/18 routes passed with `0` runtime errors.
+
 ## Suggested Execution Order
 
 - [x] Step 1: Add audit helpers and invariant tests without changing behavior.

@@ -1,17 +1,22 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getCoachName, getTierLabel, getTierColor } from '../utils/format';
+import { getTeamName, getCoachName } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import SeasonReview from '../components/SeasonReview';
 import type { Achievement } from '../engine/achievements';
+import type { GameWorld } from '../engine/season/season-manager';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
-  const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
-  const [tab, setTab] = useState<'seasons' | 'records' | 'coaches' | 'hall'>('seasons');
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
+  return <HistoryContent world={world} />;
+}
+
+function HistoryContent({ world }: { world: GameWorld }) {
+  const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
+  const [tab, setTab] = useState<'seasons' | 'records' | 'coaches' | 'hall'>('seasons');
 
   const honors = world.honorHistory;
 
@@ -374,7 +379,7 @@ export default function History() {
 
                 // Never won L1
                 const l1Winners = new Set(honors.map(h => h.league1Champion));
-                const l1Teams = allRecords.filter(([tid, recs]) => recs.some(r => r.leagueLevel === 1)).map(([tid]) => tid);
+                const l1Teams = allRecords.filter(([, recs]) => recs.some(r => r.leagueLevel === 1)).map(([tid]) => tid);
                 const neverWon = l1Teams.filter(id => !l1Winners.has(id));
                 if (neverWon.length > 0 && neverWon.length <= 6) {
                   records.push({ icon: '😤', label: '无冕之王（顶级联赛从未夺冠）', team: neverWon.map(id => getTeamName(id, world.teamBases)).join('、'), teamId: neverWon[0], detail: '' });

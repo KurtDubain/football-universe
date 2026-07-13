@@ -10,7 +10,8 @@ import type { TeamBase } from '../types/team';
 import type { PlayerSeasonStats } from '../types/player';
 import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
-import Celebration, { getMatchTags, shouldCelebrate } from '../components/Celebration';
+import Celebration from '../components/Celebration';
+import { getMatchTags, shouldCelebrate } from '../components/celebration-logic';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
@@ -39,16 +40,17 @@ function formatMoneyChip(n: number): string {
 
 type TabKey = 'matchday' | 'results' | 'overview' | 'review';
 
-const roundLabelCN: Record<string, string> = {
-  R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
-  'QF-L1': '八强首回合', 'QF-L2': '八强次回合',
-  'SF-L1': '四强首回合', 'SF-L2': '四强次回合',
-};
-function cnLabel(label: string) { return roundLabelCN[label] ?? label; }
-
 export default function Dashboard() {
-  const navigate = useNavigate();
   const world = useGameStore((s) => s.world);
+
+  if (!world) {
+    return <div className="text-slate-400">正在加载...</div>;
+  }
+  return <DashboardContent world={world} />;
+}
+
+function DashboardContent({ world }: { world: GameWorld }) {
+  const navigate = useNavigate();
   const lastResults = useGameStore((s) => s.lastResults);
   const lastNews = useGameStore((s) => s.lastNews);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
@@ -111,10 +113,6 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world?.transferWindow?.status]);
 
-  if (!world) {
-    return <div className="text-slate-400">正在加载...</div>;
-  }
-
   const currentWindow = getCurrentWindow();
   const calendarLen = world.seasonState.calendar.length;
   const completedWindows = world.seasonState.calendar.filter((w) => w.completed).length;
@@ -174,7 +172,7 @@ export default function Dashboard() {
   // recomputing on every team card.
   const teamCoachMap = useMemo(
     () => buildTeamCoachMap(world.coachStates),
-    [world.coachStates],
+    [world],
   );
 
   const tabs: { key: TabKey; label: string }[] = [
@@ -458,11 +456,14 @@ export default function Dashboard() {
       )}
 
       {/* ═══════ Celebration ═══════ */}
-      <Celebration
-        active={celebrationType !== null}
-        type={celebrationType ?? 'confetti'}
-        duration={celebrationType === 'trophy' ? 5000 : 3500}
-      />
+      {celebrationType && (
+        <Celebration
+          key={`${advanceTick}-${celebrationType}`}
+          active
+          type={celebrationType}
+          duration={celebrationType === 'trophy' ? 5000 : 3500}
+        />
+      )}
 
       {/* ═══════ Match Detail Modal ═══════ */}
       <MatchDetailModal
@@ -541,7 +542,6 @@ function MatchdayTab({
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
 
   // Group fixtures by competition (excluding ones already shown in focus banner)
-  const groups: { label: string; color: string; fixtures: MatchFixture[] }[] = [];
   const groupMap = new Map<string, MatchFixture[]>();
 
   for (const f of currentWindow.fixtures) {
@@ -818,8 +818,6 @@ function ResultsTab({
   onResultClick: (r: MatchResult) => void;
   onLiveView: (r: MatchResult) => void;
 }) {
-  const [animComplete, setAnimComplete] = useState(false);
-
   if (lastResults.length === 0) {
     return (
       <div className="text-center py-12">
@@ -834,7 +832,7 @@ function ResultsTab({
       <ResultAnimation
         results={lastResults}
         teamBases={world.teamBases}
-        onComplete={() => setAnimComplete(true)}
+        onComplete={() => undefined}
         onResultClick={onResultClick}
         onLiveView={onLiveView}
       />
@@ -1249,7 +1247,7 @@ function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string
 }
 
 function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
-  const useGodHand = useGameStore(s => s.useGodHand);
+  const applyGodHand = useGameStore(s => s.useGodHand);
   const [show, setShow] = useState(false);
   const [teamId, setTeamId] = useState('');
   const [type, setType] = useState<'boost' | 'nerf'>('boost');
@@ -1283,7 +1281,7 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
             诅咒
           </button>
         </div>
-        <button onClick={() => { if (teamId) { useGodHand(teamId, type); setShow(false); } }}
+        <button onClick={() => { if (teamId) { applyGodHand(teamId, type); setShow(false); } }}
           disabled={!teamId}
           className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
           施法

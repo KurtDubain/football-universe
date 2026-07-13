@@ -128,6 +128,20 @@ export const compressedStorage: StateStorage = {
   },
 };
 
+/** Replace one save synchronously, cancelling any stale debounced write. */
+export function replaceCompressedStorageItem(name: string, value: string): void {
+  writeQueue.delete(name);
+  if (writeQueue.size === 0 && flushTimer != null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  const compressed = compressToUTF16(value);
+  localStorage.setItem(name, compressed);
+  lastCompressedKey = name;
+  lastCompressedValue = value;
+  lastCompressedOutput = compressed;
+}
+
 /**
  * Test helper — force the pending write to flush synchronously.
  * Not called in production code; exists so unit tests don't have to

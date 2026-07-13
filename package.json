@@ -14,7 +14,8 @@
     "screenshots": "tsx scripts/screenshot.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "audit:current": "tsx scripts/audit-e2e.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",

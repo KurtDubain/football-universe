@@ -13,6 +13,7 @@ import {
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
+import type { GameWorld } from '../engine/season/season-manager';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -51,7 +52,10 @@ export default function PlayerDetail() {
   const world = useGameStore((s) => s.world);
 
   if (!world || !uuid) return <div className="text-slate-400">正在加载...</div>;
+  return <PlayerDetailContent world={world} uuid={uuid} />;
+}
 
+function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }) {
   const found = findPlayerByUuid(world.squads, uuid);
   const player = found?.player;
   const teamId = found?.teamId;
@@ -76,7 +80,7 @@ export default function PlayerDetail() {
     });
     const rank = sorted.findIndex(s => s.playerId === uuid) + 1;
     return { rank, total: sorted.length };
-  }, [world.playerStats, world.squads, player, uuid]);
+  }, [world, player, uuid]);
 
   // Recent match highlights — only regulation/ET goals; shootout kicks excluded
   const highlights = useMemo(() => {

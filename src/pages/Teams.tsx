@@ -12,6 +12,7 @@ import {
 } from '../utils/format';
 import { buildTeamCoachMap } from '../engine/coaches/coach-lookup';
 import type { TeamTier, TeamBase, TeamState } from '../types/team';
+import type { GameWorld } from '../engine/season/season-manager';
 
 type ViewMode = 'tier' | 'league' | 'region';
 
@@ -20,13 +21,19 @@ const LEAGUE_ORDER: (1 | 2 | 3)[] = [1, 2, 3];
 
 export default function Teams() {
   const world = useGameStore((s) => s.world);
+
+  if (!world) return <div className="text-slate-400">正在加载...</div>;
+  return <TeamsContent world={world} />;
+}
+
+function TeamsContent({ world }: { world: GameWorld }) {
   const [viewMode, setViewMode] = useState<ViewMode>('tier');
 
   // Memo a single teamId → coachId map per render so each TeamCard does an
   // O(1) lookup instead of walking coachStates O(N) times.
   const teamCoachMap = useMemo(
-    () => (world ? buildTeamCoachMap(world.coachStates) : new Map<string, string>()),
-    [world?.coachStates],
+    () => buildTeamCoachMap(world.coachStates),
+    [world],
   );
 
   const allTeams = useMemo(() => {
@@ -36,10 +43,6 @@ export default function Teams() {
       state: world.teamStates[base.id],
     }));
   }, [world]);
-
-  if (!world) {
-    return <div className="text-slate-400">正在加载...</div>;
-  }
 
   const teamCount = allTeams.length;
   const leagueCount = new Set(allTeams.map((t) => t.state.leagueLevel)).size;

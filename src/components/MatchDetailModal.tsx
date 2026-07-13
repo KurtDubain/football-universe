@@ -8,9 +8,7 @@ import type { CoachBase } from '../types/coach';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
-  getTeamName,
   getTeamShortName,
-  getCoachName,
   getCoachStyleLabel,
   formatForm,
 } from '../utils/format';
@@ -34,6 +32,9 @@ export default function MatchDetailModal({
   result,
   world,
 }: MatchDetailModalProps) {
+  // Hooks must run even while the controlled modal is closed.
+  const swipeRef = useSwipe<HTMLDivElement>({ onSwipeDown: onClose, threshold: 60 });
+
   if (!isOpen || !fixture) return null;
 
   const homeTeam = world.teamBases[fixture.homeTeamId];
@@ -44,9 +45,6 @@ export default function MatchDetailModal({
   const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
   const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
   const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
-
-  // Mobile — swipe down to close (modal mostly attaches from bottom on mobile)
-  const swipeRef = useSwipe<HTMLDivElement>({ onSwipeDown: onClose, threshold: 60 });
 
   if (!homeTeam || !awayTeam) return null;
 
@@ -80,7 +78,6 @@ export default function MatchDetailModal({
         ) : (
           <PreMatchView
             fixture={fixture}
-            world={world}
             homeTeam={homeTeam}
             awayTeam={awayTeam}
             homeState={homeState}
@@ -100,7 +97,6 @@ export default function MatchDetailModal({
 
 function PreMatchView({
   fixture,
-  world,
   homeTeam,
   awayTeam,
   homeState,
@@ -109,7 +105,6 @@ function PreMatchView({
   awayCoach,
 }: {
   fixture: MatchFixture;
-  world: GameWorld;
   homeTeam: TeamBase;
   awayTeam: TeamBase;
   homeState: TeamState | undefined;
@@ -377,13 +372,7 @@ function PostMatchView({
   const penaltyAwayWon = result.penalties && (result.penaltyAway ?? 0) > (result.penaltyHome ?? 0);
 
   const goalEvents = result.events.filter(
-    (e) => e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
-  );
-  const homeGoalEvents = goalEvents.filter((e) =>
-    (e.type === 'own_goal' ? e.teamId !== fixture.homeTeamId : e.teamId === fixture.homeTeamId)
-  );
-  const awayGoalEvents = goalEvents.filter((e) =>
-    (e.type === 'own_goal' ? e.teamId !== fixture.awayTeamId : e.teamId === fixture.awayTeamId)
+    (event) => event.type === 'goal' || event.type === 'penalty_goal' || event.type === 'own_goal',
   );
 
   return (

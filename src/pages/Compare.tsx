@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName, formatForm } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import TeamBadge from '../components/TeamBadge';
+import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase, TeamState } from '../types/team';
 
 type TeamNumericKey = 'overall' | 'attack' | 'midfield' | 'defense' | 'stability' | 'depth';
@@ -11,10 +11,14 @@ type StateNumericKey = 'morale' | 'fatigue' | 'coachPressure' | 'squadHealth';
 
 export default function Compare() {
   const world = useGameStore((s) => s.world);
-  const [teamA, setTeamA] = useState('');
-  const [teamB, setTeamB] = useState('');
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
+  return <CompareContent world={world} />;
+}
+
+function CompareContent({ world }: { world: GameWorld }) {
+  const [teamA, setTeamA] = useState('');
+  const [teamB, setTeamB] = useState('');
 
   const allTeamIds = Object.keys(world.teamBases).sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0));
 
@@ -104,7 +108,7 @@ export default function Compare() {
     }
 
     return { aTrophies, bTrophies, aChampions, bChampions, aSeasons: aRecords.length, bSeasons: bRecords.length, matches, aWins, bWins, draws, aGoals, bGoals };
-  }, [teamA, teamB, world.teamTrophies, world.teamSeasonRecords, world.seasonState.calendar, world.matchHistory]);
+  }, [teamA, teamB, world]);
 
   return (
     <div className="max-w-3xl space-y-5">

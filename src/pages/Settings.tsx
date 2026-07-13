@@ -1,34 +1,43 @@
 import { lazy, Suspense, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useGameStore } from '../store/game-store';
+import { SAVE_SCHEMA_VERSION, useGameStore } from '../store/game-store';
+import { exportCurrentSave, importCurrentSave } from '../store/save-backup';
 import { getTeamName } from '../utils/format';
 import { defaultTeams } from '../config/teams';
 import { APP_VERSION } from '../version';
 import { setLanguage } from '../i18n';
 import { BALANCE } from '../config/balance';
+import type { GameWorld } from '../engine/season/season-manager';
 
 const DevDataHealthPanel = import.meta.env.DEV
   ? lazy(() => import('../components/DataHealthPanel'))
   : null;
 
 export default function Settings() {
-  const { i18n } = useTranslation();
   const world = useGameStore((s) => s.world);
+
+  if (!world) return <div className="text-slate-400">正在加载...</div>;
+  return <SettingsContent world={world} />;
+}
+
+function SettingsContent({ world }: { world: GameWorld }) {
+  const { i18n } = useTranslation();
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const setFavoriteTeams = useGameStore((s) => s.setFavoriteTeams);
   const toggleFavoriteTeam = useGameStore((s) => s.toggleFavoriteTeam);
   const resetGame = useGameStore((s) => s.resetGame);
   const [showConfirm, setShowConfirm] = useState(false);
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
-
-  if (!world) return <div className="text-slate-400">正在加载...</div>;
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const saveKey = 'football-universe-save';
   let saveSize = '未知';
   try {
     const raw = localStorage.getItem(saveKey);
     if (raw) saveSize = `${(raw.length / 1024).toFixed(0)} KB`;
-  } catch {}
+  } catch {
+    saveSize = '不可用';
+  }
 
   // Runtime statistics
   const stats = useMemo(() => {
@@ -53,7 +62,7 @@ export default function Settings() {
     const isWorldCupYear = world.seasonState.seasonNumber % BALANCE.WORLD_CUP_INTERVAL === 0;
 
     return { totalGoals, totalMatches: Math.round(totalMatches), avgGoals, totalCoachChanges, topTrophy, currentChampion, isWorldCupYear };
-  }, [world.teamSeasonRecords, world.honorHistory, world.teamTrophies, world.teamBases, world.seasonState.seasonNumber]);
+  }, [world]);
 
   const guideItems: { key: string; title: string; icon: string; content: string }[] = [
     {
@@ -263,17 +272,18 @@ export default function Settings() {
           <button
             onClick={() => {
               try {
-                const data = localStorage.getItem(saveKey);
-                if (data) {
-                  const blob = new Blob([data], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `football-universe-s${world.seasonState.seasonNumber}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }
-              } catch {}
+                const data = exportCurrentSave(saveKey, SAVE_SCHEMA_VERSION);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `football-universe-s${world.seasonState.seasonNumber}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setSaveMessage('存档已导出为标准 JSON');
+              } catch (error) {
+                setSaveMessage(error instanceof Error ? error.message : '导出失败');
+              }
             }}
             className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors cursor-pointer text-left"
           >
@@ -295,15 +305,18 @@ export default function Settings() {
                 reader.onload = (ev) => {
                   try {
                     const text = ev.target?.result as string;
-                    localStorage.setItem(saveKey, text);
+                    importCurrentSave(saveKey, text, SAVE_SCHEMA_VERSION);
                     window.location.reload();
-                  } catch {}
+                  } catch (error) {
+                    setSaveMessage(error instanceof Error ? error.message : '导入失败');
+                  }
                 };
                 reader.readAsText(file);
               }}
             />
           </label>
         </div>
+        {saveMessage && <p className="mt-2 text-xs text-slate-400">{saveMessage}</p>}
       </div>
 
       {/* Danger zone */}

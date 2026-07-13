@@ -33,7 +33,10 @@ export function useSwipe<T extends HTMLElement = HTMLDivElement>(
   const ref = useRef<T>(null);
   // Use a ref to avoid re-binding listeners on every render
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
 
   useEffect(() => {
     const el = ref.current;

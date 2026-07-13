@@ -3,7 +3,7 @@ import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
 import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRegion } from '../../types/cup';
-import { MatchResult, MatchFixture } from '../../types/match';
+import { MatchResult } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats, PlayerRetirement } from '../../types/player';
 import { CoachCandidate, CoachRetirement } from '../../types/coach';
@@ -26,7 +26,7 @@ import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
 import { getTeamIdsByLeague, getAllTeamIds, createNewsId } from './helpers';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
-import { leagueConfigs, superCupConfig } from '../../config/competitions';
+import { superCupConfig } from '../../config/competitions';
 import { BALANCE } from '../../config/balance';
 import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { dispatchWindow } from './window-handlers';
@@ -679,7 +679,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   }
 
   // ── Season buffs: reverse old buffs, then apply new ones ──
-  let buffedTeamBases = { ...world.teamBases };
+  const buffedTeamBases = { ...world.teamBases };
 
   // Reverse previous season's buffs
   for (const oldBuff of (world.seasonBuffs ?? [])) {
@@ -694,7 +694,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   // Generate and apply new buffs
   const seasonBuffs = generateSeasonBuffs(allTeamIds, buffedTeamBases, rng);
   const buffNews: NewsItem[] = seasonBuffs.map(buff => ({
-    id: `buff-S${seasonNumber}-${buff.type}`,
+    id: `buff-S${seasonNumber}-${buff.teamId}-${buff.type}`,
     seasonNumber, windowIndex: 0, type: 'streak' as const,
     title: `${buffedTeamBases[buff.teamId]?.name} — ${buff.label}`,
     description: buff.description,
@@ -899,7 +899,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   // UI state — handleSeasonEnd never pauses, and any unhandled window
   // is silently committed on the user's next "推进". One news item is
   // emitted so the user sees what happened.
-  let preNews: NewsItem[] = [];
+  const preNews: NewsItem[] = [];
   if (world.transferWindow && world.transferWindow.status === 'open') {
     const tw = world.transferWindow;
     const pendingOffers = tw.incomingOffers.filter(o => o.resolution === 'pending').length;

@@ -16,6 +16,8 @@ import { computeInitialMarketValue } from '../engine/economy/market-value';
 import { initTeamFinances } from '../engine/economy/finance';
 import { computeCurrentRating } from '../engine/players/development';
 import type { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../types/player';
+
+export const SAVE_SCHEMA_VERSION = 24;
 import { enforceStorageLimits } from '../engine/season/storage-limits';
 
 interface GameStore {
@@ -1015,7 +1017,7 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'football-universe-save',
-      version: 24,
+      version: SAVE_SCHEMA_VERSION,
       // [D] — wrap localStorage with LZ-string compression. ~4-6× size
       // reduction (1MB raw → ~200KB on disk), giving comfortable
       // headroom under the 5MB quota for 50-100 seasons. Auto-detects
