@@ -19,6 +19,7 @@ const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
   red_card:     { name: 'warning', accent: '#ef4444' },
   save:         { name: 'gloves' },
   miss:         { name: 'x' },
+  penalty_miss: { name: 'x', accent: '#fbbf24' },
   gk_save:      { name: 'gloves', accent: '#3b82f6' },
   df_block:     { name: 'shield', accent: '#3b82f6' },
   assist:       { name: 'sparkle', accent: '#a78bfa' },
@@ -218,7 +219,9 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     if (finished) return '比赛结束！全场战罢。';
     if (halftime) return '中场休息 — 双方回到更衣室';
     if (playback.flashEvent?.type === 'goal' || playback.flashEvent?.type === 'penalty_goal' || playback.flashEvent?.type === 'own_goal') return '进球了！！！';
-    if (playback.flashEvent?.type === 'save') return '门将做出精彩扑救！';
+    if (playback.flashEvent?.type === 'save' || playback.flashEvent?.type === 'gk_save') return '门将做出精彩扑救！';
+    if (playback.flashEvent?.type === 'df_block') return '后卫在门线上完成关键封堵！';
+    if (playback.flashEvent?.type === 'miss' || playback.flashEvent?.type === 'penalty_miss') return '射门偏出，错失机会';
     if (playback.flashEvent?.type === 'yellow_card') return '裁判出示黄牌警告';
     if (playback.flashEvent?.type === 'red_card') return '红牌！有球员被罚下！';
     if (playback.flashEvent?.type === 'substitution') return playback.flashEvent.description;
@@ -312,6 +315,8 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             homeTeamId={result.homeTeamId}
             flashEvent={playback.flashEvent}
             allEvents={allEvents}
+            homeMatchday={result.homeMatchday}
+            awayMatchday={result.awayMatchday}
             finished={finished}
             halftime={halftime}
           />
@@ -343,7 +348,10 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         {/* Event log */}
         <div ref={logRef} className="px-4 py-1 max-h-24 overflow-y-auto scroll-smooth">
           {[...shownEvents].reverse().filter(e =>
-            e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'yellow_card' || e.type === 'red_card' || e.type === 'save' || e.type === 'substitution'
+            e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
+            || e.type === 'yellow_card' || e.type === 'red_card'
+            || e.type === 'save' || e.type === 'gk_save' || e.type === 'df_block'
+            || e.type === 'miss' || e.type === 'penalty_miss' || e.type === 'substitution'
           ).slice(0, 6).map((e, i) => (
             <div key={i} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
               <span className="w-6 text-right font-mono text-[10px]">{e.minute}'</span>

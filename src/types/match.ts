@@ -99,6 +99,8 @@ export interface MatchResult {
 export interface MatchdaySnapshot {
   players: Array<{
     playerId: string;
+    playerNumber?: number;
+    playerName?: string;
     position: 'GK' | 'DF' | 'MF' | 'FW';
     role?: 'starter' | 'bench';
     /** 0 for starters, substitution minute for used substitutes, null when unused. */

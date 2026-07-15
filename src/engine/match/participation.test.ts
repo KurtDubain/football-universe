@@ -69,6 +69,7 @@ describe('match participation', () => {
     expect(substitutions).toHaveLength(3);
     expect(new Set(substitutions.map(entry => entry.playerInId)).size).toBe(substitutions.length);
     expect(new Set(substitutions.map(entry => entry.playerOutId)).size).toBe(substitutions.length);
+    expect(first.snapshot.players[0]).toMatchObject({ playerNumber: 1, playerName: 'p1' });
     expect(first.snapshot.players.reduce((sum, entry) => sum + (entry.minutesPlayed ?? 0), 0)).toBe(11 * 90);
     expect(createSubstitutionEvents(first.snapshot, fullSquad, 'A')).toHaveLength(substitutions.length);
   });

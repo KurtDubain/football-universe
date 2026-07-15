@@ -3,14 +3,16 @@
 
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
 
-// 4-4-2 formation positions (normalized 0-1, x is depth, y is width)
+// 4-3-3 formation positions (normalized 0-1, x is depth, y is width).
+// This matches the authoritative starter shape in match participation.
 export const BASE_FORMATION: { x: number; y: number; role: Role }[] = [
   { x: 0.07, y: 0.5, role: 'GK' },
   { x: 0.22, y: 0.13, role: 'DF' }, { x: 0.20, y: 0.37, role: 'DF' },
   { x: 0.20, y: 0.63, role: 'DF' }, { x: 0.22, y: 0.87, role: 'DF' },
-  { x: 0.38, y: 0.15, role: 'MF' }, { x: 0.35, y: 0.40, role: 'MF' },
-  { x: 0.35, y: 0.60, role: 'MF' }, { x: 0.38, y: 0.85, role: 'MF' },
-  { x: 0.50, y: 0.35, role: 'FW' }, { x: 0.50, y: 0.65, role: 'FW' },
+  { x: 0.37, y: 0.24, role: 'MF' }, { x: 0.34, y: 0.50, role: 'MF' },
+  { x: 0.37, y: 0.76, role: 'MF' },
+  { x: 0.52, y: 0.18, role: 'FW' }, { x: 0.55, y: 0.50, role: 'FW' },
+  { x: 0.52, y: 0.82, role: 'FW' },
 ];
 
 export interface Particle {
@@ -37,6 +39,7 @@ export interface PassPhase {
   passerIdx: number;
   receiverIdx: number;
   attackingHome: boolean;
+  kind: 'pass' | 'shot';
   duration: number;
   hold: number;
   arc: number;

@@ -2,7 +2,6 @@
 // Operates entirely in normalized (0-1) field coordinates.
 
 import { clamp, dist, easeInOutQuad, lerp, seededRand } from './math';
-import type { MatchEvent } from '../../types/match';
 import { BASE_FORMATION, type PassPhase, type PlayerState, type Role } from './types';
 
 /**
@@ -59,36 +58,6 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
   const bx = target.x + microJ;
   const by = target.y + Math.cos(frame * 0.18) * 0.3;
   return { bx, by, arcLift: 0, spinDelta: 0.05 };
-}
-
-/**
- * For special events near the current minute (goal/penalty_goal/save), compute
- * a pixel-coord target the ball/attackers should aim at instead of the next
- * pass receiver. Returns null when no near-event override applies.
- */
-export function computeOverrideTarget(
-  allEvents: MatchEvent[],
-  minute: number,
-  homeTeamId: string,
-  P: number,
-  fw: number, fh: number,
-): { x: number; y: number } | null {
-  const nearEvent = allEvents.find(e => Math.abs(e.minute - minute) <= 1);
-  if (!nearEvent) return null;
-  const evIsHome = nearEvent.teamId === homeTeamId;
-  if (nearEvent.type === 'goal' || nearEvent.type === 'penalty_goal') {
-    return {
-      x: P + (evIsHome ? 0.97 : 0.03) * fw,
-      y: P + (0.42 + seededRand(minute * 7) * 0.16) * fh,
-    };
-  }
-  if (nearEvent.type === 'save') {
-    return {
-      x: P + (evIsHome ? 0.94 : 0.06) * fw,
-      y: P + (0.4 + seededRand(minute * 11) * 0.2) * fh,
-    };
-  }
-  return null;
 }
 
 /**
@@ -188,10 +157,12 @@ export function updatePlayerPositions(
       }
     }
 
-    // Goal scoring event — attackers swarm toward goal
+    // Shot scene — supporting forwards attack stable lanes around the target.
     if (overrideTarget && teamHasBall && slot.role === 'FW' && !isHolder) {
-      targetX_n = overrideTarget.x + (Math.random() - 0.5) * 0.04;
-      targetY_n = overrideTarget.y + (Math.random() - 0.5) * 0.06;
+      const laneSeed = (i + 1) * 97 + Math.round(overrideTarget.x * 1000) + Math.round(overrideTarget.y * 1000);
+      const supportDepth = 0.08 + seededRand(laneSeed) * 0.07;
+      targetX_n = overrideTarget.x + (isHomeTeam ? -supportDepth : supportDepth);
+      targetY_n = overrideTarget.y + (seededRand(laneSeed + 1) - 0.5) * 0.18;
     }
 
     targetX_n = clamp(targetX_n, 0.03, 0.97);

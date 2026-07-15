@@ -1,18 +1,18 @@
 import { useEffect, useRef, useMemo } from 'react';
-import type { MatchEvent } from '../types/match';
+import type { MatchdaySnapshot, MatchEvent } from '../types/match';
 import { lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence } from './pitch-canvas/sequence';
+import { findEventScene, sceneForEvent, type EventScene, type ShotOutcome } from './pitch-canvas/event-scene';
+import { activePitchPlayers, buildPitchRoster } from './pitch-canvas/lineup';
 import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import {
-  getBaseSlot, computeBallPosition, computeOverrideTarget, resolvePhasePoints, updatePlayerPositions,
-} from './pitch-canvas/physics';
+import { getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions } from './pitch-canvas/physics';
 import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
-  drawGoalCelebration, applyCameraShake, applyWhiteFlash,
-  GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES,
+  drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
+  GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES, SHOT_OUTCOME_MAX_FRAMES,
 } from './pitch-canvas/renderer';
 import { BASE_FORMATION, type Particle, type PassPhase, type PlayerState } from './pitch-canvas/types';
 
@@ -24,12 +24,30 @@ interface Props {
   homeTeamId: string;
   flashEvent: MatchEvent | null;
   allEvents: MatchEvent[];
+  homeMatchday?: MatchdaySnapshot;
+  awayMatchday?: MatchdaySnapshot;
   finished: boolean;
   halftime: boolean;
 }
 
+interface PitchDebugState {
+  coordinateSystem: string;
+  minute: number;
+  phase: 'passing' | 'holding' | 'shooting';
+  attackingSide: 'home' | 'away';
+  event: { type: MatchEvent['type']; outcome: ShotOutcome } | null;
+  ball: { x: number; y: number };
+  homeOnField: Array<{ id: string; number: number; slot: number }>;
+  awayOnField: Array<{ id: string; number: number; slot: number }>;
+}
+
+type PitchDebugWindow = Window & { render_game_to_text?: () => string };
+
 export default function PitchCanvas(props: Props) {
-  const { minute, homeColor, awayColor, homeTeamId, flashEvent, allEvents, halftime } = props;
+  const {
+    minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
+    homeMatchday, awayMatchday, halftime,
+  } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -41,8 +59,13 @@ export default function PitchCanvas(props: Props) {
   const cameraShakeRef = useRef(0);
   const cameraShakeMax = useRef(35); // remember peak so attenuation is correct
   const flashWhiteRef = useRef(0);
+  const shotOutcomeFrameRef = useRef(0);
+  const shotOutcomeRef = useRef<Exclude<ShotOutcome, 'goal'>>('save');
+  const shotOutcomeTargetRef = useRef({ x: 0, y: 0 });
+  const shotOutcomeAttackingHomeRef = useRef(true);
   const particlesRef = useRef<Particle[]>([]);
-  const lastFlashEventRef = useRef<MatchEvent | null>(null); // de-dup mount-time flashEvent
+  const pendingImpactSceneRef = useRef<EventScene | null>(null);
+  const triggeredImpactKeyRef = useRef<string | null>(null);
 
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
   const playerPosRef = useRef<PlayerState[]>(
@@ -65,60 +88,67 @@ export default function PitchCanvas(props: Props) {
   const phaseFrameRef = useRef(0);
   const phaseStateRef = useRef<'passing' | 'holding' | 'shooting'>('passing');
   const sequenceSeedRef = useRef(0);
+  const activeSceneKeyRef = useRef<string | null>(null);
+  const sequenceSceneRef = useRef<EventScene | null>(null);
   const ballSourceRef = useRef({ x: 0.5, y: 0.5 });
   const ballArcLiftRef = useRef(0);
   const interceptedRef = useRef(false);
   const ballSpinRef = useRef(0);
+  const debugStateRef = useRef<PitchDebugState>({
+    coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
+    minute,
+    phase: 'passing',
+    attackingSide: 'home',
+    event: null,
+    ball: { x: 0.5, y: 0.5 },
+    homeOnField: [],
+    awayOnField: [],
+  });
 
-  const attackSide = useMemo(() => {
-    const ev = allEvents.find(e => Math.abs(e.minute - minute) <= 2);
-    if (ev) return ev.teamId === homeTeamId ? 'home' : 'away';
-    return seededRand(minute * 31) > 0.45 ? 'home' : 'away';
-  }, [minute, allEvents, homeTeamId]);
+  const eventScene = useMemo(
+    () => findEventScene(allEvents, minute, homeTeamId, flashEvent),
+    [allEvents, minute, homeTeamId, flashEvent],
+  );
+  const homeRoster = useMemo(() => buildPitchRoster(homeMatchday), [homeMatchday]);
+  const awayRoster = useMemo(() => buildPitchRoster(awayMatchday), [awayMatchday]);
 
   const targetShift = useMemo(() => {
-    const ev = allEvents.find(e => Math.abs(e.minute - minute) <= 2);
-    if (!ev) return attackSide === 'home' ? 0.04 : -0.04;
-    return ev.teamId === homeTeamId ? 0.07 : -0.07;
-  }, [minute, allEvents, homeTeamId, attackSide]);
+    if (eventScene) return eventScene.attackingHome ? 0.07 : -0.07;
+    return seededRand(minute * 31) > 0.45 ? 0.04 : -0.04;
+  }, [eventScene, minute]);
 
   const shiftRef = useRef(0);
 
   // Live snapshot of props for the long-running rAF loop to read from.
   // Avoids restarting the rAF chain on every minute / flashEvent change.
   const liveRef = useRef({
-    minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+    eventScene, homeRoster, awayRoster,
   });
   useEffect(() => {
-    liveRef.current = { minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift };
+    liveRef.current = {
+      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+      eventScene, homeRoster, awayRoster,
+    };
   });
 
-  // Goal-trigger effect: fires once per new flashEvent (goal/penalty_goal).
-  // Spawns particles + camera shake. Does NOT restart the rAF loop.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const isGoal = flashEvent && (flashEvent.type === 'goal' || flashEvent.type === 'penalty_goal');
-    if (!isGoal) return;
-    // Skip if we already fired for this exact event (handles strict-mode double mount + replays)
-    if (lastFlashEventRef.current === flashEvent) return;
-    lastFlashEventRef.current = flashEvent;
-    const W = canvas.width, H = canvas.height;
-    const P = 10;
-    const fw = W - P * 2;
-    goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
-    cameraShakeRef.current = CAMERA_SHAKE_MAX_FRAMES;
-    cameraShakeMax.current = CAMERA_SHAKE_MAX_FRAMES;
-    flashWhiteRef.current = FLASH_MAX_FRAMES;
-    const evIsHome = flashEvent.teamId === homeTeamId;
-    const goalColor = evIsHome ? homeColor : awayColor;
-    goalCelebColor.current = goalColor;
-    goalCelebRightSide.current = evIsHome;
-    const goalX = P + (evIsHome ? 0.97 : 0.03) * fw;
-    const goalY = H / 2;
-    const floor = H - P; // particles bounce off pitch edge
-    particlesRef.current.push(...spawnGoalBurst(goalX, goalY, goalColor, floor));
-  }, [flashEvent, homeTeamId, homeColor, awayColor]);
+    const debugWindow = window as PitchDebugWindow;
+    const renderState = () => JSON.stringify(debugStateRef.current);
+    debugWindow.render_game_to_text = renderState;
+    return () => {
+      if (debugWindow.render_game_to_text === renderState) delete debugWindow.render_game_to_text;
+    };
+  }, []);
+
+  // Queue the event impact. The rAF loop triggers it only when the directed
+  // sequence's final shot reaches the goal, keeping ball and feedback aligned.
+  useEffect(() => {
+    if (!flashEvent) return;
+    const scene = sceneForEvent(flashEvent, homeTeamId);
+    if (!scene || triggeredImpactKeyRef.current === scene.key) return;
+    pendingImpactSceneRef.current = scene;
+  }, [flashEvent, homeTeamId]);
 
   // Main rAF loop — starts once on mount, reads from liveRef. No restarts.
   useEffect(() => {
@@ -129,18 +159,59 @@ export default function PitchCanvas(props: Props) {
     const P = 10;
     const fw = W - P * 2, fh = H - P * 2;
 
-    // Bootstrap sequence if empty
-    if (sequenceRef.current.length === 0) {
-      sequenceSeedRef.current = liveRef.current.minute * 137 + frameRef.current;
-      const gen = generateSequence(sequenceSeedRef.current);
-      sequenceRef.current = gen.phases;
+    function loadSequence(phases: PassPhase[], seed: number): void {
+      sequenceSeedRef.current = seed;
+      sequenceRef.current = phases;
       phaseIdxRef.current = 0;
       phaseFrameRef.current = 0;
-      phaseStateRef.current = 'passing';
+      phaseStateRef.current = phases[0]?.kind === 'shot' ? 'shooting' : 'passing';
       interceptedRef.current = false;
-      const { source } = resolvePhasePoints(sequenceRef.current[0], shiftRef.current, P, fw, fh);
+      const firstPhase = phases[0];
+      if (!firstPhase) return;
+      const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
+    }
+
+    function triggerShotImpact(scene: EventScene, currentHomeColor: string, currentAwayColor: string): void {
+      const targetX = P + scene.target.x * fw;
+      const targetY = P + scene.target.y * fh;
+      triggeredImpactKeyRef.current = scene.key;
+      pendingImpactSceneRef.current = null;
+
+      if (scene.outcome === 'goal') {
+        goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
+        cameraShakeRef.current = CAMERA_SHAKE_MAX_FRAMES;
+        cameraShakeMax.current = CAMERA_SHAKE_MAX_FRAMES;
+        flashWhiteRef.current = FLASH_MAX_FRAMES;
+        const goalColor = scene.attackingHome ? currentHomeColor : currentAwayColor;
+        goalCelebColor.current = goalColor;
+        goalCelebRightSide.current = scene.attackingHome;
+        particlesRef.current.push(...spawnGoalBurst(targetX, targetY, goalColor, H - P));
+        return;
+      }
+
+      shotOutcomeFrameRef.current = SHOT_OUTCOME_MAX_FRAMES;
+      shotOutcomeRef.current = scene.outcome;
+      shotOutcomeTargetRef.current = { x: targetX, y: targetY };
+      shotOutcomeAttackingHomeRef.current = scene.attackingHome;
+      if (scene.outcome === 'save' || scene.outcome === 'block') {
+        particlesRef.current.push(...spawnTackleSparks(targetX, targetY));
+        cameraShakeRef.current = scene.outcome === 'block' ? 12 : 8;
+        cameraShakeMax.current = cameraShakeRef.current;
+      }
+    }
+
+    // Bootstrap sequence if empty
+    if (sequenceRef.current.length === 0) {
+      const initialScene = liveRef.current.eventScene;
+      const initialSeed = initialScene?.seed ?? liveRef.current.minute * 137 + frameRef.current;
+      const generated = generateSequence(initialSeed, initialScene
+        ? { attackingHome: initialScene.attackingHome, forceShot: true }
+        : undefined);
+      loadSequence(generated.phases, initialSeed);
+      activeSceneKeyRef.current = initialScene?.key ?? null;
+      sequenceSceneRef.current = initialScene;
     }
 
     function render() {
@@ -148,7 +219,38 @@ export default function PitchCanvas(props: Props) {
       const f = frameRef.current;
       // Read live props from ref (no closure capture → no rAF restart on prop change)
       const live = liveRef.current;
-      const { minute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift } = live;
+      const {
+        minute, maxMinute, homeColor, awayColor, halftime, targetShift,
+        eventScene, homeRoster, awayRoster,
+      } = live;
+
+      if (eventScene && activeSceneKeyRef.current !== eventScene.key) {
+        // A new attack replaces any lingering cue from the previous chance.
+        shotOutcomeFrameRef.current = 0;
+        goalCelebFrame.current = 0;
+        flashWhiteRef.current = 0;
+        const directed = generateSequence(eventScene.seed, {
+          attackingHome: eventScene.attackingHome,
+          forceShot: true,
+        });
+        loadSequence(directed.phases, eventScene.seed);
+        activeSceneKeyRef.current = eventScene.key;
+        sequenceSceneRef.current = eventScene;
+      } else if (!eventScene) {
+        activeSceneKeyRef.current = null;
+      }
+
+      const queuedImpact = pendingImpactSceneRef.current;
+      const livePhase = sequenceRef.current[phaseIdxRef.current];
+      if (queuedImpact && sequenceSceneRef.current?.key === queuedImpact.key && livePhase?.kind !== 'shot') {
+        const shotIndex = sequenceRef.current.findIndex(phase => phase.kind === 'shot');
+        if (shotIndex >= 0) {
+          phaseIdxRef.current = shotIndex;
+          phaseFrameRef.current = 0;
+          phaseStateRef.current = 'shooting';
+          ballSourceRef.current = { ...ballPos.current };
+        }
+      }
 
       // Camera shake — saves ctx, translates, clears. Caller must restore() at end of frame.
       applyCameraShake(ctx, cameraShakeRef, cameraShakeMax, W, H);
@@ -170,17 +272,13 @@ export default function PitchCanvas(props: Props) {
         // Generate new sequence — possibly switching possession
         sequenceSeedRef.current += 1;
         const gen = generateSequence(sequenceSeedRef.current);
-        sequenceRef.current = gen.phases;
-        phaseIdxRef.current = 0;
-        phaseFrameRef.current = 0;
-        phaseStateRef.current = 'passing';
-        interceptedRef.current = false;
-        ballSourceRef.current = resolvePhasePoints(sequenceRef.current[0], shiftRef.current, P, fw, fh).source;
+        loadSequence(gen.phases, sequenceSeedRef.current);
+        sequenceSceneRef.current = null;
       } else {
         phaseFrameRef.current++;
-        if (phaseStateRef.current === 'passing') {
+        if (phaseStateRef.current !== 'holding') {
           // Check for interception mid-pass
-          if (phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
+          if (phase.kind === 'pass' && phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
             interceptedRef.current = true;
             particlesRef.current.push(...spawnTackleSparks(ballPos.current.x, ballPos.current.y));
             cameraShakeRef.current = Math.max(cameraShakeRef.current, 8);
@@ -198,15 +296,26 @@ export default function PitchCanvas(props: Props) {
             particlesRef.current.push(...spawnGrassKick(ballPos.current.x, ballPos.current.y, 0, 1));
           }
         } else if (phaseStateRef.current === 'holding' && phaseFrameRef.current >= phase.hold) {
-          phaseIdxRef.current++;
-          phaseFrameRef.current = 0;
-          phaseStateRef.current = 'passing';
-          const newPhase = sequenceRef.current[phaseIdxRef.current];
-          if (newPhase) {
-            const { source, dx, dy } = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
-            ballSourceRef.current = source;
-            // Grass kick on pass start
-            particlesRef.current.push(...spawnGrassKick(source.x, source.y, dx, dy));
+          const newPhase = sequenceRef.current[phaseIdxRef.current + 1];
+          const scene = sequenceSceneRef.current;
+          const waitingForEvent = newPhase?.kind === 'shot'
+            && scene
+            && minute <= scene.event.minute
+            && pendingImpactSceneRef.current?.key !== scene.key;
+          const holdingEventResult = phase.kind === 'shot' && eventScene;
+
+          if (waitingForEvent || holdingEventResult) {
+            phaseFrameRef.current = phase.hold;
+          } else {
+            phaseIdxRef.current++;
+            phaseFrameRef.current = 0;
+            if (newPhase) {
+              phaseStateRef.current = newPhase.kind === 'shot' ? 'shooting' : 'passing';
+              const { source, dx, dy } = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
+              ballSourceRef.current = source;
+              // Grass kick on pass start
+              particlesRef.current.push(...spawnGrassKick(source.x, source.y, dx, dy));
+            }
           }
         }
       }
@@ -217,14 +326,20 @@ export default function PitchCanvas(props: Props) {
       const targetX = P + receiverSlot.x * fw;
       const targetY = P + receiverSlot.y * fh;
 
-      // Special events override target (in pixel coords)
-      const overrideTarget = computeOverrideTarget(allEvents, minute, homeTeamId, P, fw, fh);
-      const finalTargetX = overrideTarget?.x ?? targetX;
-      const finalTargetY = overrideTarget?.y ?? targetY;
+      const defaultShotTarget = {
+        x: isAttHome ? 0.985 : 0.015,
+        y: 0.43 + seededRand(sequenceSeedRef.current + 71) * 0.14,
+      };
+      const directedShotScene = eventScene ?? sequenceSceneRef.current;
+      const shotTarget = currentPhase.kind === 'shot'
+        ? directedShotScene?.target ?? defaultShotTarget
+        : null;
+      const finalTargetX = shotTarget ? P + shotTarget.x * fw : targetX;
+      const finalTargetY = shotTarget ? P + shotTarget.y * fh : targetY;
 
       // Compute ball position
       const ballResult = computeBallPosition({
-        passing: phaseStateRef.current === 'passing',
+        passing: phaseStateRef.current !== 'holding',
         phaseFrame: phaseFrameRef.current,
         duration: currentPhase.duration,
         arc: currentPhase.arc,
@@ -240,8 +355,18 @@ export default function PitchCanvas(props: Props) {
       ballPos.current.x = bx;
       ballPos.current.y = by;
 
+      const pendingImpact = pendingImpactSceneRef.current;
+      if (
+        currentPhase.kind === 'shot'
+        && phaseStateRef.current === 'holding'
+        && pendingImpact
+        && directedShotScene?.key === pendingImpact.key
+      ) {
+        triggerShotImpact(pendingImpact, homeColor, awayColor);
+      }
+
       // Ball trail (motion blur)
-      if (phaseStateRef.current === 'passing' && f % 2 === 0) {
+      if (phaseStateRef.current !== 'holding' && f % 2 === 0) {
         ballHistory.current.push({ x: bx, y: by });
         if (ballHistory.current.length > 10) ballHistory.current.shift();
       } else if (ballHistory.current.length > 0 && f % 3 === 0) {
@@ -255,10 +380,6 @@ export default function PitchCanvas(props: Props) {
       // Normalize ball + override to 0-1 for AI calcs
       const ballNX = (bx - P) / fw;
       const ballNY = (by - P) / fh;
-      const overrideTargetN = overrideTarget
-        ? { x: (overrideTarget.x - P) / fw, y: (overrideTarget.y - P) / fh }
-        : null;
-
       updatePlayerPositions(
         playerPosRef.current,
         ballNX, ballNY,
@@ -266,20 +387,38 @@ export default function PitchCanvas(props: Props) {
         ballHolderIdx,
         currentPhase,
         phaseStateRef.current,
-        overrideTargetN,
+        shotTarget,
         shiftRef.current,
       );
 
       // ── Draw players ──
-      for (let i = 0; i < 11; i++) {
-        const hasBall = isAttHome && i === ballHolderIdx;
-        drawPlayer(ctx, playerPosRef.current[i], homeColor, i === 0 ? 1 : i + 1, hasBall, P, fw, fh, f);
+      const visibleHome = activePitchPlayers(homeRoster, minute, maxMinute);
+      const visibleAway = activePitchPlayers(awayRoster, minute, maxMinute);
+      for (const player of visibleHome) {
+        const hasBall = isAttHome && player.slotIndex === ballHolderIdx;
+        drawPlayer(
+          ctx, playerPosRef.current[player.slotIndex], homeColor, player.playerNumber,
+          hasBall, P, fw, fh, f,
+        );
       }
-      for (let i = 11; i < 22; i++) {
-        const formIdx = i - 11;
-        const hasBall = !isAttHome && formIdx === ballHolderIdx;
-        drawPlayer(ctx, playerPosRef.current[i], awayColor, formIdx === 0 ? 1 : formIdx + 1, hasBall, P, fw, fh, f);
+      for (const player of visibleAway) {
+        const hasBall = !isAttHome && player.slotIndex === ballHolderIdx;
+        drawPlayer(
+          ctx, playerPosRef.current[11 + player.slotIndex], awayColor, player.playerNumber,
+          hasBall, P, fw, fh, f,
+        );
       }
+
+      debugStateRef.current = {
+        coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
+        minute,
+        phase: phaseStateRef.current,
+        attackingSide: isAttHome ? 'home' : 'away',
+        event: eventScene ? { type: eventScene.event.type, outcome: eventScene.outcome } : null,
+        ball: { x: ballNX, y: ballNY },
+        homeOnField: visibleHome.map(player => ({ id: player.playerId, number: player.playerNumber, slot: player.slotIndex })),
+        awayOnField: visibleAway.map(player => ({ id: player.playerId, number: player.playerNumber, slot: player.slotIndex })),
+      };
 
       // ── Particles update + draw ──
       particlesRef.current = updateAndCullParticles(particlesRef.current, H);
@@ -317,6 +456,18 @@ export default function PitchCanvas(props: Props) {
         );
       }
 
+      if (shotOutcomeFrameRef.current > 0) {
+        drawShotOutcome(
+          ctx,
+          shotOutcomeFrameRef.current,
+          shotOutcomeRef.current,
+          shotOutcomeTargetRef.current.x,
+          shotOutcomeTargetRef.current.y,
+          shotOutcomeAttackingHomeRef.current,
+        );
+        shotOutcomeFrameRef.current--;
+      }
+
       drawBall(ctx, bx, by, ballArcLiftRef.current, ballSpinRef.current);
 
       ctx.restore();
@@ -338,6 +489,8 @@ export default function PitchCanvas(props: Props) {
       ref={canvasRef}
       width={520}
       height={280}
+      data-testid="pitch-canvas"
+      aria-label="比赛实时战术动画"
       className="w-full rounded-xl border border-emerald-900/30"
     />
   );

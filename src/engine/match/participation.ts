@@ -92,6 +92,8 @@ export function buildMatchParticipation(
     const exitedMinute = isStarter ? subOut?.minute ?? durationMinutes : subIn ? durationMinutes : null;
     return {
       playerId: player.uuid,
+      playerNumber: player.number,
+      playerName: player.name,
       position: player.position,
       role: isStarter ? 'starter' : 'bench',
       enteredMinute,

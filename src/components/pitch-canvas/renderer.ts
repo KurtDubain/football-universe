@@ -6,6 +6,7 @@
 // understands them; the orchestrator imports them when triggering effects.
 
 import { hexToRgbStr } from './math';
+import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
 
 // Mutable {current: number} shape — matches React.MutableRefObject<number>
@@ -15,6 +16,7 @@ type MutNum = { current: number };
 export const GOAL_CELEB_MAX_FRAMES = 110;
 export const FLASH_MAX_FRAMES = 12;
 export const CAMERA_SHAKE_MAX_FRAMES = 28;
+export const SHOT_OUTCOME_MAX_FRAMES = 72;
 
 /**
  * Grass + stripes + lines + pa/ga boxes + corner arcs + vignette.
@@ -261,6 +263,62 @@ export function drawGoalCelebration(
   ctx.globalCompositeOperation = 'source-over';
 }
 
+/** Draw a concise, broadcast-like impact cue for non-goal shots. */
+export function drawShotOutcome(
+  ctx: CanvasRenderingContext2D,
+  remainingFrames: number,
+  outcome: Exclude<ShotOutcome, 'goal'>,
+  targetX: number,
+  targetY: number,
+  attackingHome: boolean,
+): void {
+  const progress = 1 - remainingFrames / SHOT_OUTCOME_MAX_FRAMES;
+  const alpha = Math.max(0, 1 - progress);
+  const goalLineX = attackingHome ? targetX - 14 : targetX + 14;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = 'round';
+
+  if (outcome === 'save') {
+    ctx.strokeStyle = '#60a5fa';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(goalLineX, targetY + 6);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, 7 + progress * 7, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else if (outcome === 'block') {
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2.5;
+    const radius = 5 + progress * 4;
+    ctx.beginPath();
+    ctx.moveTo(targetX - radius, targetY - radius);
+    ctx.lineTo(targetX + radius, targetY + radius);
+    ctx.moveTo(targetX + radius, targetY - radius);
+    ctx.lineTo(targetX - radius, targetY + radius);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, 6 + progress * 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  const label = outcome === 'save' ? '扑救' : outcome === 'block' ? '封堵' : '偏出';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = outcome === 'save' ? '#bfdbfe' : outcome === 'block' ? '#fde68a' : '#e2e8f0';
+  ctx.fillText(label, targetX, Math.max(14, targetY - 13 - progress * 5));
+  ctx.restore();
+}
+
 /**
  * Compute the per-frame camera offset, decrement the shake ref, and apply
  * ctx.save() + translate + clearRect so subsequent drawing happens in
@@ -273,7 +331,9 @@ export function applyCameraShake(
   W: number, H: number,
 ): { offX: number; offY: number } {
   let offX = 0, offY = 0;
+  let shaking = false;
   if (shakeRef.current > 0) {
+    shaking = true;
     const t = 1 - shakeRef.current / shakeMaxRef.current;
     const decay = Math.exp(-t * 3); // exponential falloff
     const phase = (shakeMaxRef.current - shakeRef.current) * 0.85;
@@ -282,8 +342,13 @@ export function applyCameraShake(
     shakeRef.current--;
   }
   ctx.save();
-  ctx.translate(offX, offY);
-  ctx.clearRect(-offX, -offY, W, H);
+  ctx.clearRect(0, 0, W, H);
+  if (shaking) {
+    // Slight overscan keeps translated pitch edges outside the viewport.
+    ctx.translate(W / 2 + offX, H / 2 + offY);
+    ctx.scale(1.04, 1.04);
+    ctx.translate(-W / 2, -H / 2);
+  }
   return { offX, offY };
 }
 
