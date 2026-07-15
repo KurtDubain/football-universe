@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "bundle:check": "tsx scripts/check-bundle-size.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "screenshots": "tsx scripts/screenshot.ts",

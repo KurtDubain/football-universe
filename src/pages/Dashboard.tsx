@@ -229,7 +229,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
         <button
           onClick={handleAdvanceClick}
           disabled={isAdvancing || !currentWindow}
-          className="px-3 sm:px-4 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
+          className="px-3 sm:px-4 py-2 sm:py-1.5 min-h-11 sm:min-h-0 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
         >
           {isAdvancing
             ? '模拟中...'

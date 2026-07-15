@@ -101,6 +101,7 @@ export default function Coaches() {
       <div className="space-y-2">
         {filtered.map(({ base, state, trophies, career, team, teamState }) => {
           const pressure = teamState?.coachPressure ?? 0;
+          const pressureLabel = Math.round(pressure * 10) / 10;
           const pressureColor = pressure > 60 ? 'text-red-400' : pressure > 35 ? 'text-amber-400' : 'text-green-400';
           const ratingTier = base.rating >= 85 ? 'bg-amber-500' : base.rating >= 70 ? 'bg-blue-500' : base.rating >= 55 ? 'bg-slate-500' : 'bg-slate-600';
 
@@ -108,7 +109,7 @@ export default function Coaches() {
             <Link
               key={base.id}
               to={`/coach/${base.id}`}
-              className="block bg-slate-800 rounded-xl border border-slate-700/60 hover:border-slate-600 transition-all hover-lift"
+              className="block overflow-hidden bg-slate-800 rounded-xl border border-slate-700/60 hover:border-slate-600 transition-all hover-lift"
             >
               <div className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
                 {/* Rating badge */}
@@ -118,9 +119,9 @@ export default function Coaches() {
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-100">{base.name}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${styleColor[base.style] ?? 'bg-slate-700 text-slate-400'}`}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-100">{base.name}</span>
+                    <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${styleColor[base.style] ?? 'bg-slate-700 text-slate-400'}`}>
                       {getCoachStyleLabel(base.style)}
                     </span>
                     {state?.isUnemployed && (
@@ -129,7 +130,7 @@ export default function Coaches() {
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                     {team ? (
-                      <span className="flex items-center gap-1">
+                      <span className="flex min-w-0 items-center gap-1 truncate">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
                         {team.name}
                       </span>
@@ -176,7 +177,7 @@ export default function Coaches() {
                 <div className="shrink-0 text-right w-16">
                   {team && teamState ? (
                     <div>
-                      <div className={`text-sm font-bold ${pressureColor}`}>{pressure}</div>
+                      <div className={`text-sm font-bold ${pressureColor}`}>{pressureLabel}</div>
                       <div className="text-[10px] text-slate-500">压力</div>
                     </div>
                   ) : (

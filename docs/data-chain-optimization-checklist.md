@@ -298,34 +298,34 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 
 ### P2: Route Loading And Bundle Performance
 
-- [ ] Record a repeatable baseline for production JS size, gzip size, PWA precache size, and cold-load timing; current main JS baseline is approximately 920 KB raw / 255 KB gzip.
-- [ ] Convert non-critical routes in `App.tsx` to `React.lazy` route-level chunks with a stable loading state that does not shift the layout.
-- [ ] Keep Dashboard and initial new-game flow in the critical path; defer history, legends, search, compare, settings, editor, and deep-detail pages.
-- [ ] Inspect shared chunks before adding manual vendor splitting; avoid duplicate React, engine, or locale code across route chunks.
-- [ ] Ensure PWA precache includes the application shell while large deferred route chunks can load on demand without breaking offline navigation after first use.
-- [ ] Add chunk-size reporting to CI and define a warning budget for the initial JS path.
-- [ ] Verify desktop and mobile cold start, route navigation, back navigation, refresh on deep links, and offline revisit.
-- [ ] Target an initial main chunk below 500 KB raw without trading away current functionality or producing excessive tiny requests.
+- [x] Record a repeatable baseline for production JS size, gzip size, PWA precache size, and cold-load timing; current main JS baseline is approximately 920 KB raw / 255 KB gzip.
+- [x] Convert non-critical routes in `App.tsx` to `React.lazy` route-level chunks with a stable loading state that does not shift the layout.
+- [x] Keep Dashboard and initial new-game flow in the critical path; defer history, legends, search, compare, settings, editor, and deep-detail pages.
+- [x] Inspect shared chunks before adding manual vendor splitting; avoid duplicate React, engine, or locale code across route chunks.
+- [x] Ensure PWA precache includes the application shell while large deferred route chunks can load on demand without breaking offline navigation after first use.
+- [x] Add chunk-size reporting to CI and define a warning budget for the initial JS path.
+- [x] Verify desktop and mobile cold start, route navigation, back navigation, refresh on deep links, and offline revisit.
+- [x] Target an initial main chunk below 500 KB raw without trading away current functionality or producing excessive tiny requests.
 
 ### P2: Automated Current-Version Regression Gate
 
-- [ ] Add a CI browser job that installs Playwright, starts the built preview, and runs `pnpm audit:current` against the preview URL.
-- [ ] Run a short fixed-seed audit on every pull request and retain the 10-season audit for main or scheduled runs.
-- [ ] Upload the structured audit JSON when a run fails so season, issue codes, route, and runtime errors are visible in CI.
-- [ ] Fail CI on any world-data error/warning, browser page error, console error, empty route, or incomplete target-season count.
-- [ ] Include current-save export/import and reload as an automated browser flow, not only a unit test.
-- [ ] Cover at least 390x844 mobile and a standard desktop viewport for Dashboard, Players, Player Detail, Teams, Team Detail, History, and Settings.
-- [ ] Check horizontal overflow, clipped text, duplicate React keys, and minimum 44px primary touch targets in the browser audit.
-- [ ] Keep the online Vercel smoke check separate from deterministic local CI so deployment/network failures are distinguishable from product regressions.
+- [x] Add a CI browser job that installs Playwright, starts the built preview, and runs `pnpm audit:current` against the preview URL.
+- [x] Run a short fixed-seed audit on every pull request and retain the 10-season audit for main or scheduled runs.
+- [x] Upload the structured audit JSON when a run fails so season, issue codes, route, and runtime errors are visible in CI.
+- [x] Fail CI on any world-data error/warning, browser page error, console error, empty route, or incomplete target-season count.
+- [x] Include current-save export/import and reload as an automated browser flow, not only a unit test.
+- [x] Cover at least 390x844 mobile and a standard desktop viewport for Dashboard, Players, Player Detail, Teams, Team Detail, History, and Settings.
+- [x] Check horizontal overflow, clipped text, duplicate React keys, and minimum 44px primary touch targets in the browser audit.
+- [x] Keep the online Vercel smoke check separate from deterministic local CI so deployment/network failures are distinguishable from product regressions.
 
 ### Final Acceptance For This Backlog
 
 - [x] All P0 participation semantics are implemented, documented, and invariant-tested.
 - [x] Player Center, Player Detail, Team Detail, match events, season review, and career history agree for sampled players before and after transfers.
-- [ ] Full repository lint, type check, unit/integration tests, production build, and browser audit all pass in one clean checkout.
+- [x] Full repository lint, type check, unit/integration tests, production build, and browser audit all pass in one clean checkout.
 - [x] Ten-season fixed-seed audit completes with zero validation issues and zero browser runtime errors.
 - [x] Current JSON save export/import/reload succeeds; incompatible saves are rejected without corrupting the active game.
-- [ ] Initial production JS meets the agreed size budget and all audited routes remain usable on mobile and desktop.
+- [x] Initial production JS meets the agreed size budget and all audited routes remain usable on mobile and desktop.
 
 ## Recommended Execution Order For Section 13
 
@@ -335,8 +335,18 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
 - [x] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
 - [x] Phase 6: Clear repository lint and make lint blocking in CI.
-- [ ] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.
-- [ ] Phase 8: Run final mobile/desktop/current-save acceptance and update every checkbox only from recorded evidence.
+- [x] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.
+- [x] Phase 8: Run final mobile/desktop/current-save acceptance and update every checkbox only from recorded evidence.
+
+### Completion Evidence (2026-07-16)
+
+- Production baseline before route splitting: main JS `922,298 B` raw / approximately `255.74 KB` gzip, PWA precache approximately `2479.71 KiB`, local cold load `84 ms` DOMContentLoaded / `86 ms` load.
+- Final production build: main JS `270,635 B` raw / `80,997 B` gzip; complete initial static JS graph `646,017 B` raw / `201,737 B` gzip; PWA precache `29` entries / `2213.90 KiB`.
+- `pnpm bundle:check` passes the `500,000 B` main-entry and `700,000 B` full-initial-graph budgets.
+- The PWA precache contains every static application-shell dependency and excludes all explicit deferred route chunks; `/history` reloads successfully offline after its first online visit.
+- Full verification passes: ESLint zero findings, TypeScript build, `43` test files / `418` tests, Vite production/PWA build, and fixed-seed production browser audit.
+- Ten-season audit completed `520` advances with `0 errors / 0 warnings` at every rollover. Current-save export/import/reload, browser back, deep-link refresh, and offline revisit all passed.
+- Browser coverage passed for all `18` current routes at `390x844` and the `7` required key routes at `1440x900`, with zero runtime errors, horizontal overflow, clipped labels, or undersized primary targets.
 
 ## Suggested Execution Order
 

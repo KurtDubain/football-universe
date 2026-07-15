@@ -303,7 +303,7 @@ export default function Players() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`min-w-16 sm:min-w-0 sm:flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-w-20 sm:min-w-0 sm:flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
               tab === t.key
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'

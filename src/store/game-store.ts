@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
 import { currentSaveStorage, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-schema';
+import { exportCurrentSave, importCurrentSave } from './save-backup';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../engine/players/stats';
@@ -517,8 +518,19 @@ export const useGameStore = create<GameStore>()(
 );
 
 
-// Dev-only: expose store on window for audit/playwright scripts.
-// Production builds tree-shake `import.meta.env.DEV` away.
-if (import.meta.env?.DEV && typeof window !== "undefined") {
-  (window as unknown as { __gameStore?: typeof useGameStore }).__gameStore = useGameStore;
+// The production audit runs against a built preview. Expose the local-only
+// store bridge only for an explicit audit URL; normal sessions expose nothing.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('audit')) {
+  const auditWindow = window as unknown as {
+    __gameStore?: typeof useGameStore;
+    __gameAudit?: {
+      exportSave: () => string;
+      importSave: (text: string) => void;
+    };
+  };
+  auditWindow.__gameStore = useGameStore;
+  auditWindow.__gameAudit = {
+    exportSave: () => exportCurrentSave(SAVE_STORAGE_KEY),
+    importSave: (text) => importCurrentSave(SAVE_STORAGE_KEY, text),
+  };
 }

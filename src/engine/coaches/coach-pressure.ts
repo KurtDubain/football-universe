@@ -118,5 +118,5 @@ function countConsecutiveLosses(form: ('W' | 'D' | 'L')[]): number {
 }
 
 function clampPressure(value: number): number {
-  return Math.max(0, Math.min(100, value));
+  return Math.round(Math.max(0, Math.min(100, value)) * 10) / 10;
 }

@@ -126,7 +126,7 @@ export function applySeasonEndReset(
     fatigue: 5,
     momentum: clamp(carryMomentum, -10, 10),
     squadHealth: 92,
-    coachPressure: clamp(state.coachPressure * 0.3, 0, 30), // carry 30% of pressure
+    coachPressure: Math.round(clamp(state.coachPressure * 0.3, 0, 30) * 10) / 10, // carry 30% of pressure
     recentForm: [],
   };
 }
