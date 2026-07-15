@@ -58,8 +58,7 @@
  * ── v2 update (2026-05-21) ────────────────────────────────────────
  *
  * Live playthrough surfaced that the flat 33% rate was actually bleeding
- * non-champion elite teams hard. A diagnostic harness
- * (`scripts/sim-economy-diag.ts`) confirmed:
+ * non-champion elite teams hard. A diagnostic run confirmed:
  *
  *   广州恒大 (rep=98, L1 #1): 10y income €863M, 10y salary €1206M → -€343M
  *   西北狼   (rep=96, L1 #3): -€258M     山东泰山 (rep=87, L1 #7): -€240M

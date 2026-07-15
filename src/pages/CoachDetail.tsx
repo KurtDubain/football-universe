@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getCoachStyleLabel, getTrophyLabel } from '../utils/format';
+import { getCoachStyleLabel, getTrophyLabel } from '../utils/format';
 import { computeCoachRivalries } from '../engine/coaches/coach-rivalries';
 
 export default function CoachDetail() {

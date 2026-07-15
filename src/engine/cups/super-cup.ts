@@ -327,6 +327,7 @@ export function completeSuperCupGroupStage(
   state: SuperCupState,
   rng: SeededRNG,
 ): SuperCupState {
+  void rng; // Pairings are deterministic; keep the seeded API stable.
   const season = extractSeason(state);
 
   // QF pairings: group winner vs runner-up of paired group
@@ -387,6 +388,7 @@ export function advanceSuperCupKnockout(
   results: MatchResult[],
   rng: SeededRNG,
 ): SuperCupState {
+  void rng; // Pairings are deterministic; keep the seeded API stable.
   const resultMap = new Map(results.map((r) => [r.fixtureId, r]));
 
   // Find the first incomplete knockout round

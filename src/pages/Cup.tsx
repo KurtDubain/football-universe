@@ -6,7 +6,6 @@ import type { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRo
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
-import TeamName from '../components/TeamName';
 import { isDerby, getDerbyName } from '../config/derbies';
 
 const roundNameCN: Record<string, string> = {

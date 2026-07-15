@@ -77,14 +77,18 @@ export default function Layout({ children }: LayoutProps) {
   });
 
   useEffect(() => {
-    try { localStorage.setItem('floating-btn', showFloatingBtn ? '1' : '0'); } catch {}
-  }, [showFloatingBtn]);
-
-  useEffect(() => {
     const handleSaveError = () => setSaveError(true);
     window.addEventListener('football-save-error', handleSaveError);
     return () => window.removeEventListener('football-save-error', handleSaveError);
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('floating-btn', showFloatingBtn ? '1' : '0');
+    } catch {
+      window.dispatchEvent(new CustomEvent('football-save-error'));
+    }
+  }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;

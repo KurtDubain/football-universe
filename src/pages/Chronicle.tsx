@@ -268,9 +268,6 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
   const champ = getTeamName(honor.league1Champion, tb);
 
   // Champion's WC tournament details
-  const champRegion = tb[honor.league1Champion]?.region;
-  const champCont = champRegion?.split('+')[0];
-
   // Underdog cup winner
   const lcWinner = honor.leagueCupWinner;
   const lcWinnerLevel = lcWinner ? (l1.some(r => r.teamId === lcWinner) ? 1 : l2.some(r => r.teamId === lcWinner) ? 2 : 3) : 0;
@@ -614,7 +611,7 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
         <div className="relative">
           <div className="absolute left-8 top-0 bottom-0 w-px bg-slate-700" />
-          {episodes.map((ep, i) => (
+          {episodes.map((ep) => (
             <button key={ep.seasonNumber} onClick={() => onSelectSeason(ep.seasonNumber)}
               className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-700/30 transition-colors cursor-pointer text-left border-b border-slate-700/20 last:border-b-0">
               <div className="flex flex-col items-center shrink-0 w-8 relative z-10">

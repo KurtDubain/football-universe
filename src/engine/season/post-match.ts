@@ -367,7 +367,6 @@ export function runPostMatchProcessing(
   const midPoint = Math.floor(totalWindows / 2);
   if (windowIndex === midPoint && windowType === 'league') {
     const leader1 = league1Standings[0];
-    const leader2 = league2Standings[0];
     const bottom1 = league1Standings[league1Standings.length - 1];
     if (leader1) {
       news.push({

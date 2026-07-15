@@ -4,7 +4,6 @@ import { useGameStore } from '../store/game-store';
 import {
   getCoachName,
   getLeagueName,
-  getTrophyLabel,
   formatForm,
 } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -144,7 +143,7 @@ export default function TeamDetail() {
                 评分: {world.coachBases[coachId].rating}
               </span>
             )}
-            <FireCoachButton teamId={id!} coachId={coachId} teamName={base.name} />
+            <FireCoachButton teamId={id!} />
           </div>
         ) : (
           <span className="text-sm text-slate-500">暂无教练</span>
@@ -902,7 +901,7 @@ function TeamTrendChart({ records, color }: { records: { seasonNumber: number; l
   );
 }
 
-function FireCoachButton({ teamId, coachId, teamName }: { teamId: string; coachId: string; teamName: string }) {
+function FireCoachButton({ teamId }: { teamId: string }) {
   const favoriteTeamIds = useGameStore(s => s.favoriteTeamIds);
   const fireCoach = useGameStore(s => s.fireCoach);
   const [confirming, setConfirming] = useState(false);

@@ -189,17 +189,12 @@ function rateSummary(rate: number, allRuns: SeasonMetric[][]): RateSummary {
   const fireSalePerSeason = mean(Object.values(collated).flatMap(c => c.fire));
   const negativePerSeason = mean(Object.values(collated).flatMap(c => c.neg));
 
-  // Perma-deficit: track each team across seasons in run0 (single seed for this metric).
-  const run = allRuns[0];
-  // Re-derive per-team negative streaks
-  const teamStreak: Record<string, number> = {};
   let permaDeficit = 0;
   // We need per-team cash trajectory; collect from the original run's per-team
   // by re-running. Simpler: any team observed negative ≥ 5 times in run0.
   // (Approximation — since cashByTier doesn't preserve team ids, we count
   // total negative observations per-tier and treat counts > 5 as deficit
   // candidates. For the report, we use it directionally.)
-  void teamStreak;
   for (const r of allRuns) {
     let perRunDeficit = 0;
     let consecutiveNeg = 0;

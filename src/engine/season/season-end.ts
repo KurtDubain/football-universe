@@ -1,23 +1,17 @@
 import { SeasonState } from '../../types/season';
-import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
-import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
+import { SeasonRecord } from '../../types/team';
+import { CoachBase } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupFixture, CupRound } from '../../types/cup';
-import { MatchResult } from '../../types/match';
-import { HonorRecord } from '../../types/honor';
-import { Player, PlayerSeasonStats } from '../../types/player';
+import { CupFixture, CupRound } from '../../types/cup';
+import { PlayerSeasonStats } from '../../types/player';
 import { SeededRNG } from '../match/rng';
 import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
-import { maybeGenerateEvent, applyEventEffect, SeasonEvent } from '../events';
-import { checkAchievements, Achievement } from '../achievements';
+import { checkAchievements } from '../achievements';
 import { selectWorldCupParticipants, initWorldCup } from '../cups/world-cup';
-import { getSuperCupGroupFixtures } from '../cups/super-cup';
-import { getAllTeamIds, getTeamIdsByLeague, createNewsId, cnRoundLabel } from './helpers';
+import { getAllTeamIds, createNewsId, cnRoundLabel } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
 import { appendWorldCupWindows } from './calendar-builder';
-import { BALANCE } from '../../config/balance';
-import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
@@ -86,7 +80,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // teamStates is `let` because the season-end reset block reassigns entries
   // (it builds a fresh entry via applySeasonEndReset). The Record reference
   // itself is also reused for the team-growth/decline pass below.
-  let teamStates = { ...world.teamStates };
+  const teamStates = { ...world.teamStates };
   let playerAwardsHistory = world.playerAwardsHistory;
   let transferHistory = world.transferHistory;
   let playerStats = world.playerStats;
@@ -672,8 +666,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   freeAgentPool = transferResult.freeAgentPool;
   // v20 — staged offers/targets for favorite teams. If non-empty, opens
   // a transfer window for the UI to resolve.
-  let stagedOffers = transferResult.pendingOffers;
-  let stagedTargets = transferResult.pendingTargets;
+  const stagedOffers = transferResult.pendingOffers;
+  const stagedTargets = transferResult.pendingTargets;
   // Free agent pool snapshot for UI to display (uuids only; full lookup
   // via world.freeAgentPool live).
   const freeAgentPoolSnapshot = freeAgentPool.map(p => p.uuid);
@@ -1111,7 +1105,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     const ratio = total > 0 ? pos / total : 1;
     const wonTrophy = teamId === league1Champion || teamId === leagueCupWinner || teamId === superCupWinner;
 
-    let renewChance = wonTrophy ? 0.85 : ratio <= 0.3 ? 0.70 : ratio <= 0.6 ? 0.45 : 0.25;
+    const renewChance = wonTrophy ? 0.85 : ratio <= 0.3 ? 0.70 : ratio <= 0.6 ? 0.45 : 0.25;
 
     if (rng.next() < renewChance) {
       const extension = wonTrophy ? rng.nextInt(2, 3) : rng.nextInt(1, 2);

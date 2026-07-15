@@ -25,7 +25,11 @@ i18n
 
 export function setLanguage(lang: 'zh' | 'en') {
   i18n.changeLanguage(lang);
-  try { localStorage.setItem('language', lang); } catch {}
+  try {
+    localStorage.setItem('language', lang);
+  } catch {
+    // The selected language remains active in memory when storage is unavailable.
+  }
 }
 
 export default i18n;

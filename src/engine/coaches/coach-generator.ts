@@ -68,7 +68,7 @@ export function deriveCoachBuffsFromStyle(
   // Common defaults.
   let attackBuff = 0;
   let defenseBuff = 0;
-  let moraleBuff = rng.nextInt(2, 6);
+  const moraleBuff = rng.nextInt(2, 6);
   let leagueBuff = 0;
   let cupBuff = 0;
   const pressureResistance = rng.nextInt(40, 75);

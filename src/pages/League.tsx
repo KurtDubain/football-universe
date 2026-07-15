@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { predictMatch, MatchPrediction } from '../engine/match/prediction';
+import { predictMatch } from '../engine/match/prediction';
 import type { StandingEntry } from '../types/league';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
@@ -12,7 +12,6 @@ import {
   getTeamName,
   formatForm,
   getLeagueName,
-  getCoachName,
 } from '../utils/format';
 import { leagueConfigs } from '../config/competitions';
 
@@ -372,7 +371,6 @@ export default function League() {
                             if (remaining <= 0 || played < 3) return null;
                             const myIdx = standings.indexOf(entry);
                             const leaderPts = standings[0]?.points ?? 0;
-                            const leaderMaxPts = leaderPts;
                             const myMaxPts = entry.points + remaining * 3;
                             const relegZone = config?.directRelegation ?? 2;
                             const playoffZone = config?.playoffRelegation ?? 1;
@@ -711,7 +709,7 @@ export default function League() {
 
       {/* ═══════ TAB: 走势 ═══════ */}
       {tab === 'trend' && (
-        <TrendChart rounds={rounds} standings={standings} world={world} leagueLevel={leagueLevel} />
+        <TrendChart rounds={rounds} standings={standings} world={world} />
       )}
 
       {/* ═══════ Match Detail Modal ═══════ */}
@@ -730,11 +728,10 @@ export default function League() {
 //  Trend chart — points accumulation per round (pure CSS)
 // ══════════════════════════════════════════════════════════════
 
-function TrendChart({ rounds, standings, world, leagueLevel }: {
+function TrendChart({ rounds, standings, world }: {
   rounds: { windowId: number; windowIndex: number; label: string; completed: boolean; fixtures: MatchFixture[]; results: MatchResult[] }[];
   standings: StandingEntry[];
   world: GameWorld;
-  leagueLevel: number;
 }) {
   // Build cumulative points per team per round
   const completedRounds = rounds.filter(r => r.completed && r.results.length > 0);
@@ -800,7 +797,7 @@ function TrendChart({ rounds, standings, world, leagueLevel }: {
           })}
 
           {/* Team lines */}
-          {showTeams.map((tid, ti) => {
+          {showTeams.map((tid) => {
             const pts = cumPoints[tid];
             const color = world.teamBases[tid]?.color ?? '#888';
             const points = pts.map((p, i) => {
@@ -836,7 +833,6 @@ function TrendChart({ rounds, standings, world, leagueLevel }: {
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mt-3">
         {showTeams.map(tid => {
-          const team = world.teamBases[tid];
           const pts = cumPoints[tid][cumPoints[tid].length - 1] ?? 0;
           return (
             <div key={tid} className="flex items-center gap-1.5 text-xs">

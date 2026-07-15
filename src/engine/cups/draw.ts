@@ -52,6 +52,7 @@ export function drawKnockoutBracket(
   qualifiedTeams: { teamId: string; groupIndex: number; position: number }[],
   rng: SeededRNG,
 ): [string, string][] {
+  void rng; // Reserved for future seeded tie-breaking without changing the API.
   // Separate winners (position 1) and runners-up (position 2)
   const winners = qualifiedTeams
     .filter((t) => t.position === 1)

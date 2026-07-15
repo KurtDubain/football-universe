@@ -25,6 +25,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-13: Completed P0 real participation semantics. Every simulated match now persists 11 starters, an explicit bench, deterministic legal substitutions, actual entry/exit minutes, red-card exits, and regulation/extra-time duration. Events, aggregate stats, club segments, injury exposure, season history, career totals, and UI consumers share that snapshot. Only actual participants receive appearances or team clean sheets; starts, substitute appearances, and minutes are audited against both match snapshots and club-segment sums. Verified with 442 full-suite tests, dedicated no-sub/three-sub/red-card/extra-time/unused-bench/no-goalkeeper/transfer tests, production build, and a 10-season/520-window current-schema browser audit at 0 errors / 0 warnings across 18 routes.
 - 2026-07-15: Completed P1 live-match and animation timing hardening. `MatchLive` now uses one explicit reducer-driven playback state, `ResultAnimation` owns an idempotent completion lifecycle, and `NewsTicker` tracks stable news identities across replacement and shrink operations. Every playback, halftime, flash, completion, and scroll timer is cleaned up or version-guarded. Verified with 8 fake-timer interaction tests, 450 full-suite tests, TypeScript, targeted lint, production build, and real-browser rapid advance/live replay/pause/skip/switch checks at 0 console errors / 0 warnings.
 - 2026-07-15: Completed P1 current-schema-only persistence. Removed the v1-v24 migration chain and its migration-only tests, centralized schema/storage constants, and added strict pre-hydration validation plus malformed/incompatible-save quarantine and a one-time recovery notice. Current saves are covered through real `GameWorld` hydration, debounced/page-hide writes, pending-write replacement, quota failure, standard JSON export/import, and reload round-trip tests. Verified with 416 full-suite tests, TypeScript, targeted lint, production build, and a browser malformed-save recovery check at 0 console errors / 0 warnings. Production persistence source fell by 35,874 bytes, migration-only tests by 23,778 bytes, main JS by 6,168 bytes (928,466 -> 922,298), gzip by about 1.46 KB, and PWA precache by about 5.82 KiB.
+- 2026-07-15: Completed Phase 6 static quality cleanup. Removed five obsolete one-off audit/diagnostic scripts superseded by current tests and `audit:current`, deleted dead imports and calculations, replaced empty catches with intentional fallbacks, narrowed the remaining production `any`, preserved seeded cup APIs without unused-parameter findings, and cleared all hook lint findings. Full repository lint fell from 135 errors to zero and is now blocking in CI. Verified with lint, TypeScript, 416 full-suite tests, and production build under Node 24.
 
 ## Current Main Concerns
 
@@ -285,15 +286,15 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 
 ### P2: Static Quality And Dead-Code Removal
 
-- [ ] Reduce production `src/` ESLint from the current baseline of 64 errors and 2 warnings to zero.
-- [ ] Remove unused imports, variables, parameters, and abandoned calculations instead of suppressing them globally.
-- [ ] Replace empty catches with an intentional fallback, user-visible failure, or a narrowly documented ignore.
-- [ ] Resolve all remaining `react-hooks/set-state-in-effect` and `react-hooks/exhaustive-deps` findings through behavior-preserving refactors.
-- [ ] Replace the remaining production `any` with a concrete type or `unknown` plus narrowing.
-- [ ] Decide which one-off visual/simulation scripts remain supported; delete obsolete scripts or move them outside the linted production toolset.
-- [ ] Reduce supported `scripts/` ESLint from the current baseline of 80 errors to zero.
-- [ ] Keep `pnpm lint`, `pnpm exec tsc -b`, and `pnpm test` green together before removing CI leniency.
-- [ ] Remove `continue-on-error` from the GitHub Actions lint step only after the repository reaches zero lint errors.
+- [x] Reduce production `src/` ESLint from the current baseline of 64 errors and 2 warnings to zero.
+- [x] Remove unused imports, variables, parameters, and abandoned calculations instead of suppressing them globally.
+- [x] Replace empty catches with an intentional fallback, user-visible failure, or a narrowly documented ignore.
+- [x] Resolve all remaining `react-hooks/set-state-in-effect` and `react-hooks/exhaustive-deps` findings through behavior-preserving refactors.
+- [x] Replace the remaining production `any` with a concrete type or `unknown` plus narrowing.
+- [x] Decide which one-off visual/simulation scripts remain supported; delete obsolete scripts or move them outside the linted production toolset.
+- [x] Reduce supported `scripts/` ESLint from the current baseline of 80 errors to zero.
+- [x] Keep `pnpm lint`, `pnpm exec tsc -b`, and `pnpm test` green together before removing CI leniency.
+- [x] Remove `continue-on-error` from the GitHub Actions lint step only after the repository reaches zero lint errors.
 
 ### P2: Route Loading And Bundle Performance
 
@@ -333,7 +334,7 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Phase 3: Update all player/team/review UI consumers and complete the 10-season data audit.
 - [x] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
 - [x] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
-- [ ] Phase 6: Clear repository lint and make lint blocking in CI.
+- [x] Phase 6: Clear repository lint and make lint blocking in CI.
 - [ ] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.
 - [ ] Phase 8: Run final mobile/desktop/current-save acceptance and update every checkbox only from recorded evidence.
 

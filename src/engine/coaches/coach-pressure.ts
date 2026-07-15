@@ -1,4 +1,3 @@
-import { TeamState } from '../../types/team';
 import { TeamBase } from '../../types/team';
 import { MatchResult } from '../../types/match';
 import { BALANCE } from '../../config/balance';

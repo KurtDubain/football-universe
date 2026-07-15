@@ -260,6 +260,7 @@ export function completeWorldCupGroupStage(
   state: WorldCupState,
   rng: SeededRNG,
 ): WorldCupState {
+  void rng; // Pairings are deterministic; keep the seeded API stable.
   const season = extractSeason(state);
   const g = state.groups;
 
@@ -306,6 +307,7 @@ export function advanceWorldCupKnockout(
   results: MatchResult[],
   rng: SeededRNG,
 ): WorldCupState {
+  void rng; // Pairings are deterministic; keep the seeded API stable.
   const resultMap = new Map(results.map((r) => [r.fixtureId, r]));
 
   // Find the first incomplete knockout round

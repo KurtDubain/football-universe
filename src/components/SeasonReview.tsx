@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
-import type { SeasonRecord } from '../types/team';
+import type { SeasonRecord, TeamBase } from '../types/team';
 import { getTeamName } from '../utils/format';
 import { getSeasonTopAssistRows, getSeasonTopScorerRows } from '../engine/players/player-stat-selectors';
 import { AWARD_META } from '../engine/awards/season-awards';
@@ -25,8 +25,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   }
 
   const l1Records = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
-  const l2Records = seasonRecords.filter(r => r.leagueLevel === 2).sort((a, b) => a.leaguePosition - b.leaguePosition);
-
   const totalGoals = seasonRecords.reduce((s, r) => s + r.leagueGF, 0);
   const totalMatches = seasonRecords.reduce((s, r) => s + r.leaguePlayed, 0) / 2;
 
@@ -482,7 +480,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             <h3 className="text-xs font-semibold text-slate-400 mb-2">大洲赛季对抗</h3>
             <div className="grid grid-cols-3 gap-2">
               {entries.map(([name, data]) => {
-                const total = data.wins + data.draws + data.losses;
                 const isDominant = name === dominant[0];
                 return (
                   <div key={name} className={`text-center p-2 rounded-lg ${isDominant ? 'bg-amber-900/15 border border-amber-700/30' : 'bg-slate-700/20'}`}>
@@ -508,7 +505,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   );
 }
 
-function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; teamId: string; runnerUp?: string; tb: Record<string, any>; accent: string }) {
+function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; teamId: string; runnerUp?: string; tb: Record<string, TeamBase>; accent: string }) {
   const team = tb[teamId];
   if (!team) return null;
   const colors: Record<string, string> = {

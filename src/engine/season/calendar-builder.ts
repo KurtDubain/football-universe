@@ -75,7 +75,6 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
     // Mid/low play every other league window in the first half,
     // then space out. We map 14 rounds across ~30 league windows.
     // Play mid/low when: midR < 14 and topR is odd (every other window)
-    const shouldPlayLower = (topR % 2 === 1) || midR >= 14;
     if (midR < 14 && (topR % 2 === 1 || topR >= 27)) {
       fixtures.push(...league2Fixtures[midR]);
       parts.push(`甲级R${midR + 1}`);

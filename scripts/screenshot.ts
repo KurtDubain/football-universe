@@ -43,7 +43,9 @@ async function main() {
       if (!visible) break;
       await advance.click({ timeout: 1500 }).catch(() => {});
       await page.waitForTimeout(80);
-    } catch {}
+    } catch {
+      break;
+    }
   }
 
   await page.waitForTimeout(1500);

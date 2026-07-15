@@ -1,9 +1,9 @@
 import { SeasonState, CalendarWindow } from '../../types/season';
-import { TeamBase, TeamState } from '../../types/team';
+import { TeamState } from '../../types/team';
 import { MatchResult, MatchFixture } from '../../types/match';
 import { StandingEntry } from '../../types/league';
 import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupFixture } from '../../types/cup';
-import { simulateMatch, SimulationContext } from '../match/simulator';
+import { simulateMatch } from '../match/simulator';
 import { SeededRNG } from '../match/rng';
 import { applyMatchStateChanges } from '../state-updater';
 import { updateStandings } from '../standings/standings';

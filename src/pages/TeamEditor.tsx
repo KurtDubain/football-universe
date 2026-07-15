@@ -18,7 +18,9 @@ export default function TeamEditor() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch {
+      // Ignore malformed editor drafts and start from the built-in teams.
+    }
     return [...defaultTeams];
   });
 
