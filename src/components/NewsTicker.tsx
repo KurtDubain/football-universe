@@ -39,7 +39,7 @@ const typeBg: Record<string, string> = {
 };
 
 export default function NewsTicker({ news }: { news: NewsItem[] }) {
-  const [index, setIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const sorted = useMemo(() =>
@@ -52,15 +52,18 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
   useEffect(() => {
     if (sorted.length <= 1 || expanded) return;
     const timer = setInterval(() => {
-      setIndex(prev => (prev + 1) % sorted.length);
+      setSelectedId(previousId => {
+        const previousIndex = sorted.findIndex(item => item.id === previousId);
+        return sorted[(Math.max(0, previousIndex) + 1) % sorted.length].id;
+      });
     }, 4500);
     return () => clearInterval(timer);
-  }, [sorted.length, expanded]);
-
-  useEffect(() => { setIndex(0); }, [news.length]);
+  }, [sorted, expanded]);
 
   if (sorted.length === 0) return null;
-  const item = sorted[index % sorted.length];
+  const selectedIndex = sorted.findIndex(item => item.id === selectedId);
+  const index = selectedIndex >= 0 ? selectedIndex : 0;
+  const item = sorted[index];
   if (!item) return null;
 
   return (
@@ -68,7 +71,7 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
       {/* Main ticker bar */}
       <div
         className="h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setExpanded(previous => !previous)}
       >
         <span className="text-xs shrink-0 text-slate-300">
           <Icon name={typeIcon[item.type] ?? 'news'} size={13} accent={typeAccent[item.type]} />
@@ -91,7 +94,7 @@ export default function NewsTicker({ news }: { news: NewsItem[] }) {
             <div
               key={n.id}
               className={`flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
-              onClick={() => { setIndex(i); setExpanded(false); }}
+              onClick={() => { setSelectedId(n.id); setExpanded(false); }}
             >
               <span className="text-xs mt-0.5 shrink-0 text-slate-300">
                 <Icon name={typeIcon[n.type] ?? 'news'} size={13} accent={typeAccent[n.type]} />

@@ -23,6 +23,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-11: Hardened persisted matchday snapshots with audits for oversized squads, duplicate/unknown players, position drift, emergency-count contradictions, and transfer-window team mismatches. Moved the development data-health panel behind a development-only dynamic import so production neither executes nor bundles the validation UI; verified by inspecting production assets. Verified with TypeScript, 424 Vitest tests, multi-season smoke coverage, production build, and a development lazy-load browser check under Node 24.
 - 2026-07-12: Completed a four-agent second-pass audit across match simulation, season/transfer/finance/persistence, cross-page semantics, and the deployed desktop/mobile experience. Fixed injury/suspension window anchoring, discipline segment updates, balanced matchday goalkeeper selection, single-pass roster selection, bid/fire-sale ownership, prediction and season-review history, long-save bounds, reverse stat audits, late-drama wording, reset confirmation, and mobile touch/roster layout. Verified with TypeScript, 428 Vitest tests, production build, a clean development health panel after live play, and a deterministic 35-season/1,832-window stress run with zero validation errors or warnings.
 - 2026-07-13: Completed P0 real participation semantics. Every simulated match now persists 11 starters, an explicit bench, deterministic legal substitutions, actual entry/exit minutes, red-card exits, and regulation/extra-time duration. Events, aggregate stats, club segments, injury exposure, season history, career totals, and UI consumers share that snapshot. Only actual participants receive appearances or team clean sheets; starts, substitute appearances, and minutes are audited against both match snapshots and club-segment sums. Verified with 442 full-suite tests, dedicated no-sub/three-sub/red-card/extra-time/unused-bench/no-goalkeeper/transfer tests, production build, and a 10-season/520-window current-schema browser audit at 0 errors / 0 warnings across 18 routes.
+- 2026-07-15: Completed P1 live-match and animation timing hardening. `MatchLive` now uses one explicit reducer-driven playback state, `ResultAnimation` owns an idempotent completion lifecycle, and `NewsTicker` tracks stable news identities across replacement and shrink operations. Every playback, halftime, flash, completion, and scroll timer is cleaned up or version-guarded. Verified with 8 fake-timer interaction tests, 450 full-suite tests, TypeScript, targeted lint, production build, and real-browser rapid advance/live replay/pause/skip/switch checks at 0 console errors / 0 warnings.
 
 ## Current Main Concerns
 
@@ -260,15 +261,15 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 
 ### P1: Live Match And Animation Timing
 
-- [ ] Refactor `MatchLive` into an explicit playback state machine so event reveal, score updates, skip, close, and result changes cannot race each other.
-- [ ] Remove stale-closure risk from `MatchLive` effects and include every semantic dependency without restarting already-consumed events.
-- [ ] Reset live playback correctly when switching directly from one result to another.
-- [ ] Refactor `ResultAnimation` so sorted results are stable, completion fires exactly once, and a new result batch fully resets the reveal state.
-- [ ] Make skip behavior idempotent: repeated clicks must not duplicate completion callbacks or leave timers alive.
-- [ ] Refactor `NewsTicker` so list shrink/replace operations clamp the visible index without synchronous effect-driven state cascades.
-- [ ] Clear every animation timer on unmount and verify route changes do not update unmounted components.
-- [ ] Add fake-timer tests for normal playback, rapid skip, close/reopen, result replacement, empty results, and ticker list replacement.
-- [ ] Browser-test repeated fast advances and modal switching with zero console warnings, duplicate renders, or stale scores.
+- [x] Refactor `MatchLive` into an explicit playback state machine so event reveal, score updates, skip, close, and result changes cannot race each other.
+- [x] Remove stale-closure risk from `MatchLive` effects and include every semantic dependency without restarting already-consumed events.
+- [x] Reset live playback correctly when switching directly from one result to another.
+- [x] Refactor `ResultAnimation` so sorted results are stable, completion fires exactly once, and a new result batch fully resets the reveal state.
+- [x] Make skip behavior idempotent: repeated clicks must not duplicate completion callbacks or leave timers alive.
+- [x] Refactor `NewsTicker` so list shrink/replace operations clamp the visible index without synchronous effect-driven state cascades.
+- [x] Clear every animation timer on unmount and verify route changes do not update unmounted components.
+- [x] Add fake-timer tests for normal playback, rapid skip, close/reopen, result replacement, empty results, and ticker list replacement.
+- [x] Browser-test repeated fast advances and modal switching with zero console warnings, duplicate renders, or stale scores.
 
 ### P1: Current-Schema-Only Persistence Simplification
 
@@ -329,7 +330,7 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Phase 1: Lock participation semantics and add failing lineup/substitution invariant tests.
 - [x] Phase 2: Implement starters, substitutions, minutes, and authoritative stat propagation.
 - [x] Phase 3: Update all player/team/review UI consumers and complete the 10-season data audit.
-- [ ] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
+- [x] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
 - [ ] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
 - [ ] Phase 6: Clear repository lint and make lint blocking in CI.
 - [ ] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.

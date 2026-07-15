@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MatchResult } from '../types/match';
 import type { TeamBase } from '../types/team';
 import TeamName from './TeamName';
-import { getTeamName } from '../utils/format';
 import { isDerby, getDerbyName } from '../config/derbies';
 import { EnergyWave } from './CanvasEffects';
 
@@ -18,22 +17,42 @@ interface ResultAnimationProps {
  * Animated results reveal — shows match results one by one with dramatic timing.
  * Key matches (derbies, upsets, big scores) get extra fanfare.
  */
-export default function ResultAnimation({ results, teamBases, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [phase, setPhase] = useState<'revealing' | 'done'>('revealing');
+function resultBatchKey(results: MatchResult[]): string {
+  return results.map(result =>
+    `${result.fixtureId}:${result.homeGoals}:${result.awayGoals}:${result.etHomeGoals ?? 0}:${result.etAwayGoals ?? 0}`,
+  ).join('|');
+}
 
-  // Sort: normal matches first, key matches last for dramatic reveal
-  const sorted = [...results].sort((a, b) => {
-    const aKey = getMatchImportance(a, teamBases);
-    const bKey = getMatchImportance(b, teamBases);
-    return aKey - bKey; // lower importance first
-  });
+export default function ResultAnimation(props: ResultAnimationProps) {
+  return <ResultAnimationBatch key={resultBatchKey(props.results)} {...props} />;
+}
+
+function ResultAnimationBatch({ results, teamBases, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
+  const [revealedCount, setRevealedCount] = useState(0);
+  const completionCalledRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
 
   useEffect(() => {
-    if (phase !== 'revealing') return;
-    if (revealedCount >= sorted.length) {
-      setPhase('done');
-      const timer = setTimeout(onComplete, 800);
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  // Sort: normal matches first, key matches last for dramatic reveal
+  const sorted = useMemo(() => [...results].sort((a, b) => {
+      const aKey = getMatchImportance(a, teamBases);
+      const bKey = getMatchImportance(b, teamBases);
+      return aKey - bKey; // lower importance first
+    }), [results, teamBases]);
+  const done = revealedCount >= sorted.length;
+
+  const completeOnce = useCallback(() => {
+    if (completionCalledRef.current) return;
+    completionCalledRef.current = true;
+    onCompleteRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (done) {
+      const timer = window.setTimeout(completeOnce, 800);
       return () => clearTimeout(timer);
     }
 
@@ -42,23 +61,22 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
     // Key matches pause longer
     const delay = importance >= 3 ? 600 : importance >= 2 ? 400 : 200;
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setRevealedCount(prev => prev + 1);
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [revealedCount, phase, sorted.length]);
+  }, [completeOnce, done, revealedCount, sorted, teamBases]);
 
   const handleSkip = useCallback(() => {
     setRevealedCount(sorted.length);
-    setPhase('done');
-    onComplete();
-  }, [sorted.length, onComplete]);
+    completeOnce();
+  }, [completeOnce, sorted.length]);
 
   return (
     <div className="space-y-2">
       {/* Skip button */}
-      {phase === 'revealing' && (
+      {!done && (
         <div className="flex justify-end">
           <button onClick={handleSkip} className="text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer px-2 py-1">
             跳过动画 →
@@ -70,7 +88,7 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
         {sorted.slice(0, revealedCount).map((r, i) => {
           const importance = getMatchImportance(r, teamBases);
-          const isNew = i === revealedCount - 1 && phase === 'revealing';
+          const isNew = i === revealedCount - 1 && !done;
           return (
             <AnimatedResultCard
               key={r.fixtureId}
@@ -86,7 +104,7 @@ export default function ResultAnimation({ results, teamBases, onComplete, onResu
       </div>
 
       {/* Reveal progress */}
-      {phase === 'revealing' && (
+      {!done && (
         <div className="flex items-center gap-2 justify-center pt-2">
           <div className="w-24 h-1 bg-slate-700 rounded-full overflow-hidden">
             <div
