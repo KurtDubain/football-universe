@@ -12,7 +12,6 @@ import {
   resetDisciplineForNewSeason,
   processInjuriesAndSuspensions,
   INJURY_HISTORY_CAP,
-  INJURY_ROLL_CHANCE,
 } from './injuries';
 import { computeRetirementChance } from './retirement';
 import { SeededRNG } from '../match/rng';
@@ -551,6 +550,51 @@ describe('processInjuriesAndSuspensions', () => {
       totalInjuries += ret.injuriesApplied.length;
     }
     expect(totalInjuries).toBeGreaterThan(0);
+  });
+
+  it('never rolls a post-match injury for an unused bench player in the persisted snapshot', () => {
+    const participant = makePlayer('participant');
+    const unused = makePlayer('unused');
+    const squads = { t1: [participant, unused], t2: [] as Player[] };
+    const playerStats = {
+      participant: makeStat('participant'),
+      unused: makeStat('unused'),
+    };
+    const teamBases = { t1: makeTeamBase('t1'), t2: makeTeamBase('t2') };
+    const result = makeResult([], {
+      homeMatchday: {
+        durationMinutes: 90,
+        emergencyFloor: true,
+        availableCount: 2,
+        substitutions: [],
+        players: [
+          { playerId: 'participant', position: 'MF', role: 'starter', enteredMinute: 0, exitedMinute: 90, minutesPlayed: 90 },
+          { playerId: 'unused', position: 'MF', role: 'bench', enteredMinute: null, exitedMinute: null, minutesPlayed: 0 },
+        ],
+      },
+      awayMatchday: {
+        durationMinutes: 90,
+        emergencyFloor: true,
+        availableCount: 0,
+        substitutions: [],
+        players: [],
+      },
+    });
+    let participantInjuries = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      participant.injuredUntilWindow = 0;
+      participant.injuryHistory = undefined;
+      unused.injuredUntilWindow = 0;
+      unused.injuryHistory = undefined;
+      const processed = processInjuriesAndSuspensions({
+        results: [result], squads, playerStats, teamBases,
+        seasonNumber: 1, globalWindowIdx: 0, windowIndex: 0,
+        rng: new SeededRNG(seed),
+      });
+      participantInjuries += processed.injuriesApplied.filter(entry => entry.playerId === 'participant').length;
+      expect(processed.injuriesApplied.some(entry => entry.playerId === 'unused')).toBe(false);
+    }
+    expect(participantInjuries).toBeGreaterThan(0);
   });
 
   it('does NOT re-roll injuries for players already injured', () => {

@@ -169,9 +169,9 @@ function pickCardPlayer(squad: Player[], rng: SeededRNG): Player {
 /**
  * Pick a GK from the squad (prefer #1 or lowest-numbered GK).
  */
-function pickGoalkeeper(squad: Player[]): Player {
+function pickGoalkeeper(squad: Player[]): Player | undefined {
   const gks = squad.filter((p) => p.position === 'GK');
-  if (gks.length === 0) return squad[0]; // fallback
+  if (gks.length === 0) return undefined;
   // Prefer #1 if available, otherwise lowest numbered GK
   const gk1 = gks.find((p) => p.number === 1);
   if (gk1) return gk1;
@@ -265,16 +265,46 @@ export function generateMatchEvents(
   etHomeGoals: number = 0,
   etAwayGoals: number = 0,
   isBigMatch: boolean = false,
+  homePlayersAtMinute?: (minute: number) => Player[],
+  awayPlayersAtMinute?: (minute: number) => Player[],
+  homeRedCardCandidatesAtMinute?: (minute: number) => Player[],
+  awayRedCardCandidatesAtMinute?: (minute: number) => Player[],
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const maxNormalMinute = 90;
   const maxMinute = extraTime ? 120 : 90;
+  const dismissedAt = new Map<string, number>();
 
-  // Helper to get squad for a team (may be undefined for backward compat)
-  function getSquad(teamId: string): Player[] | undefined {
-    if (teamId === homeTeamId) return homeSquad;
-    if (teamId === awayTeamId) return awaySquad;
-    return undefined;
+  function getSquad(teamId: string, minute: number): Player[] | undefined {
+    const squad = teamId === homeTeamId
+      ? homePlayersAtMinute?.(minute) ?? homeSquad
+      : teamId === awayTeamId
+        ? awayPlayersAtMinute?.(minute) ?? awaySquad
+        : undefined;
+    return squad?.filter(player => (dismissedAt.get(player.uuid) ?? Number.POSITIVE_INFINITY) > minute);
+  }
+
+  // Roll dismissal first so every later event picker can exclude a player
+  // after their red-card minute. Output order is still chronological below.
+  if (rng.next() < 0.06) {
+    const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
+    const minute = randomMinuteInRange(20, maxMinute, rng);
+    const squad = teamId === homeTeamId
+      ? homeRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute)
+      : awayRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute);
+    if (squad && squad.length > 0) {
+      const player = pickCardPlayer(squad, rng);
+      dismissedAt.set(player.uuid, minute);
+      events.push({
+        minute,
+        type: 'red_card',
+        teamId,
+        playerId: player.uuid,
+        playerNumber: player.number,
+        playerName: player.name,
+        description: formatDescription(rng.pick(RED_CARD_DESCRIPTIONS), player.number, player.name),
+      });
+    }
   }
 
   // ── Generate goals ───────────────────────────────────────────────
@@ -284,12 +314,11 @@ export function generateMatchEvents(
     teamId: string,
     isET: boolean,
   ): void => {
-    const squad = getSquad(teamId);
-
     for (let i = 0; i < goals; i++) {
       const minute = isET
         ? weightedGoalMinute(120, rng)
         : weightedGoalMinute(90, rng);
+      const squad = getSquad(teamId, minute);
 
       // ~10% of goals are from set pieces, ~8% are penalties in open play
       const roll = rng.next();
@@ -308,7 +337,7 @@ export function generateMatchEvents(
       let playerId: string | undefined;
       let playerNumber: number | undefined;
       let playerName: string | undefined;
-      if (squad) {
+      if (squad?.length) {
         const scorer = pickGoalScorer(squad, rng, isBigMatch);
         playerId = scorer.uuid;
         playerNumber = scorer.number;
@@ -326,7 +355,7 @@ export function generateMatchEvents(
       });
 
       // ~70% of non-penalty goals have an assist
-      if (squad && playerId && !isPenalty && rng.next() < 0.70) {
+      if (squad?.length && playerId && !isPenalty && rng.next() < 0.70) {
         const assister = pickAssistProvider(squad, playerId, rng);
         events.push({
           minute,
@@ -358,12 +387,12 @@ export function generateMatchEvents(
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
     const description = rng.pick(YELLOW_CARD_DESCRIPTIONS);
-    const squad = getSquad(teamId);
+    const squad = getSquad(teamId, minute);
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
     let playerName: string | undefined;
-    if (squad) {
+    if (squad?.length) {
       const player = pickCardPlayer(squad, rng);
       playerId = player.uuid;
       playerNumber = player.number;
@@ -381,35 +410,6 @@ export function generateMatchEvents(
     });
   }
 
-  // ── Red cards (rare, ~6% chance per match, max 1 usually) ───────
-
-  if (rng.next() < 0.06) {
-    const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(20, maxMinute, rng);
-    const description = rng.pick(RED_CARD_DESCRIPTIONS);
-    const squad = getSquad(teamId);
-
-    let playerId: string | undefined;
-    let playerNumber: number | undefined;
-    let playerName: string | undefined;
-    if (squad) {
-      const player = pickCardPlayer(squad, rng);
-      playerId = player.uuid;
-      playerNumber = player.number;
-      playerName = player.name;
-    }
-
-    events.push({
-      minute,
-      type: 'red_card',
-      teamId,
-      playerId,
-      playerNumber,
-      playerName,
-      description: formatDescription(description, playerNumber, playerName),
-    });
-  }
-
   // ── Key saves (1-4) ──────────────────────────────────────────────
 
   const totalSaves = rng.nextInt(1, 4);
@@ -418,16 +418,18 @@ export function generateMatchEvents(
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
     const description = rng.pick(SAVE_DESCRIPTIONS);
-    const squad = getSquad(teamId);
+    const squad = getSquad(teamId, minute);
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
     let playerName: string | undefined;
-    if (squad) {
+    if (squad?.length) {
       const gk = pickGoalkeeper(squad);
-      playerId = gk.uuid;
-      playerNumber = gk.number;
-      playerName = gk.name;
+      if (gk) {
+        playerId = gk.uuid;
+        playerNumber = gk.number;
+        playerName = gk.name;
+      }
     }
 
     events.push({
@@ -448,12 +450,12 @@ export function generateMatchEvents(
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
     const description = rng.pick(MISS_DESCRIPTIONS);
-    const squad = getSquad(teamId);
+    const squad = getSquad(teamId, minute);
 
     let playerId: string | undefined;
     let playerNumber: number | undefined;
     let playerName: string | undefined;
-    if (squad) {
+    if (squad?.length) {
       const player = pickMissPlayer(squad, rng);
       playerId = player.uuid;
       playerNumber = player.number;
@@ -487,11 +489,11 @@ export function generateMatchEvents(
 
     for (let round = 0; round < maxRounds; round++) {
       // Home takes
-      const homeShooterSquad = homeSquad;
+      const homeShooterSquad = getSquad(homeTeamId, maxMinute - 1);
       let homeShooterPlayerId: string | undefined;
       let homeShooterNumber: number | undefined;
       let homeShooterName: string | undefined;
-      if (homeShooterSquad) {
+      if (homeShooterSquad?.length) {
         // Pick from outfield players for shootout
         const outfield = homeShooterSquad.filter((p) => p.position !== 'GK');
         const shooter =
@@ -530,11 +532,11 @@ export function generateMatchEvents(
       penMinute++;
 
       // Away takes
-      const awayShooterSquad = awaySquad;
+      const awayShooterSquad = getSquad(awayTeamId, maxMinute - 1);
       let awayShooterPlayerId: string | undefined;
       let awayShooterNumber: number | undefined;
       let awayShooterName: string | undefined;
-      if (awayShooterSquad) {
+      if (awayShooterSquad?.length) {
         const outfield = awayShooterSquad.filter((p) => p.position !== 'GK');
         const shooter =
           outfield.length > 0
@@ -698,9 +700,9 @@ export function applyDenyPipeline(
   homeSquad: Player[] | undefined,
   awaySquad: Player[] | undefined,
   rng: SeededRNG,
+  homePlayersAtMinute?: (minute: number) => Player[],
+  awayPlayersAtMinute?: (minute: number) => Player[],
 ): MatchEvent[] {
-  const homeDenyRate = denyRateForTeam(awaySquad); // home goals denied by AWAY defence
-  const awayDenyRate = denyRateForTeam(homeSquad); // away goals denied by HOME defence
   const out: MatchEvent[] = [];
   let i = 0;
   while (i < events.length) {
@@ -717,10 +719,17 @@ export function applyDenyPipeline(
       continue;
     }
     const isHome = ev.teamId === homeTeamId;
-    const denyRate = isHome ? homeDenyRate : awayDenyRate;
-    const defendingSquad = isHome ? awaySquad : homeSquad;
+    const redCardedBefore = new Set(events
+      .filter(event => event.type === 'red_card' && event.minute <= ev.minute)
+      .map(event => event.playerId)
+      .filter((id): id is string => Boolean(id)));
+    const defendingSquad = (isHome
+      ? awayPlayersAtMinute?.(ev.minute) ?? awaySquad
+      : homePlayersAtMinute?.(ev.minute) ?? homeSquad)
+      ?.filter(player => !redCardedBefore.has(player.uuid));
+    const denyRate = denyRateForTeam(defendingSquad);
     const roll = rng.next();
-    if (roll >= denyRate || !defendingSquad) {
+    if (roll >= denyRate || !defendingSquad?.length) {
       // Goal survives. Push as-is, and push the paired assist event too
       // (without re-rolling deny on it — it's not a goal).
       out.push(ev);
@@ -751,51 +760,32 @@ export function applyDenyPipeline(
       assisterId = events[i + 1].playerId;
       consumeAssist = true;
     }
-    // Pick GK or DF for credit. 60/40 split.
+    // Pick GK or DF for credit. If the preferred position is unavailable,
+    // use the other real position rather than relabelling an outfield player.
     const useGk = rng.next() < 0.6;
-    if (useGk) {
-      const gk = pickGoalkeeper(defendingSquad);
-      out.push({
-        minute: ev.minute,
-        type: 'gk_save',
-        teamId: isHome ? awayTeamId : homeTeamId, // credit DEFENDING side
-        playerId: gk.uuid,
-        playerNumber: gk.number,
-        playerName: gk.name,
-        description: rng.pick(GK_SAVE_DESCRIPTIONS),
-        deniedScorerId: ev.playerId,
-        ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
-      });
-    } else {
-      const df = pickDefender(defendingSquad, rng);
-      if (df) {
-        out.push({
-          minute: ev.minute,
-          type: 'df_block',
-          teamId: isHome ? awayTeamId : homeTeamId,
-          playerId: df.uuid,
-          playerNumber: df.number,
-          playerName: df.name,
-          description: rng.pick(DF_BLOCK_DESCRIPTIONS),
-          deniedScorerId: ev.playerId,
-          ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
-        });
-      } else {
-        // No DF available — fall back to GK so we don't lose attribution.
-        const gk = pickGoalkeeper(defendingSquad);
-        out.push({
-          minute: ev.minute,
-          type: 'gk_save',
-          teamId: isHome ? awayTeamId : homeTeamId,
-          playerId: gk.uuid,
-          playerNumber: gk.number,
-          playerName: gk.name,
-          description: rng.pick(GK_SAVE_DESCRIPTIONS),
-          deniedScorerId: ev.playerId,
-          ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
-        });
-      }
+    const goalkeeper = pickGoalkeeper(defendingSquad);
+    const defender = pickDefender(defendingSquad, rng);
+    const creditedPlayer = useGk ? goalkeeper ?? defender : defender ?? goalkeeper;
+    if (!creditedPlayer) {
+      out.push(ev);
+      if (consumeAssist) out.push(events[i + 1]);
+      i += consumeAssist ? 2 : 1;
+      continue;
     }
+    const creditType = creditedPlayer.position === 'GK' ? 'gk_save' as const : 'df_block' as const;
+    out.push({
+      minute: ev.minute,
+      type: creditType,
+      teamId: isHome ? awayTeamId : homeTeamId,
+      playerId: creditedPlayer.uuid,
+      playerNumber: creditedPlayer.number,
+      playerName: creditedPlayer.name,
+      description: creditType === 'gk_save'
+        ? rng.pick(GK_SAVE_DESCRIPTIONS)
+        : rng.pick(DF_BLOCK_DESCRIPTIONS),
+      deniedScorerId: ev.playerId,
+      ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
+    });
     // Advance past the goal (and assist, if consumed).
     i += consumeAssist ? 2 : 1;
   }

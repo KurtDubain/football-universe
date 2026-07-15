@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { initializeGameWorld } from '../season/season-manager';
 import { validateWorldData } from './world-data';
 import { pickMatchday } from '../players/injuries';
+import { playerTeamStatKey } from '../players/stats';
 import type { MatchResult } from '../../types/match';
 import type { PlayerSeasonStats } from '../../types/player';
 
@@ -153,6 +154,38 @@ describe('validateWorldData', () => {
     expect(codes).toContain('clean_sheets_exceed_appearances');
     expect(codes).toContain('big_chances_below_goals');
     expect(codes).toContain('key_passes_below_assists');
+  });
+
+  it('rejects inconsistent participation counters and aggregate club-segment sums', () => {
+    const { world, player } = firstPlayerFixture();
+    const segmentKey = playerTeamStatKey(player.uuid, player.teamId);
+    const validation = validateWorldData({
+      ...world,
+      playerStats: {
+        ...world.playerStats,
+        [player.uuid]: {
+          ...world.playerStats[player.uuid],
+          appearances: 2,
+          starts: 2,
+          substituteAppearances: 1,
+          minutesPlayed: 400,
+        },
+      },
+      playerStatSegments: {
+        ...world.playerStatSegments,
+        [segmentKey]: {
+          ...world.playerStatSegments![segmentKey],
+          appearances: 1,
+          starts: 1,
+          substituteAppearances: 0,
+          minutesPlayed: 90,
+        },
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).toContain('player_invalid_participation_totals');
+    expect(codes).toContain('player_participation_segment_sum_mismatch');
   });
 
   it('reports scoreline mismatches and invalid event references', () => {

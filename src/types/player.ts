@@ -135,11 +135,13 @@ export interface PlayerSeasonStats {
   yellowCards: number;
   redCards: number;
   appearances: number;
+  starts?: number;
+  substituteAppearances?: number;
+  minutesPlayed?: number;
   /**
-   * v21 — individual clean-sheet count. Incremented for every matchday
-   * DF/GK whose side conceded 0 goals (regulation-time). Tracked for ALL
-   * positions for cheapness, but only meaningful for DF/GK (FW/MF will
-   * also accumulate it, but no surface reads it for them).
+   * Individual clean-sheet count. Incremented for each DF/GK who actually
+   * appeared when their side conceded 0 goals across regulation and extra
+   * time. Unused bench players and outfield attackers never receive credit.
    */
   cleanSheets: number;
   /**
@@ -195,6 +197,9 @@ export interface PlayerSeasonStatsHistoryEntry {
   goals: number;
   assists: number;
   appearances: number;
+  starts?: number;
+  substituteAppearances?: number;
+  minutesPlayed?: number;
   yellowCards: number;
   redCards: number;
   /** Total league goals conceded by the player's team that season. */

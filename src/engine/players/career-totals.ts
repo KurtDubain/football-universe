@@ -4,6 +4,9 @@ import type { PlayerSeasonStats, PlayerSeasonStatsHistoryEntry } from '../../typ
 export interface PlayerCareerTotals {
   seasons: number;
   appearances: number;
+  starts: number;
+  substituteAppearances: number;
+  minutesPlayed: number;
   goals: number;
   assists: number;
   yellowCards: number;
@@ -19,6 +22,9 @@ export interface PlayerCareerTotals {
 function addHistoryEntry(total: PlayerCareerTotals, entry: PlayerSeasonStatsHistoryEntry): void {
   total.seasons++;
   total.appearances += entry.appearances;
+  total.starts += entry.starts ?? entry.appearances;
+  total.substituteAppearances += entry.substituteAppearances ?? 0;
+  total.minutesPlayed += entry.minutesPlayed ?? entry.appearances * 90;
   total.goals += entry.goals;
   total.assists += entry.assists;
   total.yellowCards += entry.yellowCards;
@@ -32,6 +38,9 @@ function addHistoryEntry(total: PlayerCareerTotals, entry: PlayerSeasonStatsHist
 
 function addCurrentSeason(total: PlayerCareerTotals, stat: PlayerSeasonStats): void {
   total.appearances += stat.appearances;
+  total.starts += stat.starts ?? stat.appearances;
+  total.substituteAppearances += stat.substituteAppearances ?? 0;
+  total.minutesPlayed += stat.minutesPlayed ?? stat.appearances * 90;
   total.goals += stat.goals;
   total.assists += stat.assists;
   total.yellowCards += stat.yellowCards;
@@ -58,6 +67,9 @@ export function computePlayerCareerTotals(
   const total: PlayerCareerTotals = {
     seasons: 0,
     appearances: 0,
+    starts: 0,
+    substituteAppearances: 0,
+    minutesPlayed: 0,
     goals: 0,
     assists: 0,
     yellowCards: 0,

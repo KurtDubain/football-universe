@@ -1,6 +1,7 @@
 import { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import { MatchResult } from '../../types/match';
 import { pickMatchday as pickMatchdayWithDiscipline } from './injuries';
+import { selectStartingEleven } from '../match/participation';
 
 /**
  * Player-stat semantics, kept close to the update engine:
@@ -36,6 +37,9 @@ export function createInitialPlayerStats(
         yellowCards: 0,
         redCards: 0,
         appearances: 0,
+        starts: 0,
+        substituteAppearances: 0,
+        minutesPlayed: 0,
         cleanSheets: 0,
         saves: 0,
         keyBlocks: 0,
@@ -60,6 +64,9 @@ export function emptyPlayerStat(playerId: string, teamId: string): PlayerSeasonS
     yellowCards: 0,
     redCards: 0,
     appearances: 0,
+    starts: 0,
+    substituteAppearances: 0,
+    minutesPlayed: 0,
     cleanSheets: 0,
     saves: 0,
     keyBlocks: 0,
@@ -122,7 +129,10 @@ function ensureSegment(
   return segments[key];
 }
 
-type StatMatchdayPlayer = Pick<Player, 'uuid' | 'position'>;
+type StatMatchdayPlayer = Pick<Player, 'uuid' | 'position'> & {
+  role: 'starter' | 'bench';
+  minutesPlayed: number;
+};
 
 function resolveResultMatchday(
   result: MatchResult,
@@ -132,12 +142,28 @@ function resolveResultMatchday(
 ): StatMatchdayPlayer[] {
   const snapshot = side === 'home' ? result.homeMatchday : result.awayMatchday;
   if (snapshot) {
-    return snapshot.players.map((player) => ({
+    return snapshot.players.filter(player => (player.minutesPlayed ?? 90) > 0).map((player) => ({
       uuid: player.playerId,
       position: player.position,
+      role: player.role ?? 'starter',
+      minutesPlayed: player.minutesPlayed ?? 90,
     }));
   }
-  return pickMatchdayWithDiscipline(squad, globalWindowIdx) ?? [];
+  const matchday = pickMatchdayWithDiscipline(squad, globalWindowIdx) ?? [];
+  const starterIds = new Set(selectStartingEleven(matchday).map(player => player.uuid));
+  return matchday
+    .filter(player => starterIds.has(player.uuid))
+    .map(player => ({ ...player, role: 'starter' as const, minutesPlayed: 90 }));
+}
+
+function addParticipation(stat: PlayerSeasonStats, player: StatMatchdayPlayer): PlayerSeasonStats {
+  return {
+    ...stat,
+    appearances: stat.appearances + 1,
+    starts: (stat.starts ?? 0) + (player.role === 'starter' ? 1 : 0),
+    substituteAppearances: (stat.substituteAppearances ?? 0) + (player.role === 'bench' ? 1 : 0),
+    minutesPlayed: (stat.minutesPlayed ?? 0) + player.minutesPlayed,
+  };
 }
 
 /**
@@ -163,11 +189,11 @@ export function updatePlayerStatSegmentsFromResults(
 
     for (const p of homeMatchday) {
       const s = ensureSegment(segments, p.uuid, result.homeTeamId);
-      if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = { ...s, appearances: s.appearances + 1 };
+      if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = addParticipation(s, p);
     }
     for (const p of awayMatchday) {
       const s = ensureSegment(segments, p.uuid, result.awayTeamId);
-      if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = { ...s, appearances: s.appearances + 1 };
+      if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = addParticipation(s, p);
     }
 
     const awayConceded = result.awayGoals + (result.etAwayGoals ?? 0);
@@ -259,7 +285,8 @@ export function updatePlayerStatsFromResults(
   const stats = { ...currentStats };
 
   for (const result of results) {
-    // Mark appearances for matchday squad (top 14 by rating = 11 starters + 3 subs)
+    // Participation is derived from the persisted match snapshot. Unused
+    // bench players have zero minutes and never reach this list.
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
 
@@ -268,11 +295,11 @@ export function updatePlayerStatsFromResults(
 
     for (const p of homeMatchday) {
       if (!stats[p.uuid]) continue;
-      stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
+      stats[p.uuid] = addParticipation(stats[p.uuid], p);
     }
     for (const p of awayMatchday) {
       if (!stats[p.uuid]) continue;
-      stats[p.uuid] = { ...stats[p.uuid], appearances: stats[p.uuid].appearances + 1 };
+      stats[p.uuid] = addParticipation(stats[p.uuid], p);
     }
 
     // v21 — credit clean sheets to DF/GK whenever the opposing side scored

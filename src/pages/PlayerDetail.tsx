@@ -180,6 +180,9 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
 
   // Efficiency
   const appearances = stats?.appearances ?? 0;
+  const starts = stats?.starts ?? 0;
+  const substituteAppearances = stats?.substituteAppearances ?? 0;
+  const minutesPlayed = stats?.minutesPlayed ?? 0;
   const goals = stats?.goals ?? 0;
   const assists = stats?.assists ?? 0;
   const goalsPerApp = appearances > 0 ? (goals / appearances).toFixed(2) : '0';
@@ -245,6 +248,9 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatBox label="出场" value={appearances} />
+          <StatBox label="首发" value={starts} />
+          <StatBox label="替补登场" value={substituteAppearances} />
+          <StatBox label="出场分钟" value={minutesPlayed} />
           <StatBox label="进球" value={goals} color="text-amber-400" />
           <StatBox label="助攻" value={assists} color="text-blue-400" />
           <StatBox label="黄牌" value={stats?.yellowCards ?? 0} color="text-yellow-400" />
@@ -383,6 +389,8 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
             <tr className="text-slate-500 border-b border-slate-700/40">
               <th className="text-left py-1">球队</th>
               <th className="text-right py-1">出场</th>
+              <th className="text-right py-1">首/替</th>
+              <th className="text-right py-1">分钟</th>
               <th className="text-right py-1">进球</th>
               <th className="text-right py-1">助攻</th>
               <th className="text-right py-1">防守</th>
@@ -401,9 +409,11 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
                   </Link>
                 </td>
                 <td className="py-1 text-right text-slate-300 tabular-nums">{row.appearances}</td>
+                <td className="py-1 text-right text-slate-400 tabular-nums">{row.starts ?? 0}/{row.substituteAppearances ?? 0}</td>
+                <td className="py-1 text-right text-slate-400 tabular-nums">{row.minutesPlayed ?? 0}</td>
                 <td className="py-1 text-right text-amber-300 tabular-nums">{row.goals}</td>
                 <td className="py-1 text-right text-blue-300 tabular-nums">{row.assists}</td>
-                <td className="py-1 text-right text-slate-400 tabular-nums">
+                <td className="py-1 text-right text-slate-400 tabular-nums" title="零封仅统计实际登场且球队整场（含加时）零失球的门将与后卫">
                   {row.identity.position === 'GK'
                     ? `${row.cleanSheets}零封/${row.saves}神扑`
                     : row.identity.position === 'DF'
@@ -623,7 +633,8 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
               <th className="text-left py-1">赛季</th>
               <th className="text-left py-1">球队</th>
               <th className="text-right py-1">联赛</th>
-              <th className="text-right py-1">出场</th>
+              <th className="text-right py-1">出场(首/替)</th>
+              <th className="text-right py-1">分钟</th>
               <th className="text-right py-1">进球</th>
               <th className="text-right py-1">助攻</th>
               <th className="text-right py-1">黄</th>
@@ -645,7 +656,8 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
                   <td className="py-1 text-slate-400">S{h.season}</td>
                   <td className="py-1 text-slate-300 truncate max-w-[80px]">{teamName}</td>
                   <td className="py-1 text-right text-slate-400 tabular-nums">{rank}</td>
-                  <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}</td>
+                  <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}({h.starts ?? h.appearances}/{h.substituteAppearances ?? 0})</td>
+                  <td className="py-1 text-right text-slate-400 tabular-nums">{h.minutesPlayed ?? h.appearances * 90}</td>
                   <td className="py-1 text-right text-amber-300 tabular-nums">{h.goals}</td>
                   <td className="py-1 text-right text-blue-300 tabular-nums">{h.assists}</td>
                   <td className="py-1 text-right text-slate-500 tabular-nums">{h.yellowCards}</td>
@@ -896,6 +908,9 @@ function RetiredPlayerView({
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatBox label="生涯出场" value={careerTotals?.appearances ?? stats?.appearances ?? 0} />
+        <StatBox label="生涯首发" value={careerTotals?.starts ?? stats?.starts ?? 0} />
+        <StatBox label="生涯替补" value={careerTotals?.substituteAppearances ?? stats?.substituteAppearances ?? 0} />
+        <StatBox label="生涯分钟" value={careerTotals?.minutesPlayed ?? stats?.minutesPlayed ?? 0} />
         <StatBox label="生涯进球" value={careerGoals} color="text-amber-400" />
         <StatBox label="生涯助攻" value={careerTotals?.assists ?? stats?.assists ?? 0} color="text-blue-300" />
         <StatBox label="冠军" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />

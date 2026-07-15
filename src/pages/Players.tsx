@@ -200,7 +200,7 @@ export default function Players() {
               </span>
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}
+              {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : mode === 'defense' ? (
@@ -210,7 +210,7 @@ export default function Players() {
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.keyBlocks}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}
+              {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : mode === 'keepers' ? (
@@ -220,7 +220,7 @@ export default function Players() {
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.saves}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}
+              {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : mode === 'creation' ? (
@@ -244,7 +244,7 @@ export default function Players() {
               {mode === 'careerScorers' ? stat.assists : stat.goals}
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}
+              {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : (
@@ -258,7 +258,7 @@ export default function Players() {
               {mode === 'scorers' ? stat.assists : stat.goals}
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}
+              {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         )}
@@ -332,23 +332,23 @@ export default function Players() {
                     <th className="px-2 py-2.5 text-center">黄牌</th>
                     <th className="px-2 py-2.5 text-center">红牌</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场
+                      出场/首发
                     </th>
                   </>
                 ) : tab === 'defense' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">零封</th>
+                    <th className="px-2 py-2.5 text-center" title="仅统计实际登场且球队整场（含加时）零失球的门将与后卫">零封</th>
                     <th className="px-2 py-2.5 text-center">关键封堵</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场
+                      出场/首发
                     </th>
                   </>
                 ) : tab === 'keepers' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">零封</th>
+                    <th className="px-2 py-2.5 text-center" title="仅统计实际登场且球队整场（含加时）零失球的门将与后卫">零封</th>
                     <th className="px-2 py-2.5 text-center">神扑</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场
+                      出场/首发
                     </th>
                   </>
                 ) : tab === 'creation' ? (
@@ -368,7 +368,7 @@ export default function Players() {
                       {tab === 'careerScorers' ? '生涯助攻' : '生涯进球'}
                     </th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      生涯出场
+                      生涯出场/首发
                     </th>
                   </>
                 ) : (
@@ -380,7 +380,7 @@ export default function Players() {
                       {tab === 'scorers' ? '助攻' : '进球'}
                     </th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场
+                      出场/首发
                     </th>
                   </>
                 )}

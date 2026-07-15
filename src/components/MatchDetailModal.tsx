@@ -786,6 +786,8 @@ function getEventIcon(type: MatchEvent['type']): string {
       return '\uD83E\uDDE4';
     case 'assist':
       return '\uD83C\uDFA5';
+    case 'substitution':
+      return '\u21C4';
     default:
       return '\u2022';
   }

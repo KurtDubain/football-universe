@@ -663,7 +663,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                       {stats && stats.appearances > 0 ? (
                         <>
                           <span className="text-slate-400 hidden sm:inline">
-                            {stats.appearances}场
+                            {stats.appearances}场 · {stats.starts ?? 0}首发 · {stats.substituteAppearances ?? 0}替补 · {stats.minutesPlayed ?? 0}分钟
                           </span>
                           {stats.goals > 0 && (
                             <span className="text-slate-200 font-medium">
@@ -676,7 +676,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                             </span>
                           )}
                           {(player.position === 'GK' || player.position === 'DF') && stats.cleanSheets > 0 && (
-                            <span className="text-blue-300">
+                            <span className="text-blue-300" title="实际登场且球队整场（含加时）零失球">
                               {stats.cleanSheets}零封
                             </span>
                           )}

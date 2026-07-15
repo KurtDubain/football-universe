@@ -15,6 +15,13 @@ import { poissonSample } from './poisson';
 import { generateMatchEvents, applyDenyPipeline } from './events';
 import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
 import { selectMatchday } from '../players/injuries';
+import {
+  buildMatchParticipation,
+  applyDismissalsToSnapshot,
+  createSubstitutionEvents,
+  playersOnField,
+  selectStartingEleven,
+} from './participation';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -289,12 +296,12 @@ export function simulateMatch(
   const globalWindowIdx = ctx.globalWindowIdx ?? 0;
   const homeSelection = selectMatchday(ctx.homeSquad, globalWindowIdx);
   const awaySelection = selectMatchday(ctx.awaySquad, globalWindowIdx);
-  const homeMatchdaySquad = homeSelection?.players;
-  const awayMatchdaySquad = awaySelection?.players;
+  const homeStarters = selectStartingEleven(homeSelection?.players ?? []);
+  const awayStarters = selectStartingEleven(awaySelection?.players ?? []);
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
-  const homeBoosts = computePlayerBoosts(homeMatchdaySquad, globalWindowIdx);
-  const awayBoosts = computePlayerBoosts(awayMatchdaySquad, globalWindowIdx);
+  const homeBoosts = computePlayerBoosts(homeStarters, globalWindowIdx);
+  const awayBoosts = computePlayerBoosts(awayStarters, globalWindowIdx);
 
   // 1. Calculate adjusted strengths. v23 — for neutral-venue matches
   // (cup finals), suppress home advantage by passing isHome=false for
@@ -385,6 +392,28 @@ export function simulateMatch(
     }
   }
 
+  const durationMinutes: 90 | 120 = extraTime ? 120 : 90;
+  const homeParticipation = buildMatchParticipation(homeSelection, durationMinutes, rng.fork());
+  const awayParticipation = buildMatchParticipation(awaySelection, durationMinutes, rng.fork());
+  const homePlayersAtMinute = (minute: number) => playersOnField(
+    ctx.homeSquad,
+    homeParticipation?.snapshot,
+    Math.min(minute, durationMinutes - 1),
+  );
+  const awayPlayersAtMinute = (minute: number) => playersOnField(
+    ctx.awaySquad,
+    awayParticipation?.snapshot,
+    Math.min(minute, durationMinutes - 1),
+  );
+  const homeScheduledOut = new Set(homeParticipation?.snapshot.substitutions?.map(sub => sub.playerOutId) ?? []);
+  const awayScheduledOut = new Set(awayParticipation?.snapshot.substitutions?.map(sub => sub.playerOutId) ?? []);
+  const homeRedCardCandidatesAtMinute = (minute: number) => homePlayersAtMinute(minute)
+    .filter(player => !homeScheduledOut.has(player.uuid))
+    .filter(player => homeParticipation?.snapshot.players.find(entry => entry.playerId === player.uuid)?.enteredMinute !== minute);
+  const awayRedCardCandidatesAtMinute = (minute: number) => awayPlayersAtMinute(minute)
+    .filter(player => !awayScheduledOut.has(player.uuid))
+    .filter(player => awayParticipation?.snapshot.players.find(entry => entry.playerId === player.uuid)?.enteredMinute !== minute);
+
   // 6. Generate match events
   // v18 — flag "big match" so clutch-tagged players get a +30% weight on
   // the goal-scorer roll. Big match = cup final OR derby. Stays loose
@@ -393,7 +422,7 @@ export function simulateMatch(
     fixture.roundLabel === 'Final' ||
     fixture.roundLabel === '决赛' ||
     isDerby(homeTeam.id, awayTeam.id);
-  const rawEvents = generateMatchEvents(
+  const generatedEvents = generateMatchEvents(
     regHomeGoals,
     regAwayGoals,
     homeTeam.id,
@@ -403,12 +432,24 @@ export function simulateMatch(
     extraTime,
     penaltyHome,
     penaltyAway,
-    homeMatchdaySquad,
-    awayMatchdaySquad,
+    homeStarters,
+    awayStarters,
     etHomeGoals ?? 0,
     etAwayGoals ?? 0,
     isBigMatch,
+    homePlayersAtMinute,
+    awayPlayersAtMinute,
+    homeRedCardCandidatesAtMinute,
+    awayRedCardCandidatesAtMinute,
   );
+  applyDismissalsToSnapshot(homeParticipation?.snapshot, generatedEvents, homeTeam.id);
+  applyDismissalsToSnapshot(awayParticipation?.snapshot, generatedEvents, awayTeam.id);
+  const rawEvents = [
+    ...generatedEvents,
+    ...createSubstitutionEvents(homeParticipation?.snapshot, ctx.homeSquad, homeTeam.id),
+    ...createSubstitutionEvents(awayParticipation?.snapshot, ctx.awaySquad, awayTeam.id),
+  ].sort((a, b) => a.minute - b.minute
+    || Number(b.type === 'substitution') - Number(a.type === 'substitution'));
 
   // v22 — Apply deny pipeline. Goals that get denied are removed from
   // the events list and replaced with `gk_save` / `df_block` events. We
@@ -429,9 +470,11 @@ export function simulateMatch(
         rawEvents,
         homeTeam.id,
         awayTeam.id,
-        homeMatchdaySquad,
-        awayMatchdaySquad,
+        homeStarters,
+        awayStarters,
         rng.fork(),
+        homePlayersAtMinute,
+        awayPlayersAtMinute,
       );
   const isHomeGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === homeTeam.id;
   const isAwayGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === awayTeam.id;
@@ -487,26 +530,8 @@ export function simulateMatch(
     competitionType: ctx.competitionType,
     competitionName: fixture.competitionName,
     roundLabel: fixture.roundLabel,
-    ...(homeSelection && {
-      homeMatchday: {
-        players: homeSelection.players.map((player) => ({
-          playerId: player.uuid,
-          position: player.position,
-        })),
-        emergencyFloor: homeSelection.emergencyFloor,
-        availableCount: homeSelection.availableCount,
-      },
-    }),
-    ...(awaySelection && {
-      awayMatchday: {
-        players: awaySelection.players.map((player) => ({
-          playerId: player.uuid,
-          position: player.position,
-        })),
-        emergencyFloor: awaySelection.emergencyFloor,
-        availableCount: awaySelection.availableCount,
-      },
-    }),
+    ...(homeParticipation && { homeMatchday: homeParticipation.snapshot }),
+    ...(awayParticipation && { awayMatchday: awayParticipation.snapshot }),
     ...(isNeutral && { isNeutralVenue: true }),
   };
 
@@ -555,16 +580,13 @@ function calculateStateChanges(
   // Determine effective winner (including penalties)
   let homeWin: boolean;
   let awayWin: boolean;
-  let draw: boolean;
 
   if (penalties && penaltyHome !== undefined && penaltyAway !== undefined) {
     homeWin = penaltyHome > penaltyAway;
     awayWin = penaltyAway > penaltyHome;
-    draw = false;
   } else {
     homeWin = homeGoals > awayGoals;
     awayWin = awayGoals > homeGoals;
-    draw = homeGoals === awayGoals;
   }
 
   const isBigWin = Math.abs(homeGoals - awayGoals) >= 3;

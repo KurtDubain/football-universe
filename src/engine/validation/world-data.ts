@@ -192,7 +192,85 @@ function validateMatchdaySnapshot(
     });
   }
 
+  const duration = snapshot.durationMinutes ?? (result.extraTime ? 120 : 90);
+  if (duration !== (result.extraTime ? 120 : 90)) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'matchday_duration_mismatch',
+      message: `Fixture ${result.fixtureId} stores ${duration} participation minutes but extraTime=${result.extraTime}.`,
+      teamId, fixtureId: result.fixtureId, season: resultSeason,
+    });
+  }
+  const starters = snapshot.players.filter(player => player.role === 'starter');
+  const expectedStarters = Math.min(11, snapshot.players.length);
+  if (starters.length !== expectedStarters) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'matchday_starter_count_mismatch',
+      message: `Fixture ${result.fixtureId} stores ${starters.length} starters for ${teamId}; expected ${expectedStarters}.`,
+      teamId, fixtureId: result.fixtureId, season: resultSeason,
+    });
+  }
+  if (snapshot.players.some(player => player.position === 'GK')
+    && starters.length > 0
+    && !starters.some(player => player.position === 'GK')) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'matchday_starter_missing_goalkeeper',
+      message: `Fixture ${result.fixtureId} has an available matchday goalkeeper but none in ${teamId}'s starting lineup.`,
+      teamId, fixtureId: result.fixtureId, season: resultSeason,
+    });
+  }
+  const substitutions = snapshot.substitutions ?? [];
+  if (substitutions.length > 3) {
+    pushIssue(issues, {
+      severity: 'error', code: 'matchday_too_many_substitutions',
+      message: `Fixture ${result.fixtureId} stores ${substitutions.length} substitutions for ${teamId}; maximum is 3.`,
+      teamId, fixtureId: result.fixtureId, season: resultSeason,
+    });
+  }
+  const substitutedIn = new Set<string>();
+  const substitutedOut = new Set<string>();
+  const entriesById = new Map(snapshot.players.map(player => [player.playerId, player]));
+  for (const substitution of substitutions) {
+    const incoming = entriesById.get(substitution.playerInId);
+    const outgoing = entriesById.get(substitution.playerOutId);
+    const invalid = !incoming || !outgoing
+      || incoming.role !== 'bench'
+      || outgoing.role !== 'starter'
+      || incoming.enteredMinute !== substitution.minute
+      || outgoing.exitedMinute !== substitution.minute
+      || substitution.minute <= 0
+      || substitution.minute >= duration
+      || substitutedIn.has(substitution.playerInId)
+      || substitutedOut.has(substitution.playerOutId);
+    if (invalid) {
+      pushIssue(issues, {
+        severity: 'error', code: 'matchday_invalid_substitution',
+        message: `Fixture ${result.fixtureId} contains an invalid substitution for ${teamId} at ${substitution.minute}'.`,
+        teamId, fixtureId: result.fixtureId, season: resultSeason,
+      });
+    }
+    substitutedIn.add(substitution.playerInId);
+    substitutedOut.add(substitution.playerOutId);
+  }
+
   for (const entry of snapshot.players) {
+    const entered = entry.enteredMinute;
+    const exited = entry.exitedMinute;
+    const expectedMinutes = entered == null || exited == null ? 0 : exited - entered;
+    if (entered != null && (entered < 0 || entered >= duration)
+      || exited != null && (exited <= 0 || exited > duration)
+      || entered != null && exited != null && exited <= entered
+      || (entry.minutesPlayed ?? expectedMinutes) !== expectedMinutes
+      || entry.role === 'starter' && entered !== 0
+      || entry.role === 'bench' && entered == null && (entry.minutesPlayed ?? 0) !== 0) {
+      pushIssue(issues, {
+        severity: 'error', code: 'matchday_invalid_minutes',
+        message: `Fixture ${result.fixtureId} has invalid participation minutes for ${entry.playerId}.`,
+        teamId, playerId: entry.playerId, fixtureId: result.fixtureId, season: resultSeason,
+      });
+    }
     if (!isKnownPlayer(world, entry.playerId, activePlayers)) {
       pushIssue(issues, {
         severity: 'warning',
@@ -450,6 +528,9 @@ function validateEventDerivedStats(
 
 interface MatchdayDerivedStats {
   appearances: number;
+  starts: number;
+  substituteAppearances: number;
+  minutesPlayed: number;
   cleanSheets: number;
 }
 
@@ -457,10 +538,17 @@ function incrementMatchdayDerived(
   map: Map<string, MatchdayDerivedStats>,
   key: string,
   cleanSheet: boolean,
+  role: 'starter' | 'bench',
+  minutesPlayed: number,
 ): void {
-  const current = map.get(key) ?? { appearances: 0, cleanSheets: 0 };
+  const current = map.get(key) ?? {
+    appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+  };
   map.set(key, {
     appearances: current.appearances + 1,
+    starts: current.starts + (role === 'starter' ? 1 : 0),
+    substituteAppearances: current.substituteAppearances + (role === 'bench' ? 1 : 0),
+    minutesPlayed: current.minutesPlayed + minutesPlayed,
     cleanSheets: current.cleanSheets + (cleanSheet ? 1 : 0),
   });
 }
@@ -483,19 +571,25 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
       [result.awayTeamId, result.awayMatchday!, awayClean],
     ] as const) {
       for (const player of snapshot.players) {
+        const minutesPlayed = player.minutesPlayed ?? 90;
+        if (minutesPlayed <= 0) continue;
         const earnsCleanSheet = clean && (player.position === 'DF' || player.position === 'GK');
-        incrementMatchdayDerived(expectedByPlayer, player.playerId, earnsCleanSheet);
+        incrementMatchdayDerived(expectedByPlayer, player.playerId, earnsCleanSheet, player.role ?? 'starter', minutesPlayed);
         incrementMatchdayDerived(
           expectedBySegment,
           playerTeamStatKey(player.playerId, teamId),
           earnsCleanSheet,
+          player.role ?? 'starter',
+          minutesPlayed,
         );
       }
     }
   }
 
   for (const [playerId, stat] of Object.entries(world.playerStats ?? {})) {
-    const expected = expectedByPlayer.get(playerId) ?? { appearances: 0, cleanSheets: 0 };
+    const expected = expectedByPlayer.get(playerId) ?? {
+      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+    };
     if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
         severity: 'warning',
@@ -503,6 +597,18 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         message: `Player ${playerId} has ${stat.appearances} appearances, but persisted matchday squads explain ${expected.appearances}.`,
         teamId: stat.teamId,
         playerId,
+      });
+    }
+    for (const [field, actual] of [
+      ['starts', stat.starts ?? 0],
+      ['substituteAppearances', stat.substituteAppearances ?? 0],
+      ['minutesPlayed', stat.minutesPlayed ?? 0],
+    ] as const) {
+      if (actual === expected[field]) continue;
+      pushIssue(issues, {
+        severity: 'warning', code: `player_${field}_matchday_mismatch`,
+        message: `Player ${playerId} has ${actual} ${field}, but participation snapshots explain ${expected[field]}.`,
+        teamId: stat.teamId, playerId,
       });
     }
     if (hasLegacyResults ? stat.cleanSheets < expected.cleanSheets : stat.cleanSheets !== expected.cleanSheets) {
@@ -517,7 +623,9 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
   }
 
   for (const [segmentKey, stat] of Object.entries(world.playerStatSegments ?? {})) {
-    const expected = expectedBySegment.get(segmentKey) ?? { appearances: 0, cleanSheets: 0 };
+    const expected = expectedBySegment.get(segmentKey) ?? {
+      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+    };
     if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
         severity: 'warning',
@@ -527,6 +635,18 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         playerId: stat.playerId,
       });
     }
+    for (const [field, actual] of [
+      ['starts', stat.starts ?? 0],
+      ['substituteAppearances', stat.substituteAppearances ?? 0],
+      ['minutesPlayed', stat.minutesPlayed ?? 0],
+    ] as const) {
+      if (actual === expected[field]) continue;
+      pushIssue(issues, {
+        severity: 'warning', code: `player_segment_${field}_matchday_mismatch`,
+        message: `Player segment ${segmentKey} has ${actual} ${field}, but participation snapshots explain ${expected[field]}.`,
+        teamId: stat.teamId, playerId: stat.playerId,
+      });
+    }
     if (hasLegacyResults ? stat.cleanSheets < expected.cleanSheets : stat.cleanSheets !== expected.cleanSheets) {
       pushIssue(issues, {
         severity: 'warning',
@@ -534,6 +654,62 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         message: `Player segment ${segmentKey} has ${stat.cleanSheets} clean sheets, but persisted matchday squads explain ${expected.cleanSheets}.`,
         teamId: stat.teamId,
         playerId: stat.playerId,
+      });
+    }
+  }
+}
+
+const PARTICIPATION_FIELDS = [
+  'appearances',
+  'starts',
+  'substituteAppearances',
+  'minutesPlayed',
+  'cleanSheets',
+] as const;
+
+function validateParticipationCounters(world: GameWorld, issues: WorldDataIssue[]): void {
+  const segmentsByPlayer = new Map<string, PlayerSeasonStats[]>();
+  for (const segment of Object.values(world.playerStatSegments ?? {})) {
+    const rows = segmentsByPlayer.get(segment.playerId) ?? [];
+    rows.push(segment);
+    segmentsByPlayer.set(segment.playerId, rows);
+
+    const starts = segment.starts ?? 0;
+    const substitutes = segment.substituteAppearances ?? 0;
+    const minutes = segment.minutesPlayed ?? 0;
+    if (starts + substitutes !== segment.appearances || minutes < 0 || minutes > segment.appearances * 120) {
+      pushIssue(issues, {
+        severity: 'error', code: 'player_segment_invalid_participation_totals',
+        message: `Player segment ${segment.playerId}@@${segment.teamId} has inconsistent appearances, starts, substitutes, or minutes.`,
+        teamId: segment.teamId, playerId: segment.playerId,
+      });
+    }
+  }
+
+  for (const [playerId, stat] of Object.entries(world.playerStats ?? {})) {
+    const starts = stat.starts ?? 0;
+    const substitutes = stat.substituteAppearances ?? 0;
+    const minutes = stat.minutesPlayed ?? 0;
+    if (starts + substitutes !== stat.appearances || minutes < 0 || minutes > stat.appearances * 120) {
+      pushIssue(issues, {
+        severity: 'error', code: 'player_invalid_participation_totals',
+        message: `Player ${playerId} has inconsistent appearances, starts, substitutes, or minutes.`,
+        teamId: stat.teamId, playerId,
+      });
+    }
+
+    const segments = segmentsByPlayer.get(playerId);
+    if (!segments || Object.keys(world.playerStatSegments ?? {}).length === 0) continue;
+    const mismatches = PARTICIPATION_FIELDS.filter(field => {
+      const aggregate = stat[field] ?? 0;
+      const segmented = segments.reduce((sum, segment) => sum + (segment[field] ?? 0), 0);
+      return aggregate !== segmented;
+    });
+    if (mismatches.length > 0) {
+      pushIssue(issues, {
+        severity: 'error', code: 'player_participation_segment_sum_mismatch',
+        message: `Player ${playerId} aggregate participation differs from club segments for: ${mismatches.join(', ')}.`,
+        teamId: stat.teamId, playerId,
       });
     }
   }
@@ -796,6 +972,37 @@ function countScorelineEvents(result: MatchResult): { home: number; away: number
   return { home, away };
 }
 
+function snapshotForTeam(result: MatchResult, teamId: string) {
+  if (teamId === result.homeTeamId) return result.homeMatchday;
+  if (teamId === result.awayTeamId) return result.awayMatchday;
+  return undefined;
+}
+
+function isOnFieldAtMinute(
+  result: MatchResult,
+  teamId: string,
+  playerId: string,
+  minute: number,
+  allowDismissalMinute = false,
+): boolean {
+  const snapshot = snapshotForTeam(result, teamId);
+  if (!snapshot) return true;
+  const entry = snapshot.players.find(player => player.playerId === playerId);
+  if (!entry) return false;
+  if (entry.enteredMinute === undefined || entry.exitedMinute === undefined) return true;
+  if (entry.enteredMinute == null || entry.exitedMinute == null) return false;
+  const effectiveMinute = Math.min(minute, (snapshot.durationMinutes ?? (result.extraTime ? 120 : 90)) - 1);
+  if (entry.enteredMinute > effectiveMinute) return false;
+  if (entry.exitedMinute < effectiveMinute) return false;
+  if (entry.exitedMinute === effectiveMinute && !allowDismissalMinute) return false;
+  return !(result.events ?? []).some(event =>
+    event.type === 'red_card'
+    && event.teamId === teamId
+    && event.playerId === playerId
+    && event.minute < minute
+  );
+}
+
 function validateEventSemantics(
   world: GameWorld,
   result: MatchResult,
@@ -817,6 +1024,21 @@ function validateEventSemantics(
       teamId: event.teamId,
       fixtureId: result.fixtureId,
     });
+  }
+
+  if (event.type === 'substitution') {
+    const matchingSubstitution = snapshotForTeam(result, event.teamId)?.substitutions?.some(substitution =>
+      substitution.minute === event.minute
+      && substitution.playerInId === event.playerInId
+      && substitution.playerOutId === event.playerOutId
+    );
+    if (!matchingSubstitution) {
+      pushIssue(issues, {
+        severity: 'error', code: 'substitution_event_snapshot_mismatch',
+        message: `Substitution event at ${event.minute}' does not match ${event.teamId}'s participation snapshot.`,
+        teamId: event.teamId, fixtureId: result.fixtureId,
+      });
+    }
   }
 
   if (
@@ -950,6 +1172,13 @@ function validateEventSemantics(
         fixtureId: result.fixtureId,
       });
     }
+    if (!isOnFieldAtMinute(result, event.teamId, event.playerId, event.minute, event.type === 'red_card')) {
+      pushIssue(issues, {
+        severity: 'error', code: 'event_player_not_on_field',
+        message: `Match event player ${event.playerId} was not on the field for ${event.teamId} at ${event.minute}'.`,
+        teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+      });
+    }
   }
 
   if (attackingTeamId) {
@@ -965,6 +1194,14 @@ function validateEventSemantics(
         teamId: attackingTeamId,
         playerId,
         fixtureId: result.fixtureId,
+      });
+    }
+    for (const playerId of deniedPlayerIds) {
+      if (isOnFieldAtMinute(result, attackingTeamId, playerId, event.minute)) continue;
+      pushIssue(issues, {
+        severity: 'error', code: 'event_denied_player_not_on_field',
+        message: `Denied attacking player ${playerId} was not on the field for ${attackingTeamId} at ${event.minute}'.`,
+        teamId: attackingTeamId, playerId, fixtureId: result.fixtureId,
       });
     }
   }
@@ -1119,6 +1356,8 @@ function validateResult(
       ['event_unknown_player', event.playerId],
       ['event_unknown_denied_scorer', event.deniedScorerId],
       ['event_unknown_denied_assister', event.deniedAssisterId],
+      ['event_unknown_player_in', event.playerInId],
+      ['event_unknown_player_out', event.playerOutId],
     ] as const;
 
     for (const [code, playerId] of eventPlayerIds) {
@@ -1386,6 +1625,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
 
   validateEventDerivedStats(world, eventDerivedByPlayer, eventDerivedBySegment, issues);
   validateMatchdayDerivedStats(world, issues);
+  validateParticipationCounters(world, issues);
   validateTransferConsistency(world, activePlayerTeams, issues);
 
   const errors = issues.filter((issue) => issue.severity === 'error');

@@ -7,6 +7,17 @@ import { MatchFixture } from '../../types/match';
 import type { Player, PlayerPosition } from '../../types/player';
 import { pickMatchday } from '../players/injuries';
 
+function eventPlayerWasOnField(result: ReturnType<typeof simulateMatch>['matchResult'], event: typeof result.events[number]): boolean {
+  if (!event.playerId || event.type === 'own_goal') return true;
+  const snapshot = event.teamId === result.homeTeamId ? result.homeMatchday : result.awayMatchday;
+  if (!snapshot) return true;
+  const entry = snapshot.players.find(player => player.playerId === event.playerId);
+  if (!entry || entry.enteredMinute == null || entry.exitedMinute == null) return false;
+  const minute = Math.min(event.minute, (snapshot.durationMinutes ?? 90) - 1);
+  return entry.enteredMinute <= minute
+    && (entry.exitedMinute > minute || (event.type === 'red_card' && entry.exitedMinute === minute));
+}
+
 // ─── Test fixtures ────────────────────────────────────────────────
 
 function makeTeam(id: string, overall: number): TeamBase {
@@ -253,6 +264,63 @@ describe('simulateMatch', () => {
           if (event.deniedAssisterId) {
             const attackingIds = event.teamId === 'home' ? awayMatchdayIds : homeMatchdayIds;
             expect(attackingIds.has(event.deniedAssisterId)).toBe(true);
+          }
+        }
+      }
+    });
+
+    it('assigns every event to an on-field player and emits nothing after a dismissal', () => {
+      let redCardsSeen = 0;
+      for (let seed = 1; seed <= 250; seed++) {
+        const result = simulateMatch({
+          ...buildContext(seed),
+          homeSquad: makeDeepSquad('home'),
+          awaySquad: makeDeepSquad('away'),
+          globalWindowIdx: 0,
+        }, makeFixture()).matchResult;
+
+        for (const event of result.events) {
+          expect(eventPlayerWasOnField(result, event)).toBe(true);
+          for (const deniedPlayerId of [event.deniedScorerId, event.deniedAssisterId]) {
+            if (!deniedPlayerId) continue;
+            const attackingTeamId = event.teamId === result.homeTeamId
+              ? result.awayTeamId
+              : result.homeTeamId;
+            const proxy = { ...event, teamId: attackingTeamId, playerId: deniedPlayerId };
+            expect(eventPlayerWasOnField(result, proxy)).toBe(true);
+          }
+        }
+
+        for (const red of result.events.filter(event => event.type === 'red_card' && event.playerId)) {
+          redCardsSeen++;
+          expect(result.events.some(event =>
+            event.minute > red.minute
+            && (event.playerId === red.playerId
+              || event.deniedScorerId === red.playerId
+              || event.deniedAssisterId === red.playerId),
+          )).toBe(false);
+        }
+      }
+      expect(redCardsSeen).toBeGreaterThan(0);
+    });
+
+    it('never labels an outfield player as a goalkeeper when no goalkeeper is available', () => {
+      const homeSquad = makeDeepSquad('home').filter(player => player.position !== 'GK');
+      const awaySquad = makeDeepSquad('away').filter(player => player.position !== 'GK');
+      const playersById = new Map([...homeSquad, ...awaySquad].map(player => [player.uuid, player]));
+
+      for (let seed = 1; seed <= 100; seed++) {
+        const result = simulateMatch({
+          ...buildContext(seed),
+          homeSquad,
+          awaySquad,
+          globalWindowIdx: 0,
+        }, makeFixture()).matchResult;
+        for (const event of result.events) {
+          if (event.type === 'save') expect(event.playerId).toBeUndefined();
+          if (event.type === 'gk_save') expect(event.playerId).toBeUndefined();
+          if (event.type === 'df_block' && event.playerId) {
+            expect(playersById.get(event.playerId)?.position).toBe('DF');
           }
         }
       }

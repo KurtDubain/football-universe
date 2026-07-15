@@ -69,6 +69,46 @@ function mkLeagueResult(
 }
 
 describe('updatePlayerStatsFromResults — shootout exclusion', () => {
+  it('credits starts, actual substitutes, minutes, and clean sheets without touching unused bench players', () => {
+    const starter = mkPlayer('starter-df', 'A', 'DF');
+    const substitute = mkPlayer('sub-df', 'A', 'DF');
+    const unused = mkPlayer('unused-df', 'A', 'DF');
+    const squads = { A: [starter, substitute, unused], B: [] };
+    const initialStats = createInitialPlayerStats(squads);
+    const initialSegments = createInitialPlayerStatSegments(squads);
+    const result: MatchResult = {
+      ...mkLeagueResult('A', 'B', 1, 0, []),
+      homeMatchday: {
+        durationMinutes: 90,
+        emergencyFloor: true,
+        availableCount: 3,
+        substitutions: [{ minute: 70, playerInId: substitute.uuid, playerOutId: starter.uuid }],
+        players: [
+          { playerId: starter.uuid, position: 'DF', role: 'starter', enteredMinute: 0, exitedMinute: 70, minutesPlayed: 70 },
+          { playerId: substitute.uuid, position: 'DF', role: 'bench', enteredMinute: 70, exitedMinute: 90, minutesPlayed: 20 },
+          { playerId: unused.uuid, position: 'DF', role: 'bench', enteredMinute: null, exitedMinute: null, minutesPlayed: 0 },
+        ],
+      },
+      awayMatchday: {
+        durationMinutes: 90,
+        emergencyFloor: true,
+        availableCount: 0,
+        substitutions: [],
+        players: [],
+      },
+    };
+
+    const totals = updatePlayerStatsFromResults(initialStats, [result], squads);
+    const segments = updatePlayerStatSegmentsFromResults(initialSegments, [result], squads);
+
+    expect(totals[starter.uuid]).toMatchObject({ appearances: 1, starts: 1, substituteAppearances: 0, minutesPlayed: 70, cleanSheets: 1 });
+    expect(totals[substitute.uuid]).toMatchObject({ appearances: 1, starts: 0, substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 1 });
+    expect(totals[unused.uuid]).toMatchObject({ appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0 });
+    expect(segments[playerTeamStatKey(starter.uuid, 'A')]).toMatchObject({ starts: 1, minutesPlayed: 70, cleanSheets: 1 });
+    expect(segments[playerTeamStatKey(substitute.uuid, 'A')]).toMatchObject({ substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 1 });
+    expect(segments[playerTeamStatKey(unused.uuid, 'A')]).toMatchObject({ appearances: 0, minutesPlayed: 0, cleanSheets: 0 });
+  });
+
   it('uses persisted matchday snapshots instead of recomputing from the live squad', () => {
     const defender = mkPlayer('historical-df', 'A', 'DF');
     const stats = createInitialPlayerStats({ A: [defender], B: [] });
@@ -235,12 +275,16 @@ describe('player stat segments', () => {
       teamId: 'A',
       goals: 1,
       appearances: 1,
+      starts: 1,
+      minutesPlayed: 90,
     });
     expect(segments[playerTeamStatKey('p-1', 'B')]).toMatchObject({
       playerId: 'p-1',
       teamId: 'B',
       goals: 1,
       appearances: 1,
+      starts: 1,
+      minutesPlayed: 90,
     });
 
     const topByTeam = getTopScorerByTeamFromSegments(segments, totals);

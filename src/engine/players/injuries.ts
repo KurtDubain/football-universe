@@ -32,8 +32,8 @@ import { SeededRNG } from '../match/rng';
 
 /**
  * Per-appearance probability that a player picks up an injury during the
- * match. ~2% means roughly one injury every two matches across a 14-man
- * matchday squad — about right for an arcade-tilt simulation.
+ * match. ~2% means roughly one injury every four matches across the players
+ * who actually appeared — about right for an arcade-tilt simulation.
  */
 export const INJURY_ROLL_CHANCE = 0.02;
 
@@ -507,11 +507,9 @@ export function processInjuriesAndSuspensions(args: {
   }
 
   // ── 2. Injuries — roll for each player who appeared ─────────
-  // We re-run the matchday filter with `globalWindowIdx` so the players who
-  // actually took the field are who we roll for. (NOT `pickMatchday` from
-  // helpers — that's the helper used at simulation time. We recompute here
-  // because squads may have shifted in the same window's earlier processing,
-  // though in practice no transfer/retire happens mid-window.)
+  // Current injuries are post-match outcomes, not timestamped match events.
+  // Persisted participation is authoritative: starters and used substitutes
+  // are exposed to the roll, while unused bench players are never selected.
   for (const result of results) {
     const homeSquad = squads[result.homeTeamId];
     const awaySquad = squads[result.awayTeamId];
@@ -522,6 +520,7 @@ export function processInjuriesAndSuspensions(args: {
       if (!snapshot) return pickMatchday(squad, globalWindowIdx);
       const playersById = new Map((squad ?? []).map((player) => [player.uuid, player]));
       return snapshot.players
+        .filter((entry) => (entry.minutesPlayed ?? 90) > 0)
         .map((entry) => playersById.get(entry.playerId))
         .filter(Boolean) as Player[];
     };

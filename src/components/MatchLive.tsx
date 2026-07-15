@@ -22,6 +22,7 @@ const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
   gk_save:      { name: 'gloves', accent: '#3b82f6' },
   df_block:     { name: 'shield', accent: '#3b82f6' },
   assist:       { name: 'sparkle', accent: '#a78bfa' },
+  substitution: { name: 'refresh', accent: '#38bdf8' },
 };
 
 export default function MatchLive({ result, teamBases, onClose }: Props) {
@@ -117,6 +118,7 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
     if (flashEvent?.type === 'save') return '门将做出精彩扑救！';
     if (flashEvent?.type === 'yellow_card') return '裁判出示黄牌警告';
     if (flashEvent?.type === 'red_card') return '红牌！有球员被罚下！';
+    if (flashEvent?.type === 'substitution') return flashEvent.description;
     return '';
   }, [minute, finished, htShow, flashEvent]);
 
@@ -234,7 +236,7 @@ export default function MatchLive({ result, teamBases, onClose }: Props) {
         {/* Event log */}
         <div ref={logRef} className="px-4 py-1 max-h-24 overflow-y-auto scroll-smooth">
           {[...shownEvents].reverse().filter(e =>
-            e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'yellow_card' || e.type === 'red_card' || e.type === 'save'
+            e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'yellow_card' || e.type === 'red_card' || e.type === 'save' || e.type === 'substitution'
           ).slice(0, 6).map((e, i) => (
             <div key={i} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
               <span className="w-6 text-right font-mono text-[10px]">{e.minute}'</span>

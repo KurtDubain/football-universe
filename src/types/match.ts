@@ -37,7 +37,9 @@ export interface MatchEvent {
     /** v22 — would-be goal denied by the goalkeeper. */
     | 'gk_save'
     /** v22 — would-be goal blocked on the line by a defender. */
-    | 'df_block';
+    | 'df_block'
+    /** One player leaves and another enters at this minute. */
+    | 'substitution';
   teamId: string;
   /** Holds a Player.uuid value (stable across transfers). */
   playerId?: string;
@@ -52,6 +54,11 @@ export interface MatchEvent {
    */
   deniedScorerId?: string;
   deniedAssisterId?: string;
+  /** Substitution-only references. `playerId` is intentionally omitted. */
+  playerInId?: string;
+  playerOutId?: string;
+  playerInName?: string;
+  playerOutName?: string;
 }
 
 export interface MatchStats {
@@ -93,7 +100,19 @@ export interface MatchdaySnapshot {
   players: Array<{
     playerId: string;
     position: 'GK' | 'DF' | 'MF' | 'FW';
+    role?: 'starter' | 'bench';
+    /** 0 for starters, substitution minute for used substitutes, null when unused. */
+    enteredMinute?: number | null;
+    /** Substitution/dismissal minute for players who leave, otherwise match duration. */
+    exitedMinute?: number | null;
+    minutesPlayed?: number;
   }>;
+  substitutions?: Array<{
+    minute: number;
+    playerInId: string;
+    playerOutId: string;
+  }>;
+  durationMinutes?: 90 | 120;
   emergencyFloor: boolean;
   availableCount: number;
 }

@@ -22,6 +22,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-11: Persisted exact home/away matchday snapshots on every new match result, including player positions, emergency-floor status, and available-player counts. Appearance, clean-sheet, club-segment, and post-match injury processing now consume the persisted snapshot instead of recomputing from a potentially changed live squad. `validateWorldData` performs strict appearance/clean-sheet audits only when the current season has complete snapshot coverage, preserving compatibility with legacy saves. Verified with TypeScript, 423 Vitest tests including the multi-season smoke test, and production build under Node 24.
 - 2026-07-11: Hardened persisted matchday snapshots with audits for oversized squads, duplicate/unknown players, position drift, emergency-count contradictions, and transfer-window team mismatches. Moved the development data-health panel behind a development-only dynamic import so production neither executes nor bundles the validation UI; verified by inspecting production assets. Verified with TypeScript, 424 Vitest tests, multi-season smoke coverage, production build, and a development lazy-load browser check under Node 24.
 - 2026-07-12: Completed a four-agent second-pass audit across match simulation, season/transfer/finance/persistence, cross-page semantics, and the deployed desktop/mobile experience. Fixed injury/suspension window anchoring, discipline segment updates, balanced matchday goalkeeper selection, single-pass roster selection, bid/fire-sale ownership, prediction and season-review history, long-save bounds, reverse stat audits, late-drama wording, reset confirmation, and mobile touch/roster layout. Verified with TypeScript, 428 Vitest tests, production build, a clean development health panel after live play, and a deterministic 35-season/1,832-window stress run with zero validation errors or warnings.
+- 2026-07-13: Completed P0 real participation semantics. Every simulated match now persists 11 starters, an explicit bench, deterministic legal substitutions, actual entry/exit minutes, red-card exits, and regulation/extra-time duration. Events, aggregate stats, club segments, injury exposure, season history, career totals, and UI consumers share that snapshot. Only actual participants receive appearances or team clean sheets; starts, substitute appearances, and minutes are audited against both match snapshots and club-segment sums. Verified with 442 full-suite tests, dedicated no-sub/three-sub/red-card/extra-time/unused-bench/no-goalkeeper/transfer tests, production build, and a 10-season/520-window current-schema browser audit at 0 errors / 0 warnings across 18 routes.
 
 ## Current Main Concerns
 
@@ -228,6 +229,111 @@ Scope: only saves created by the current schema are supported and audited; histo
 - [x] TypeScript project build and Vite production/PWA build passed.
 - [x] Current-schema browser audit: 10 seasons, 520 advances, every rollover at `0 errors / 0 warnings`.
 - [x] Route audit: 18/18 routes passed with `0` runtime errors.
+
+## 13. Current-Version Follow-Up Backlog (2026-07-13)
+
+Scope: improve only the current game model and current save schema. Do not preserve or migrate historical save formats. Every checkbox remains open until its implementation and listed acceptance checks have both passed.
+
+### P0: Real Lineups, Substitutions, And Appearance Semantics
+
+Contract: normal matches use 11 starters and up to three deterministic substitutions. Injuries remain post-match exposure outcomes rather than timestamped in-match events, so they do not invent forced substitutions; only actual participants enter the injury roll. A dismissal ends the player's minutes immediately and never permits a replacement. A clean sheet belongs to every GK/DF who actually appeared when the team conceded zero across regulation plus extra time, including a substituted defender; unused bench players receive nothing.
+
+- [x] Define one authoritative match participation model shared by simulation, events, player stats, club segments, validation, and UI.
+- [x] Split the current 14-player matchday selection into exactly 11 starters plus an explicit bench when enough players are available.
+- [x] Preserve emergency behavior for short squads while guaranteeing a starting goalkeeper whenever an eligible goalkeeper exists.
+- [x] Add deterministic substitution decisions, including substitute-in player, substitute-out player, and minute.
+- [x] Limit normal substitutions to the configured competition allowance and prevent the same player from entering or leaving twice.
+- [x] Define injury/red-card behavior: injuries are post-match outcomes for actual participants; dismissals end minutes immediately, allow no replacement, and reduce the on-field count.
+- [x] Ensure goals, assists, saves, blocks, chances, passes, cards, and post-match injury exposure can only be assigned to an actual on-field participant.
+- [x] Count an appearance only for starters and substitutes who actually enter the match; unused bench players must remain unchanged.
+- [x] Add separate current-season counters for starts, substitute appearances, and minutes played.
+- [x] Update club-specific stat segments with the same starts/substitute/minutes counters as the aggregate player row.
+- [x] Define clean-sheet credit explicitly and apply it consistently to goalkeepers and defenders who actually appeared; unused substitutes never receive one.
+- [x] Give every appearing GK/DF the team clean sheet, including substituted defenders, and surface the regulation-plus-extra-time definition in UI tooltips.
+- [x] Ensure transferred players retain correct per-club starts, substitute appearances, minutes, and clean sheets.
+- [x] Snapshot the new participation counters into season history, awards inputs, career totals, retired-player records, and Season Review.
+- [x] Update every Player Center, Player Detail, Team Detail, leaderboard, and Season Review consumer that displays participation to use the authoritative selectors.
+- [x] Add match-detail substitution events with clear in/out names and minutes without overcrowding mobile layouts.
+- [x] Add deterministic unit tests for no substitutions, three substitutions, post-match injury exposure, red cards, short benches, no available goalkeeper, extra time, and transferred-player club splits.
+- [x] Add invariant checks for 11 starters, legal bench membership, legal substitution order, on-field event ownership, participation counter arithmetic, and aggregate-versus-segment totals.
+- [x] Run 10 current-schema seasons and require `0 errors / 0 warnings` after every rollover with the new model.
+
+### P1: Live Match And Animation Timing
+
+- [ ] Refactor `MatchLive` into an explicit playback state machine so event reveal, score updates, skip, close, and result changes cannot race each other.
+- [ ] Remove stale-closure risk from `MatchLive` effects and include every semantic dependency without restarting already-consumed events.
+- [ ] Reset live playback correctly when switching directly from one result to another.
+- [ ] Refactor `ResultAnimation` so sorted results are stable, completion fires exactly once, and a new result batch fully resets the reveal state.
+- [ ] Make skip behavior idempotent: repeated clicks must not duplicate completion callbacks or leave timers alive.
+- [ ] Refactor `NewsTicker` so list shrink/replace operations clamp the visible index without synchronous effect-driven state cascades.
+- [ ] Clear every animation timer on unmount and verify route changes do not update unmounted components.
+- [ ] Add fake-timer tests for normal playback, rapid skip, close/reopen, result replacement, empty results, and ticker list replacement.
+- [ ] Browser-test repeated fast advances and modal switching with zero console warnings, duplicate renders, or stale scores.
+
+### P1: Current-Schema-Only Persistence Simplification
+
+- [ ] Remove the v1-v24 migration chain and migration-only helper functions from `game-store.ts`.
+- [ ] Delete migration-only tests and fixtures that no longer represent a supported capability.
+- [ ] Keep one exported current schema version constant used by persistence, import/export, tests, and audit tooling.
+- [ ] Validate the minimum current persisted envelope before hydration, including `version`, `state`, `world`, season state, teams, squads, and player stats.
+- [ ] On incompatible or malformed local storage, fail closed: preserve the bad payload only for diagnostics, clear it from the active key, and return to the new-game screen with a concise recovery message.
+- [ ] Ensure current valid saves still hydrate, debounce, flush on page hide, survive reload, and round-trip through standard JSON export/import.
+- [ ] Add tests for current save hydration, malformed JSON, wrong version, missing world fields, pending-write replacement, quota failure, and reload round-trip.
+- [ ] Measure and record the source/bundle reduction after migration removal.
+
+### P2: Static Quality And Dead-Code Removal
+
+- [ ] Reduce production `src/` ESLint from the current baseline of 64 errors and 2 warnings to zero.
+- [ ] Remove unused imports, variables, parameters, and abandoned calculations instead of suppressing them globally.
+- [ ] Replace empty catches with an intentional fallback, user-visible failure, or a narrowly documented ignore.
+- [ ] Resolve all remaining `react-hooks/set-state-in-effect` and `react-hooks/exhaustive-deps` findings through behavior-preserving refactors.
+- [ ] Replace the remaining production `any` with a concrete type or `unknown` plus narrowing.
+- [ ] Decide which one-off visual/simulation scripts remain supported; delete obsolete scripts or move them outside the linted production toolset.
+- [ ] Reduce supported `scripts/` ESLint from the current baseline of 80 errors to zero.
+- [ ] Keep `pnpm lint`, `pnpm exec tsc -b`, and `pnpm test` green together before removing CI leniency.
+- [ ] Remove `continue-on-error` from the GitHub Actions lint step only after the repository reaches zero lint errors.
+
+### P2: Route Loading And Bundle Performance
+
+- [ ] Record a repeatable baseline for production JS size, gzip size, PWA precache size, and cold-load timing; current main JS baseline is approximately 920 KB raw / 255 KB gzip.
+- [ ] Convert non-critical routes in `App.tsx` to `React.lazy` route-level chunks with a stable loading state that does not shift the layout.
+- [ ] Keep Dashboard and initial new-game flow in the critical path; defer history, legends, search, compare, settings, editor, and deep-detail pages.
+- [ ] Inspect shared chunks before adding manual vendor splitting; avoid duplicate React, engine, or locale code across route chunks.
+- [ ] Ensure PWA precache includes the application shell while large deferred route chunks can load on demand without breaking offline navigation after first use.
+- [ ] Add chunk-size reporting to CI and define a warning budget for the initial JS path.
+- [ ] Verify desktop and mobile cold start, route navigation, back navigation, refresh on deep links, and offline revisit.
+- [ ] Target an initial main chunk below 500 KB raw without trading away current functionality or producing excessive tiny requests.
+
+### P2: Automated Current-Version Regression Gate
+
+- [ ] Add a CI browser job that installs Playwright, starts the built preview, and runs `pnpm audit:current` against the preview URL.
+- [ ] Run a short fixed-seed audit on every pull request and retain the 10-season audit for main or scheduled runs.
+- [ ] Upload the structured audit JSON when a run fails so season, issue codes, route, and runtime errors are visible in CI.
+- [ ] Fail CI on any world-data error/warning, browser page error, console error, empty route, or incomplete target-season count.
+- [ ] Include current-save export/import and reload as an automated browser flow, not only a unit test.
+- [ ] Cover at least 390x844 mobile and a standard desktop viewport for Dashboard, Players, Player Detail, Teams, Team Detail, History, and Settings.
+- [ ] Check horizontal overflow, clipped text, duplicate React keys, and minimum 44px primary touch targets in the browser audit.
+- [ ] Keep the online Vercel smoke check separate from deterministic local CI so deployment/network failures are distinguishable from product regressions.
+
+### Final Acceptance For This Backlog
+
+- [x] All P0 participation semantics are implemented, documented, and invariant-tested.
+- [x] Player Center, Player Detail, Team Detail, match events, season review, and career history agree for sampled players before and after transfers.
+- [ ] Full repository lint, type check, unit/integration tests, production build, and browser audit all pass in one clean checkout.
+- [x] Ten-season fixed-seed audit completes with zero validation issues and zero browser runtime errors.
+- [ ] Current JSON save export/import/reload succeeds; incompatible saves are rejected without corrupting the active game.
+- [ ] Initial production JS meets the agreed size budget and all audited routes remain usable on mobile and desktop.
+
+## Recommended Execution Order For Section 13
+
+- [x] Phase 1: Lock participation semantics and add failing lineup/substitution invariant tests.
+- [x] Phase 2: Implement starters, substitutions, minutes, and authoritative stat propagation.
+- [x] Phase 3: Update all player/team/review UI consumers and complete the 10-season data audit.
+- [ ] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
+- [ ] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
+- [ ] Phase 6: Clear repository lint and make lint blocking in CI.
+- [ ] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.
+- [ ] Phase 8: Run final mobile/desktop/current-save acceptance and update every checkbox only from recorded evidence.
 
 ## Suggested Execution Order
 

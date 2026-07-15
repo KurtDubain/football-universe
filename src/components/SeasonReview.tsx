@@ -244,6 +244,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                     <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
                     <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
                     <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
+                    <div className="text-[10px] text-slate-500">{king.appearances}场 · {king.starts ?? 0}首发 · {king.minutesPlayed ?? 0}分钟</div>
                   </div>
                 </div>
               </div>
@@ -280,6 +281,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                     <div className="text-[10px] text-emerald-400 font-semibold">赛季助攻王</div>
                     <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
                     <div className="text-xs text-emerald-400 font-bold">{king.assists}助 {king.goals > 0 ? `${king.goals}球` : ''}</div>
+                    <div className="text-[10px] text-slate-500">{king.appearances}场 · {king.starts ?? 0}首发 · {king.minutesPlayed ?? 0}分钟</div>
                   </div>
                 </div>
               </div>
