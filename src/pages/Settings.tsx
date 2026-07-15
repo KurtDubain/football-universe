@@ -1,7 +1,8 @@
 import { lazy, Suspense, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SAVE_SCHEMA_VERSION, useGameStore } from '../store/game-store';
+import { useGameStore } from '../store/game-store';
 import { exportCurrentSave, importCurrentSave } from '../store/save-backup';
+import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { getTeamName } from '../utils/format';
 import { defaultTeams } from '../config/teams';
 import { APP_VERSION } from '../version';
@@ -30,7 +31,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  const saveKey = 'football-universe-save';
+  const saveKey = SAVE_STORAGE_KEY;
   let saveSize = '未知';
   try {
     const raw = localStorage.getItem(saveKey);
@@ -272,7 +273,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <button
             onClick={() => {
               try {
-                const data = exportCurrentSave(saveKey, SAVE_SCHEMA_VERSION);
+                const data = exportCurrentSave(saveKey);
                 const blob = new Blob([data], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -305,7 +306,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
                 reader.onload = (ev) => {
                   try {
                     const text = ev.target?.result as string;
-                    importCurrentSave(saveKey, text, SAVE_SCHEMA_VERSION);
+                    importCurrentSave(saveKey, text);
                     window.location.reload();
                   } catch (error) {
                     setSaveMessage(error instanceof Error ? error.message : '导入失败');

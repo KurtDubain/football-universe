@@ -448,8 +448,6 @@ describe('processRetirements — coach pool seeding', () => {
       makePlayer('p-df', 't1', { age: HARD_AGE_CAP, peakRating: 87, position: 'DF', number: 4 }),
       makePlayer('p-gk', 't1', { age: HARD_AGE_CAP, peakRating: 86, position: 'GK', number: 1 }),
     ];
-    const world = buildWorld({ team, squad });
-
     // Try several seeds — at least one should land enough 40% rolls to
     // populate the pool. The deterministic coverage test below pins the seed.
     let foundFW = false;
@@ -781,40 +779,5 @@ describe('handleSeasonEnd integration', () => {
     expect(lastEntry.uuid).toBe('p-veteran');
     // Oldest entry was dropped (overflow → cap)
     expect(result.retirementHistory.some((r) => r.uuid === 'old-0')).toBe(false);
-  });
-});
-
-// ── 8. Migration v10 → v11 ─────────────────────────────────────
-
-import { applyV10ToV11RetirementInit } from '../../store/game-store';
-
-describe('applyV10ToV11RetirementInit (v10 → v11)', () => {
-  it('initialises retirementHistory and coachCandidatePool to empty arrays', () => {
-    const w: { retirementHistory?: unknown; coachCandidatePool?: unknown } = {};
-    const tally = applyV10ToV11RetirementInit(w);
-    expect(tally.touched).toBe(2);
-    expect(w.retirementHistory).toEqual([]);
-    expect(w.coachCandidatePool).toEqual([]);
-  });
-
-  it('idempotent: leaves existing arrays alone', () => {
-    const existing = [{ uuid: 'p-x' }];
-    const w: { retirementHistory?: unknown; coachCandidatePool?: unknown } = {
-      retirementHistory: existing,
-      coachCandidatePool: [],
-    };
-    const tally = applyV10ToV11RetirementInit(w);
-    expect(tally.touched).toBe(0);
-    expect(w.retirementHistory).toBe(existing);
-  });
-
-  it('only initialises the missing field', () => {
-    const w: { retirementHistory?: unknown; coachCandidatePool?: unknown } = {
-      retirementHistory: [{ uuid: 'p-x' }],
-      // coachCandidatePool missing
-    };
-    const tally = applyV10ToV11RetirementInit(w);
-    expect(tally.touched).toBe(1);
-    expect(w.coachCandidatePool).toEqual([]);
   });
 });

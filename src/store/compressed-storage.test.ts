@@ -55,11 +55,10 @@ describe('compressedStorage', () => {
     expect(onDisk!.length).toBeLessThan(payload.length / 2);
   });
 
-  it('auto-detects legacy uncompressed plaintext on read', () => {
-    const plain = JSON.stringify({ legacy: true });
-    // Write directly via localStorage to simulate a v1 (uncompressed) save
-    localStorage.setItem('legacy', plain);
-    const read = compressedStorage.getItem('legacy');
+  it('reads an uncompressed current JSON representation', () => {
+    const plain = JSON.stringify({ current: true });
+    localStorage.setItem('plain', plain);
+    const read = compressedStorage.getItem('plain');
     expect(read).toBe(plain);
   });
 
@@ -85,6 +84,16 @@ describe('compressedStorage', () => {
     __flushCompressedStorageForTests();
     const read = compressedStorage.getItem('debounce');
     expect(read).toBe(JSON.stringify({ count: 4 }));
+  });
+
+  it('flushes the newest pending write when the page is hidden', () => {
+    compressedStorage.setItem('pagehide', JSON.stringify({ count: 1 }));
+    compressedStorage.setItem('pagehide', JSON.stringify({ count: 2 }));
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(localStorage.getItem('pagehide')).not.toBeNull();
+    expect(compressedStorage.getItem('pagehide')).toBe(JSON.stringify({ count: 2 }));
   });
 
   it('retains the newest pending save and emits an error when disk quota fails', () => {

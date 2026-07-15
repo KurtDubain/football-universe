@@ -24,6 +24,7 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-12: Completed a four-agent second-pass audit across match simulation, season/transfer/finance/persistence, cross-page semantics, and the deployed desktop/mobile experience. Fixed injury/suspension window anchoring, discipline segment updates, balanced matchday goalkeeper selection, single-pass roster selection, bid/fire-sale ownership, prediction and season-review history, long-save bounds, reverse stat audits, late-drama wording, reset confirmation, and mobile touch/roster layout. Verified with TypeScript, 428 Vitest tests, production build, a clean development health panel after live play, and a deterministic 35-season/1,832-window stress run with zero validation errors or warnings.
 - 2026-07-13: Completed P0 real participation semantics. Every simulated match now persists 11 starters, an explicit bench, deterministic legal substitutions, actual entry/exit minutes, red-card exits, and regulation/extra-time duration. Events, aggregate stats, club segments, injury exposure, season history, career totals, and UI consumers share that snapshot. Only actual participants receive appearances or team clean sheets; starts, substitute appearances, and minutes are audited against both match snapshots and club-segment sums. Verified with 442 full-suite tests, dedicated no-sub/three-sub/red-card/extra-time/unused-bench/no-goalkeeper/transfer tests, production build, and a 10-season/520-window current-schema browser audit at 0 errors / 0 warnings across 18 routes.
 - 2026-07-15: Completed P1 live-match and animation timing hardening. `MatchLive` now uses one explicit reducer-driven playback state, `ResultAnimation` owns an idempotent completion lifecycle, and `NewsTicker` tracks stable news identities across replacement and shrink operations. Every playback, halftime, flash, completion, and scroll timer is cleaned up or version-guarded. Verified with 8 fake-timer interaction tests, 450 full-suite tests, TypeScript, targeted lint, production build, and real-browser rapid advance/live replay/pause/skip/switch checks at 0 console errors / 0 warnings.
+- 2026-07-15: Completed P1 current-schema-only persistence. Removed the v1-v24 migration chain and its migration-only tests, centralized schema/storage constants, and added strict pre-hydration validation plus malformed/incompatible-save quarantine and a one-time recovery notice. Current saves are covered through real `GameWorld` hydration, debounced/page-hide writes, pending-write replacement, quota failure, standard JSON export/import, and reload round-trip tests. Verified with 416 full-suite tests, TypeScript, targeted lint, production build, and a browser malformed-save recovery check at 0 console errors / 0 warnings. Production persistence source fell by 35,874 bytes, migration-only tests by 23,778 bytes, main JS by 6,168 bytes (928,466 -> 922,298), gzip by about 1.46 KB, and PWA precache by about 5.82 KiB.
 
 ## Current Main Concerns
 
@@ -273,14 +274,14 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 
 ### P1: Current-Schema-Only Persistence Simplification
 
-- [ ] Remove the v1-v24 migration chain and migration-only helper functions from `game-store.ts`.
-- [ ] Delete migration-only tests and fixtures that no longer represent a supported capability.
-- [ ] Keep one exported current schema version constant used by persistence, import/export, tests, and audit tooling.
-- [ ] Validate the minimum current persisted envelope before hydration, including `version`, `state`, `world`, season state, teams, squads, and player stats.
-- [ ] On incompatible or malformed local storage, fail closed: preserve the bad payload only for diagnostics, clear it from the active key, and return to the new-game screen with a concise recovery message.
-- [ ] Ensure current valid saves still hydrate, debounce, flush on page hide, survive reload, and round-trip through standard JSON export/import.
-- [ ] Add tests for current save hydration, malformed JSON, wrong version, missing world fields, pending-write replacement, quota failure, and reload round-trip.
-- [ ] Measure and record the source/bundle reduction after migration removal.
+- [x] Remove the v1-v24 migration chain and migration-only helper functions from `game-store.ts`.
+- [x] Delete migration-only tests and fixtures that no longer represent a supported capability.
+- [x] Keep one exported current schema version constant used by persistence, import/export, tests, and audit tooling.
+- [x] Validate the minimum current persisted envelope before hydration, including `version`, `state`, `world`, season state, teams, squads, and player stats.
+- [x] On incompatible or malformed local storage, fail closed: preserve the bad payload only for diagnostics, clear it from the active key, and return to the new-game screen with a concise recovery message.
+- [x] Ensure current valid saves still hydrate, debounce, flush on page hide, survive reload, and round-trip through standard JSON export/import.
+- [x] Add tests for current save hydration, malformed JSON, wrong version, missing world fields, pending-write replacement, quota failure, and reload round-trip.
+- [x] Measure and record the source/bundle reduction after migration removal.
 
 ### P2: Static Quality And Dead-Code Removal
 
@@ -322,7 +323,7 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Player Center, Player Detail, Team Detail, match events, season review, and career history agree for sampled players before and after transfers.
 - [ ] Full repository lint, type check, unit/integration tests, production build, and browser audit all pass in one clean checkout.
 - [x] Ten-season fixed-seed audit completes with zero validation issues and zero browser runtime errors.
-- [ ] Current JSON save export/import/reload succeeds; incompatible saves are rejected without corrupting the active game.
+- [x] Current JSON save export/import/reload succeeds; incompatible saves are rejected without corrupting the active game.
 - [ ] Initial production JS meets the agreed size budget and all audited routes remain usable on mobile and desktop.
 
 ## Recommended Execution Order For Section 13
@@ -331,7 +332,7 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Phase 2: Implement starters, substitutions, minutes, and authoritative stat propagation.
 - [x] Phase 3: Update all player/team/review UI consumers and complete the 10-season data audit.
 - [x] Phase 4: Repair live-match/result/ticker timing and add fake-timer interaction tests.
-- [ ] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
+- [x] Phase 5: Remove historical migration code and harden current-save hydration/recovery.
 - [ ] Phase 6: Clear repository lint and make lint blocking in CI.
 - [ ] Phase 7: Split routes, establish performance budgets, and add the browser audit CI gate.
 - [ ] Phase 8: Run final mobile/desktop/current-save acceptance and update every checkbox only from recorded evidence.

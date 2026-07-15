@@ -11,7 +11,6 @@ import type { GameWorld } from '../season/season-manager';
 import type { CoachBase, CoachState } from '../../types/coach';
 import type { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
-import { applyV11ToV12CoachAge } from '../../store/game-store';
 
 // ── Test fixtures ────────────────────────────────────────────────
 
@@ -398,60 +397,6 @@ describe('processCoachRetirements — pool consumption integration', () => {
     );
     expect(teamsWithCoaches.has('t1')).toBe(true);
     expect(teamsWithCoaches.has('t2')).toBe(true);
-  });
-});
-
-// ── 5. v11 → v12 migration ──────────────────────────────────
-
-describe('applyV11ToV12CoachAge (v11 → v12)', () => {
-  it('assigns deterministic age in [35, 65] from id hash', () => {
-    const world = {
-      coachBases: {
-        coach_a: { id: 'coach_a' } as { id?: string; age?: number },
-        coach_b: { id: 'coach_b' } as { id?: string; age?: number },
-      },
-    };
-    const tally = applyV11ToV12CoachAge(world);
-    expect(tally.coachesTouched).toBe(2);
-    for (const c of Object.values(world.coachBases)) {
-      expect(c.age).toBeGreaterThanOrEqual(35);
-      expect(c.age).toBeLessThanOrEqual(65);
-    }
-  });
-
-  it('idempotent — does not overwrite an existing age', () => {
-    const world = {
-      coachBases: {
-        coach_a: { id: 'coach_a', age: 42 } as { id?: string; age?: number },
-      },
-    };
-    applyV11ToV12CoachAge(world);
-    expect(world.coachBases.coach_a.age).toBe(42);
-  });
-
-  it('initialises coachRetirementHistory + nextCoachIdCounter', () => {
-    const world: { coachBases?: unknown; coachRetirementHistory?: unknown; nextCoachIdCounter?: unknown } = {
-      coachBases: {},
-    };
-    const tally = applyV11ToV12CoachAge(world);
-    expect(tally.fieldsTouched).toBe(2);
-    expect(world.coachRetirementHistory).toEqual([]);
-    expect(world.nextCoachIdCounter).toBe(0);
-  });
-
-  it('two worlds with same coach ids produce identical ages (deterministic)', () => {
-    const a = { coachBases: { c_x: { id: 'c_x' } as { id?: string; age?: number } } };
-    const b = { coachBases: { c_x: { id: 'c_x' } as { id?: string; age?: number } } };
-    applyV11ToV12CoachAge(a);
-    applyV11ToV12CoachAge(b);
-    expect(a.coachBases.c_x.age).toBe(b.coachBases.c_x.age);
-  });
-
-  it('handles malformed entries without throwing', () => {
-    const world = { coachBases: { broken: {} as { id?: string; age?: number } } };
-    expect(() => applyV11ToV12CoachAge(world)).not.toThrow();
-    expect(world.coachBases.broken.age).toBeGreaterThanOrEqual(35);
-    expect(world.coachBases.broken.age).toBeLessThanOrEqual(65);
   });
 });
 

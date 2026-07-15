@@ -5,6 +5,7 @@ import { ParticleBackground } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 import { defaultTeams } from '../config/teams';
 import { GAME_MODES, type GameMode } from '../types/game-mode';
+import { consumeSaveRecoveryMessage } from '../store/save-schema';
 
 export default function Welcome() {
   const newGame = useGameStore((s) => s.newGame);
@@ -14,6 +15,7 @@ export default function Welcome() {
   const [mode, setMode] = useState<GameMode>('free');
   const [starting, setStarting] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [recoveryMessage] = useState(consumeSaveRecoveryMessage);
 
   function handleStart() {
     setStarting(true);
@@ -64,6 +66,12 @@ export default function Welcome() {
           <FeatureCard emoji="♾️" label="无限赛季" sub="王朝兴衰自然演化" />
           <FeatureCard emoji="🎲" label="种子可复现" sub="同种子=同宇宙" />
         </section>
+
+        {recoveryMessage && (
+          <div role="alert" className="max-w-xl mx-auto border border-amber-700 bg-amber-950/80 px-4 py-3 text-sm text-amber-100 rounded-lg">
+            {recoveryMessage}
+          </div>
+        )}
 
         {/* Setup form */}
         <section className="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 max-w-xl mx-auto">

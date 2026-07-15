@@ -9,9 +9,8 @@ import type { StateStorage } from 'zustand/middleware';
  * 1MB raw save becomes ~200KB on disk. This buys us comfortable headroom
  * under the 5MB localStorage quota for ~50-100 seasons of play.
  *
- * Auto-detects legacy uncompressed saves on read: any value that parses
- * as valid JSON is treated as v1 plaintext and rewritten compressed on
- * next save. No explicit migration step needed.
+ * Also accepts an uncompressed current-schema JSON representation. Schema
+ * compatibility is enforced by the validation layer above this adapter.
  *
  * compressToUTF16 / decompressFromUTF16 — chose UTF16 over Base64 because
  * UTF16 packs 15 bits per character (vs ~6 for Base64), giving ~2.5×
@@ -100,7 +99,7 @@ export const compressedStorage: StateStorage = {
     if (pending != null) return pending;
     const raw = localStorage.getItem(name);
     if (raw == null) return null;
-    // Auto-detect legacy uncompressed format: starts with '{' (JSON object).
+    // Auto-detect uncompressed JSON: compressed strings never start with '{'.
     // Compressed strings never start with '{' — they're UTF16 binary data.
     if (raw.length > 0 && raw[0] === '{') {
       return raw;
