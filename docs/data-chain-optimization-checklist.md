@@ -348,6 +348,22 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - Ten-season audit completed `520` advances with `0 errors / 0 warnings` at every rollover. Current-save export/import/reload, browser back, deep-link refresh, and offline revisit all passed.
 - Browser coverage passed for all `18` current routes at `390x844` and the `7` required key routes at `1440x900`, with zero runtime errors, horizontal overflow, clipped labels, or undersized primary targets.
 
+## 14. Forecast, Narrative, And Match Presentation Pass (2026-07-16)
+
+- [x] Use one deterministic pre-match strength/xG model for simulation inputs, predictions, odds, and upset semantics.
+- [x] Derive win/draw/loss percentages from the shared expected-goals model and enforce monotonic calibration tests.
+- [x] Format upset scores from the named winner's perspective, including away-team upsets.
+- [x] Render match detail and live playback above every sticky page control on mobile.
+- [x] Meet 44px touch targets for tabs and fixture-star actions; keep the optional floating advance control accessible and on-screen.
+- [x] Make pitch playback refresh-rate independent and render sharply at the active device pixel ratio.
+- [x] Animate the credited goalkeeper/defender toward saves and blocks, highlight the credited event player, and let misses cross the end line.
+- [x] Give extra time and penalty shootouts dedicated playback phases without adding shootout goals to the match score.
+- [x] Give repeated same-minute events stable unique animation identities.
+- [x] Respect reduced-motion preferences and provide optional muted-by-default match audio.
+- [x] Update stale roadmap claims and leave focused regression coverage for every fixed production issue.
+
+Verification: Node 24 TypeScript and ESLint passed; all `433` Vitest tests passed; production/PWA build and bundle budget passed (`268,298` byte main chunk); current-schema production browser audit completed one full season (`52` advances) with `0 errors / 0 warnings`, all `18` mobile and `7` desktop routes clean, and save/back/deep-link/offline checks passing. `verify:match` additionally passed at `1440x900@2` and `390x844@3`, with nonblank full-DPR pitch buffers, deterministic ball movement, overlay ordering, mobile touch targets, Escape close, and zero runtime errors.
+
 ## Suggested Execution Order
 
 - [x] Step 1: Add audit helpers and invariant tests without changing behavior.

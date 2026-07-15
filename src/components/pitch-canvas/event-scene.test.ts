@@ -35,4 +35,22 @@ describe('event-directed pitch scenes', () => {
     expect(sequence.phases.every(phase => phase.attackingHome === false)).toBe(true);
     expect(sequence.phases.at(-1)?.kind).toBe('shot');
   });
+
+  it('lets misses cross the goal line and keeps repeated events distinct', () => {
+    const firstEvent = event('miss', 'HOME', 62);
+    const secondEvent = event('miss', 'HOME', 62);
+    const first = sceneForEvent(firstEvent, 'HOME', 0);
+    const second = sceneForEvent(secondEvent, 'HOME', 1);
+
+    expect(first?.target.x).toBeGreaterThan(1);
+    expect(first?.key).not.toBe(second?.key);
+  });
+
+  it('uses a single-shot penalty sequence from the spot', () => {
+    const sequence = generateSequence(42, { attackingHome: true, forceShot: true, setPiece: 'penalty' });
+
+    expect(sequence.phases).toHaveLength(1);
+    expect(sequence.phases[0].kind).toBe('shot');
+    expect(sequence.phases[0].sourceOverride).toEqual({ x: 0.88, y: 0.5 });
+  });
 });

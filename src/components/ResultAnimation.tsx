@@ -134,8 +134,13 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
   const homeWon = totalHome > totalAway || (r.penalties && (r.penaltyHome ?? 0) > (r.penaltyAway ?? 0));
   const awayWon = totalAway > totalHome || (r.penalties && (r.penaltyAway ?? 0) > (r.penaltyHome ?? 0));
   const derbyName = isDerby(r.homeTeamId, r.awayTeamId, teamBases) ? getDerbyName(r.homeTeamId, r.awayTeamId, teamBases) : null;
-  const isUpset = Math.abs((ht?.overall ?? 0) - (at?.overall ?? 0)) > 12 &&
-    ((ht?.overall ?? 0) > (at?.overall ?? 0) ? awayWon : homeWon);
+  const probabilityGap = Math.abs((r.prediction?.homeWinPct ?? 0) - (r.prediction?.awayWinPct ?? 0));
+  const isUpset = r.prediction
+    ? probabilityGap >= 10 && (homeWon
+      ? r.prediction.homeWinPct < r.prediction.awayWinPct
+      : awayWon && r.prediction.awayWinPct < r.prediction.homeWinPct)
+    : Math.abs((ht?.overall ?? 0) - (at?.overall ?? 0)) > 12
+      && ((ht?.overall ?? 0) > (at?.overall ?? 0) ? awayWon : homeWon);
   const totalGoals = totalHome + totalAway;
   const isHighScoring = totalGoals >= 5;
 

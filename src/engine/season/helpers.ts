@@ -55,6 +55,14 @@ export function createNewsId(seasonNumber: number, windowIndex: number, suffix: 
 export function isUpset(homeTeam: TeamBase, awayTeam: TeamBase, result: MatchResult): boolean {
   const homeGoalsTotal = result.homeGoals + (result.etHomeGoals ?? 0);
   const awayGoalsTotal = result.awayGoals + (result.etAwayGoals ?? 0);
+  if (homeGoalsTotal === awayGoalsTotal) return false;
+  if (result.prediction) {
+    const probabilityGap = Math.abs(result.prediction.homeWinPct - result.prediction.awayWinPct);
+    if (probabilityGap < 10) return false;
+    return homeGoalsTotal > awayGoalsTotal
+      ? result.prediction.homeWinPct < result.prediction.awayWinPct
+      : result.prediction.awayWinPct < result.prediction.homeWinPct;
+  }
   const overallDiff = Math.abs(homeTeam.overall - awayTeam.overall);
   if (overallDiff < 10) return false;
   const strongerIsHome = homeTeam.overall > awayTeam.overall;

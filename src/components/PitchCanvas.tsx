@@ -41,7 +41,14 @@ interface PitchDebugState {
   awayOnField: Array<{ id: string; number: number; slot: number }>;
 }
 
-type PitchDebugWindow = Window & { render_game_to_text?: () => string };
+type PitchDebugWindow = Window & {
+  render_game_to_text?: () => string;
+  advanceTime?: (milliseconds: number) => void;
+};
+
+const LOGICAL_WIDTH = 520;
+const LOGICAL_HEIGHT = 280;
+const FIXED_FRAME_MS = 1000 / 60;
 
 export default function PitchCanvas(props: Props) {
   const {
@@ -145,19 +152,48 @@ export default function PitchCanvas(props: Props) {
   // sequence's final shot reaches the goal, keeping ball and feedback aligned.
   useEffect(() => {
     if (!flashEvent) return;
-    const scene = sceneForEvent(flashEvent, homeTeamId);
+    const eventIndex = allEvents.indexOf(flashEvent);
+    const scene = sceneForEvent(flashEvent, homeTeamId, eventIndex >= 0 ? eventIndex : undefined);
     if (!scene || triggeredImpactKeyRef.current === scene.key) return;
     pendingImpactSceneRef.current = scene;
-  }, [flashEvent, homeTeamId]);
+  }, [allEvents, flashEvent, homeTeamId]);
 
   // Main rAF loop — starts once on mount, reads from liveRef. No restarts.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+    const canvas: HTMLCanvasElement = canvasElement;
     const ctx = canvas.getContext('2d')!;
-    const W = canvas.width, H = canvas.height;
+    const W = LOGICAL_WIDTH, H = LOGICAL_HEIGHT;
     const P = 10;
     const fw = W - P * 2, fh = H - P * 2;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function resizeCanvas(): void {
+      // clientWidth is layout-space width and is unaffected by the modal's
+      // scale-in transform, so the initial backing buffer reaches full DPR.
+      const cssWidth = canvas.clientWidth || LOGICAL_WIDTH;
+      const cssHeight = cssWidth * LOGICAL_HEIGHT / LOGICAL_WIDTH;
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const nextWidth = Math.round(cssWidth * dpr);
+      const nextHeight = Math.round(cssHeight * dpr);
+      if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+        canvas.width = nextWidth;
+        canvas.height = nextHeight;
+      }
+      ctx.setTransform(
+        dpr * cssWidth / LOGICAL_WIDTH,
+        0,
+        0,
+        dpr * cssHeight / LOGICAL_HEIGHT,
+        0,
+        0,
+      );
+    }
+
+    resizeCanvas();
+    const resizeObserver = new ResizeObserver(resizeCanvas);
+    resizeObserver.observe(canvas);
 
     function loadSequence(phases: PassPhase[], seed: number): void {
       sequenceSeedRef.current = seed;
@@ -207,14 +243,18 @@ export default function PitchCanvas(props: Props) {
       const initialScene = liveRef.current.eventScene;
       const initialSeed = initialScene?.seed ?? liveRef.current.minute * 137 + frameRef.current;
       const generated = generateSequence(initialSeed, initialScene
-        ? { attackingHome: initialScene.attackingHome, forceShot: true }
+        ? {
+          attackingHome: initialScene.attackingHome,
+          forceShot: true,
+          setPiece: initialScene.event.type === 'penalty_goal' || initialScene.event.type === 'penalty_miss' ? 'penalty' : undefined,
+        }
         : undefined);
       loadSequence(generated.phases, initialSeed);
       activeSceneKeyRef.current = initialScene?.key ?? null;
       sequenceSceneRef.current = initialScene;
     }
 
-    function render() {
+    function renderFrame() {
       frameRef.current++;
       const f = frameRef.current;
       // Read live props from ref (no closure capture → no rAF restart on prop change)
@@ -232,6 +272,7 @@ export default function PitchCanvas(props: Props) {
         const directed = generateSequence(eventScene.seed, {
           attackingHome: eventScene.attackingHome,
           forceShot: true,
+          setPiece: eventScene.event.type === 'penalty_goal' || eventScene.event.type === 'penalty_miss' ? 'penalty' : undefined,
         });
         loadSequence(directed.phases, eventScene.seed);
         activeSceneKeyRef.current = eventScene.key;
@@ -262,7 +303,6 @@ export default function PitchCanvas(props: Props) {
       if (halftime) {
         drawHalftime(ctx, W, H);
         ctx.restore();
-        raf = requestAnimationFrame(render);
         return;
       }
 
@@ -389,6 +429,19 @@ export default function PitchCanvas(props: Props) {
         phaseStateRef.current,
         shotTarget,
         shiftRef.current,
+        (() => {
+          if (!directedShotScene || (directedShotScene.outcome !== 'save' && directedShotScene.outcome !== 'block')) return undefined;
+          const eventPlayerId = directedShotScene.event.playerId;
+          if (!eventPlayerId) return undefined;
+          const defendingHome = directedShotScene.event.teamId === live.homeTeamId;
+          const roster = defendingHome ? homeRoster : awayRoster;
+          const player = roster.find(entry => entry.playerId === eventPlayerId);
+          if (!player) return undefined;
+          return {
+            playerIndex: player.slotIndex + (defendingHome ? 0 : 11),
+            target: directedShotScene.target,
+          };
+        })(),
       );
 
       // ── Draw players ──
@@ -396,16 +449,18 @@ export default function PitchCanvas(props: Props) {
       const visibleAway = activePitchPlayers(awayRoster, minute, maxMinute);
       for (const player of visibleHome) {
         const hasBall = isAttHome && player.slotIndex === ballHolderIdx;
+        const highlighted = eventScene?.event.playerId === player.playerId;
         drawPlayer(
           ctx, playerPosRef.current[player.slotIndex], homeColor, player.playerNumber,
-          hasBall, P, fw, fh, f,
+          hasBall, P, fw, fh, f, highlighted, highlighted ? player.playerName : undefined,
         );
       }
       for (const player of visibleAway) {
         const hasBall = !isAttHome && player.slotIndex === ballHolderIdx;
+        const highlighted = eventScene?.event.playerId === player.playerId;
         drawPlayer(
           ctx, playerPosRef.current[11 + player.slotIndex], awayColor, player.playerNumber,
-          hasBall, P, fw, fh, f,
+          hasBall, P, fw, fh, f, highlighted, highlighted ? player.playerName : undefined,
         );
       }
 
@@ -475,11 +530,37 @@ export default function PitchCanvas(props: Props) {
       // ── White flash on goal (drawn on top of everything, no shake) ──
       applyWhiteFlash(ctx, flashWhiteRef, W, H);
 
-      raf = requestAnimationFrame(render);
     }
 
-    let raf = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(raf);
+    const debugWindow = window as PitchDebugWindow;
+    const advanceTime = (milliseconds: number) => {
+      const steps = Math.max(1, Math.round(milliseconds / FIXED_FRAME_MS));
+      for (let step = 0; step < steps; step++) renderFrame();
+    };
+    debugWindow.advanceTime = advanceTime;
+
+    let lastTimestamp = performance.now();
+    let accumulator = FIXED_FRAME_MS;
+    let raf = 0;
+    function animate(timestamp: number): void {
+      const elapsed = Math.min(100, Math.max(0, timestamp - lastTimestamp));
+      lastTimestamp = timestamp;
+      accumulator += elapsed;
+      const frameStep = reducedMotion ? 250 : FIXED_FRAME_MS;
+      let steps = 0;
+      while (accumulator >= frameStep && steps < 6) {
+        renderFrame();
+        accumulator -= frameStep;
+        steps++;
+      }
+      raf = requestAnimationFrame(animate);
+    }
+    raf = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(raf);
+      resizeObserver.disconnect();
+      if (debugWindow.advanceTime === advanceTime) delete debugWindow.advanceTime;
+    };
     // Empty deps — render loop runs once for the lifetime of the component.
     // All reactive props are read via liveRef.current inside render().
   }, []);
@@ -487,11 +568,11 @@ export default function PitchCanvas(props: Props) {
   return (
     <canvas
       ref={canvasRef}
-      width={520}
-      height={280}
+      width={LOGICAL_WIDTH}
+      height={LOGICAL_HEIGHT}
       data-testid="pitch-canvas"
       aria-label="比赛实时战术动画"
-      className="w-full rounded-xl border border-emerald-900/30"
+      className="w-full aspect-[13/7] rounded-xl border border-emerald-900/30"
     />
   );
 }

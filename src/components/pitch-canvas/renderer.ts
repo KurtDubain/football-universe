@@ -99,6 +99,8 @@ export function drawPlayer(
   P: number,
   fw: number, fh: number,
   frame: number,
+  highlighted = false,
+  label?: string,
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -129,6 +131,18 @@ export function drawPlayer(
     const pulse = 1 + Math.sin(frame * 0.18) * 0.15;
     ctx.beginPath(); ctx.arc(px, py, 9 * pulse, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.3; ctx.stroke();
+  }
+
+  if (highlighted) {
+    const pulse = 1 + Math.sin(frame * 0.14) * 0.1;
+    ctx.beginPath(); ctx.arc(px, py, 10 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.stroke();
+    if (label) {
+      ctx.font = 'bold 7px sans-serif';
+      ctx.fillStyle = '#fef3c7';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, px, Math.max(8, py - 11));
+    }
   }
 
   // Body

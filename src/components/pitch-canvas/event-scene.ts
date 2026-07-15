@@ -36,7 +36,7 @@ function outcomeFor(event: MatchEvent): ShotOutcome {
   return 'save';
 }
 
-export function sceneForEvent(event: MatchEvent, homeTeamId: string): EventScene | null {
+export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: number): EventScene | null {
   if (!SHOT_EVENT_TYPES.has(event.type)) return null;
 
   const eventBelongsToHome = event.teamId === homeTeamId;
@@ -44,9 +44,11 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string): EventScene
     ? !eventBelongsToHome
     : eventBelongsToHome;
   const outcome = outcomeFor(event);
-  const key = `${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`;
+  const key = `${ordinal ?? 'direct'}:${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`;
   const seed = hashText(key);
-  const attackGoalX = attackingHome ? 0.985 : 0.015;
+  const attackGoalX = outcome === 'miss'
+    ? (attackingHome ? 1.015 : -0.015)
+    : (attackingHome ? 0.985 : 0.015);
   const targetY = outcome === 'miss'
     ? (seededRand(seed + 1) > 0.5 ? 0.34 : 0.66)
     : outcome === 'block'
@@ -69,12 +71,13 @@ export function findEventScene(
   homeTeamId: string,
   flashEvent?: MatchEvent | null,
 ): EventScene | null {
-  const flashScene = flashEvent ? sceneForEvent(flashEvent, homeTeamId) : null;
+  const flashIndex = flashEvent ? events.indexOf(flashEvent) : -1;
+  const flashScene = flashEvent ? sceneForEvent(flashEvent, homeTeamId, flashIndex >= 0 ? flashIndex : undefined) : null;
   if (flashScene) return flashScene;
 
   const nearby = events
     .filter(event => event.minute - minute >= 0 && event.minute - minute <= 2)
-    .map(event => sceneForEvent(event, homeTeamId))
+    .map(event => sceneForEvent(event, homeTeamId, events.indexOf(event)))
     .filter((scene): scene is EventScene => scene !== null)
     .sort((a, b) => a.event.minute - b.event.minute || a.key.localeCompare(b.key));
   return nearby[0] ?? null;

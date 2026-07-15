@@ -71,7 +71,8 @@ export function resolvePhasePoints(
 ): { source: { x: number; y: number }; dx: number; dy: number } {
   const passerSlot = getBaseSlot(phase.passerIdx, phase.attackingHome, shift);
   const recvSlot = getBaseSlot(phase.receiverIdx, phase.attackingHome, shift);
-  const source = { x: P + passerSlot.x * fw, y: P + passerSlot.y * fh };
+  const sourceSlot = phase.sourceOverride ?? passerSlot;
+  const source = { x: P + sourceSlot.x * fw, y: P + sourceSlot.y * fh };
   return { source, dx: recvSlot.x - passerSlot.x, dy: recvSlot.y - passerSlot.y };
 }
 
@@ -92,6 +93,7 @@ export function updatePlayerPositions(
   phaseState: 'passing' | 'holding' | 'shooting',
   overrideTarget: { x: number; y: number } | null,
   shift: number,
+  defensiveAction?: { playerIndex: number; target: { x: number; y: number } },
 ): void {
   const isAttHome = currentPhase.attackingHome;
   for (let i = 0; i < 22; i++) {
@@ -163,6 +165,12 @@ export function updatePlayerPositions(
       const supportDepth = 0.08 + seededRand(laneSeed) * 0.07;
       targetX_n = overrideTarget.x + (isHomeTeam ? -supportDepth : supportDepth);
       targetY_n = overrideTarget.y + (seededRand(laneSeed + 1) - 0.5) * 0.18;
+    }
+
+    if (defensiveAction?.playerIndex === i && overrideTarget && phaseState !== 'holding') {
+      targetX_n = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
+      targetY_n = defensiveAction.target.y;
+      playerPos[i].sprintT = 1;
     }
 
     targetX_n = clamp(targetX_n, 0.03, 0.97);

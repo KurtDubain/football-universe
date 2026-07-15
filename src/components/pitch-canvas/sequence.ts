@@ -2,9 +2,10 @@
 import { seededRand } from './math';
 import type { PassPhase } from './types';
 
-interface SequenceOptions {
+export interface SequenceOptions {
   attackingHome?: boolean;
   forceShot?: boolean;
+  setPiece?: 'penalty';
 }
 
 /**
@@ -16,6 +17,23 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   const playStyle = r(1);
   const endsInShot = options.forceShot ?? r(2) < 0.30;
   const willIntercept = !endsInShot && r(3) < 0.18; // pass gets stolen
+
+  if (options.setPiece === 'penalty') {
+    return {
+      endsInShot: true,
+      phases: [{
+        passerIdx: 9,
+        receiverIdx: 9,
+        attackingHome: isHome,
+        kind: 'shot',
+        duration: 24,
+        hold: 18,
+        arc: 0.05,
+        intercepted: false,
+        sourceOverride: { x: isHome ? 0.88 : 0.12, y: 0.5 },
+      }],
+    };
+  }
 
   let route: number[];
   if (options.forceShot) {

@@ -28,6 +28,12 @@ export interface PostMatchResult {
   memorableMatches: import('../../types/memorable').MemorableMatchEntry[];
 }
 
+export function formatWinnerPerspectiveScore(result: MatchResult, winnerIsHome: boolean): string {
+  const home = result.homeGoals + (result.etHomeGoals ?? 0);
+  const away = result.awayGoals + (result.etAwayGoals ?? 0);
+  return winnerIsHome ? `${home}-${away}` : `${away}-${home}`;
+}
+
 // ── Orchestration function ──────────────────────────────────────
 
 export function runPostMatchProcessing(
@@ -198,9 +204,7 @@ export function runPostMatchProcessing(
       const winnerIsHome = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
       const winner = winnerIsHome ? homeTeam : awayTeam;
       const loser = winnerIsHome ? awayTeam : homeTeam;
-      const totalH = result.homeGoals + (result.etHomeGoals ?? 0);
-      const totalA = result.awayGoals + (result.etAwayGoals ?? 0);
-      const score = `${totalH}-${totalA}`;
+      const score = formatWinnerPerspectiveScore(result, winnerIsHome);
       const titles = [
         `爆冷！${winner.name} ${score} 击败 ${loser.name}`,
         `冷门！${loser.name}阴沟翻船，不敌${winner.name}`,

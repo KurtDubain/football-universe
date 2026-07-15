@@ -101,14 +101,14 @@ function advance(milliseconds: number): void {
 }
 
 function button(label: string): HTMLButtonElement {
-  const match = [...container.querySelectorAll('button')]
+  const match = [...document.body.querySelectorAll('button')]
     .find(element => element.textContent?.includes(label));
   if (!match) throw new Error(`Button not found: ${label}`);
   return match as HTMLButtonElement;
 }
 
 function score(label: string): string | null {
-  return container.querySelector(`[aria-label="${label}"]`)?.textContent ?? null;
+  return document.body.querySelector(`[aria-label="${label}"]`)?.textContent ?? null;
 }
 
 function news(id: string, title: string, type: NewsItem['type']): NewsItem {
@@ -127,11 +127,11 @@ describe('MatchLive playback state machine', () => {
     expect(score('主队比分')).toBe('0');
     advance(560);
 
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');
-    expect(container.textContent).toContain('主队破门');
-    expect(container.textContent).toContain('进球了');
+    expect(document.body.textContent).toContain('主队破门');
+    expect(document.body.textContent).toContain('进球了');
   });
 
   it('pauses manually and resumes after the dedicated halftime delay', () => {
@@ -139,19 +139,19 @@ describe('MatchLive playback state machine', () => {
 
     act(() => button('暂停').click());
     advance(1000);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
     act(() => button('继续').click());
     advance(280);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
 
     advance(44 * 280);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
-    expect(container.textContent).toContain('中场休息');
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
+    expect(document.body.textContent).toContain('中场休息');
     advance(1999);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
     advance(1);
     advance(280);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("46'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("46'");
   });
 
   it('makes rapid skip idempotent and resets when a different result opens', () => {
@@ -163,12 +163,12 @@ describe('MatchLive playback state machine', () => {
       skip.click();
       skip.click();
     });
-    expect(container.textContent).toContain('全场结束');
+    expect(document.body.textContent).toContain('全场结束');
     expect(score('主队比分')).toBe('1');
-    expect(container.textContent?.match(/主队破门/g)).toHaveLength(1);
+    expect(document.body.textContent?.match(/主队破门/g)).toHaveLength(1);
 
     render(<MatchLive result={makeResult('live-d')} teamBases={teamBases} onClose={() => undefined} />);
-    expect(container.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
     expect(score('主队比分')).toBe('0');
   });
 
@@ -178,6 +178,40 @@ describe('MatchLive playback state machine', () => {
     act(() => root.unmount());
     expect(vi.getTimerCount()).toBe(0);
     root = createRoot(container);
+  });
+
+  it('plays dedicated extra-time and shootout breaks without adding penalties to match score', () => {
+    const events: MatchEvent[] = [
+      { minute: 95, type: 'goal', teamId: 'home', description: '加时进球' },
+      { minute: 121, type: 'penalty_goal', teamId: 'home', description: '点球命中' },
+      { minute: 122, type: 'penalty_miss', teamId: 'away', description: '点球罚失' },
+    ];
+    render(<MatchLive result={makeResult('live-shootout', events, {
+      homeGoals: 0,
+      awayGoals: 0,
+      extraTime: true,
+      etHomeGoals: 1,
+      etAwayGoals: 0,
+      penalties: true,
+      penaltyHome: 1,
+      penaltyAway: 0,
+    })} teamBases={teamBases} onClose={() => undefined} />);
+
+    act(() => button('4x').click());
+    advance(45 * 70);
+    expect(document.body.textContent).toContain('中场休息');
+    advance(2000);
+    advance(45 * 70);
+    expect(document.body.textContent).toContain('进入加时赛');
+    advance(2000);
+    advance(30 * 70);
+    expect(document.body.textContent).toContain('点球大战即将开始');
+    advance(2000);
+    advance(2 * 70);
+
+    expect(score('主队比分')).toBe('1');
+    expect(score('客队比分')).toBe('0');
+    expect(document.body.textContent).toContain('点球 1 - 0');
   });
 });
 

@@ -9,11 +9,11 @@ import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
 import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
-import { isDerby, getDerbyBoost } from '../../config/derbies';
+import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents, applyDenyPipeline } from './events';
-import { computePlayerBoosts, PlayerBoosts } from '../players/player-boosts';
+import { computePlayerBoosts } from '../players/player-boosts';
 import { selectMatchday } from '../players/injuries';
 import {
   buildMatchParticipation,
@@ -22,6 +22,8 @@ import {
   playersOnField,
   selectStartingEleven,
 } from './participation';
+import type { AdjustedStrengths } from './model';
+import { calculateMatchModel, competitionRandomness, expectedGoals, forecastFromModel } from './model';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -53,98 +55,6 @@ export interface SimulationResult {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function isCup(type: CompetitionType): boolean {
-  return type === 'league_cup' || type === 'super_cup' || type === 'world_cup' || type === 'continental_cup';
-}
-
-interface AdjustedStrengths {
-  attack: number;
-  midfield: number;
-  defense: number;
-}
-
-function calculateAdjustedStrengths(
-  team: TeamBase,
-  state: TeamState,
-  coach: CoachBase | null,
-  isHome: boolean,
-  playerBoosts?: PlayerBoosts,
-): AdjustedStrengths {
-  const homeBonus = isHome ? BALANCE.HOME_ADVANTAGE * 100 : 0;
-  const homeSmallBonus = isHome ? 3 : 0;
-
-  const coachAttackBuff = coach ? coach.attackBuff * BALANCE.COACH_BUFF_WEIGHT : 0;
-  const coachDefenseBuff = coach ? coach.defenseBuff * BALANCE.COACH_BUFF_WEIGHT : 0;
-
-  // Phase 1B — squad-derived buffs (independent of coach). See player-boosts.ts.
-  const playerAttack   = playerBoosts?.attack   ?? 0;
-  const playerMidfield = playerBoosts?.midfield ?? 0;
-  const playerDefense  = playerBoosts?.defense  ?? 0;
-
-  const attack = Math.max(
-    20,
-    team.attack
-      + coachAttackBuff
-      + playerAttack
-      + homeBonus
-      + state.momentum * 1.5
-      - state.fatigue * 0.15
-      + (state.morale - 60) * 0.12,
-  );
-
-  const midfield = Math.max(
-    20,
-    team.midfield
-      + playerMidfield
-      + homeSmallBonus
-      + state.momentum * 1
-      - state.fatigue * 0.08,
-  );
-
-  const defense = Math.max(
-    20,
-    team.defense
-      + coachDefenseBuff
-      + playerDefense
-      + homeSmallBonus
-      - state.fatigue * 0.10
-      + team.stability * 0.1,
-  );
-
-  return { attack, midfield, defense };
-}
-
-function calculateExpectedGoals(
-  attackStrength: number,
-  defenseStrength: number,
-  midfieldDominance: number, // 0-1, from this team's perspective
-  coach: CoachBase | null,
-  competitionType: CompetitionType,
-  rng: SeededRNG,
-): number {
-  // Attack power boosted by midfield dominance
-  const effectiveAttack = attackStrength * (0.6 + midfieldDominance * 0.4);
-  // Defense modulated by opponent midfield dominance
-  const effectiveDefense = defenseStrength * (0.8 + (1 - midfieldDominance) * 0.2);
-
-  let expGoals = BALANCE.BASE_GOAL_RATE * (effectiveAttack / effectiveDefense);
-
-  // Apply match-type randomness
-  const noise = isCup(competitionType) ? BALANCE.CUP_RANDOMNESS : BALANCE.LEAGUE_RANDOMNESS;
-  expGoals *= 1 + rng.nextFloat(-noise, noise);
-
-  // Apply coach comp-type buffs
-  if (coach) {
-    if (isCup(competitionType)) {
-      expGoals *= 1 + coach.cupBuff * 0.01;
-    } else {
-      expGoals *= 1 + coach.leagueBuff * 0.01;
-    }
-  }
-
-  return clamp(expGoals, 0.2, 5.0);
 }
 
 function generateMatchStats(
@@ -303,54 +213,34 @@ export function simulateMatch(
   const homeBoosts = computePlayerBoosts(homeStarters, globalWindowIdx);
   const awayBoosts = computePlayerBoosts(awayStarters, globalWindowIdx);
 
-  // 1. Calculate adjusted strengths. v23 — for neutral-venue matches
-  // (cup finals), suppress home advantage by passing isHome=false for
-  // both sides. The `homeTeamId` label is preserved for stats but the
-  // venue is neutral.
+  const model = calculateMatchModel({
+    homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
+    fixture, homeBoosts, awayBoosts,
+  });
+  const homeAdj = model.home;
+  const awayAdj = model.away;
+  const midfieldDominance = model.midfieldDominance;
   const isNeutral = !!fixture.isNeutralVenue;
-  const homeAdj = calculateAdjustedStrengths(homeTeam, homeState, homeCoach, !isNeutral, homeBoosts);
-  const awayAdj = calculateAdjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts);
-
-  // 2. Underdog boost — weaker team gets a small boost to enable upsets
-  const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);
-  if (overallGap > 8) {
-    const boost = BALANCE.UNDERDOG_BOOST * overallGap;
-    if (homeTeam.overall < awayTeam.overall) {
-      homeAdj.attack += boost;
-      homeAdj.midfield += boost * 0.5;
-    } else {
-      awayAdj.attack += boost;
-      awayAdj.midfield += boost * 0.5;
-    }
-  }
-
-  // 2b. Derby boost — derbies are more intense and unpredictable
-  const derbyBases = { [homeTeam.id]: homeTeam, [awayTeam.id]: awayTeam } as Record<string, TeamBase>;
-  if (isDerby(homeTeam.id, awayTeam.id, derbyBases)) {
-    const derbyBoost = getDerbyBoost(homeTeam.id, awayTeam.id, derbyBases);
-    homeAdj.attack += derbyBoost;
-    awayAdj.attack += derbyBoost;
-  }
-
-  // 3. Midfield dominance (0 = away dominant, 1 = home dominant)
-  const midfieldDominance = homeAdj.midfield / (homeAdj.midfield + awayAdj.midfield);
 
   // 3. Expected goals
-  const homeExpGoals = calculateExpectedGoals(
+  const noise = competitionRandomness(ctx.competitionType);
+  const homeNoise = 1 + rng.fork().nextFloat(-noise, noise);
+  const awayNoise = 1 + rng.fork().nextFloat(-noise, noise);
+  const homeExpGoals = expectedGoals(
     homeAdj.attack,
     awayAdj.defense,
     midfieldDominance,
     homeCoach,
     ctx.competitionType,
-    rng.fork(), // isolated randomness for noise
+    homeNoise,
   );
-  const awayExpGoals = calculateExpectedGoals(
+  const awayExpGoals = expectedGoals(
     awayAdj.attack,
     homeAdj.defense,
     1 - midfieldDominance,
     awayCoach,
     ctx.competitionType,
-    rng.fork(),
+    awayNoise,
   );
 
   // 4. Sample goals from Poisson
@@ -533,6 +423,7 @@ export function simulateMatch(
     ...(homeParticipation && { homeMatchday: homeParticipation.snapshot }),
     ...(awayParticipation && { awayMatchday: awayParticipation.snapshot }),
     ...(isNeutral && { isNeutralVenue: true }),
+    prediction: forecastFromModel(model),
   };
 
   // 8b. Compute Man of the Match (winner determined by combined regulation

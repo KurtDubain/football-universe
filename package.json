@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "audit:current": "tsx scripts/audit-e2e.ts"
+    "audit:current": "tsx scripts/audit-e2e.ts",
+    "verify:match": "tsx scripts/verify-match-presentation.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",

@@ -175,7 +175,12 @@ export default function Calendar() {
                         const awayCoachId = getTeamCoachId(world.coachStates, fixture.awayTeamId);
                         const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
                         const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
-                        const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
+                        const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, {
+                          fixture,
+                          homeSquad: world.squads[fixture.homeTeamId],
+                          awaySquad: world.squads[fixture.awayTeamId],
+                          globalWindowIdx: world.totalElapsedWindows,
+                        });
 
                         const calDerby = isDerby(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) ? getDerbyName(fixture.homeTeamId, fixture.awayTeamId, world.teamBases) : null;
 

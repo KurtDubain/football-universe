@@ -618,7 +618,13 @@ export default function League() {
                             homeState,
                             awayState,
                             homeCoach,
-                            awayCoach
+                            awayCoach,
+                            {
+                              fixture,
+                              homeSquad: world.squads[fixture.homeTeamId],
+                              awaySquad: world.squads[fixture.awayTeamId],
+                              globalWindowIdx: world.totalElapsedWindows,
+                            },
                           );
 
                           return (

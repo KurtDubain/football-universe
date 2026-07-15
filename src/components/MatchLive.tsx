@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useReducer, useRef, useCallback, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSwipe } from '../utils/use-swipe';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
@@ -26,7 +27,7 @@ const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
   substitution: { name: 'refresh', accent: '#38bdf8' },
 };
 
-type PlaybackPhase = 'playing' | 'paused' | 'halftime' | 'finished';
+type PlaybackPhase = 'playing' | 'paused' | 'halftime' | 'extra_time_break' | 'shootout_break' | 'finished';
 
 interface PlaybackState {
   minute: number;
@@ -35,11 +36,15 @@ interface PlaybackState {
   consumedEventCount: number;
   homeScore: number;
   awayScore: number;
+  penaltyHomeScore: number;
+  penaltyAwayScore: number;
   flashEvent: MatchEvent | null;
   goalFlash: 'home' | 'away' | null;
   flashVersion: number;
   goalFlashVersion: number;
   hasHadHalftime: boolean;
+  hasHadExtraTimeBreak: boolean;
+  hasHadShootoutBreak: boolean;
 }
 
 type PlaybackAction =
@@ -47,7 +52,7 @@ type PlaybackAction =
   | { type: 'skip'; events: MatchEvent[]; maxMinute: number; homeTeamId: string }
   | { type: 'setSpeed'; speed: number }
   | { type: 'togglePause' }
-  | { type: 'resumeHalftime' }
+  | { type: 'resumeBreak' }
   | { type: 'clearEventFlash'; version: number }
   | { type: 'clearGoalFlash'; version: number };
 
@@ -58,15 +63,19 @@ const initialPlaybackState: PlaybackState = {
   consumedEventCount: 0,
   homeScore: 0,
   awayScore: 0,
+  penaltyHomeScore: 0,
+  penaltyAwayScore: 0,
   flashEvent: null,
   goalFlash: null,
   flashVersion: 0,
   goalFlashVersion: 0,
   hasHadHalftime: false,
+  hasHadExtraTimeBreak: false,
+  hasHadShootoutBreak: false,
 };
 
 function isScoreEvent(event: MatchEvent): boolean {
-  return event.type === 'goal' || event.type === 'own_goal' || event.type === 'penalty_goal';
+  return event.type === 'goal' || event.type === 'own_goal';
 }
 
 function revealThroughMinute(
@@ -78,6 +87,8 @@ function revealThroughMinute(
   let nextEventCount = state.consumedEventCount;
   let homeScore = state.homeScore;
   let awayScore = state.awayScore;
+  let penaltyHomeScore = state.penaltyHomeScore;
+  let penaltyAwayScore = state.penaltyAwayScore;
   let latestEvent: MatchEvent | null = null;
   let latestGoal: MatchEvent | null = null;
 
@@ -88,6 +99,10 @@ function revealThroughMinute(
       latestGoal = event;
       if (event.teamId === homeTeamId) homeScore++;
       else awayScore++;
+    } else if (event.type === 'penalty_goal') {
+      latestGoal = event;
+      if (event.teamId === homeTeamId) penaltyHomeScore++;
+      else penaltyAwayScore++;
     }
     nextEventCount++;
   }
@@ -99,6 +114,8 @@ function revealThroughMinute(
     consumedEventCount: nextEventCount,
     homeScore,
     awayScore,
+    penaltyHomeScore,
+    penaltyAwayScore,
     flashEvent: latestGoal ?? latestEvent,
     goalFlash: latestGoal ? (latestGoal.teamId === homeTeamId ? 'home' : 'away') : state.goalFlash,
     flashVersion: state.flashVersion + 1,
@@ -115,6 +132,12 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
       if (nextMinute === 45 && !state.hasHadHalftime) {
         return { ...next, phase: 'halftime', hasHadHalftime: true };
       }
+      if (nextMinute === 90 && action.maxMinute > 90 && !state.hasHadExtraTimeBreak) {
+        return { ...next, phase: 'extra_time_break', hasHadExtraTimeBreak: true };
+      }
+      if (nextMinute === 120 && action.maxMinute > 120 && !state.hasHadShootoutBreak) {
+        return { ...next, phase: 'shootout_break', hasHadShootoutBreak: true };
+      }
       if (nextMinute >= action.maxMinute) return { ...next, phase: 'finished' };
       return next;
     }
@@ -124,6 +147,8 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
         ...completed,
         phase: 'finished',
         hasHadHalftime: true,
+        hasHadExtraTimeBreak: action.maxMinute > 90,
+        hasHadShootoutBreak: action.maxMinute > 120,
         flashEvent: null,
         goalFlash: null,
       };
@@ -134,8 +159,10 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
       if (state.phase === 'playing') return { ...state, phase: 'paused' };
       if (state.phase === 'paused') return { ...state, phase: 'playing' };
       return state;
-    case 'resumeHalftime':
-      return state.phase === 'halftime' ? { ...state, phase: 'playing' } : state;
+    case 'resumeBreak':
+      return state.phase === 'halftime' || state.phase === 'extra_time_break' || state.phase === 'shootout_break'
+        ? { ...state, phase: 'playing' }
+        : state;
     case 'clearEventFlash':
       return action.version === state.flashVersion ? { ...state, flashEvent: null } : state;
     case 'clearGoalFlash':
@@ -144,8 +171,8 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
 }
 
 function playbackKey(result: MatchResult): string {
-  const eventKey = result.events.map(event =>
-    `${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`,
+  const eventKey = result.events.map((event, index) =>
+    `${index}:${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`,
   ).join(',');
   return `${result.fixtureId}:${result.homeGoals}:${result.awayGoals}:${result.etHomeGoals ?? 0}:${result.etAwayGoals ?? 0}:${eventKey}`;
 }
@@ -156,20 +183,43 @@ export default function MatchLive(props: Props) {
 
 function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
+  const [muted, setMuted] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
   const maxMin = result.extraTime ? 120 : 90;
+  const timelineMax = result.penalties
+    ? Math.max(121, ...result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss').map(event => event.minute))
+    : maxMin;
 
   const allEvents = useMemo(() =>
-    [...result.events].filter(e => e.minute <= maxMin).sort((a, b) => a.minute - b.minute),
-    [result.events, maxMin]
+    result.events.map((event, order) => ({ event, order }))
+      .filter(({ event }) => event.minute <= timelineMax)
+      .sort((a, b) => a.event.minute - b.event.minute || a.order - b.order)
+      .map(({ event }) => event),
+    [result.events, timelineMax]
   );
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
   const finished = playback.phase === 'finished';
   const paused = playback.phase === 'paused';
   const halftime = playback.phase === 'halftime';
+  const extraTimeBreak = playback.phase === 'extra_time_break';
+  const shootoutBreak = playback.phase === 'shootout_break';
+  const isBreak = halftime || extraTimeBreak || shootoutBreak;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   // Tick — slowed down for broadcast-style pacing
   // At 1x: 280ms per game minute → ~25s for 90 mins (was 10.8s, too fast)
@@ -177,16 +227,32 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     if (playback.phase !== 'playing') return;
     const interval = Math.max(60, 280 / playback.speed);
     const timer = window.setInterval(() => {
-      dispatch({ type: 'tick', events: allEvents, maxMinute: maxMin, homeTeamId: result.homeTeamId });
+      dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
     }, interval);
     return () => clearInterval(timer);
-  }, [playback.phase, playback.speed, allEvents, maxMin, result.homeTeamId]);
+  }, [playback.phase, playback.speed, allEvents, timelineMax, result.homeTeamId]);
 
   useEffect(() => {
-    if (!halftime) return;
-    const timer = window.setTimeout(() => dispatch({ type: 'resumeHalftime' }), 2000);
+    if (!isBreak) return;
+    const timer = window.setTimeout(() => dispatch({ type: 'resumeBreak' }), 2000);
     return () => clearTimeout(timer);
-  }, [halftime]);
+  }, [isBreak]);
+
+  useEffect(() => {
+    if (muted || !playback.flashEvent) return;
+    const AudioContextClass = window.AudioContext;
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const isGoal = playback.flashEvent.type === 'goal' || playback.flashEvent.type === 'own_goal' || playback.flashEvent.type === 'penalty_goal';
+    oscillator.frequency.value = isGoal ? 660 : 330;
+    gain.gain.setValueAtTime(0.035, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (isGoal ? 0.22 : 0.1));
+    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + (isGoal ? 0.22 : 0.1));
+    oscillator.addEventListener('ended', () => void audioContext.close(), { once: true });
+  }, [muted, playback.flashEvent, playback.flashVersion]);
 
   useEffect(() => {
     if (!playback.flashEvent) return;
@@ -211,13 +277,15 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   }, [playback.consumedEventCount]);
 
   const skip = useCallback(() => {
-    dispatch({ type: 'skip', events: allEvents, maxMinute: maxMin, homeTeamId: result.homeTeamId });
-  }, [allEvents, maxMin, result.homeTeamId]);
+    dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
+  }, [allEvents, timelineMax, result.homeTeamId]);
 
   // Commentary text for current state
   const commentary = useMemo(() => {
     if (finished) return '比赛结束！全场战罢。';
     if (halftime) return '中场休息 — 双方回到更衣室';
+    if (extraTimeBreak) return '九十分钟战平 — 稍事休整后进入加时赛';
+    if (shootoutBreak) return '加时赛仍未分胜负 — 点球大战即将开始';
     if (playback.flashEvent?.type === 'goal' || playback.flashEvent?.type === 'penalty_goal' || playback.flashEvent?.type === 'own_goal') return '进球了！！！';
     if (playback.flashEvent?.type === 'save' || playback.flashEvent?.type === 'gk_save') return '门将做出精彩扑救！';
     if (playback.flashEvent?.type === 'df_block') return '后卫在门线上完成关键封堵！';
@@ -230,7 +298,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     if (playback.minute >= 70) return '比赛进入最后阶段';
     if (playback.minute === 46) return '下半场开始！';
     return '';
-  }, [playback.minute, playback.flashEvent, finished, halftime]);
+  }, [playback.minute, playback.flashEvent, finished, halftime, extraTimeBreak, shootoutBreak]);
 
   // Mobile — swipe down on overlay or content to close
   const swipeRef = useSwipe<HTMLDivElement>({
@@ -238,12 +306,15 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     threshold: 60,
   });
 
-  return (
+  return createPortal(
     <div
       ref={swipeRef}
-      className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[200] flex items-center justify-center p-3"
+      role="dialog"
+      aria-modal="true"
+      aria-label="比赛直播回放"
+      className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
-      <div className={`bg-slate-900 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scale-in border ${
+      <div className={`bg-slate-900 rounded-2xl w-full max-w-lg max-h-[calc(100dvh-16px)] overflow-y-auto shadow-2xl animate-scale-in motion-reduce:animate-none border ${
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
 
@@ -305,10 +376,16 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
           </div>
         </div>
 
+        {result.penalties && playback.minute > 120 && (
+          <div className="-mt-1 pb-2 text-center text-[11px] font-semibold text-amber-400 tabular-nums">
+            点球 {playback.penaltyHomeScore} - {playback.penaltyAwayScore}
+          </div>
+        )}
+
         {/* Pitch */}
         <div className="px-3 py-2">
           <PitchCanvas
-            minute={playback.minute}
+            minute={Math.min(playback.minute, maxMin)}
             maxMinute={maxMin}
             homeColor={ht?.color ?? '#ef4444'}
             awayColor={at?.color ?? '#3b82f6'}
@@ -318,7 +395,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             homeMatchday={result.homeMatchday}
             awayMatchday={result.awayMatchday}
             finished={finished}
-            halftime={halftime}
+            halftime={isBreak}
           />
         </div>
 
@@ -332,16 +409,16 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         {/* Progress bar with markers */}
         <div className="px-4 py-1">
           <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-300" style={{ width: `${(playback.minute / maxMin) * 100}%` }} />
+            <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-300 motion-reduce:transition-none" style={{ width: `${(playback.minute / timelineMax) * 100}%` }} />
             {/* HT marker */}
-            <div className="absolute top-0 bottom-0 w-px bg-slate-600" style={{ left: `${(45 / maxMin) * 100}%` }} />
+            <div className="absolute top-0 bottom-0 w-px bg-slate-600" style={{ left: `${(45 / timelineMax) * 100}%` }} />
             {/* Goal markers */}
             {shownEvents.filter(e => e.type === 'goal' || e.type === 'penalty_goal').map((e, i) => (
-              <div key={i} className="absolute top-0 w-1 h-full bg-amber-400 rounded-full" style={{ left: `${(e.minute / maxMin) * 100}%` }} />
+              <div key={`${e.minute}:${e.type}:${i}`} className="absolute top-0 w-1 h-full bg-amber-400 rounded-full" style={{ left: `${(e.minute / timelineMax) * 100}%` }} />
             ))}
           </div>
           <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
-            <span>0'</span><span>45'</span><span>{maxMin}'</span>
+            <span>0'</span><span>45'</span><span>{timelineMax > 120 ? '点球' : `${maxMin}'`}</span>
           </div>
         </div>
 
@@ -353,7 +430,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             || e.type === 'save' || e.type === 'gk_save' || e.type === 'df_block'
             || e.type === 'miss' || e.type === 'penalty_miss' || e.type === 'substitution'
           ).slice(0, 6).map((e, i) => (
-            <div key={i} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
+            <div key={`${e.minute}:${e.type}:${e.teamId}:${e.playerId ?? ''}:${i}`} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
               <span className="w-6 text-right font-mono text-[10px]">{e.minute}'</span>
               <span className="text-sm inline-flex items-center justify-center w-4 h-4">
                 {EVENT_ICONS[e.type]
@@ -371,16 +448,19 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
           <div className="flex gap-1">
             {[1, 2, 4].map(s => (
               <button key={s} onClick={() => dispatch({ type: 'setSpeed', speed: s })}
-                className={`px-2.5 py-1 text-[10px] rounded-md cursor-pointer transition-colors ${playback.speed === s ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                className={`min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md cursor-pointer transition-colors ${playback.speed === s ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
               >{s}x</button>
             ))}
-            <button onClick={() => dispatch({ type: 'togglePause' })} disabled={halftime}
-              className="px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60"
-            >{halftime ? '中场' : paused ? '继续' : '暂停'}</button>
+            <button onClick={() => dispatch({ type: 'togglePause' })} disabled={isBreak}
+              className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60"
+            >{isBreak ? '休息' : paused ? '继续' : '暂停'}</button>
+            <button onClick={() => setMuted(value => !value)} aria-label={muted ? '开启比赛声音' : '关闭比赛声音'}
+              className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer"
+            >{muted ? '静音' : '声音'}</button>
           </div>
           <div className="flex gap-2">
-            {!finished && <button onClick={skip} className="px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
-            <button onClick={onClose} className="px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
+            {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
+            <button onClick={onClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
               {finished ? '关闭' : '退出'}
             </button>
           </div>
@@ -394,6 +474,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

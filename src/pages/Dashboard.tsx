@@ -15,6 +15,7 @@ import { getMatchTags, shouldCelebrate } from '../components/celebration-logic';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
+import BettingPanel from '../components/BettingPanel';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
@@ -394,7 +395,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`pb-3 pt-2 sm:pb-2 sm:pt-0 px-2 sm:px-0 text-sm font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
+            className={`min-h-11 sm:min-h-0 pb-3 pt-2 sm:pb-2 sm:pt-0 px-2 sm:px-0 text-sm font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
               activeTab === tab.key
                 ? 'text-blue-400'
                 : 'text-slate-500 hover:text-slate-300'
@@ -598,7 +599,8 @@ function MatchdayTab({
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-                      className={`text-base shrink-0 ml-1 transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
+                      aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
+                      className={`w-11 h-11 -my-3 inline-flex items-center justify-center text-base shrink-0 transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
                       title={isStarred ? '已加星 (推进时自动直播)' : '加星 — 推进时自动直播'}
                     >
                       {isStarred ? '★' : '☆'}
@@ -1109,7 +1111,12 @@ function FixtureCard({
   const homeCoach = homeCoachId ? world.coachBases[homeCoachId] ?? null : null;
   const awayCoach = awayCoachId ? world.coachBases[awayCoachId] ?? null : null;
 
-  const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
+  const pred = predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, {
+    fixture,
+    homeSquad: world.squads[fixture.homeTeamId],
+    awaySquad: world.squads[fixture.awayTeamId],
+    globalWindowIdx: world.totalElapsedWindows,
+  });
 
   // Get match tags
   const standings = homeState.leagueLevel === 1 ? world.league1Standings : homeState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
@@ -1128,7 +1135,8 @@ function FixtureCard({
       {/* Star button — top-right corner */}
       <button
         onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-        className={`absolute top-1 right-1 text-xs transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-700 hover:text-amber-400 opacity-0 group-hover:opacity-100'}`}
+        aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
+        className={`absolute top-0 right-0 w-11 h-11 inline-flex items-start pt-2 justify-center text-sm transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 sm:text-slate-700 hover:text-amber-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
         title={isStarred ? '已加星' : '加星 — 推进时自动直播'}
       >
         {isStarred ? '★' : '☆'}
@@ -1136,7 +1144,7 @@ function FixtureCard({
 
       {/* Tags */}
       {tags.length > 0 && (
-        <div className="flex gap-1 mb-1 pr-5">
+        <div className="flex gap-1 mb-1 pr-10">
           {tags.map((t, i) => (
             <span key={i} className={`text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
           ))}
@@ -1291,80 +1299,6 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
           取消
         </button>
       </div>
-    </div>
-  );
-}
-
-function BettingPanel({ world, fixtures }: { world: GameWorld; fixtures: MatchFixture[] }) {
-  const placeBet = useGameStore(s => s.placeBet);
-  const [expanded, setExpanded] = useState(false);
-  const coins = world.coins ?? 1000;
-  const existingBets = world.bets ?? [];
-
-  if (fixtures.length === 0) return null;
-
-  const calcOdds = (homeId: string, awayId: string): { home: number; draw: number; away: number } => {
-    const hOvr = world.teamBases[homeId]?.overall ?? 50;
-    const aOvr = world.teamBases[awayId]?.overall ?? 50;
-    const diff = hOvr - aOvr;
-    const homeProb = 0.45 + diff * 0.008;
-    const drawProb = 0.25;
-    const awayProb = 1 - homeProb - drawProb;
-    return {
-      home: Math.max(1.1, +(1 / Math.max(0.05, homeProb)).toFixed(2)),
-      draw: Math.max(1.5, +(1 / Math.max(0.05, drawProb)).toFixed(2)),
-      away: Math.max(1.1, +(1 / Math.max(0.05, awayProb)).toFixed(2)),
-    };
-  };
-
-  if (!expanded) {
-    return (
-      <button onClick={() => setExpanded(true)}
-        className="w-full bg-slate-800 hover:bg-slate-700 border border-dashed border-amber-700/30 rounded-lg p-2 text-xs text-amber-400/60 hover:text-amber-400 transition-colors cursor-pointer">
-        竞猜下注 — {coins} 金币可用 {existingBets.length > 0 ? `· 已下${existingBets.length}注` : ''}
-      </button>
-    );
-  }
-
-  const leagueFixtures = fixtures.filter(f => f.competitionType === 'league').slice(0, 4);
-  const betFixtures = leagueFixtures.length > 0 ? leagueFixtures : fixtures.slice(0, 4);
-
-  return (
-    <div className="bg-slate-800 rounded-xl border border-amber-700/30 p-3">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-amber-400">竞猜下注</h4>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-amber-300 font-medium">{coins} 金币</span>
-          <button onClick={() => setExpanded(false)} className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-300">收起</button>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {betFixtures.map(f => {
-          const odds = calcOdds(f.homeTeamId, f.awayTeamId);
-          const existing = existingBets.find(b => b.fixtureId === f.id);
-          const homeName = world.teamBases[f.homeTeamId]?.shortName ?? '主';
-          const awayName = world.teamBases[f.awayTeamId]?.shortName ?? '客';
-          return (
-            <div key={f.id} className="flex items-center gap-2 text-xs">
-              <span className="flex-1 truncate text-slate-300">{homeName} vs {awayName}</span>
-              {existing ? (
-                <span className="text-[10px] text-amber-400">已押 {existing.outcome === 'home' ? '主胜' : existing.outcome === 'away' ? '客胜' : '平局'} {existing.amount}币 @{existing.odds}</span>
-              ) : (
-                <div className="flex gap-1">
-                  {(['home', 'draw', 'away'] as const).map(outcome => (
-                    <button key={outcome} onClick={() => placeBet(f.id, outcome, 50, odds[outcome])}
-                      disabled={coins < 50}
-                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-slate-300 rounded text-[10px] cursor-pointer transition-colors">
-                      {outcome === 'home' ? '主' : outcome === 'away' ? '客' : '平'} {odds[outcome]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-[11px] sm:text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于OVR差距 · 推进后自动结算</p>
     </div>
   );
 }

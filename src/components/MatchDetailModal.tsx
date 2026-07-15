@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import type { MatchFixture, MatchResult, MatchEvent } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase, TeamState } from '../types/team';
 import type { CoachBase } from '../types/coach';
+import type { Player } from '../types/player';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
@@ -34,6 +36,19 @@ export default function MatchDetailModal({
 }: MatchDetailModalProps) {
   // Hooks must run even while the controlled modal is closed.
   const swipeRef = useSwipe<HTMLDivElement>({ onSwipeDown: onClose, threshold: 60 });
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !fixture) return null;
 
@@ -48,20 +63,24 @@ export default function MatchDetailModal({
 
   if (!homeTeam || !awayTeam) return null;
 
-  return (
+  return createPortal(
     <div
       ref={swipeRef}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={result ? '比赛详情' : '赛前预测'}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] flex items-end sm:items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-2xl w-full sm:mx-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
+        className="bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-2xl w-full sm:mx-4 max-h-[calc(100dvh-16px)] sm:max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-200 text-xl leading-none cursor-pointer z-10 p-3"
+          aria-label="关闭比赛详情"
+          className="text-slate-400 hover:text-slate-200 text-xl leading-none cursor-pointer z-10 w-11 h-11 inline-flex items-center justify-center"
           style={{ position: 'sticky', float: 'right', marginTop: '4px', marginRight: '4px' }}
         >
           &#x2715;
@@ -84,10 +103,14 @@ export default function MatchDetailModal({
             awayState={awayState}
             homeCoach={homeCoach}
             awayCoach={awayCoach}
+            homeSquad={world.squads[fixture.homeTeamId]}
+            awaySquad={world.squads[fixture.awayTeamId]}
+            globalWindowIdx={world.totalElapsedWindows}
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -103,6 +126,9 @@ function PreMatchView({
   awayState,
   homeCoach,
   awayCoach,
+  homeSquad,
+  awaySquad,
+  globalWindowIdx,
 }: {
   fixture: MatchFixture;
   homeTeam: TeamBase;
@@ -111,11 +137,19 @@ function PreMatchView({
   awayState: TeamState | undefined;
   homeCoach: CoachBase | null;
   awayCoach: CoachBase | null;
+  homeSquad?: Player[];
+  awaySquad?: Player[];
+  globalWindowIdx: number;
 }) {
   const prediction: MatchPrediction | null = useMemo(() => {
     if (!homeState || !awayState) return null;
-    return predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach);
-  }, [homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach]);
+    return predictMatch(homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, {
+      fixture,
+      homeSquad,
+      awaySquad,
+      globalWindowIdx,
+    });
+  }, [fixture, homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, homeSquad, awaySquad, globalWindowIdx]);
 
   if (!prediction || !homeState || !awayState) return null;
 

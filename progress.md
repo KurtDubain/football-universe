@@ -24,3 +24,26 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Add a dedicated extra-time break and penalty-shootout choreography in a later animation phase.
 - Consider optional crowd/audio feedback with a muted default and reduced-motion support; keep it separate from match result logic.
+
+## 2026-07-16 Follow-up Optimization Pass
+
+- Scope requested: complete the remaining data-trust, mobile-overlay, animation-timing, visual-fidelity, accessibility, and maintainability improvements, then verify the whole project.
+- Confirmed production findings: pre-match prediction and betting odds use different models from the simulator; away-upset news prints a home/away score after a winner-first team name; mobile match detail/live overlays sit below Dashboard's sticky header; small star controls miss the 44px touch target.
+- Animation goals: fixed 60Hz simulation independent of display refresh rate, DPR-aware canvas backing, real keeper/defender response, misses crossing the end line, stable event identity, extra-time/shootout choreography, reduced-motion support, and optional muted-by-default audio cues.
+- Verification required before checklist completion: focused unit/component tests, full lint/type/test/build/bundle checks, deterministic animation client, screenshot inspection, and desktop/mobile production-style browser flows.
+
+### Implementation status
+
+- Shared deterministic strength/xG/Poisson forecast now drives simulation snapshots, every prediction surface, betting odds, and probability-based upset labels. Away-winner news scores are winner-relative.
+- Match detail/live views now use body portals above sticky controls, lock body scroll, support Escape, and expose larger mobile targets. The optional floating advance control is a bounded semantic button and stays off the Dashboard route.
+- Pitch playback now uses a fixed 60Hz accumulator, DPR-aware backing buffer, deterministic `window.advanceTime(ms)`, unique event ordinals, event-player labels, defensive save/block movement, end-line misses, penalty set pieces, reduced motion, and muted-by-default audio cues.
+- Live playback now pauses at halftime, regulation-to-extra-time, and extra-time-to-shootout boundaries; shootout scores are tracked separately from the match score.
+- Focused forecast, simulator, event-scene, post-match, and playback tests pass.
+
+### Final verification
+
+- Completed Node 24 TypeScript, ESLint, all `433` Vitest tests, production/PWA build, and bundle budget checks. Main entry remains `268,298` bytes and within budget.
+- Production-preview current-schema audit passed one full season (`52` advances) with `0 errors / 0 warnings`; `18` mobile routes and `7` desktop routes passed overflow, clipping, target-size, runtime, persistence, history-navigation, deep-link, and offline checks.
+- Added and passed `pnpm verify:match` at `1440x900@2` and `390x844@3`: pitch buffers reached full device pixel ratio, pixel probes were nonblank, deterministic stepping moved the ball, overlay z-index exceeded sticky controls, mobile buttons met 44px, Escape closed the dialog, and console/page errors were empty.
+- Inspected `/tmp/football-match-live-desktop.png` and `/tmp/football-match-live-mobile.png`; pitch framing, player/ball visibility, scoreboard, progress, and controls were coherent with no overlap or cropping.
+- No remaining items in the 2026-07-16 optimization checklist.

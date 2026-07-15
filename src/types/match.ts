@@ -94,6 +94,14 @@ export interface MatchResult {
   awayMatchday?: MatchdaySnapshot;
   /** v23 — true if the match was at a neutral venue (cup finals). */
   isNeutralVenue?: boolean;
+  /** Deterministic pre-match forecast used by predictions, odds, and upset labels. */
+  prediction?: {
+    homeWinPct: number;
+    drawPct: number;
+    awayWinPct: number;
+    homeExpectedGoals: number;
+    awayExpectedGoals: number;
+  };
 }
 
 export interface MatchdaySnapshot {
