@@ -137,3 +137,15 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Ten-season production audit completed 520 advances with 0 errors / 0 warnings; all audited mobile/desktop routes passed overflow, clipping, touch-target, persistence, navigation, offline, and runtime checks.
 - The required deterministic game client completed two iterations; state and the final screenshot were inspected with coherent player/ball/save rendering and no error artifact.
 - Fire-sale exchange removal and contracts/wages/loans remain intentionally deferred; this pass adds playability without a save-schema expansion.
+
+## 2026-07-17 Lightweight Team Stories
+
+- User requested more personality and fun in club histories without adding a complex narrative system.
+- Added a pure, display-only team-story selector. It derives each club's current chapter from real standings, form, consecutive titles, promotion/relegation, finances, expectations, and recent OVR movement; no random claims or persisted story state were introduced.
+- Team detail now combines up to four recent turning points from trophies, league transitions, memorable matches, coach changes, and transfers. Entries link back to the existing chronicle, match, coach, or player history surface.
+- Added a recent focus-opponent summary computed from actual archived and current matches. Frequency, close scores, finals, memorable matches, and competitive balance determine the opponent; W/D/L, aggregate score, and latest result are team-relative.
+- Performance remains isolated to opening one team-detail page. Season simulation, advance work, save schema, and storage growth are unchanged.
+- Focused tests cover dynasty, champion-in-financial-danger, varied timeline composition, and rivalry scoring/team-relative records.
+- Final verification: 54 files / 469 tests, full ESLint, TypeScript production/PWA build, and bundle budgets pass. Main entry remains 269,615 bytes; initial graph is 676,096 bytes.
+- A real browser advanced 60 windows into S2 and inspected Guangzhou Hengda at 390x844@3 and 1440x900. The panel derived current form/finance, two real memorable losses, and a seven-match Beijing rivalry; both layouts had zero body/panel overflow and zero runtime errors.
+- The required deterministic game client completed two iterations; state and final screenshot were inspected with coherent player, ball, and save rendering and no error artifact.

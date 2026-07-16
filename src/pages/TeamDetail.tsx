@@ -10,8 +10,10 @@ import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { formatMoney } from '../engine/economy/finance';
 import { computePlayerBoosts } from '../engine/players/player-boosts';
 import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
+import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '../engine/season/team-story';
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
+import { Icon, type IconName } from '../components/Icon';
 
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +53,8 @@ export default function TeamDetail() {
           </div>
         </div>
       </div>
+
+      <TeamStoryPanel teamId={id} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {/* Base Attributes */}
@@ -363,6 +367,128 @@ export default function TeamDetail() {
 
       {/* ═══ 阵容名单 ═══ */}
       <SquadRoster teamId={id} />
+    </div>
+  );
+}
+
+const storyToneClasses: Record<TeamStoryTone, { title: string; border: string; badge: string }> = {
+  amber: { title: 'text-amber-300', border: 'border-amber-500', badge: 'bg-amber-900/35 text-amber-300' },
+  emerald: { title: 'text-emerald-300', border: 'border-emerald-500', badge: 'bg-emerald-900/35 text-emerald-300' },
+  red: { title: 'text-red-300', border: 'border-red-500', badge: 'bg-red-900/35 text-red-300' },
+  blue: { title: 'text-blue-300', border: 'border-blue-500', badge: 'bg-blue-900/35 text-blue-300' },
+  slate: { title: 'text-slate-200', border: 'border-slate-500', badge: 'bg-slate-700 text-slate-300' },
+};
+
+const storyMomentMeta: Record<TeamStoryMomentKind, { icon: IconName; color: string }> = {
+  trophy: { icon: 'trophy', color: 'text-amber-400' },
+  transition: { icon: 'arrow-up', color: 'text-emerald-400' },
+  match: { icon: 'ball', color: 'text-blue-400' },
+  coach: { icon: 'tie', color: 'text-purple-400' },
+  transfer: { icon: 'handshake', color: 'text-cyan-400' },
+};
+
+function TeamStoryPanel({ teamId }: { teamId: string }) {
+  const world = useGameStore((s) => s.world);
+  const story = useMemo(() => world ? buildTeamStory(world, teamId) : null, [world, teamId]);
+  if (!world || !story) return null;
+
+  const tone = storyToneClasses[story.chapter.tone];
+  return (
+    <section className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden" aria-labelledby="team-story-heading">
+      <div className="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between gap-3">
+        <h3 id="team-story-heading" className="text-sm font-semibold text-slate-200 inline-flex items-center gap-2">
+          <Icon name="building" size={15} /> 球队故事
+        </h3>
+        <span className="text-[10px] text-slate-500">依据真实历程即时生成</span>
+      </div>
+
+      <div className={`px-4 py-3 border-l-4 ${tone.border}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] text-slate-500 mb-0.5">当前篇章</div>
+            <div className={`text-base font-bold ${tone.title}`}>{story.chapter.title}</div>
+            <p className="text-xs text-slate-400 leading-relaxed mt-1 max-w-3xl">{story.chapter.summary}</p>
+          </div>
+          <Icon name="sparkle" size={22} className={`${tone.title} shrink-0 mt-1`} />
+        </div>
+        {story.chapter.signals.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {story.chapter.signals.map(signal => (
+              <span key={signal} className={`text-[10px] px-2 py-1 rounded ${tone.badge}`}>{signal}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.45fr)_minmax(220px,0.75fr)] border-t border-slate-700/40">
+        <div className="px-4 py-3 md:border-r border-slate-700/40">
+          <div className="text-[11px] font-semibold text-slate-400 mb-2">近期转折</div>
+          {story.moments.length === 0 ? (
+            <p className="text-xs text-slate-600">故事仍在书写，完成赛季后会留下更多转折。</p>
+          ) : (
+            <div className="space-y-2.5">
+              {story.moments.map(moment => {
+                const meta = storyMomentMeta[moment.kind];
+                const content = (
+                  <>
+                    <span className={`w-6 h-6 shrink-0 flex items-center justify-center ${meta.color}`}>
+                      <Icon name={meta.icon} size={14} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-xs font-medium text-slate-200">{moment.title}</span>
+                        <span className="text-[10px] text-slate-600">S{moment.season}</span>
+                      </span>
+                      <span className="block text-[11px] text-slate-500 leading-relaxed mt-0.5">{moment.detail}</span>
+                    </span>
+                  </>
+                );
+                return moment.linkTo ? (
+                  <Link key={moment.id} to={moment.linkTo} className="flex items-start gap-2 hover:bg-slate-700/20 -mx-1 px-1 py-0.5 rounded transition-colors">
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={moment.id} className="flex items-start gap-2">{content}</div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t md:border-t-0 border-slate-700/40">
+          <div className="text-[11px] font-semibold text-slate-400 mb-2">近期焦点对手</div>
+          {story.rivalry ? (
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <Link to={`/team/${story.rivalry.opponentId}`} className="text-sm font-semibold text-blue-300 hover:text-blue-200 truncate">
+                  {story.rivalry.opponentName}
+                </Link>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 shrink-0">{story.rivalry.label}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 mt-3 text-center">
+                <StoryStat value={story.rivalry.meetings} label="交锋" />
+                <StoryStat value={story.rivalry.wins} label="胜" valueClass="text-emerald-300" />
+                <StoryStat value={story.rivalry.draws} label="平" />
+                <StoryStat value={story.rivalry.losses} label="负" valueClass="text-red-300" />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-3">
+                总比分 {story.rivalry.goalsFor}-{story.rivalry.goalsAgainst} · 最近一次 {story.rivalry.latest}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-600">至少完成两次交锋后，才会形成焦点对手。</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StoryStat({ value, label, valueClass = 'text-slate-200' }: { value: number; label: string; valueClass?: string }) {
+  return (
+    <div>
+      <div className={`text-base font-bold tabular-nums ${valueClass}`}>{value}</div>
+      <div className="text-[10px] text-slate-600">{label}</div>
     </div>
   );
 }
