@@ -434,6 +434,62 @@ describe('validateWorldData', () => {
     expect(issueCodes(validation)).not.toContain('event_player_emergency_exception');
   });
 
+  it('does not carry ordinary injuries or suspensions into a later season', () => {
+    const world = initializeGameWorld(2024);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const player = world.squads[homeTeamId].find((row) => row.position === 'FW')
+      ?? world.squads[homeTeamId][0];
+    const result = makeSingleGoalResult(
+      'offseason-availability-fixture',
+      homeTeamId,
+      awayTeamId,
+      player.uuid,
+    );
+    const squads = {
+      ...world.squads,
+      [homeTeamId]: world.squads[homeTeamId].map((row) => row.uuid === player.uuid
+        ? {
+            ...row,
+            injuredUntilWindow: 0,
+            suspendedUntilWindow: 0,
+            injuryHistory: [{
+              type: 'major' as const,
+              startSeason: 1,
+              startWindow: -1,
+              durationMatches: 5,
+              reason: '上赛季短期伤病',
+            }],
+            suspensionHistory: [{
+              startSeason: 1,
+              startWindow: -1,
+              unavailableFromWindow: 0,
+              suspendedUntilWindow: 5,
+              banWindows: 5,
+              reason: 'red_cards' as const,
+            }],
+          }
+        : row),
+    };
+    const validation = validateWorldData({
+      ...world,
+      totalElapsedWindows: 1,
+      squads,
+      seasonState: {
+        ...world.seasonState,
+        seasonNumber: 2,
+        calendar: [{
+          ...world.seasonState.calendar[0],
+          completed: true,
+          results: [result],
+        }, ...world.seasonState.calendar.slice(1)],
+      },
+    });
+    const codes = issueCodes(validation);
+
+    expect(codes).not.toContain('event_player_unavailable');
+    expect(codes).not.toContain('event_player_suspended');
+  });
+
   it('labels unavailable event players as emergency exceptions when fewer than 11 are available', () => {
     const world = initializeGameWorld(2024);
     const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);

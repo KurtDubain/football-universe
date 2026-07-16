@@ -1,67 +1,163 @@
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import type { StateStorage } from 'zustand/middleware';
+import type { CompressionWorkerRequest, CompressionWorkerResponse } from './compression-worker';
+import { conservativeUTF16Bytes } from './save-budget';
 
 /**
- * [D] — Compressed localStorage adapter for zustand persist.
+ * Debounced, compressed persistence for the game save.
  *
- * Wraps the standard localStorage with LZ-string compression. JSON game
- * state compresses 4-6× thanks to repeated key names + numeric IDs, so a
- * 1MB raw save becomes ~200KB on disk. This buys us comfortable headroom
- * under the 5MB localStorage quota for ~50-100 seasons of play.
- *
- * Also accepts an uncompressed current-schema JSON representation. Schema
- * compatibility is enforced by the validation layer above this adapter.
- *
- * compressToUTF16 / decompressFromUTF16 — chose UTF16 over Base64 because
- * UTF16 packs 15 bits per character (vs ~6 for Base64), giving ~2.5×
- * better compression. The downside is the bytes can't be inspected as
- * text in DevTools, but the trade-off is worth it for save size.
- *
- * ── PERFORMANCE: debounced writes ───────────────────────────────────
- *
- * Compressing a ~700KB JSON via LZ-string takes 50-80ms on a typical
- * machine. Zustand persist writes on every `set()` — so rapid-fire
- * advances (clicking 推进 repeatedly) used to stack 50-80ms compress
- * costs per click, causing visible micro-stutter between matches.
- *
- * Fix: queue writes with a 250ms trailing debounce. Rapid clicks
- * collapse into ONE compress+write. Final pending write is flushed
- * synchronously on `beforeunload` so tab-close never loses data.
- *
- * Also: tracks last-compressed value so identical re-saves (which
- * can happen during React re-renders) skip the compress step entirely.
+ * Runtime Zustand envelopes are queued as objects so JSON serialization and
+ * LZ compression can both happen in a Worker. Plain string callers remain
+ * supported for import/export and focused storage tests. The newest queued
+ * revision always wins; stale Worker responses are ignored.
  */
 
 const WRITE_DEBOUNCE_MS = 250;
 
-const writeQueue = new Map<string, string>();
+interface PendingWrite {
+  revision: number;
+  payload: unknown;
+  serialized: boolean;
+}
+
+const writeQueue = new Map<string, PendingWrite>();
+const inFlight = new Map<string, number>();
+const postMessageCosts = new Map<number, number>();
+let nextRevision = 1;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let lastCompressedValue: string | null = null;
-let lastCompressedKey: string | null = null;
-let lastCompressedOutput: string | null = null;
+let compressionWorker: Worker | null = null;
+let workerUnavailable = false;
+
+function serializePending(entry: PendingWrite): string {
+  return entry.serialized ? String(entry.payload) : JSON.stringify(entry.payload);
+}
+
+function emitSaveError(name: string): void {
+  console.error('[compressed-storage] write failed for', name);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('football-save-error', { detail: { name } }));
+  }
+}
+
+function persistCompressed(name: string, entry: PendingWrite, compressed: string): void {
+  try {
+    localStorage.setItem(name, compressed);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('football-save-size', {
+        detail: { name, bytes: conservativeUTF16Bytes(compressed) },
+      }));
+    }
+    if (writeQueue.get(name)?.revision === entry.revision) writeQueue.delete(name);
+  } catch (error) {
+    console.error('[compressed-storage] write failed for', name, error);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('football-save-error', { detail: { name } }));
+    }
+  }
+}
+
+function persistSynchronously(name: string, entry: PendingWrite): void {
+  try {
+    persistCompressed(name, entry, compressToUTF16(serializePending(entry)));
+  } catch (error) {
+    console.error('[compressed-storage] serialization failed for', name, error);
+    emitSaveError(name);
+  }
+}
+
+function flushWritesSynchronously(): void {
+  if (flushTimer != null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  for (const [name, entry] of [...writeQueue]) {
+    inFlight.delete(name);
+    postMessageCosts.delete(entry.revision);
+    persistSynchronously(name, entry);
+  }
+}
+
+function disableWorker(): void {
+  compressionWorker?.terminate();
+  compressionWorker = null;
+  workerUnavailable = true;
+  inFlight.clear();
+}
+
+function handleWorkerMessage(event: MessageEvent<CompressionWorkerResponse>): void {
+  const response = event.data;
+  const postMessageMs = postMessageCosts.get(response.revision) ?? 0;
+  postMessageCosts.delete(response.revision);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('football-save-performance', {
+      detail: {
+        revision: response.revision,
+        postMessageMs,
+        serializationMs: response.serializationMs ?? 0,
+        compressionMs: response.compressionMs ?? 0,
+      },
+    }));
+  }
+  if (inFlight.get(response.name) === response.revision) inFlight.delete(response.name);
+
+  const pending = writeQueue.get(response.name);
+  if (!pending || pending.revision !== response.revision) return;
+
+  if (response.error || response.compressed == null) {
+    console.error('[compressed-storage] worker failed for', response.name, response.error);
+    disableWorker();
+    flushWritesSynchronously();
+    return;
+  }
+
+  persistCompressed(response.name, pending, response.compressed);
+}
+
+function getCompressionWorker(): Worker | null {
+  if (workerUnavailable || typeof Worker === 'undefined') return null;
+  if (compressionWorker) return compressionWorker;
+  try {
+    compressionWorker = new Worker(new URL('./compression-worker.ts', import.meta.url), { type: 'module' });
+    compressionWorker.addEventListener('message', handleWorkerMessage);
+    compressionWorker.addEventListener('error', (event) => {
+      console.error('[compressed-storage] worker unavailable', event.error ?? event.message);
+      disableWorker();
+      flushWritesSynchronously();
+    });
+    return compressionWorker;
+  } catch (error) {
+    console.warn('[compressed-storage] falling back to main-thread compression', error);
+    workerUnavailable = true;
+    return null;
+  }
+}
 
 function flushWrites(): void {
   flushTimer = null;
-  for (const [name, value] of [...writeQueue]) {
-    let compressed: string;
-    if (name === lastCompressedKey && value === lastCompressedValue && lastCompressedOutput != null) {
-      compressed = lastCompressedOutput;
-    } else {
-      compressed = compressToUTF16(value);
-      lastCompressedKey = name;
-      lastCompressedValue = value;
-      lastCompressedOutput = compressed;
-    }
+  const worker = getCompressionWorker();
+  if (!worker) {
+    flushWritesSynchronously();
+    return;
+  }
+
+  for (const [name, entry] of writeQueue) {
+    if (inFlight.get(name) === entry.revision) continue;
+    const request: CompressionWorkerRequest = {
+      name,
+      revision: entry.revision,
+      payload: entry.payload,
+      serialized: entry.serialized,
+    };
     try {
-      localStorage.setItem(name, compressed);
-      if (writeQueue.get(name) === value) writeQueue.delete(name);
-    } catch (e) {
-      // Quota exceeded or storage unavailable — surface to console so the
-      // user/dev sees it rather than silently losing the save.
-      console.error('[compressed-storage] write failed for', name, e);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('football-save-error', { detail: { name } }));
-      }
+      inFlight.set(name, entry.revision);
+      const postStart = performance.now();
+      worker.postMessage(request);
+      postMessageCosts.set(entry.revision, performance.now() - postStart);
+    } catch (error) {
+      console.warn('[compressed-storage] worker postMessage failed; using fallback', error);
+      disableWorker();
+      flushWritesSynchronously();
+      return;
     }
   }
 }
@@ -71,85 +167,79 @@ function scheduleFlush(): void {
   flushTimer = setTimeout(flushWrites, WRITE_DEBOUNCE_MS);
 }
 
-// Force a synchronous flush on tab unload so the latest state always
-// makes it to disk. `pagehide` + `beforeunload` both register because
-// browsers vary on which one fires reliably (mobile Safari prefers
-// pagehide, desktop fires beforeunload first).
+function queueWrite(name: string, payload: unknown, serialized: boolean): void {
+  writeQueue.set(name, { revision: nextRevision++, payload, serialized });
+  scheduleFlush();
+}
+
 if (typeof window !== 'undefined') {
   const sync = () => {
-    if (flushTimer != null) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
-    if (writeQueue.size > 0) flushWrites();
+    if (writeQueue.size > 0) flushWritesSynchronously();
   };
   window.addEventListener('beforeunload', sync);
   window.addEventListener('pagehide', sync);
-  // Also flush when the tab becomes hidden (mobile background, alt-tab).
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') sync();
   });
 }
 
 export const compressedStorage: StateStorage = {
-  getItem: (name: string): string | null => {
-    // If a write is pending, prefer the in-memory copy — zustand may
-    // re-hydrate before our debounced flush lands.
+  getItem: (name): string | null => {
     const pending = writeQueue.get(name);
-    if (pending != null) return pending;
+    if (pending) return serializePending(pending);
+
     const raw = localStorage.getItem(name);
     if (raw == null) return null;
-    // Auto-detect uncompressed JSON: compressed strings never start with '{'.
-    // Compressed strings never start with '{' — they're UTF16 binary data.
-    if (raw.length > 0 && raw[0] === '{') {
-      return raw;
-    }
+    if (raw.length > 0 && raw[0] === '{') return raw;
     try {
       const decompressed = decompressFromUTF16(raw);
-      // decompressFromUTF16 returns "" or null on failure. Both are bad.
-      if (!decompressed || decompressed.length === 0) {
-        // Fall through to returning raw — caller's JSON.parse will throw
-        // with a useful error rather than silently dropping the save.
-        return raw;
-      }
-      return decompressed;
+      return decompressed && decompressed.length > 0 ? decompressed : raw;
     } catch {
       return raw;
     }
   },
-  setItem: (name: string, value: string): void => {
-    writeQueue.set(name, value);
-    scheduleFlush();
-  },
-  removeItem: (name: string): void => {
+  setItem: (name, value): void => queueWrite(name, value, true),
+  removeItem: (name): void => {
+    const revision = writeQueue.get(name)?.revision ?? inFlight.get(name);
     writeQueue.delete(name);
+    inFlight.delete(name);
+    if (revision != null) postMessageCosts.delete(revision);
     localStorage.removeItem(name);
   },
 };
 
-/** Replace one save synchronously, cancelling any stale debounced write. */
+/** Queue a JSON-compatible value without serializing it on the main thread. */
+export function queueCompressedJSONValue(name: string, value: unknown): void {
+  queueWrite(name, value, false);
+}
+
+/** Replace one save synchronously, cancelling any stale queued revision. */
 export function replaceCompressedStorageItem(name: string, value: string): void {
+  const revision = writeQueue.get(name)?.revision ?? inFlight.get(name);
   writeQueue.delete(name);
+  inFlight.delete(name);
+  if (revision != null) postMessageCosts.delete(revision);
   if (writeQueue.size === 0 && flushTimer != null) {
     clearTimeout(flushTimer);
     flushTimer = null;
   }
-  const compressed = compressToUTF16(value);
-  localStorage.setItem(name, compressed);
-  lastCompressedKey = name;
-  lastCompressedValue = value;
-  lastCompressedOutput = compressed;
+  localStorage.setItem(name, compressToUTF16(value));
 }
 
-/**
- * Test helper — force the pending write to flush synchronously.
- * Not called in production code; exists so unit tests don't have to
- * wait WRITE_DEBOUNCE_MS for assertions.
- */
+/** Test helper: force the newest queued revisions to disk synchronously. */
 export function __flushCompressedStorageForTests(): void {
-  if (flushTimer != null) {
-    clearTimeout(flushTimer);
-    flushTimer = null;
-  }
-  if (writeQueue.size > 0) flushWrites();
+  flushWritesSynchronously();
+}
+
+/** Test helper: reset Worker and queue state between isolated scenarios. */
+export function __resetCompressedStorageForTests(): void {
+  if (flushTimer != null) clearTimeout(flushTimer);
+  flushTimer = null;
+  compressionWorker?.terminate();
+  compressionWorker = null;
+  workerUnavailable = false;
+  writeQueue.clear();
+  inFlight.clear();
+  postMessageCosts.clear();
+  nextRevision = 1;
 }

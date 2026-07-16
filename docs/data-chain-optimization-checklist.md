@@ -26,6 +26,9 @@ This document tracks the data-chain issues found during the initial project revi
 - 2026-07-15: Completed P1 live-match and animation timing hardening. `MatchLive` now uses one explicit reducer-driven playback state, `ResultAnimation` owns an idempotent completion lifecycle, and `NewsTicker` tracks stable news identities across replacement and shrink operations. Every playback, halftime, flash, completion, and scroll timer is cleaned up or version-guarded. Verified with 8 fake-timer interaction tests, 450 full-suite tests, TypeScript, targeted lint, production build, and real-browser rapid advance/live replay/pause/skip/switch checks at 0 console errors / 0 warnings.
 - 2026-07-15: Completed P1 current-schema-only persistence. Removed the v1-v24 migration chain and its migration-only tests, centralized schema/storage constants, and added strict pre-hydration validation plus malformed/incompatible-save quarantine and a one-time recovery notice. Current saves are covered through real `GameWorld` hydration, debounced/page-hide writes, pending-write replacement, quota failure, standard JSON export/import, and reload round-trip tests. Verified with 416 full-suite tests, TypeScript, targeted lint, production build, and a browser malformed-save recovery check at 0 console errors / 0 warnings. Production persistence source fell by 35,874 bytes, migration-only tests by 23,778 bytes, main JS by 6,168 bytes (928,466 -> 922,298), gzip by about 1.46 KB, and PWA precache by about 5.82 KiB.
 - 2026-07-15: Completed Phase 6 static quality cleanup. Removed five obsolete one-off audit/diagnostic scripts superseded by current tests and `audit:current`, deleted dead imports and calculations, replaced empty catches with intentional fallbacks, narrowed the remaining production `any`, preserved seeded cup APIs without unused-parameter findings, and cleared all hook lint findings. Full repository lint fell from 135 errors to zero and is now blocking in CI. Verified with lint, TypeScript, 416 full-suite tests, and production build under Node 24.
+- 2026-07-16: Profiled mobile advance and long-save growth before changing behavior. At 4x CPU slowdown, engine work measured 7.6 ms p50 / 36.9 ms p95, synchronous JSON serialization 40.6 ms p50 / 49.9 ms p95, and the debounced main-thread LZ write produced a worst observed 2.47 s timer gap. A deterministic 225-season engine run showed compressed season-end saves of about 2.2 MB at S50, 2.9 MB at S100, 3.7 MB at S150, 4.4 MB at S200, and 4.81 MB at S225 under a conservative two-byte UTF-16 estimate. Added Section 15 as the implementation and acceptance checklist; no runtime behavior changed in this assessment.
+- 2026-07-16: Completed Section 15 P0 mobile advance responsiveness. Zustand now queues save envelopes without main-thread stringify, a revisioned Worker performs serialization plus LZ compression, stale responses cannot overwrite newer worlds, transient UI-only updates are deduplicated, and lifecycle/Worker failures retain synchronous durability fallbacks. All advance modes reject concurrent input and yield one painted frame before synchronous engine work. At 390x844@3, normal p95 measured 27.4 ms and 4x CPU p95 55.0 ms; maximum main-thread long task was 60 ms and timer gap 66.3 ms versus the 2.47 s baseline. PostMessage/structured-clone cost peaked at 20.9 ms while 207-233 ms compression stayed in the Worker. Twenty simultaneous attempts produced one advance and the exact world survived reload. Verified with 438 tests, lint, TypeScript, production build/budget, two-season browser audit at 0 errors / 0 warnings, match-presentation verification, and mobile screenshot/console inspection.
+- 2026-07-16: Completed Section 15 animation rendering guardrails. Live playback now applies measured desktop/mobile/reduced-motion DPR, particle, and frame-rate budgets; sustained pressure degrades quality without changing match state. Rendering and the match clock stop when hidden, covered, paused, at a break, completed, or unmounted. Result cards expose separate match-detail and live-replay controls. Verified with 449 tests, lint, TypeScript, production/PWA build and bundle budgets, normal/4x mobile animation audits, desktop/mobile/reduced-motion screenshots, deterministic game-client playback, and a 10-season/520-advance data audit at 0 errors / 0 warnings.
 
 ## Current Main Concerns
 
@@ -363,6 +366,99 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 - [x] Update stale roadmap claims and leave focused regression coverage for every fixed production issue.
 
 Verification: Node 24 TypeScript and ESLint passed; all `433` Vitest tests passed; production/PWA build and bundle budget passed (`268,298` byte main chunk); current-schema production browser audit completed one full season (`52` advances) with `0 errors / 0 warnings`, all `18` mobile and `7` desktop routes clean, and save/back/deep-link/offline checks passing. `verify:match` additionally passed at `1440x900@2` and `390x844@3`, with nonblank full-DPR pitch buffers, deterministic ball movement, overlay ordering, mobile touch targets, Escape close, and zero runtime errors.
+
+## 15. Mobile Advance And Long-Save Performance Backlog (2026-07-16)
+
+Scope: remove visible mobile stalls when advancing a window while preserving deterministic simulation, current data semantics, save durability, match detail, and the current-schema-only support policy. Do not check an item until its implementation and listed acceptance evidence both pass.
+
+### Measured Baseline
+
+- Mobile profile at 4x CPU slowdown: engine 7.6 ms p50 / 36.9 ms p95; one `JSON.stringify` 40.6 ms p50 / 49.9 ms p95; complete advance action 66.7 ms p50 / 99.7 ms p95.
+- The trailing 250 ms save debounce moves the stall away from the click but still performs LZ compression on the main thread; the worst observed throttled compression long task was about 2.47 s.
+- A late first-season save was about 3.73 MB raw. The current calendar was about 2.75 MB, including about 1.97 MB of persisted matchday snapshots and about 0.46 MB of events. Forecast snapshots were only about 0.05 MB and are not a meaningful source of the regression.
+- Detailed current-season calendar data is replaced at rollover rather than accumulated forever. Historical match detail retains three seasons, transfers 20, player season rows 25, team records 40, and player awards 50.
+- Long-save stress result: player-history rows plateau near 12,500, but honors, predictions, season buffs, trophies, coach bases, and coach careers continue to grow slowly. A conservative 5 MB localStorage boundary is approached around S225, with browser-specific quota behavior still treated as a risk rather than a guarantee.
+
+### P0: Make Advance Responsive
+
+- [x] Add one repeatable browser performance harness for a late-season save at 390x844 with normal and 4x CPU profiles; record click-to-feedback, action duration, main-thread long tasks, timer gaps, and save completion.
+- [x] Set an explicit `advancing` state before engine work, yield at least one animation frame so pressed/loading feedback paints, and block duplicate taps until the window commit finishes.
+- [x] Keep `executeCurrentWindow` deterministic and synchronous for this pass; do not move the simulation engine to a worker until persistence costs have been isolated and remeasured.
+- [x] Move LZ compression off the main thread behind a small persistence worker while keeping the final `localStorage.setItem` on the main thread.
+- [x] Give every queued save a monotonically increasing revision and ensure a late worker response can never overwrite a newer world.
+- [x] Collapse rapid advances to the newest pending revision without dropping the last committed save.
+- [x] Preserve the existing 250 ms idle behavior or replace it with an evidence-backed schedule that avoids compressing between consecutive taps.
+- [x] Define worker startup and unsupported-browser fallback behavior; gameplay and saving must still work when Worker construction or messaging fails.
+- [x] Preserve visibility-change, `pagehide`, and `beforeunload` durability. If the latest worker result is not ready, use a tested last-chance path without corrupting or regressing the previously committed save.
+- [x] Keep quota failures user-visible and retain the newest pending in-memory save so a later retry can succeed.
+- [x] Audit Zustand `set()` calls during advance and remove persistence triggers for UI-only/transient state that is not part of the persisted envelope.
+- [x] Commit the simulated world, result batch, news batch, and advance tick atomically where their semantics allow it; avoid serializing multiple equivalent full-world snapshots for one click.
+- [x] Measure structured-clone/postMessage cost separately from JSON serialization. Do not declare the worker pass complete if main-thread payload preparation simply replaces the current stringify stall.
+
+### P0 Acceptance: Responsiveness And Durability
+
+- [x] At 390x844 and 4x CPU slowdown, visible pressed/loading feedback paints before the simulation result is committed.
+- [x] No save-related main-thread task exceeds 100 ms in the target late-season scenario; record exceptions with a trace rather than averaging them away.
+- [x] Eliminate the observed multi-second post-advance timer gap caused by main-thread LZ compression.
+- [x] Normal-speed mobile advance action reaches p95 below 50 ms outside the engine's irreducible work; 4x CPU p95 remains below 100 ms with no multi-second delayed stall.
+- [x] Twenty rapid advance attempts produce the correct number of accepted advances, no duplicate window execution, and the newest world after reload.
+- [x] Reload after idle, immediate tab hide, page hide, and worker failure each restores the latest acknowledged game state or the last clearly committed state without malformed JSON.
+- [x] Existing quota-error, export/import, schema validation, and pending-write replacement tests remain green.
+
+### P1: Control Save Work And Size
+
+- [x] Add a supported save-size report that separates raw and compressed size for `seasonState`, current results/events, matchday snapshots, player history, match history, squads, coaches, honors, transfers, finances, awards, predictions, and season buffs.
+- [x] Add deterministic size checkpoints for S1 end, S50, S100, and S150; store metrics as test/audit artifacts so later features cannot silently consume the storage budget.
+- [x] Adopt S150 as the conservative supported long-save target and require its season-end compressed estimate to remain below 4 MB with at least 20% headroom against the project's 5 MB design boundary.
+- [x] Add a non-blocking warning before a real save reaches the danger zone; report export/cleanup options without interrupting the current advance.
+- [x] Verify the current storage-trim action materially reduces both raw and compressed size, and state exactly which detail it discards.
+- [x] Avoid retaining duplicate `lastResults`/`lastNews` payloads when equivalent data already exists in the current calendar, unless reload/replay behavior demonstrably requires the duplicate.
+- [x] Review whether persisted forecast/display caches are reconstructible; remove only caches whose recomputation is deterministic and cheap.
+- [x] Keep all canonical aggregate stats, club segments, frozen season rows, awards, records, and result scorelines intact through every size optimization.
+
+Evidence (2026-07-16): `pnpm audit:long-save` writes `/tmp/football-long-save-audit.json`. Conservative compressed browser writes were 580,466 bytes (S1), 1,467,284 (S50), 1,575,014 (S100), and 1,685,654 (S150). Forecast snapshots remain canonical frozen pre-match evidence used by odds, upset labels, and history views, so they were retained. Explicit cleanup removes completed-result events and matchday snapshots only; at S150 it reduced raw/compressed size from 14,958,987/1,685,654 to 11,397,801/1,314,650 bytes.
+
+### P1 Acceptance: Long Saves
+
+- [x] Run at least 150 deterministic seasons with `validateWorldData` at every rollover and finish with zero errors and zero warnings.
+- [x] At S1, S50, S100, and S150, export, import, reload, advance one window, and compare season/window identity plus canonical world-data invariants.
+- [x] Confirm detailed match history contains no more than three distinct seasons, transfer history 20, player rows 25 recent seasons, team records 40 per team, and awards 50 seasons.
+- [x] Confirm size controls do not change standings, scores, player totals, finance balances, transfers, awards, trophies, prediction results, or seeded replay output.
+- [x] Exercise the browser's actual storage write at the target size rather than relying only on compressed string length estimates.
+
+### P2: Compact Historical Representation Only If Needed
+
+- [x] Re-profile after P0 and P1. Do not change historical schemas merely because raw JSON looks large if responsiveness and the S150 storage budget already pass.
+- [ ] If current-calendar snapshots remain the largest cost, design a compact authoritative participation snapshot that stores IDs, roles, entry/exit minutes, and emergency metadata without repeated display fields.
+- [ ] Prove the compact snapshot can still audit starters, bench, substitutions, red-card exits, event ownership, appearances, minutes, clean sheets, injuries, and transfer-time ownership.
+- [ ] Evaluate compacting old completed-result events separately from current/recent match detail; document the exact UX loss before accepting any retention reduction.
+- [ ] If coach data remains the dominant unbounded history, separate active coach simulation state from immutable historical identity/career summaries and deduplicate repeated names/team metadata.
+- [ ] Consider bounded or compact summaries for prediction and season-buff history only after confirming Chronicle and Season Review requirements.
+- [ ] Prefer a versioned compact current schema over ad hoc JSON key shortening. Since legacy compatibility is out of scope, keep one readable import/export representation and one clearly tested runtime representation if they differ.
+- [ ] Evaluate IndexedDB only if worker compression plus compaction cannot maintain the S150 budget or reliable page-hide persistence; do not introduce it as part of the initial P0 pass.
+
+Decision (2026-07-16): P2 is not triggered. The post-P1 S150 browser write is 1,685,654 bytes, reload/page-hide durability passes, and normal/4x mobile responsiveness remains within budget. The unchecked design items stay conditional and should only be reopened after a measured budget regression.
+
+### Animation And Rendering Guardrails
+
+- [x] Profile canvas/frame work independently from advance/save work so animation regressions are not attributed to the engine.
+- [x] Cap canvas device-pixel ratio and particle density on constrained mobile devices using measured frame time, while preserving goals, ball movement, player positioning, and essential match cues.
+- [x] Pause canvas updates when hidden, covered, completed, or outside the live-match route.
+- [x] Keep animation state isolated so persistence completion, news updates, and unrelated store changes do not restart or rerender the live sequence.
+- [x] Verify normal playback, reduced-motion mode, skip, rapid close/reopen, and consecutive result batches at 390x844 and desktop sizes.
+- [x] Require no incoherent overlap, clipped controls, stale score, duplicate completion, or sustained frame time above 33 ms during the audited mobile sequence.
+
+Evidence (2026-07-16): `pnpm audit:animation-performance` passed at `390x844@3` under normal and 4x CPU profiles. Average Canvas draw time was 0.19/0.81 ms, maximum consecutive slow frames was 1/1, particle use stayed within the 180 cap, and hidden/covered/closed/reopened/next-batch assertions all passed with no runtime errors. `pnpm verify:match` separately passed desktop, constrained mobile, and reduced-motion profiles at effective DPR 2/2/1.5 with particle caps 350/180/60, deterministic ball movement, zero paused/completed frames, and coherent inspected screenshots.
+
+### Recommended Execution Order For Section 15
+
+- [x] Phase 1: Add the repeatable late-season mobile trace and save-size reporting before changing code.
+- [x] Phase 2: Paint advancing feedback, guard duplicate input, and remove redundant persistence triggers.
+- [x] Phase 3: Add revisioned worker compression with fallback and lifecycle durability tests.
+- [x] Phase 4: Re-run browser timing; update P0 items only from traces and reload evidence.
+- [x] Phase 5: Add S1/S50/S100/S150 storage budgets and long-save round-trip validation.
+- [x] Phase 6: Compact snapshots or unbounded history only where the measured post-P0 budget requires it.
+- [x] Phase 7: Run full lint, TypeScript, unit/integration tests, production build, current browser audit, mobile performance trace, and 150-season acceptance before closing the section.
 
 ## Suggested Execution Order
 

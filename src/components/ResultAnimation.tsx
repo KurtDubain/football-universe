@@ -151,81 +151,88 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
     : 'bg-slate-800 border-slate-700';
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full rounded-lg border p-2 text-left cursor-pointer transition-all hover-lift relative overflow-hidden ${baseClass} ${
+    <div
+      className={`w-full rounded-lg border text-left transition-all hover-lift relative overflow-hidden ${baseClass} ${
         isNew ? 'animate-scale-in' : ''
       }`}
     >
       {/* Energy wave on key match reveal */}
       {isKeyMatch && isNew && <EnergyWave color={ht?.color ?? '#f59e0b'} />}
-      {/* Tags row — compact */}
-      {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
-        <div className="flex gap-1 mb-1 flex-wrap">
-          {derbyName && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
-          {isUpset && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
-          {isHighScoring && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
-          {r.competitionType !== 'league' && (
-            <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
-          )}
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full p-2 text-left cursor-pointer"
+        aria-label={`查看 ${ht?.name ?? r.homeTeamId} 对 ${at?.name ?? r.awayTeamId} 战报`}
+      >
+        {/* Tags row — compact */}
+        {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
+          <div className="flex gap-1 mb-1 flex-wrap">
+            {derbyName && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
+            {isUpset && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
+            {isHighScoring && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
+            {r.competitionType !== 'league' && (
+              <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
+            )}
+          </div>
+        )}
 
-      {/* Score line */}
-      <div className="flex items-center">
-        <div className="flex-1 min-w-0">
-          <TeamName teamId={r.homeTeamId} teamBases={teamBases} showTier link={false}
-            className={`text-xs ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`} />
-        </div>
+        {/* Score line */}
+        <div className="flex items-center">
+          <div className="flex-1 min-w-0">
+            <TeamName teamId={r.homeTeamId} teamBases={teamBases} showTier link={false}
+              className={`text-xs ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`} />
+          </div>
 
-        <div className="flex items-center gap-1 px-2 shrink-0">
-          <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${homeWon ? 'text-green-400' : 'text-slate-300'}`}>
-            {totalHome}
-          </span>
-          <span className="text-slate-600 text-[10px]">:</span>
-          <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${awayWon ? 'text-green-400' : 'text-slate-300'}`}>
-            {totalAway}
-          </span>
-          {r.extraTime && (
-            <span className="text-[10px] sm:text-[8px] text-amber-400 ml-0.5">
-              {r.penalties ? `P` : '加时'}
+          <div className="flex items-center gap-1 px-2 shrink-0">
+            <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${homeWon ? 'text-green-400' : 'text-slate-300'}`}>
+              {totalHome}
             </span>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 text-right">
-          <TeamName teamId={r.awayTeamId} teamBases={teamBases} showTier link={false}
-            className={`text-xs ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'} justify-end`} />
-        </div>
-      </div>
-
-      {/* Key goal events — only for key matches, max 3 */}
-      {isKeyMatch && r.events.length > 0 && (
-        <div className="mt-1 flex gap-1.5 text-[11px] sm:text-[9px] text-slate-500 overflow-hidden">
-          {r.events
-            .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
-            .slice(0, 3)
-            .map((e, i) => (
-              <span key={i}>
-                {e.minute}'{e.playerName ? ` ${e.playerName}` : (e.playerNumber ? ` ${e.playerNumber}号` : '')}
+            <span className="text-slate-600 text-[10px]">:</span>
+            <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${awayWon ? 'text-green-400' : 'text-slate-300'}`}>
+              {totalAway}
+            </span>
+            {r.extraTime && (
+              <span className="text-[10px] sm:text-[8px] text-amber-400 ml-0.5">
+                {r.penalties ? `P` : '加时'}
               </span>
-            ))}
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0 text-right">
+            <TeamName teamId={r.awayTeamId} teamBases={teamBases} showTier link={false}
+              className={`text-xs ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'} justify-end`} />
+          </div>
         </div>
-      )}
+
+        {/* Key goal events — only for key matches, max 3 */}
+        {isKeyMatch && r.events.length > 0 && (
+          <div className="mt-1 flex gap-1.5 text-[11px] sm:text-[9px] text-slate-500 overflow-hidden">
+            {r.events
+              .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
+              .slice(0, 3)
+              .map((e, i) => (
+                <span key={i}>
+                  {e.minute}'{e.playerName ? ` ${e.playerName}` : (e.playerNumber ? ` ${e.playerNumber}号` : '')}
+                </span>
+              ))}
+          </div>
+        )}
+      </button>
 
       {/* Live replay button for important matches */}
       {onLiveView && (
-        <div className="mt-1 pt-1 border-t border-slate-700/30">
-          <span
-            onClick={(e) => { e.stopPropagation(); onLiveView(); }}
-            className="text-[11px] sm:text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
+        <div className="mx-2 pb-2 pt-1 border-t border-slate-700/30">
+          <button
+            type="button"
+            onClick={onLiveView}
+            className="min-h-11 sm:min-h-0 text-[11px] sm:text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
           >
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-breathe" />
             观看直播回放
-          </span>
+          </button>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 

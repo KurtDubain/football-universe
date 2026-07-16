@@ -112,15 +112,27 @@ function getOpposingTeamId(result: MatchResult, teamId: string): string | undefi
   return undefined;
 }
 
-function isPlayerInjuredAtWindow(player: Player, globalWindowIdx: number): boolean {
+function isPlayerInjuredAtWindow(
+  player: Player,
+  globalWindowIdx: number,
+  season?: number,
+): boolean {
   return (player.injuryHistory ?? []).some((injury) =>
+    (season === undefined || injury.startSeason === season || injury.type === 'long_term')
+    &&
     globalWindowIdx > injury.startWindow
     && globalWindowIdx <= injury.startWindow + injury.durationMatches
   );
 }
 
-function isPlayerSuspendedAtWindow(player: Player, globalWindowIdx: number): boolean {
+function isPlayerSuspendedAtWindow(
+  player: Player,
+  globalWindowIdx: number,
+  season?: number,
+): boolean {
   return (player.suspensionHistory ?? []).some((suspension) =>
+    (season === undefined || suspension.startSeason === season)
+    &&
     globalWindowIdx >= suspension.unavailableFromWindow
     && globalWindowIdx < suspension.suspendedUntilWindow
   );
@@ -324,6 +336,7 @@ function buildMatchdayPlayerIds(
   world: GameWorld,
   result: MatchResult,
   resultGlobalWindowIdx: number | undefined,
+  resultSeason: number | undefined,
   activePlayers: Map<string, Player>,
 ): Map<string, MatchdayAuditContext> {
   const idsByTeam = new Map<string, MatchdayAuditContext>();
@@ -340,8 +353,8 @@ function buildMatchdayPlayerIds(
           const player = activePlayers.get(playerId);
           if (
             player
-            && (isPlayerInjuredAtWindow(player, resultGlobalWindowIdx)
-              || isPlayerSuspendedAtWindow(player, resultGlobalWindowIdx))
+            && (isPlayerInjuredAtWindow(player, resultGlobalWindowIdx, resultSeason)
+              || isPlayerSuspendedAtWindow(player, resultGlobalWindowIdx, resultSeason))
           ) {
             unavailablePlayerIds.add(playerId);
           }
@@ -482,6 +495,9 @@ function validateEventDerivedStats(
   eventDerivedBySegment: Map<string, EventDerivedStats>,
   issues: WorldDataIssue[],
 ): void {
+  const hasArchivedResults = world.seasonState.calendar.some((window) => (
+    window.results.some((result) => result.detailsArchived)
+  ));
   const playerIds = new Set([
     ...eventDerivedByPlayer.keys(),
     ...Object.entries(world.playerStats)
@@ -491,7 +507,11 @@ function validateEventDerivedStats(
   for (const playerId of playerIds) {
     const expected = eventDerivedByPlayer.get(playerId) ?? emptyEventDerivedStats();
     const actual = world.playerStats[playerId];
-    const details = eventDerivedMismatchDetails(expected, actual);
+    const details = hasArchivedResults && actual
+      ? EVENT_DERIVED_FIELDS
+        .filter((field) => actual[field] < expected[field])
+        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field]}`)
+      : eventDerivedMismatchDetails(expected, actual);
     if (details.length === 0) continue;
     pushIssue(issues, {
       severity: 'warning',
@@ -514,7 +534,11 @@ function validateEventDerivedStats(
     const expected = eventDerivedBySegment.get(segmentKey) ?? emptyEventDerivedStats();
     const [playerId, teamId] = segmentKey.split('@@');
     const actual = world.playerStatSegments?.[segmentKey];
-    const details = eventDerivedMismatchDetails(expected, actual);
+    const details = hasArchivedResults && actual
+      ? EVENT_DERIVED_FIELDS
+        .filter((field) => actual[field] < expected[field])
+        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field]}`)
+      : eventDerivedMismatchDetails(expected, actual);
     if (details.length === 0) continue;
     pushIssue(issues, {
       severity: 'warning',
@@ -604,7 +628,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
       ['substituteAppearances', stat.substituteAppearances ?? 0],
       ['minutesPlayed', stat.minutesPlayed ?? 0],
     ] as const) {
-      if (actual === expected[field]) continue;
+      if (hasLegacyResults ? actual >= expected[field] : actual === expected[field]) continue;
       pushIssue(issues, {
         severity: 'warning', code: `player_${field}_matchday_mismatch`,
         message: `Player ${playerId} has ${actual} ${field}, but participation snapshots explain ${expected[field]}.`,
@@ -640,7 +664,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
       ['substituteAppearances', stat.substituteAppearances ?? 0],
       ['minutesPlayed', stat.minutesPlayed ?? 0],
     ] as const) {
-      if (actual === expected[field]) continue;
+      if (hasLegacyResults ? actual >= expected[field] : actual === expected[field]) continue;
       pushIssue(issues, {
         severity: 'warning', code: `player_segment_${field}_matchday_mismatch`,
         message: `Player segment ${segmentKey} has ${actual} ${field}, but participation snapshots explain ${expected[field]}.`,
@@ -1127,8 +1151,8 @@ function validateEventSemantics(
       if (!check.playerId || !check.teamId) continue;
       const checkPlayer = activePlayers.get(check.playerId);
       if (!checkPlayer) continue;
-      const injured = isPlayerInjuredAtWindow(checkPlayer, resultGlobalWindowIdx);
-      const suspended = isPlayerSuspendedAtWindow(checkPlayer, resultGlobalWindowIdx);
+      const injured = isPlayerInjuredAtWindow(checkPlayer, resultGlobalWindowIdx, resultSeason);
+      const suspended = isPlayerSuspendedAtWindow(checkPlayer, resultGlobalWindowIdx, resultSeason);
       if (!injured && !suspended) continue;
       const matchday = matchdayPlayerIdsByTeam.get(check.teamId);
       const emergencyException = Boolean(
@@ -1268,6 +1292,7 @@ function validateResult(
     world,
     result,
     resultGlobalWindowIdx,
+    resultSeason,
     activePlayers,
   );
   if (result.homeMatchday) {
@@ -1319,7 +1344,7 @@ function validateResult(
   const expectedHome = result.homeGoals + (result.etHomeGoals ?? 0);
   const expectedAway = result.awayGoals + (result.etAwayGoals ?? 0);
   const counted = countScorelineEvents(result);
-  if (counted.home !== expectedHome || counted.away !== expectedAway) {
+  if (!result.detailsArchived && (counted.home !== expectedHome || counted.away !== expectedAway)) {
     pushIssue(issues, {
       severity: 'warning',
       code: 'scoreline_event_mismatch',

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
-import { currentSaveStorage, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-schema';
+import { createCurrentSavePersistStorage, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-schema';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
 import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
@@ -13,6 +13,7 @@ import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { enforceStorageLimits } from '../engine/season/storage-limits';
+import { archiveCompletedMatchDetails, boundWorldStorageMetadata, type StorageCleanupResult } from './save-compaction';
 
 interface GameStore {
   world: GameWorld | null;
@@ -34,9 +35,9 @@ interface GameStore {
   dismissAchievement: () => void;
 
   newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => void;
-  advanceWindow: () => void;
-  batchAdvance: (count: number) => void;
-  advanceUntil: (type: 'cup' | 'season_end') => void;
+  advanceWindow: () => Promise<void>;
+  batchAdvance: (count: number) => Promise<void>;
+  advanceUntil: (type: 'cup' | 'season_end') => Promise<void>;
   /** Sets the legacy primary favorite. */
   setFavoriteTeam: (teamId: string | null) => void;
   /** Sets the entire favorites list (max 3 entries). */
@@ -60,7 +61,51 @@ interface GameStore {
   getCurrentWindow: () => CalendarWindow | null;
   getTeamsByLeague: (level: 1 | 2 | 3) => string[];
   isGameOver: () => boolean;
-  trimStorage: () => void;
+  trimStorage: () => StorageCleanupResult | null;
+}
+
+type PersistedGameState = Pick<GameStore,
+  | 'world'
+  | 'initialized'
+  | 'lastResults'
+  | 'lastNews'
+  | 'favoriteTeamId'
+  | 'favoriteTeamIds'
+>;
+
+const EMPTY_PERSISTED_RESULTS: MatchResult[] = [];
+const EMPTY_PERSISTED_NEWS: NewsItem[] = [];
+
+function reconstructLastResults(world: GameWorld | null): MatchResult[] {
+  if (!world) return [];
+  for (let index = world.seasonState.calendar.length - 1; index >= 0; index--) {
+    const window = world.seasonState.calendar[index];
+    if (window.completed && window.results.length > 0) return window.results;
+  }
+  return [];
+}
+
+function mergePersistedGameState(
+  persistedState: unknown,
+  current: GameStore,
+): GameStore {
+  const persisted = persistedState as PersistedGameState;
+  const merged = { ...current, ...persisted };
+  return {
+    ...merged,
+    lastResults: reconstructLastResults(merged.world),
+    lastNews: merged.world?.newsLog.slice(-30) ?? [],
+  };
+}
+
+function yieldForAdvanceFeedback(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
 
 function hashActionSeed(input: string): number {
@@ -101,10 +146,11 @@ export const useGameStore = create<GameStore>()(
         set({ world, initialized: true, lastResults: [], lastNews: [] });
       },
 
-      advanceWindow: () => {
-        const { world } = get();
-        if (!world) return;
+      advanceWindow: async () => {
+        const { world, isAdvancing } = get();
+        if (!world || isAdvancing) return;
         set({ isAdvancing: true });
+        await yieldForAdvanceFeedback();
         try {
           const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
           // Settle bets
@@ -119,26 +165,28 @@ export const useGameStore = create<GameStore>()(
               coins += Math.round(bet.amount * bet.odds);
             }
           }
-          const updatedWorld = { ...result.world, coins, bets: [] as typeof result.world.bets };
+          const updatedWorld = boundWorldStorageMetadata({
+            ...result.world,
+            coins,
+            bets: [] as typeof result.world.bets,
+          });
 
           // Detect new achievements (compare against pre-advance state)
           const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
           const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
 
           set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false, advanceTick: get().advanceTick + 1, newAchievements: [...get().newAchievements, ...newAch] });
-          if (updatedWorld.seasonState.completed || updatedWorld.newsLog.length > 300) {
-            get().trimStorage();
-          }
         } catch (e) {
           console.error('Error advancing window:', e);
           set({ isAdvancing: false });
         }
       },
 
-      batchAdvance: (count: number) => {
+      batchAdvance: async (count: number) => {
         let { world } = get();
-        if (!world) return;
+        if (!world || get().isAdvancing) return;
         set({ isAdvancing: true });
+        await yieldForAdvanceFeedback();
         try {
           let allResults: MatchResult[] = [];
           let allNews: NewsItem[] = [];
@@ -152,7 +200,7 @@ export const useGameStore = create<GameStore>()(
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          world = enforceStorageLimits(world);
+          world = boundWorldStorageMetadata(enforceStorageLimits(world));
           set({ world, lastResults: allResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in batch advance:', e);
@@ -160,10 +208,11 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      advanceUntil: (type: 'cup' | 'season_end') => {
+      advanceUntil: async (type: 'cup' | 'season_end') => {
         let { world } = get();
-        if (!world) return;
+        if (!world || get().isAdvancing) return;
         set({ isAdvancing: true });
+        await yieldForAdvanceFeedback();
         try {
           let allNews: NewsItem[] = [];
           let lastResults: MatchResult[] = [];
@@ -181,7 +230,7 @@ export const useGameStore = create<GameStore>()(
             safety++;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          world = enforceStorageLimits(world);
+          world = boundWorldStorageMetadata(enforceStorageLimits(world));
           set({ world, lastResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in advanceUntil:', e);
@@ -484,19 +533,10 @@ export const useGameStore = create<GameStore>()(
 
       trimStorage: () => {
         const { world } = get();
-        if (!world) return;
-        // Trim newsLog to last 200
-        const trimmedNews = world.newsLog.length > 200 ? world.newsLog.slice(-200) : world.newsLog;
-        // Trim old calendar events (keep results but strip detailed events for old seasons)
-        const cal = world.seasonState.calendar.map(w => {
-          if (w.completed && w.results.length > 0) {
-            return { ...w, results: w.results.map(r => ({ ...r, events: r.events.slice(0, 5) })) };
-          }
-          return w;
-        });
-        set({
-          world: { ...world, newsLog: trimmedNews, seasonState: { ...world.seasonState, calendar: cal } },
-        });
+        if (!world) return null;
+        const cleanup = archiveCompletedMatchDetails(world);
+        set({ world: cleanup.world });
+        return cleanup;
       },
     }),
     {
@@ -504,15 +544,19 @@ export const useGameStore = create<GameStore>()(
       version: SAVE_SCHEMA_VERSION,
       // Validate the complete current envelope before Zustand can hydrate it.
       // Invalid payloads are quarantined and removed from the active key.
-      storage: createJSONStorage(() => currentSaveStorage),
+      storage: createCurrentSavePersistStorage<PersistedGameState>(),
       partialize: (state) => ({
         world: state.world,
         initialized: state.initialized,
-        lastResults: state.lastResults,
-        lastNews: state.lastNews,
+        // Both batches already exist in the current calendar/news log and are
+        // reconstructed on hydration. Keep empty schema fields for readable
+        // current-save validation without duplicating a large match batch.
+        lastResults: EMPTY_PERSISTED_RESULTS,
+        lastNews: EMPTY_PERSISTED_NEWS,
         favoriteTeamId: state.favoriteTeamId,
         favoriteTeamIds: state.favoriteTeamIds,
       }),
+      merge: mergePersistedGameState,
     }
   )
 );

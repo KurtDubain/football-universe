@@ -102,6 +102,8 @@ export interface MatchResult {
     homeExpectedGoals: number;
     awayExpectedGoals: number;
   };
+  /** User explicitly archived replay-only detail to reduce save size. */
+  detailsArchived?: boolean;
 }
 
 export interface MatchdaySnapshot {

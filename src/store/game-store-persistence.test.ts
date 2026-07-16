@@ -58,4 +58,23 @@ describe('game store current-save persistence', () => {
     expect(useGameStore.getState().world?.seed).toBe(24680);
     expect(useGameStore.getState().favoriteTeamIds).toEqual([favorite]);
   });
+
+  it('does not duplicate result/news batches and reconstructs them on hydration', async () => {
+    useGameStore.getState().newGame(13579);
+    await useGameStore.getState().advanceWindow();
+    const resultCount = useGameStore.getState().lastResults.length;
+    expect(resultCount).toBeGreaterThan(0);
+
+    __flushCompressedStorageForTests();
+    const exported = JSON.parse(exportCurrentSave(SAVE_STORAGE_KEY));
+    expect(exported.state.lastResults).toEqual([]);
+    expect(exported.state.lastNews).toEqual([]);
+
+    useGameStore.setState({ world: null, initialized: false, lastResults: [], lastNews: [] });
+    replaceCompressedStorageItem(SAVE_STORAGE_KEY, JSON.stringify(exported));
+    await useGameStore.persist.rehydrate();
+
+    expect(useGameStore.getState().lastResults).toHaveLength(resultCount);
+    expect(useGameStore.getState().lastNews).toEqual(useGameStore.getState().world?.newsLog.slice(-30));
+  });
 });

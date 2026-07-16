@@ -184,6 +184,7 @@ export default function MatchLive(props: Props) {
 function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
   const [muted, setMuted] = useState(true);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
   const logRef = useRef<HTMLDivElement>(null);
 
   const ht = teamBases[result.homeTeamId];
@@ -221,22 +222,28 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => setPageVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   // Tick — slowed down for broadcast-style pacing
   // At 1x: 280ms per game minute → ~25s for 90 mins (was 10.8s, too fast)
   useEffect(() => {
-    if (playback.phase !== 'playing') return;
+    if (playback.phase !== 'playing' || !pageVisible) return;
     const interval = Math.max(60, 280 / playback.speed);
     const timer = window.setInterval(() => {
       dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
     }, interval);
     return () => clearInterval(timer);
-  }, [playback.phase, playback.speed, allEvents, timelineMax, result.homeTeamId]);
+  }, [playback.phase, playback.speed, allEvents, timelineMax, result.homeTeamId, pageVisible]);
 
   useEffect(() => {
-    if (!isBreak) return;
+    if (!isBreak || !pageVisible) return;
     const timer = window.setTimeout(() => dispatch({ type: 'resumeBreak' }), 2000);
     return () => clearTimeout(timer);
-  }, [isBreak]);
+  }, [isBreak, pageVisible]);
 
   useEffect(() => {
     if (muted || !playback.flashEvent) return;
@@ -312,6 +319,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="比赛直播回放"
+      data-fixture-id={result.fixtureId}
       className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
       <div className={`bg-slate-900 rounded-2xl w-full max-w-lg max-h-[calc(100dvh-16px)] overflow-y-auto shadow-2xl animate-scale-in motion-reduce:animate-none border ${
@@ -396,6 +404,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             awayMatchday={result.awayMatchday}
             finished={finished}
             halftime={isBreak}
+            active={playback.phase === 'playing' && pageVisible}
           />
         </div>
 

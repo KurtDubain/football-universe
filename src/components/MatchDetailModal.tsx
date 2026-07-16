@@ -572,6 +572,11 @@ function PostMatchView({
       </div>
 
       {/* ──── Full events list ──── */}
+      {result.detailsArchived && (
+        <div className="px-6 py-3 text-xs text-amber-300 bg-amber-950/20 border-b border-amber-800/30">
+          该场比赛的事件回放与出场阵容快照已被清理，比分和技术统计仍完整保留。
+        </div>
+      )}
       {result.events.length > 0 && (
         <div className="px-6 py-4 pb-5">
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">

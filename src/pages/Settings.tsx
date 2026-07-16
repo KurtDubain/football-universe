@@ -9,6 +9,7 @@ import { APP_VERSION } from '../version';
 import { setLanguage } from '../i18n';
 import { BALANCE } from '../config/balance';
 import type { GameWorld } from '../engine/season/season-manager';
+import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 
 const DevDataHealthPanel = import.meta.env.DEV
   ? lazy(() => import('../components/DataHealthPanel'))
@@ -27,15 +28,20 @@ function SettingsContent({ world }: { world: GameWorld }) {
   const setFavoriteTeams = useGameStore((s) => s.setFavoriteTeams);
   const toggleFavoriteTeam = useGameStore((s) => s.toggleFavoriteTeam);
   const resetGame = useGameStore((s) => s.resetGame);
+  const trimStorage = useGameStore((s) => s.trimStorage);
   const [showConfirm, setShowConfirm] = useState(false);
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const saveKey = SAVE_STORAGE_KEY;
   let saveSize = '未知';
+  let saveBytes = 0;
   try {
     const raw = localStorage.getItem(saveKey);
-    if (raw) saveSize = `${(raw.length / 1024).toFixed(0)} KB`;
+    saveBytes = conservativeUTF16Bytes(raw);
+    if (raw) saveSize = saveBytes >= 1024 * 1024
+      ? `${(saveBytes / 1024 / 1024).toFixed(2)} MB`
+      : `${(saveBytes / 1024).toFixed(0)} KB`;
   } catch {
     saveSize = '不可用';
   }
@@ -211,7 +217,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <span className="text-slate-500">球员总数</span>
           <span className="text-slate-200">{Object.values(world.squads).reduce((s, sq) => s + sq.length, 0)} 名</span>
           <span className="text-slate-500">存档大小</span>
-          <span className="text-slate-200">{saveSize}</span>
+          <span className={isSaveNearCapacity(saveBytes) ? 'text-amber-300' : 'text-slate-200'}>{saveSize}</span>
           <span className="text-slate-500">版本</span>
           <span className="text-slate-200">v{APP_VERSION}</span>
         </div>
@@ -316,6 +322,23 @@ function SettingsContent({ world }: { world: GameWorld }) {
               }}
             />
           </label>
+
+          <button
+            onClick={() => {
+              if (!window.confirm('清理后将无法查看已完成比赛的事件回放和出场阵容快照。比分、技术统计、球员累计、奖项和财务都会保留。确定继续吗？')) return;
+              const cleanup = trimStorage();
+              if (!cleanup || cleanup.archivedResults === 0) {
+                setSaveMessage('当前没有可清理的已完成比赛详情');
+                return;
+              }
+              const reducedKB = Math.max(0, cleanup.rawBytesBefore - cleanup.rawBytesAfter) / 1024;
+              setSaveMessage(`已清理 ${cleanup.archivedResults} 场比赛的 ${cleanup.removedEvents} 条事件和 ${cleanup.removedMatchdaySnapshots} 份出场快照，原始存档减少约 ${reducedKB.toFixed(0)} KB；比分、技术统计和累计数据已保留。`);
+            }}
+            className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors cursor-pointer text-left"
+          >
+            清理详细战报
+            <span className="block text-[10px] text-slate-500 mt-0.5">删除已完成比赛的事件回放和出场阵容快照，保留赛果与统计</span>
+          </button>
         </div>
         {saveMessage && <p className="mt-2 text-xs text-slate-400">{saveMessage}</p>}
       </div>

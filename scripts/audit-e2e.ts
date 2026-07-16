@@ -20,7 +20,7 @@ type SeasonResult = {
 type AuditStoreState = {
   world: GameWorld | null;
   newGame: (seed: number) => void;
-  advanceWindow: () => void;
+  advanceWindow: () => Promise<void>;
 };
 
 type BrowserAuditWindow = Window & {

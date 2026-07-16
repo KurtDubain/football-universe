@@ -216,7 +216,11 @@ export function spawnGrassKick(cx: number, cy: number, dx: number, dy: number): 
  * Mutates each Particle in place (cheap, hot path); returns a fresh array
  * containing the survivors (also sorted for render-pass batching).
  */
-export function updateAndCullParticles(particles: Particle[], height: number): Particle[] {
+export function updateAndCullParticles(
+  particles: Particle[],
+  height: number,
+  particleCap: number = PARTICLE_CAP,
+): Particle[] {
   const live: Particle[] = [];
   for (const ptcl of particles) {
     ptcl.life--;
@@ -241,7 +245,7 @@ export function updateAndCullParticles(particles: Particle[], height: number): P
     live.push(ptcl);
   }
   // Bound at PARTICLE_CAP — keep youngest if exceeded
-  const capped = live.length > PARTICLE_CAP ? live.slice(-PARTICLE_CAP) : live;
+  const capped = live.length > particleCap ? live.slice(-particleCap) : live;
   // Render order: normal-blend first, then additive on top so glow stacks visibly.
   capped.sort((a, b) => (a.blend === 'add' ? 1 : 0) - (b.blend === 'add' ? 1 : 0));
   return capped;

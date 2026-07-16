@@ -180,6 +180,33 @@ describe('MatchLive playback state machine', () => {
     root = createRoot(container);
   });
 
+  it('pauses the playback clock while the page is hidden', () => {
+    let visibility: DocumentVisibilityState = 'visible';
+    const descriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility,
+    });
+    try {
+      render(<MatchLive result={makeResult('live-hidden')} teamBases={teamBases} onClose={() => undefined} />);
+      advance(280);
+      expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+
+      visibility = 'hidden';
+      act(() => document.dispatchEvent(new Event('visibilitychange')));
+      advance(2000);
+      expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+
+      visibility = 'visible';
+      act(() => document.dispatchEvent(new Event('visibilitychange')));
+      advance(280);
+      expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
+    } finally {
+      if (descriptor) Object.defineProperty(document, 'visibilityState', descriptor);
+      else Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    }
+  });
+
   it('plays dedicated extra-time and shootout breaks without adding penalties to match score', () => {
     const events: MatchEvent[] = [
       { minute: 95, type: 'goal', teamId: 'home', description: '加时进球' },
@@ -281,6 +308,34 @@ describe('ResultAnimation completion lifecycle', () => {
     />);
     advance(800);
     expect(onComplete).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps match detail and live replay as distinct controls', () => {
+    const onResultClick = vi.fn();
+    const onLiveView = vi.fn();
+    const result = makeResult('result-controls', [], { roundLabel: 'Final' });
+    render(<ResultAnimation
+      results={[result]}
+      teamBases={teamBases}
+      onComplete={() => undefined}
+      onResultClick={onResultClick}
+      onLiveView={onLiveView}
+    />);
+
+    act(() => button('跳过').click());
+    const controls = Array.from(container.querySelectorAll('button'));
+    const detail = controls.find(control => control.getAttribute('aria-label')?.startsWith('查看 '));
+    const replay = controls.find(control => control.textContent?.trim() === '观看直播回放');
+    expect(detail).toBeTruthy();
+    expect(replay).toBeTruthy();
+
+    act(() => detail?.click());
+    expect(onResultClick).toHaveBeenCalledWith(result);
+    expect(onLiveView).not.toHaveBeenCalled();
+
+    act(() => replay?.click());
+    expect(onLiveView).toHaveBeenCalledWith(result);
+    expect(onResultClick).toHaveBeenCalledTimes(1);
   });
 });
 

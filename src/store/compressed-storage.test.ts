@@ -1,10 +1,70 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { compressedStorage, __flushCompressedStorageForTests } from './compressed-storage';
+import { compressToUTF16 } from 'lz-string';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  compressedStorage,
+  __flushCompressedStorageForTests,
+  __resetCompressedStorageForTests,
+  queueCompressedJSONValue,
+} from './compressed-storage';
+import type { CompressionWorkerRequest, CompressionWorkerResponse } from './compression-worker';
+
+class FakeCompressionWorker {
+  static latest: FakeCompressionWorker | null = null;
+  readonly requests: CompressionWorkerRequest[] = [];
+  private messageListener: ((event: MessageEvent<CompressionWorkerResponse>) => void) | null = null;
+  private errorListener: ((event: ErrorEvent) => void) | null = null;
+
+  constructor() {
+    FakeCompressionWorker.latest = this;
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    if (type === 'message') {
+      this.messageListener = listener as (event: MessageEvent<CompressionWorkerResponse>) => void;
+    } else if (type === 'error') {
+      this.errorListener = listener as (event: ErrorEvent) => void;
+    }
+  }
+
+  postMessage(request: CompressionWorkerRequest): void {
+    this.requests.push(request);
+  }
+
+  respond(index: number): void {
+    const request = this.requests[index];
+    const text = request.serialized ? String(request.payload) : JSON.stringify(request.payload);
+    this.messageListener?.({
+      data: {
+        name: request.name,
+        revision: request.revision,
+        compressed: compressToUTF16(text),
+      },
+    } as MessageEvent<CompressionWorkerResponse>);
+  }
+
+  fail(): void {
+    this.errorListener?.({ message: 'worker failed' } as ErrorEvent);
+  }
+
+  terminate(): void {}
+}
+
+function readJSON(name: string): unknown {
+  return JSON.parse(compressedStorage.getItem(name) as string);
+}
 
 beforeEach(() => {
+  __resetCompressedStorageForTests();
   __flushCompressedStorageForTests();
   localStorage.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  __resetCompressedStorageForTests();
+  FakeCompressionWorker.latest = null;
 });
 
 describe('compressedStorage', () => {
@@ -53,6 +113,19 @@ describe('compressedStorage', () => {
     expect(onDisk).not.toBeNull();
     // At least 2× compression on a payload this redundant
     expect(onDisk!.length).toBeLessThan(payload.length / 2);
+  });
+
+  it('reports conservative on-disk bytes after a successful write', () => {
+    const onSize = vi.fn();
+    window.addEventListener('football-save-size', onSize);
+    compressedStorage.setItem('size-event', JSON.stringify({ season: 20 }));
+    __flushCompressedStorageForTests();
+
+    const onDisk = localStorage.getItem('size-event')!;
+    expect(onSize).toHaveBeenCalledWith(expect.objectContaining({
+      detail: { name: 'size-event', bytes: onDisk.length * 2 },
+    }));
+    window.removeEventListener('football-save-size', onSize);
   });
 
   it('reads an uncompressed current JSON representation', () => {
@@ -113,5 +186,63 @@ describe('compressedStorage', () => {
     __flushCompressedStorageForTests();
     expect(compressedStorage.getItem('quota-save')).toBe(value);
     window.removeEventListener('football-save-error', onError);
+  });
+
+  it('serializes objects in the worker and ignores stale revision responses', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeCompressionWorker);
+
+    queueCompressedJSONValue('worker-save', { season: 1 });
+    vi.advanceTimersByTime(250);
+    const worker = FakeCompressionWorker.latest!;
+    expect(worker.requests).toHaveLength(1);
+    expect(localStorage.getItem('worker-save')).toBeNull();
+
+    queueCompressedJSONValue('worker-save', { season: 2 });
+    vi.advanceTimersByTime(250);
+    expect(worker.requests).toHaveLength(2);
+
+    worker.respond(0);
+    expect(localStorage.getItem('worker-save')).toBeNull();
+
+    worker.respond(1);
+    expect(readJSON('worker-save')).toEqual({ season: 2 });
+  });
+
+  it('falls back synchronously to the newest value when the worker fails', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeCompressionWorker);
+
+    queueCompressedJSONValue('worker-fallback', { season: 9 });
+    vi.advanceTimersByTime(250);
+    FakeCompressionWorker.latest!.fail();
+
+    expect(readJSON('worker-fallback')).toEqual({ season: 9 });
+    expect(localStorage.getItem('worker-fallback')).not.toBeNull();
+  });
+
+  it('pagehide commits an in-flight revision and rejects its later worker response', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeCompressionWorker);
+
+    queueCompressedJSONValue('pagehide-worker', { season: 12 });
+    vi.advanceTimersByTime(250);
+    const worker = FakeCompressionWorker.latest!;
+    window.dispatchEvent(new Event('pagehide'));
+    expect(readJSON('pagehide-worker')).toEqual({ season: 12 });
+
+    worker.respond(0);
+    expect(readJSON('pagehide-worker')).toEqual({ season: 12 });
+  });
+
+  it('visibility hide synchronously commits the newest pending revision', () => {
+    queueCompressedJSONValue('visibility-save', { season: 14 });
+    const visibilityState = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(readJSON('visibility-save')).toEqual({ season: 14 });
+    expect(localStorage.getItem('visibility-save')).not.toBeNull();
+    visibilityState.mockRestore();
   });
 });

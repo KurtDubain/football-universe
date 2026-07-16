@@ -7,6 +7,8 @@ import NewsTicker from '../components/NewsTicker';
 import AchievementToast from '../components/AchievementToast';
 import { AmbientGlow } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
+import { SAVE_STORAGE_KEY } from '../store/save-schema';
+import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 
 interface LayoutProps {
   children: ReactNode;
@@ -72,6 +74,13 @@ export default function Layout({ children }: LayoutProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [saveNearCapacity, setSaveNearCapacity] = useState(() => {
+    try {
+      return isSaveNearCapacity(conservativeUTF16Bytes(localStorage.getItem(SAVE_STORAGE_KEY)));
+    } catch {
+      return false;
+    }
+  });
   const [showFloatingBtn, setShowFloatingBtn] = useState(() => {
     try { return localStorage.getItem('floating-btn') === '1'; } catch { return false; }
   });
@@ -80,6 +89,15 @@ export default function Layout({ children }: LayoutProps) {
     const handleSaveError = () => setSaveError(true);
     window.addEventListener('football-save-error', handleSaveError);
     return () => window.removeEventListener('football-save-error', handleSaveError);
+  }, []);
+
+  useEffect(() => {
+    const handleSaveSize = (event: Event) => {
+      const detail = (event as CustomEvent<{ name: string; bytes: number }>).detail;
+      if (detail.name === SAVE_STORAGE_KEY) setSaveNearCapacity(isSaveNearCapacity(detail.bytes));
+    };
+    window.addEventListener('football-save-size', handleSaveSize);
+    return () => window.removeEventListener('football-save-size', handleSaveSize);
   }, []);
 
   useEffect(() => {
@@ -410,6 +428,14 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* News ticker at top */}
         <NewsTicker news={world?.newsLog.slice(-20) ?? []} />
+
+        {saveNearCapacity && (
+          <div role="status" className="px-3 sm:px-5 py-2 bg-amber-950/60 border-b border-amber-700/50 text-amber-100 text-xs flex items-center gap-2">
+            <span className="flex-1">存档已接近浏览器容量上限，请及时导出备份或清理已完成比赛的详细回放。</span>
+            <NavLink to="/settings" className="shrink-0 text-amber-300 hover:text-white underline">前往设置</NavLink>
+            <button type="button" aria-label="关闭存档容量提示" onClick={() => setSaveNearCapacity(false)} className="w-8 h-8 shrink-0 text-amber-300 hover:text-white">×</button>
+          </div>
+        )}
 
         {/* Content */}
         <main className={`flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'pb-20 sm:pb-20' : ''}`} key={location.pathname}>

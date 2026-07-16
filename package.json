@@ -17,6 +17,9 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "audit:current": "tsx scripts/audit-e2e.ts",
+    "audit:advance-performance": "tsx scripts/audit-advance-performance.ts",
+    "audit:animation-performance": "tsx scripts/audit-animation-performance.ts",
+    "audit:long-save": "tsx scripts/audit-long-save.ts",
     "verify:match": "tsx scripts/verify-match-presentation.ts"
   },
   "dependencies": {

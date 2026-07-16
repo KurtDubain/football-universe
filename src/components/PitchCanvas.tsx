@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useRef, useMemo } from 'react';
 import type { MatchdaySnapshot, MatchEvent } from '../types/match';
 import { lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence } from './pitch-canvas/sequence';
@@ -15,6 +15,12 @@ import {
   GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES, SHOT_OUTCOME_MAX_FRAMES,
 } from './pitch-canvas/renderer';
 import { BASE_FORMATION, type Particle, type PassPhase, type PlayerState } from './pitch-canvas/types';
+import {
+  degradeRenderBudget,
+  selectRenderBudget,
+  shouldDegradeRenderBudget,
+  type RenderBudget,
+} from './pitch-canvas/render-budget';
 
 interface Props {
   minute: number;
@@ -28,6 +34,7 @@ interface Props {
   awayMatchday?: MatchdaySnapshot;
   finished: boolean;
   halftime: boolean;
+  active: boolean;
 }
 
 interface PitchDebugState {
@@ -39,6 +46,19 @@ interface PitchDebugState {
   ball: { x: number; y: number };
   homeOnField: Array<{ id: string; number: number; slot: number }>;
   awayOnField: Array<{ id: string; number: number; slot: number }>;
+  rendering: {
+    active: boolean;
+    pauseReason: 'none' | 'hidden' | 'covered' | 'paused' | 'break' | 'completed';
+    quality: RenderBudget['quality'];
+    dpr: number;
+    particleCount: number;
+    particleCap: number;
+    renderedFrames: number;
+    averageRenderMs: number;
+    averageFrameIntervalMs: number;
+    maxFrameIntervalMs: number;
+    maxConsecutiveSlowFrames: number;
+  };
 }
 
 type PitchDebugWindow = Window & {
@@ -50,10 +70,10 @@ const LOGICAL_WIDTH = 520;
 const LOGICAL_HEIGHT = 280;
 const FIXED_FRAME_MS = 1000 / 60;
 
-export default function PitchCanvas(props: Props) {
+function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
-    homeMatchday, awayMatchday, halftime,
+    homeMatchday, awayMatchday, halftime, finished, active,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,6 +93,7 @@ export default function PitchCanvas(props: Props) {
   const particlesRef = useRef<Particle[]>([]);
   const pendingImpactSceneRef = useRef<EventScene | null>(null);
   const triggeredImpactKeyRef = useRef<string | null>(null);
+  const wakeRenderLoopRef = useRef<() => void>(() => undefined);
 
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
   const playerPosRef = useRef<PlayerState[]>(
@@ -110,6 +131,19 @@ export default function PitchCanvas(props: Props) {
     ball: { x: 0.5, y: 0.5 },
     homeOnField: [],
     awayOnField: [],
+    rendering: {
+      active: true,
+      pauseReason: 'none',
+      quality: 'full',
+      dpr: 1,
+      particleCount: 0,
+      particleCap: 350,
+      renderedFrames: 0,
+      averageRenderMs: 0,
+      averageFrameIntervalMs: 0,
+      maxFrameIntervalMs: 0,
+      maxConsecutiveSlowFrames: 0,
+    },
   });
 
   const eventScene = useMemo(
@@ -129,15 +163,19 @@ export default function PitchCanvas(props: Props) {
   // Live snapshot of props for the long-running rAF loop to read from.
   // Avoids restarting the rAF chain on every minute / flashEvent change.
   const liveRef = useRef({
-    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
     eventScene, homeRoster, awayRoster,
   });
   useEffect(() => {
     liveRef.current = {
-      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, targetShift,
+      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
       eventScene, homeRoster, awayRoster,
     };
-  });
+    wakeRenderLoopRef.current();
+  }, [
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active,
+    targetShift, eventScene, homeRoster, awayRoster,
+  ]);
 
   useEffect(() => {
     const debugWindow = window as PitchDebugWindow;
@@ -168,13 +206,52 @@ export default function PitchCanvas(props: Props) {
     const P = 10;
     const fw = W - P * 2, fh = H - P * 2;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    let renderBudget = selectRenderBudget({
+      cssWidth: canvas.clientWidth || LOGICAL_WIDTH,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      reducedMotion,
+      hardwareConcurrency: navigator.hardwareConcurrency,
+      deviceMemory,
+    });
+    let currentDpr = 1;
+    const renderDurations: number[] = [];
+    const frameIntervals: number[] = [];
+    let renderedFrames = 0;
+    let consecutiveSlowFrames = 0;
+    let maxConsecutiveSlowFrames = 0;
+    let maxFrameIntervalMs = 0;
+
+    const average = (values: number[]): number => values.length === 0
+      ? 0
+      : values.reduce((sum, value) => sum + value, 0) / values.length;
+
+    function updateRenderingDebug(
+      activeNow: boolean,
+      pauseReason: PitchDebugState['rendering']['pauseReason'],
+    ): void {
+      debugStateRef.current.rendering = {
+        active: activeNow,
+        pauseReason,
+        quality: renderBudget.quality,
+        dpr: currentDpr,
+        particleCount: particlesRef.current.length,
+        particleCap: renderBudget.particleCap,
+        renderedFrames,
+        averageRenderMs: average(renderDurations),
+        averageFrameIntervalMs: average(frameIntervals),
+        maxFrameIntervalMs,
+        maxConsecutiveSlowFrames,
+      };
+    }
 
     function resizeCanvas(): void {
       // clientWidth is layout-space width and is unaffected by the modal's
       // scale-in transform, so the initial backing buffer reaches full DPR.
       const cssWidth = canvas.clientWidth || LOGICAL_WIDTH;
       const cssHeight = cssWidth * LOGICAL_HEIGHT / LOGICAL_WIDTH;
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const dpr = Math.min(window.devicePixelRatio || 1, renderBudget.dprCap);
+      currentDpr = dpr;
       const nextWidth = Math.round(cssWidth * dpr);
       const nextHeight = Math.round(cssHeight * dpr);
       if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
@@ -189,11 +266,53 @@ export default function PitchCanvas(props: Props) {
         0,
         0,
       );
+      updateRenderingDebug(debugStateRef.current.rendering.active, debugStateRef.current.rendering.pauseReason);
     }
 
     resizeCanvas();
     const resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(canvas);
+
+    function addParticles(spawned: Particle[]): void {
+      const density = Math.min(1, renderBudget.particleCap / 350);
+      const keep = Math.max(1, Math.round(spawned.length * density));
+      if (keep >= spawned.length) {
+        particlesRef.current.push(...spawned);
+      } else {
+        const stride = spawned.length / keep;
+        for (let index = 0; index < keep; index++) {
+          particlesRef.current.push(spawned[Math.floor(index * stride)]);
+        }
+      }
+      if (particlesRef.current.length > renderBudget.particleCap) {
+        particlesRef.current = particlesRef.current.slice(-renderBudget.particleCap);
+      }
+    }
+
+    function recordRenderDuration(duration: number): void {
+      renderedFrames++;
+      renderDurations.push(duration);
+      if (renderDurations.length > 60) renderDurations.shift();
+      updateRenderingDebug(true, 'none');
+    }
+
+    function recordFrameInterval(interval: number): void {
+      frameIntervals.push(interval);
+      if (frameIntervals.length > 60) frameIntervals.shift();
+      maxFrameIntervalMs = Math.max(maxFrameIntervalMs, interval);
+      consecutiveSlowFrames = interval > 33 ? consecutiveSlowFrames + 1 : 0;
+      maxConsecutiveSlowFrames = Math.max(maxConsecutiveSlowFrames, consecutiveSlowFrames);
+      if (renderBudget.quality === 'reduced' || renderBudget.quality === 'degraded') return;
+      if (!shouldDegradeRenderBudget({
+        renderedFrames,
+        consecutiveSlowFrames,
+        averageFrameIntervalMs: average(frameIntervals),
+        averageRenderMs: average(renderDurations),
+      })) return;
+      renderBudget = degradeRenderBudget(renderBudget);
+      particlesRef.current = particlesRef.current.slice(-renderBudget.particleCap);
+      resizeCanvas();
+    }
 
     function loadSequence(phases: PassPhase[], seed: number): void {
       sequenceSeedRef.current = seed;
@@ -223,7 +342,7 @@ export default function PitchCanvas(props: Props) {
         const goalColor = scene.attackingHome ? currentHomeColor : currentAwayColor;
         goalCelebColor.current = goalColor;
         goalCelebRightSide.current = scene.attackingHome;
-        particlesRef.current.push(...spawnGoalBurst(targetX, targetY, goalColor, H - P));
+        addParticles(spawnGoalBurst(targetX, targetY, goalColor, H - P));
         return;
       }
 
@@ -232,7 +351,7 @@ export default function PitchCanvas(props: Props) {
       shotOutcomeTargetRef.current = { x: targetX, y: targetY };
       shotOutcomeAttackingHomeRef.current = scene.attackingHome;
       if (scene.outcome === 'save' || scene.outcome === 'block') {
-        particlesRef.current.push(...spawnTackleSparks(targetX, targetY));
+        addParticles(spawnTackleSparks(targetX, targetY));
         cameraShakeRef.current = scene.outcome === 'block' ? 12 : 8;
         cameraShakeMax.current = cameraShakeRef.current;
       }
@@ -255,6 +374,7 @@ export default function PitchCanvas(props: Props) {
     }
 
     function renderFrame() {
+      const renderStarted = performance.now();
       frameRef.current++;
       const f = frameRef.current;
       // Read live props from ref (no closure capture → no rAF restart on prop change)
@@ -303,6 +423,7 @@ export default function PitchCanvas(props: Props) {
       if (halftime) {
         drawHalftime(ctx, W, H);
         ctx.restore();
+        recordRenderDuration(performance.now() - renderStarted);
         return;
       }
 
@@ -320,7 +441,7 @@ export default function PitchCanvas(props: Props) {
           // Check for interception mid-pass
           if (phase.kind === 'pass' && phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
             interceptedRef.current = true;
-            particlesRef.current.push(...spawnTackleSparks(ballPos.current.x, ballPos.current.y));
+            addParticles(spawnTackleSparks(ballPos.current.x, ballPos.current.y));
             cameraShakeRef.current = Math.max(cameraShakeRef.current, 8);
             // Keep `cameraShakeMax` in sync so the attenuated sine still has
             // proper amplitude — otherwise a tackle right after a goal
@@ -333,7 +454,7 @@ export default function PitchCanvas(props: Props) {
             phaseStateRef.current = 'holding';
             phaseFrameRef.current = 0;
             // Ball arrival = grass kick effect
-            particlesRef.current.push(...spawnGrassKick(ballPos.current.x, ballPos.current.y, 0, 1));
+            addParticles(spawnGrassKick(ballPos.current.x, ballPos.current.y, 0, 1));
           }
         } else if (phaseStateRef.current === 'holding' && phaseFrameRef.current >= phase.hold) {
           const newPhase = sequenceRef.current[phaseIdxRef.current + 1];
@@ -354,7 +475,7 @@ export default function PitchCanvas(props: Props) {
               const { source, dx, dy } = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
               ballSourceRef.current = source;
               // Grass kick on pass start
-              particlesRef.current.push(...spawnGrassKick(source.x, source.y, dx, dy));
+              addParticles(spawnGrassKick(source.x, source.y, dx, dy));
             }
           }
         }
@@ -473,10 +594,11 @@ export default function PitchCanvas(props: Props) {
         ball: { x: ballNX, y: ballNY },
         homeOnField: visibleHome.map(player => ({ id: player.playerId, number: player.playerNumber, slot: player.slotIndex })),
         awayOnField: visibleAway.map(player => ({ id: player.playerId, number: player.playerNumber, slot: player.slotIndex })),
+        rendering: debugStateRef.current.rendering,
       };
 
       // ── Particles update + draw ──
-      particlesRef.current = updateAndCullParticles(particlesRef.current, H);
+      particlesRef.current = updateAndCullParticles(particlesRef.current, H, renderBudget.particleCap);
       renderParticles(ctx, particlesRef.current);
 
       // ── Ball trail ──
@@ -529,6 +651,7 @@ export default function PitchCanvas(props: Props) {
 
       // ── White flash on goal (drawn on top of everything, no shake) ──
       applyWhiteFlash(ctx, flashWhiteRef, W, H);
+      recordRenderDuration(performance.now() - renderStarted);
 
     }
 
@@ -539,26 +662,85 @@ export default function PitchCanvas(props: Props) {
     };
     debugWindow.advanceTime = advanceTime;
 
+    let pageVisible = document.visibilityState !== 'hidden';
+    let intersectionVisible = true;
     let lastTimestamp = performance.now();
-    let accumulator = FIXED_FRAME_MS;
+    let accumulator = renderBudget.frameStepMs;
     let raf = 0;
+
+    function getPauseReason(): PitchDebugState['rendering']['pauseReason'] {
+      if (!pageVisible) return 'hidden';
+      if (!intersectionVisible) return 'covered';
+      if (liveRef.current.finished) return 'completed';
+      if (liveRef.current.halftime) return 'break';
+      if (!liveRef.current.active) return 'paused';
+      return 'none';
+    }
+
+    function scheduleFrame(): void {
+      if (raf === 0) raf = requestAnimationFrame(animate);
+    }
+
+    function wakeRenderLoop(): void {
+      lastTimestamp = performance.now();
+      accumulator = renderBudget.frameStepMs;
+      scheduleFrame();
+    }
+
     function animate(timestamp: number): void {
+      raf = 0;
+      const pauseReason = getPauseReason();
+      if (pauseReason !== 'none') {
+        if (pauseReason !== 'hidden' && pauseReason !== 'covered') renderFrame();
+        updateRenderingDebug(false, pauseReason);
+        return;
+      }
       const elapsed = Math.min(100, Math.max(0, timestamp - lastTimestamp));
       lastTimestamp = timestamp;
       accumulator += elapsed;
-      const frameStep = reducedMotion ? 250 : FIXED_FRAME_MS;
+      recordFrameInterval(elapsed);
       let steps = 0;
-      while (accumulator >= frameStep && steps < 6) {
+      while (accumulator >= renderBudget.frameStepMs && steps < 6) {
         renderFrame();
-        accumulator -= frameStep;
+        accumulator -= renderBudget.frameStepMs;
         steps++;
       }
-      raf = requestAnimationFrame(animate);
+      scheduleFrame();
     }
-    raf = requestAnimationFrame(animate);
+
+    const handleVisibilityChange = () => {
+      pageVisible = document.visibilityState !== 'hidden';
+      if (!pageVisible) {
+        if (raf !== 0) cancelAnimationFrame(raf);
+        raf = 0;
+        updateRenderingDebug(false, 'hidden');
+        return;
+      }
+      wakeRenderLoop();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const intersectionObserver = typeof IntersectionObserver === 'undefined'
+      ? null
+      : new IntersectionObserver((entries) => {
+        intersectionVisible = entries[0]?.isIntersecting ?? true;
+        if (!intersectionVisible) {
+          if (raf !== 0) cancelAnimationFrame(raf);
+          raf = 0;
+          updateRenderingDebug(false, 'covered');
+          return;
+        }
+        wakeRenderLoop();
+      }, { threshold: 0.05 });
+    intersectionObserver?.observe(canvas);
+    wakeRenderLoopRef.current = wakeRenderLoop;
+    wakeRenderLoop();
     return () => {
-      cancelAnimationFrame(raf);
+      if (raf !== 0) cancelAnimationFrame(raf);
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      wakeRenderLoopRef.current = () => undefined;
       if (debugWindow.advanceTime === advanceTime) delete debugWindow.advanceTime;
     };
     // Empty deps — render loop runs once for the lifetime of the component.
@@ -576,3 +758,5 @@ export default function PitchCanvas(props: Props) {
     />
   );
 }
+
+export default memo(PitchCanvas);

@@ -1,9 +1,8 @@
-import type { StateStorage } from 'zustand/middleware';
-import { compressedStorage } from './compressed-storage';
+import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
+import { compressedStorage, queueCompressedJSONValue } from './compressed-storage';
+import { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION } from './save-constants';
 
-export const SAVE_SCHEMA_VERSION = 24;
-export const SAVE_STORAGE_KEY = 'football-universe-save';
-export const SAVE_DIAGNOSTIC_KEY = `${SAVE_STORAGE_KEY}-invalid`;
+export { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-constants';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -116,6 +115,45 @@ export const currentSaveStorage: StateStorage = {
   setItem: (name, value) => compressedStorage.setItem(name, value),
   removeItem: (name) => compressedStorage.removeItem(name),
 };
+
+function hasSamePersistedState<T>(a: StorageValue<T> | null, b: StorageValue<T>): boolean {
+  if (!a || a.version !== b.version) return false;
+  if (!isRecord(a.state) || !isRecord(b.state)) return Object.is(a.state, b.state);
+  const aState = a.state as JsonRecord;
+  const bState = b.state as JsonRecord;
+  const aKeys = Object.keys(aState);
+  const bKeys = Object.keys(bState);
+  return aKeys.length === bKeys.length
+    && aKeys.every((key) => Object.prototype.hasOwnProperty.call(bState, key)
+      && Object.is(aState[key], bState[key]));
+}
+
+/**
+ * Zustand persistence boundary that queues the envelope as an object. This
+ * lets the compression Worker perform JSON serialization as well as LZ work,
+ * and skips writes triggered only by non-persisted UI state changes.
+ */
+export function createCurrentSavePersistStorage<T>(): PersistStorage<T> {
+  let lastValue: StorageValue<T> | null = null;
+  return {
+    getItem: (name) => {
+      const raw = currentSaveStorage.getItem(name);
+      if (raw === null || raw instanceof Promise) return null;
+      const parsed = parseCurrentSave(raw) as unknown as StorageValue<T>;
+      lastValue = parsed;
+      return parsed;
+    },
+    setItem: (name, value) => {
+      if (hasSamePersistedState(lastValue, value)) return;
+      lastValue = value;
+      queueCompressedJSONValue(name, value);
+    },
+    removeItem: (name) => {
+      lastValue = null;
+      compressedStorage.removeItem(name);
+    },
+  };
+}
 
 export function getSaveRecoveryMessage(): string | null {
   if (!latestRecovery || !recoveryMessagePending) return null;
