@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getCoachName, formatForm } from '../utils/format';
+import { getTeamName, getTeamShortName, getCoachName, formatForm } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import TeamBadge from '../components/TeamBadge';
 import type { GameWorld } from '../engine/season/season-manager';
@@ -233,11 +233,11 @@ function CompareContent({ world }: { world: GameWorld }) {
                   return (
                     <div key={i} className="flex items-center gap-2 px-4 py-2 text-xs">
                       <span className="text-[10px] text-slate-600 w-8 shrink-0">S{m.season}</span>
-                      <span className="flex-1 truncate text-slate-400">{getTeamName(m.home, world.teamBases)}</span>
+                      <span className="flex-1 whitespace-nowrap text-slate-400" title={getTeamName(m.home, world.teamBases)}>{getTeamShortName(m.home, world.teamBases)}</span>
                       <span className="font-bold tabular-nums px-2 py-0.5 rounded" style={{ color: resultColor }}>
                         {m.homeGoals} - {m.awayGoals}
                       </span>
-                      <span className="flex-1 truncate text-slate-400 text-right">{getTeamName(m.away, world.teamBases)}</span>
+                      <span className="flex-1 whitespace-nowrap text-slate-400 text-right" title={getTeamName(m.away, world.teamBases)}>{getTeamShortName(m.away, world.teamBases)}</span>
                       <span className="text-[10px] text-slate-600 w-12 text-right shrink-0 truncate">{m.comp}</span>
                       {m.et && <span className="text-[9px] text-amber-500">ET</span>}
                       {m.pen && <span className="text-[9px] text-amber-500">P{m.pen}</span>}

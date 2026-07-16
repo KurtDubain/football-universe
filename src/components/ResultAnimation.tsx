@@ -179,7 +179,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
         {/* Score line */}
         <div className="flex items-center">
           <div className="flex-1 min-w-0">
-            <TeamName teamId={r.homeTeamId} teamBases={teamBases} showTier link={false}
+            <TeamName teamId={r.homeTeamId} teamBases={teamBases} showTier link={false} compact
               className={`text-xs ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`} />
           </div>
 
@@ -199,7 +199,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
           </div>
 
           <div className="flex-1 min-w-0 text-right">
-            <TeamName teamId={r.awayTeamId} teamBases={teamBases} showTier link={false}
+            <TeamName teamId={r.awayTeamId} teamBases={teamBases} showTier link={false} compact
               className={`text-xs ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'} justify-end`} />
           </div>
         </div>

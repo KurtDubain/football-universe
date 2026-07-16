@@ -420,3 +420,45 @@ describe('processTransferWindow v2 — concentration caps', () => {
     expect(maxToElite).toBeLessThanOrEqual(2);
   });
 });
+
+describe('processTransferWindow — contextual decisions', () => {
+  it('does not let an automatic buyer spend money it does not have', () => {
+    const world = buildWorld();
+    world.teamFinances = {
+      elite: { cash: 3, totalIncome: 0, totalExpense: 0, history: [] },
+      weak: { cash: 100, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+
+    for (let seed = 0; seed < 100; seed++) {
+      const result = processTransferWindow(world, new SeededRNG(seed));
+      expect(result.transfers.filter(transfer => transfer.type === 'transfer')).toHaveLength(0);
+    }
+  });
+
+  it('leaves favorite-team purchases for the player to decide', () => {
+    const world = buildWorld();
+    world.teamFinances = {
+      elite: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+      weak: { cash: 100, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+
+    for (let seed = 0; seed < 100; seed++) {
+      const result = processTransferWindow(world, new SeededRNG(seed), { favoriteTeamIds: new Set(['elite']) });
+      expect(result.transfers.filter(transfer => transfer.toTeamId === 'elite')).toHaveLength(0);
+    }
+  });
+
+  it('anchors automatic fees to market value instead of a rating-only formula', () => {
+    const world = buildWorld();
+    const candidate = world.squads.weak.find(player => player.uuid === CANDIDATE_UUID)!;
+    candidate.marketValue = 60;
+    world.teamFinances = {
+      elite: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+      weak: { cash: 100, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+
+    const result = seedWithTransfer(world);
+    const transfer = result.transfers.find(entry => entry.playerId === CANDIDATE_UUID);
+    expect(transfer?.fee).toBeGreaterThan(40);
+  });
+});

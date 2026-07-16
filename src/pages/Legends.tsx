@@ -276,7 +276,7 @@ function RetireeCard({
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: team.color }}
                 />
-                <span className="truncate">{team.name}</span>
+                <span className="whitespace-nowrap" title={team.name}>{team.shortName}</span>
               </Link>
             ) : (
               <span className="text-slate-500 truncate">{retiree.teamName}</span>
@@ -564,7 +564,7 @@ function CoachRetireeCard({
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: team.color }}
                 />
-                <span className="truncate">{team.name}</span>
+                <span className="whitespace-nowrap" title={team.name}>{team.shortName}</span>
               </Link>
             ) : (
               <span className="text-slate-500 truncate">{retiree.finalTeamName}</span>

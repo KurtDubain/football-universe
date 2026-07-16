@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
-import { getTeamName } from '../utils/format';
+import { getTeamName, getTeamShortName } from '../utils/format';
 import { getSeasonTopAssistRows, getSeasonTopScorerRows } from '../engine/players/player-stat-selectors';
 import { AWARD_META } from '../engine/awards/season-awards';
 
@@ -165,7 +165,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                 <div key={r.teamId} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${isChampion ? 'bg-amber-900/10' : isRelegated ? 'bg-red-900/10' : ''}`}>
                   <span className={`w-4 text-center font-bold ${isChampion ? 'text-amber-400' : isRelegated ? 'text-red-400' : 'text-slate-500'}`}>{i + 1}</span>
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team?.color ?? '#666' }} />
-                  <Link to={`/team/${r.teamId}`} className="flex-1 truncate text-slate-200 hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
+                  <Link to={`/team/${r.teamId}`} className="flex-1 whitespace-nowrap text-slate-200 hover:text-blue-400" title={getTeamName(r.teamId, tb)}>{getTeamShortName(r.teamId, tb)}</Link>
                   <span className="text-slate-500 w-6 text-center">{r.leagueWon}</span>
                   <span className="text-slate-500 w-6 text-center">{r.leagueDrawn}</span>
                   <span className="text-slate-500 w-6 text-center">{r.leagueLost}</span>
@@ -523,7 +523,7 @@ function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; 
         <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: team.color }}>
           {team.shortName?.charAt(0)}
         </span>
-        <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-100 hover:text-blue-400 truncate">{team.name}</Link>
+        <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-100 hover:text-blue-400 whitespace-nowrap" title={team.name}>{team.shortName}</Link>
       </div>
       {runnerUp && tb[runnerUp] && (
         <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500">

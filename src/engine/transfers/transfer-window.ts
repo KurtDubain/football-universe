@@ -5,13 +5,23 @@ import { SeededRNG } from '../match/rng';
 import {
   applyTransferMove,
   createTransferRecord,
-  FREE_AGENT_SIGNING_FEE,
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from './transfer-application';
 import { ageMultiplier, computeInitialMarketValue } from '../economy/market-value';
 import { computeCurrentRating } from '../players/development';
 import { computePlayerCareerTotals } from '../players/career-totals';
+import {
+  assessSquadNeeds,
+  createOpeningOffer,
+  estimateBuyerValuation,
+  estimateFreeAgentSigningCost,
+  estimateTransferValue,
+  isKeySquadPlayer,
+  scoreTransferFit,
+  sellerAcceptanceProbability,
+  weightedPick,
+} from './transfer-decision';
 
 /**
  * End-of-season transfer window (v2 — 4-position support + free agent pool).
@@ -35,15 +45,15 @@ import { computePlayerCareerTotals } from '../players/career-totals';
  * 3. Distribute free agents. Priority order:
  *    a) Sellers that lost a player to poaching this round (compensate)
  *    b) Non-elite teams by inverse league rank (weakest pick first)
- *    Each recipient signs at most 1 free agent that fits their squad
- *    gap. Signing fee €5M (low — these are released/unattached).
- *    Released-from elite team gets the €5M as compensation.
+ *    Each recipient signs at most 1 free agent that fits its squad need.
+ *    Signing premium scales with market value and age; released-from elite
+ *    team receives that premium as compensation.
  *
  * 4. Leftover free agents are retired (added to retirementHistory with
  *    reason "未获自由市场报价"). Avoids player count inflation per the
  *    "球员太多" feedback.
  *
- * Cash conservation: poach fee is buyer→seller. Free agent fee is
+ * Cash conservation: poach fee is buyer→seller. Free-agent premium is
  * recipient→released-from. No universe drain.
  *
  * UUIDs survive the swap — playerStats, transferHistory, etc. all
@@ -133,23 +143,6 @@ function buildCandidates(world: GameWorld): Candidate[] {
   return [...byPos.FW, ...byPos.MF, ...byPos.DF, ...byPos.GK];
 }
 
-/** Position with the FEWEST players at-or-above some rating threshold.
- *  Used to decide which free agent best fills a squad gap. */
-function findWeakestPosition(squad: Player[]): PlayerPosition {
-  const POS_TARGET: Record<PlayerPosition, number> = { GK: 3, DF: 7, MF: 7, FW: 5 };
-  let worst: PlayerPosition = 'FW';
-  let worstDiff = -Infinity;
-  for (const pos of ['GK', 'DF', 'MF', 'FW'] as PlayerPosition[]) {
-    const have = squad.filter(p => p.position === pos).length;
-    const diff = POS_TARGET[pos] - have;
-    if (diff > worstDiff) {
-      worstDiff = diff;
-      worst = pos;
-    }
-  }
-  return worst;
-}
-
 export function processTransferWindow(
   world: GameWorld,
   rng: SeededRNG,
@@ -173,6 +166,29 @@ export function processTransferWindow(
   let squads: Record<string, Player[]> = { ...world.squads };
   for (const tid of Object.keys(squads)) squads[tid] = [...squads[tid]];
   let playerStats = world.playerStats;
+  const needsByTeam = Object.fromEntries(
+    Object.entries(squads).map(([teamId, squad]) => [teamId, assessSquadNeeds(squad)]),
+  );
+  const coachStyleByTeam = Object.fromEntries(
+    Object.entries(world.coachStates)
+      .filter(([, state]) => state.currentTeamId)
+      .map(([coachId, state]) => [state.currentTeamId!, world.coachBases[coachId]?.style]),
+  );
+  const financeReserveByTeam = Object.fromEntries(
+    Object.entries(squads).map(([teamId, squad]) => {
+      const cash = world.teamFinances[teamId]?.cash;
+      if (cash === undefined || cash <= 0) return [teamId, 0];
+      const squadValue = squad.reduce((sum, player) => sum + (player.marketValue ?? 0), 0);
+      return [teamId, Math.min(cash * 0.25, Math.max(5, squadValue * 0.03))];
+    }),
+  );
+  const plannedSpending: Record<string, number> = {};
+  const availableCash = (teamId: string): number => {
+    const cash = world.teamFinances[teamId]?.cash;
+    return cash === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, cash - (financeReserveByTeam[teamId] ?? 0) - (plannedSpending[teamId] ?? 0));
+  };
 
   const eliteTeamIds = Object.values(world.teamBases)
     .filter(t => t.overall >= ELITE_OVERALL_THRESHOLD)
@@ -201,37 +217,61 @@ export function processTransferWindow(
   for (const cand of shuffledCandidates) {
     // Per-seller cap: each non-elite team loses at most N stars per season.
     if ((sellerPoachCount[cand.teamId] ?? 0) >= MAX_POACHES_PER_SELLER) continue;
-    // v17 — personality tag affects poach probability:
-    //   loyal player  → never poached (probability = 0)
-    //   ambitious     → 1.5× probability
     const fromSquad = squads[cand.teamId];
     const candPlayer = fromSquad?.find(p => p.uuid === cand.playerUuid);
     if (candPlayer?.tag === 'loyal') continue;
-    const tagMul = candPlayer?.tag === 'ambitious' ? 1.5 : 1;
-    if (rng.next() >= POACH_PROBABILITY * tagMul) continue;
-    // Eligible buyers: elite teams that aren't the seller AND haven't hit
-    // their buyer cap yet. Without this cap one elite can hoard 4+ stars
-    // in a season.
-    const buyers = eliteTeamIds.filter(tid =>
-      tid !== cand.teamId
-      && (buyerPoachCount[tid] ?? 0) < MAX_POACHES_PER_BUYER,
-    );
-    if (buyers.length === 0) continue;
-    const buyerId = rng.pick(buyers);
-
-    const toSquad = squads[buyerId];
-    if (!fromSquad || !toSquad) continue;
-
     const incomingPlayer = candPlayer;
-    if (!incomingPlayer) continue;
-
-    const released = pickTransferReleaseCandidate(toSquad, incomingPlayer, false);
-    if (!released) continue;
-    if (released.rating >= incomingPlayer.rating) continue;
-
-    const fee = Math.round((incomingPlayer.rating - 60) * 1.2);
+    if (!incomingPlayer || !fromSquad || (fromSquad.length >= 11 && fromSquad.length <= 18)) continue;
     const fromTeam = world.teamBases[cand.teamId];
-    const toTeam = world.teamBases[buyerId];
+    if (!fromTeam) continue;
+    const askingValue = estimateTransferValue({
+      player: incomingPlayer,
+      sellerSquad: fromSquad,
+      sellerCash: world.teamFinances[cand.teamId]?.cash,
+      stats: world.playerStats[cand.playerUuid],
+    });
+
+    const buyerOptions = eliteTeamIds
+      .filter((teamId) => !favoriteSet.has(teamId))
+      .filter((teamId) => teamId !== cand.teamId && (buyerPoachCount[teamId] ?? 0) < MAX_POACHES_PER_BUYER)
+      .map((teamId) => {
+        const buyer = world.teamBases[teamId];
+        const buyerSquad = squads[teamId];
+        const released = buyerSquad ? pickTransferReleaseCandidate(buyerSquad, incomingPlayer, false) : undefined;
+        if (!buyer || !buyerSquad || !released || released.rating >= incomingPlayer.rating) return null;
+        const fit = scoreTransferFit({
+          player: incomingPlayer,
+          buyerSquad,
+          buyer,
+          seller: fromTeam,
+          coachStyle: coachStyleByTeam[teamId],
+          availableCash: availableCash(teamId),
+          expectedFee: askingValue,
+          needs: needsByTeam[teamId],
+        });
+        const buyerValuation = estimateBuyerValuation({ askingValue, fit, player: incomingPlayer });
+        const minimumPlausibleOffer = Math.min(askingValue, buyerValuation) * 0.86;
+        if (fit.weight <= 0 || availableCash(teamId) < minimumPlausibleOffer) return null;
+        return { teamId, buyer, buyerSquad, released, fit, buyerValuation };
+      })
+      .filter((option): option is NonNullable<typeof option> => option !== null);
+    if (buyerOptions.length === 0) continue;
+
+    const strongestDemand = Math.max(...buyerOptions.map((option) => option.fit.needScore));
+    const personalityBoost = incomingPlayer.tag === 'ambitious' ? 0.12 : 0;
+    const activityChance = Math.min(0.65, POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost);
+    if (rng.next() >= activityChance) continue;
+    const selectedBuyer = weightedPick(buyerOptions, option => option.fit.weight, rng);
+    if (!selectedBuyer) continue;
+    const buyerId = selectedBuyer.teamId;
+    const released = selectedBuyer.released;
+    const toTeam = selectedBuyer.buyer;
+    const fee = createOpeningOffer({
+      askingValue,
+      buyerValuation: selectedBuyer.buyerValuation,
+      availableCash: availableCash(buyerId),
+      rng,
+    });
 
     // v20 — if seller is a favorite team, DON'T execute. Stage as an
     // IncomingOffer for the UI to resolve. (Free agent pool still gets
@@ -243,18 +283,32 @@ export function processTransferWindow(
         playerName: incomingPlayer.name ?? `${incomingPlayer.number}号`,
         playerPosition: incomingPlayer.position,
         playerRating: incomingPlayer.rating,
+        playerAge: incomingPlayer.age,
+        marketValue: incomingPlayer.marketValue,
+        buyerValuation: selectedBuyer.buyerValuation,
+        needScore: selectedBuyer.fit.needScore,
+        interestReason: selectedBuyer.fit.reason,
         ownerTeamId: cand.teamId,
         ownerTeamName: fromTeam?.name ?? cand.teamId,
         buyerId,
         buyerName: toTeam?.name ?? buyerId,
-        fee: fee > 0 ? fee : 1,
+        fee,
         resolution: 'pending',
       });
       // Bump seller/buyer caps so we don't generate 10 offers for the same player
       sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
       buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
+      plannedSpending[buyerId] = (plannedSpending[buyerId] ?? 0) + fee;
       continue;
     }
+
+    const sellerAcceptance = sellerAcceptanceProbability({
+      bid: fee,
+      askingValue,
+      sellerCash: world.teamFinances[cand.teamId]?.cash,
+      keyPlayer: isKeySquadPlayer(fromSquad, incomingPlayer),
+    });
+    if (rng.next() >= sellerAcceptance) continue;
 
     const applied = applyTransferMove({
       squads,
@@ -285,6 +339,9 @@ export function processTransferWindow(
     sellersNeedReplacement.add(cand.teamId);
     sellerPoachCount[cand.teamId] = (sellerPoachCount[cand.teamId] ?? 0) + 1;
     buyerPoachCount[buyerId] = (buyerPoachCount[buyerId] ?? 0) + 1;
+    plannedSpending[buyerId] = (plannedSpending[buyerId] ?? 0) + fee;
+    needsByTeam[buyerId] = assessSquadNeeds(squads[buyerId]);
+    needsByTeam[cand.teamId] = assessSquadNeeds(squads[cand.teamId]);
   }
 
   // ── Step 1.5: Merge persistent pool into the in-flight pool ────
@@ -307,26 +364,69 @@ export function processTransferWindow(
     for (const favId of favoriteSet) {
       const favTeam = world.teamBases[favId];
       if (!favTeam) continue;
-      const candidatesForFav = candidates
+      const candidateOptions = candidates
         .filter(c => c.teamId !== favId)
         .filter(c => !poachedUuids.has(c.playerUuid))
         .filter(c => !targetedUuids.has(c.playerUuid))
-        .slice(0, 4);
-      for (const c of candidatesForFav) {
+        .map((candidate) => {
+          const sellerSquad = squads[candidate.teamId] ?? [];
+          if (sellerSquad.length >= 11 && sellerSquad.length <= 18) return null;
+          const player = sellerSquad.find((entry) => entry.uuid === candidate.playerUuid);
+          const seller = world.teamBases[candidate.teamId];
+          if (!player || !seller) return null;
+          const askingValue = estimateTransferValue({
+            player,
+            sellerSquad,
+            sellerCash: world.teamFinances[candidate.teamId]?.cash,
+            stats: world.playerStats[player.uuid],
+          });
+          const fit = scoreTransferFit({
+            player,
+            buyerSquad: squads[favId] ?? [],
+            buyer: favTeam,
+            seller,
+            coachStyle: coachStyleByTeam[favId],
+            availableCash: availableCash(favId),
+            expectedFee: askingValue,
+            needs: needsByTeam[favId],
+          });
+          if (fit.weight <= 0 || availableCash(favId) < askingValue * 0.7) return null;
+          return {
+            candidate,
+            player,
+            askingValue,
+            fit,
+            buyerValuation: estimateBuyerValuation({ askingValue, fit, player }),
+          };
+        })
+        .filter((option): option is NonNullable<typeof option> => option !== null);
+      const candidatesForFav: typeof candidateOptions = [];
+      while (candidateOptions.length > 0 && candidatesForFav.length < 4) {
+        const selected = weightedPick(candidateOptions, option => option.fit.weight, rng);
+        if (!selected) break;
+        candidatesForFav.push(selected);
+        candidateOptions.splice(candidateOptions.indexOf(selected), 1);
+      }
+      for (const option of candidatesForFav) {
+        const c = option.candidate;
         const sellerSquad = squads[c.teamId] ?? [];
-        const p = sellerSquad.find(pp => pp.uuid === c.playerUuid);
+        const p = option.player ?? sellerSquad.find(pp => pp.uuid === c.playerUuid);
         if (!p) continue;
-        const suggestedFee = Math.max(5, Math.round((p.rating - 55) * 1.5));
         pendingTargets.push({
           id: `target-${seasonNumber}-${p.uuid}-${favId}`,
           playerId: p.uuid,
           playerName: p.name ?? `${p.number}号`,
           playerPosition: p.position,
           playerRating: p.rating,
+          playerAge: p.age,
+          marketValue: p.marketValue,
+          buyerValuation: option.buyerValuation,
+          needScore: option.fit.needScore,
+          interestReason: option.fit.reason,
           fromTeamId: c.teamId,
           fromTeamName: world.teamBases[c.teamId]?.name ?? c.teamId,
           toTeamId: favId,
-          suggestedFee,
+          suggestedFee: option.askingValue,
           resolution: 'pending',
         });
         targetedUuids.add(c.playerUuid);
@@ -358,10 +458,35 @@ export function processTransferWindow(
     // v20 — favorite teams sign manually via /market UI; skip auto-assign
     if (favoriteSet.has(recipient)) continue;
     const recipientSquad = squads[recipient] ?? [];
-    const gap = findWeakestPosition(recipientSquad);
-    // Prefer free agent at the gap position; otherwise take whoever
-    let pickIdx = freeAgentPool.findIndex(fa => fa.player.position === gap);
-    if (pickIdx < 0) pickIdx = 0;
+    const recipientTeam = world.teamBases[recipient];
+    if (!recipientTeam) continue;
+    const freeAgentOptions = freeAgentPool
+      .map((freeAgent, index) => {
+        const signingCost = estimateFreeAgentSigningCost(freeAgent.player);
+        return {
+          index,
+          freeAgent,
+          signingCost,
+          fit: scoreTransferFit({
+            player: freeAgent.player,
+            buyerSquad: recipientSquad,
+            buyer: recipientTeam,
+            coachStyle: coachStyleByTeam[recipient],
+            availableCash: availableCash(recipient),
+            expectedFee: signingCost,
+            needs: needsByTeam[recipient],
+            requireUpgrade: false,
+          }),
+        };
+      })
+      .filter(option => option.signingCost <= availableCash(recipient));
+    const selectedFreeAgent = weightedPick(
+      freeAgentOptions,
+      option => option.fit.weight + option.fit.needScore * 1.5,
+      rng,
+    );
+    if (!selectedFreeAgent) continue;
+    const pickIdx = selectedFreeAgent.index;
     const { player, releasedFromTeamId } = freeAgentPool.splice(pickIdx, 1)[0];
     const applied = applyTransferMove({
       squads,
@@ -375,7 +500,6 @@ export function processTransferWindow(
     playerStats = applied.playerStats;
 
     const releasedFromTeam = world.teamBases[releasedFromTeamId];
-    const recipientTeam = world.teamBases[recipient];
     transfers.push(createTransferRecord({
       season: seasonNumber,
       windowIndex,
@@ -385,9 +509,11 @@ export function processTransferWindow(
       toTeamId: recipient,
       toTeamName: recipientTeam?.name ?? recipient,
       type: 'free_agent',
-      fee: FREE_AGENT_SIGNING_FEE,
+      fee: selectedFreeAgent.signingCost,
       reason: '自由转会签约',
     }));
+    plannedSpending[recipient] = (plannedSpending[recipient] ?? 0) + selectedFreeAgent.signingCost;
+    needsByTeam[recipient] = assessSquadNeeds(squads[recipient]);
   }
 
   // ── Step 2.5: Random churn — each non-elite team has a small chance

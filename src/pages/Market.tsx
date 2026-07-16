@@ -3,6 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMoney } from '../engine/economy/finance';
 import { Icon } from '../components/Icon';
+import { pickTransferReleaseCandidate } from '../engine/transfers/transfer-application';
+import {
+  counterAcceptanceProbability,
+  estimateFreeAgentSigningCost,
+  isKeySquadPlayer,
+  sellerAcceptanceProbability,
+  suggestCounterFee,
+} from '../engine/transfers/transfer-decision';
 
 /**
  * Phase 2 — Transfer Window page for favorite teams.
@@ -10,7 +18,7 @@ import { Icon } from '../components/Icon';
  * Surface only when `world.transferWindow` is open. Shows:
  *   - Incoming offers (elite teams bidding for YOUR stars)
  *   - Outgoing targets (rumored players you could bid for)
- *   - Free agent pool (sign for €5M each)
+ *   - Free agent pool (market-value-scaled signing premium)
  * Plus action buttons. "完成" closes the window + advances to next season.
  *
  * Auto-redirects to / if no window is open.
@@ -34,6 +42,7 @@ export default function Market() {
   const closeTransferWindow = useGameStore((s) => s.closeTransferWindow);
   const navigate = useNavigate();
   const [bidValues, setBidValues] = useState<Record<string, number>>({});
+  const [freeAgentTeamId, setFreeAgentTeamId] = useState(favoriteTeamIds[0] ?? '');
 
   useEffect(() => {
     if (!world?.transferWindow) {
@@ -43,7 +52,10 @@ export default function Market() {
 
   if (!world || !world.transferWindow) return null;
   const tw = world.transferWindow;
-  const favTeamFinances = favoriteTeamIds[0] ? world.teamFinances[favoriteTeamIds[0]] : undefined;
+  const selectedFreeAgentTeamId = favoriteTeamIds.includes(freeAgentTeamId)
+    ? freeAgentTeamId
+    : favoriteTeamIds[0] ?? '';
+  const favTeamFinances = favoriteTeamIds.length === 1 ? world.teamFinances[favoriteTeamIds[0]] : undefined;
   const pendingOffers = tw.incomingOffers.filter(o => o.resolution === 'pending');
   const resolvedOffers = tw.incomingOffers.filter(o => o.resolution !== 'pending');
   const pendingTargets = tw.outgoingTargets.filter(t => t.resolution === 'pending');
@@ -78,15 +90,27 @@ export default function Market() {
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[o.playerPosition] ?? ''}`}>{POS_LABEL[o.playerPosition]}</span>
               <span className="text-sm font-semibold text-slate-100">{o.playerName}</span>
               <span className="text-[10px] text-slate-500">能力 {o.playerRating}</span>
+              {o.playerAge !== undefined && <span className="text-[10px] text-slate-500">{o.playerAge}岁</span>}
+              {o.marketValue !== undefined && <span className="text-[10px] text-slate-500">身价 {formatMoney(o.marketValue)}</span>}
               <span className="text-[10px] text-slate-500">从 {o.ownerTeamName}</span>
               <span className="text-amber-300 font-bold ml-auto">{formatMoney(o.fee)}</span>
             </div>
             <div className="text-xs text-slate-400 mb-2">
-              <span className="font-medium text-slate-300">{o.buyerName}</span> 出价求购
+              <span className="font-medium text-slate-300">{o.buyerName}</span> 出价求购{o.interestReason ? ` · ${o.interestReason}` : ''}
+              <span className="block text-[10px] text-slate-500 mt-1">成交后 {o.ownerTeamName} 阵容剩余 {Math.max(0, (world.squads[o.ownerTeamId]?.length ?? 1) - 1)} 人</span>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => acceptIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-emerald-700 hover:bg-emerald-600 rounded text-white inline-flex items-center gap-1"><Icon name="check" size={12} /> 接受 {formatMoney(o.fee)}</button>
-              <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-amber-700 hover:bg-amber-600 rounded text-white inline-flex items-center gap-1"><Icon name="speech" size={12} /> 还价 {formatMoney(Math.round(o.fee * 1.3))} (60%成功率)</button>
+              {(() => {
+                const counterFee = suggestCounterFee(o);
+                const probability = counterAcceptanceProbability({
+                  counterFee,
+                  buyerValuation: o.buyerValuation ?? Math.max(o.fee * 1.2, (o.marketValue ?? o.fee) * 1.05),
+                  buyerCash: world.teamFinances[o.buyerId]?.cash,
+                  needScore: o.needScore,
+                });
+                return <button onClick={() => counterIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-amber-700 hover:bg-amber-600 rounded text-white inline-flex items-center gap-1"><Icon name="speech" size={12} /> 还价 {formatMoney(counterFee)} · {Math.round(probability * 100)}%</button>;
+              })()}
               <button onClick={() => rejectIncomingOffer(o.id)} className="text-xs px-3 py-2 sm:py-1.5 min-h-[36px] bg-red-800 hover:bg-red-700 rounded text-white inline-flex items-center gap-1"><Icon name="x" size={12} /> 拒绝</button>
             </div>
           </div>
@@ -109,15 +133,34 @@ export default function Market() {
       <Section title={<><Icon name="target" size={14} className="inline-block mr-1" /> 你的目标 ({pendingTargets.length})</>} emptyMessage={tw.outgoingTargets.length === 0 ? '无可用候选(本赛季没有合适的明星)' : undefined}>
         {pendingTargets.map(t => {
           const currentBid = bidValues[t.id] ?? t.suggestedFee;
-          const canAfford = favTeamFinances && favTeamFinances.cash >= currentBid;
+          const targetFinance = world.teamFinances[t.toTeamId];
+          const canAfford = !!targetFinance && targetFinance.cash >= currentBid;
+          const sellerSquad = world.squads[t.fromTeamId] ?? [];
+          const targetPlayer = sellerSquad.find(player => player.uuid === t.playerId);
+          const buyerSquad = world.squads[t.toTeamId] ?? [];
+          const releaseCandidate = targetPlayer
+            ? pickTransferReleaseCandidate(buyerSquad, targetPlayer)
+            : undefined;
+          const acceptanceProbability = sellerAcceptanceProbability({
+            bid: currentBid,
+            askingValue: t.suggestedFee,
+            sellerCash: world.teamFinances[t.fromTeamId]?.cash,
+            keyPlayer: targetPlayer ? isKeySquadPlayer(sellerSquad, targetPlayer) : false,
+          });
           return (
             <div key={t.id} className="bg-slate-800 rounded-lg border border-slate-700/60 p-3">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[t.playerPosition] ?? ''}`}>{POS_LABEL[t.playerPosition]}</span>
                 <span className="text-sm font-semibold text-slate-100">{t.playerName}</span>
                 <span className="text-[10px] text-slate-500">能力 {t.playerRating}</span>
+                {t.playerAge !== undefined && <span className="text-[10px] text-slate-500">{t.playerAge}岁</span>}
+                {t.marketValue !== undefined && <span className="text-[10px] text-slate-500">身价 {formatMoney(t.marketValue)}</span>}
                 <span className="text-[10px] text-slate-500">来自 {t.fromTeamName}</span>
                 <span className="text-slate-300 ml-auto">建议 {formatMoney(t.suggestedFee)}</span>
+              </div>
+              <div className="text-[10px] text-slate-500 mb-2">
+                {world.teamBases[t.toTeamId]?.name ?? t.toTeamId} · {t.interestReason ?? '阵容补强'} · 可用 {formatMoney(targetFinance?.cash ?? 0)}
+                {releaseCandidate ? ` · 腾位 ${releaseCandidate.name}` : ''}
               </div>
               <div className="flex gap-2 flex-wrap items-center">
                 <div className="flex items-center gap-1 flex-1 min-w-0 sm:flex-none">
@@ -137,7 +180,7 @@ export default function Market() {
                 >
                   <Icon name="outbox" size={12} className="inline-block mr-1" /> 报价
                 </button>
-                <span className="text-[10px] text-slate-500 sm:ml-auto basis-full sm:basis-auto">出价 ≥ {formatMoney(Math.round(t.suggestedFee * 0.9))} 接受概率高</span>
+                <span className="text-[10px] text-slate-500 sm:ml-auto basis-full sm:basis-auto">预计接受概率 {Math.round(acceptanceProbability * 100)}%</span>
               </div>
               {!canAfford && (
                 <div className="text-[10px] text-red-400 mt-1">💸 现金不足</div>
@@ -161,16 +204,30 @@ export default function Market() {
 
       {/* Free agent pool */}
       <Section title={<><Icon name="cart" size={14} className="inline-block mr-1" /> 自由市场 ({poolPlayers.length})</>} emptyMessage={poolPlayers.length === 0 ? '当前自由市场为空' : undefined}>
+        {favoriteTeamIds.length > 1 && poolPlayers.length > 0 && (
+          <select
+            value={selectedFreeAgentTeamId}
+            onChange={(event) => setFreeAgentTeamId(event.target.value)}
+            className="w-full sm:w-auto text-xs px-2 py-2 bg-slate-900 border border-slate-700 rounded text-slate-200"
+            aria-label="自由球员签约球队"
+          >
+            {favoriteTeamIds.map(teamId => (
+              <option key={teamId} value={teamId}>{world.teamBases[teamId]?.name ?? teamId} · {formatMoney(world.teamFinances[teamId]?.cash ?? 0)}</option>
+            ))}
+          </select>
+        )}
         {poolPlayers.map(p => {
-          const canAfford = favTeamFinances && favTeamFinances.cash >= 5;
+          const signingTeamId = selectedFreeAgentTeamId;
+          const signingCost = estimateFreeAgentSigningCost(p);
+          const canAfford = !!signingTeamId && (world.teamFinances[signingTeamId]?.cash ?? 0) >= signingCost;
           return (
             <div key={p.uuid} className="flex items-center gap-2 p-2 bg-slate-800 rounded text-xs flex-wrap">
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[p.position] ?? ''}`}>{POS_LABEL[p.position]}</span>
               <span className="text-slate-100 font-medium">{p.name ?? `${p.number}号`}</span>
               <span className="text-[10px] text-slate-500">能力 {p.rating} · {p.age ?? '?'}岁</span>
-              <span className="text-amber-300 ml-auto">签字费 €5M</span>
+              <span className="text-amber-300 ml-auto">签字费 {formatMoney(signingCost)}</span>
               <button
-                onClick={() => signFromFreeAgentPool(p.uuid)}
+                onClick={() => signFromFreeAgentPool(p.uuid, signingTeamId)}
                 disabled={!canAfford}
                 className="text-[11px] px-3 py-1.5 min-h-[32px] bg-cyan-700 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 rounded text-white"
               >签下</button>
@@ -223,6 +280,7 @@ function resolutionLabel(r: string): React.ReactNode {
     case 'rejected': return wrap(<Icon name="x" size={11} />, '拒绝');
     case 'countered_accepted': return wrap(<Icon name="speech" size={11} />, '还价成功');
     case 'countered_rejected': return wrap(<Icon name="speech" size={11} />, '还价被拒');
+    case 'withdrawn': return '报价失效';
     case 'bid_accepted': return wrap(<Icon name="outbox" size={11} />, '报价被接受');
     case 'bid_rejected': return wrap(<Icon name="outbox" size={11} />, '报价被拒');
     case 'skipped': return '— 跳过';

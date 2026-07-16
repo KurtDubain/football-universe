@@ -7,6 +7,7 @@ import { isDerby, getDerbyName } from '../config/derbies';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
+  getTeamShortName,
   getWindowTypeColor,
   getWindowTypeLabel,
 } from '../utils/format';
@@ -141,7 +142,7 @@ export default function Calendar() {
                           >
                             <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam?.color ?? '#666' }} />
-                              <span className="text-slate-200 truncate">{getTeamName(r.homeTeamId, world.teamBases)}</span>
+                              <span className="text-slate-200 whitespace-nowrap" title={getTeamName(r.homeTeamId, world.teamBases)}>{getTeamShortName(r.homeTeamId, world.teamBases)}</span>
                             </div>
                             <div className="flex items-center gap-1.5 px-3 shrink-0">
                               <span className={`font-bold text-base ${r.homeGoals > r.awayGoals ? 'text-green-400' : r.homeGoals < r.awayGoals ? 'text-red-400' : 'text-slate-300'}`}>
@@ -157,7 +158,7 @@ export default function Calendar() {
                             </div>
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam?.color ?? '#666' }} />
-                              <span className="text-slate-200 truncate">{getTeamName(r.awayTeamId, world.teamBases)}</span>
+                              <span className="text-slate-200 whitespace-nowrap" title={getTeamName(r.awayTeamId, world.teamBases)}>{getTeamShortName(r.awayTeamId, world.teamBases)}</span>
                             </div>
                             <span className="text-[10px] text-slate-600 ml-2 shrink-0">详情 →</span>
                           </button>
@@ -192,7 +193,7 @@ export default function Calendar() {
                           >
                             <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam.color }} />
-                              <span className="text-slate-300 truncate">{homeTeam.name}</span>
+                              <span className="text-slate-300 whitespace-nowrap" title={homeTeam.name}>{homeTeam.shortName}</span>
                               <span className="text-[10px] text-slate-500">{homeTeam.overall}</span>
                             </div>
                             <div className="flex flex-col items-center px-3 shrink-0 w-16">
@@ -206,7 +207,7 @@ export default function Calendar() {
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
                               <span className="text-[10px] text-slate-500">{awayTeam.overall}</span>
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam.color }} />
-                              <span className="text-slate-300 truncate">{awayTeam.name}</span>
+                              <span className="text-slate-300 whitespace-nowrap" title={awayTeam.name}>{awayTeam.shortName}</span>
                             </div>
                             <span className="text-[10px] text-slate-600 ml-2 shrink-0">
                               {calDerby ? <span className="text-orange-400">{calDerby}</span> : '预测 →'}

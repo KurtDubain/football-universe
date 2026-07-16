@@ -160,7 +160,50 @@ function buildWorld(): GameWorld {
 }
 
 describe('transfer-window store actions', () => {
-  it('keeps manual accepted offers squad-balanced and attributes records to transferWindow.season', () => {
+  it('keeps a staged offer from overdrawing the buyer after finances changed', () => {
+    const world = buildWorld();
+    world.teamFinances.buyer = makeFinance(10);
+    const offer: IncomingOffer = {
+      id: 'offer-unfunded',
+      playerId: 'p-sell',
+      playerName: 'p-sell',
+      playerPosition: 'FW',
+      playerRating: 84,
+      ownerTeamId: 'seller',
+      ownerTeamName: 'seller',
+      buyerId: 'buyer',
+      buyerName: 'buyer',
+      fee: 40,
+      resolution: 'pending',
+    };
+
+    expect(applyOfferTransfer(world, offer, 40)).toBe(world);
+  });
+
+  it('protects a playable 18-player roster from another sale', () => {
+    const world = buildWorld();
+    world.squads.seller = [
+      world.squads.seller[0],
+      ...Array.from({ length: 17 }, (_, index) => makePlayer(`seller-depth-${index}`, 'seller', 20 + index, 60)),
+    ];
+    const offer: IncomingOffer = {
+      id: 'offer-roster-floor',
+      playerId: 'p-sell',
+      playerName: 'p-sell',
+      playerPosition: 'FW',
+      playerRating: 84,
+      ownerTeamId: 'seller',
+      ownerTeamName: 'seller',
+      buyerId: 'buyer',
+      buyerName: 'buyer',
+      fee: 40,
+      resolution: 'pending',
+    };
+
+    expect(applyOfferTransfer(world, offer, 40)).toBe(world);
+  });
+
+  it('keeps the buyer capped, releases its fringe player, and attributes records to transferWindow.season', () => {
     const world = buildWorld();
     const offer: IncomingOffer = {
       id: 'offer-1',
@@ -178,12 +221,13 @@ describe('transfer-window store actions', () => {
 
     const out = applyOfferTransfer(world, offer, 40);
 
-    expect(out.squads.seller).toHaveLength(world.squads.seller.length);
+    expect(out.squads.seller).toHaveLength(world.squads.seller.length - 1);
     expect(out.squads.buyer).toHaveLength(world.squads.buyer.length);
     expect(out.squads.buyer.find((p) => p.uuid === 'p-sell')?.teamId).toBe('buyer');
-    expect(out.squads.seller.find((p) => p.uuid === 'p-release')?.teamId).toBe('seller');
+    expect(out.squads.seller.find((p) => p.uuid === 'p-release')).toBeUndefined();
+    expect(out.freeAgentPool.some((p) => p.uuid === 'p-release')).toBe(true);
     expect(out.playerStats['p-sell'].teamId).toBe('buyer');
-    expect(out.playerStats['p-release'].teamId).toBe('seller');
+    expect(out.playerStats['p-release'].teamId).toBe('buyer');
 
     expect(out.transferHistory).toHaveLength(2);
     expect(out.transferHistory.every((t) => t.season === 3)).toBe(true);
@@ -197,9 +241,8 @@ describe('transfer-window store actions', () => {
     expect(out.transferHistory[1]).toMatchObject({
       playerId: 'p-release',
       fromTeamId: 'buyer',
-      toTeamId: 'seller',
-      type: 'free_agent',
-      fee: 5,
+      toTeamId: '__free_market__',
+      type: 'free',
     });
     expect(out.newsLog).toHaveLength(2);
     expect(out.newsLog.every((n) => n.seasonNumber === 3)).toBe(true);
@@ -209,26 +252,26 @@ describe('transfer-window store actions', () => {
       type: 'trophy',
     });
     expect(out.newsLog[1]).toMatchObject({
-      id: 'manual-transfer:S3:W0:p-release:seller',
+      id: 'manual-transfer:S3:W0:p-release:__free_market__',
       type: 'trophy',
     });
 
-    expect(out.teamFinances.seller.cash).toBe(135);
+    expect(out.teamFinances.seller.cash).toBe(140);
     expect(out.teamFinances.seller.totalIncome).toBe(0);
     expect(out.teamFinances.seller.totalExpense).toBe(0);
     expect(out.teamFinances.seller.history.at(-1)).toMatchObject({
       season: 3,
-      endCash: 135,
+      endCash: 140,
       transferIncome: 40,
-      transferExpense: 5,
+      transferExpense: 0,
     });
-    expect(out.teamFinances.buyer.cash).toBe(65);
+    expect(out.teamFinances.buyer.cash).toBe(60);
     expect(out.teamFinances.buyer.totalIncome).toBe(0);
     expect(out.teamFinances.buyer.totalExpense).toBe(0);
     expect(out.teamFinances.buyer.history.at(-1)).toMatchObject({
       season: 3,
-      endCash: 65,
-      transferIncome: 5,
+      endCash: 60,
+      transferIncome: 0,
       transferExpense: 40,
     });
   });

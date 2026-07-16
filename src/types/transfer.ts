@@ -34,6 +34,7 @@ export type WindowItemResolution =
   | 'rejected'    // incoming offer declined
   | 'countered_accepted'  // counter-offer worked, sold at higher fee
   | 'countered_rejected'  // counter-offer failed, you kept the player
+  | 'withdrawn'    // buyer could no longer fund the previously staged offer
   | 'bid_accepted'  // outbound bid was accepted, you bought
   | 'bid_rejected'  // outbound bid declined
   | 'skipped';      // outbound target you didn't pursue
@@ -49,6 +50,12 @@ export interface IncomingOffer {
   buyerId: string;          // elite team making the offer
   buyerName: string;
   fee: number;              // offered fee (€M)
+  /** Optional v24 decision context; absent on older in-progress saves. */
+  playerAge?: number;
+  marketValue?: number;
+  buyerValuation?: number;
+  needScore?: number;
+  interestReason?: string;
   counterFee?: number;      // if user countered, what they asked
   resolution: WindowItemResolution;
 }
@@ -63,6 +70,12 @@ export interface OutgoingTarget {
   fromTeamName: string;
   toTeamId: string;         // your favorite team that would buy
   suggestedFee: number;     // engine's guess of what's needed
+  /** Optional v24 decision context; absent on older in-progress saves. */
+  playerAge?: number;
+  marketValue?: number;
+  buyerValuation?: number;
+  needScore?: number;
+  interestReason?: string;
   bidFee?: number;          // if user bid, what they offered
   resolution: WindowItemResolution;
 }

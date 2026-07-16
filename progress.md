@@ -89,3 +89,51 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - The required deterministic game client completed two iterations. Text state and inspected screenshots covered a miss, goal, halftime pause, player positions, ball movement, and pressure-triggered degraded rendering without losing essential cues.
 - Final regression: 51 files / 449 tests, full ESLint, TypeScript, production/PWA build, bundle budgets (269,427-byte main entry; 668,292-byte initial graph), and the 10-season/520-advance current browser audit pass. Every season is 0 errors / 0 warnings; all 18 mobile and 7 desktop routes pass layout, target-size, persistence, navigation, offline, and runtime checks.
 - Section 15 animation guardrails are complete. Historical representation P2 remains intentionally inactive because the measured S150 browser write is 1.69 MB and lifecycle durability/responsiveness budgets pass.
+
+## 2026-07-16 Playability And Team-Name Readability
+
+- User asked for the next playability opportunities and reported that ellipsized team names are less useful than explicit abbreviations.
+- Added a compact `TeamName` mode and applied the same rule across dense matchday, result, calendar, league, cup, comparison, transfer, season-review, chronicle, settings, and legends surfaces: show the complete `shortName`, retain the full name in the title/accessibility text, and reserve full names for wider/detail contexts.
+- Added focused component coverage for compact versus full labels. TypeScript, touched-file ESLint, and 13 focused TeamName/playback tests pass.
+- Inspected 390x844 Dashboard and expanded Calendar screens in the local browser. Sampled labels including 山东泰山/直隶胜利/岛津众城 rendered as 泰山/直隶/岛津 with no overflow or clipping; no production `team.name`/`getTeamName` truncation combination remains.
+- Required deterministic game client completed two iterations after the UI change; text state and inspected screenshots retained normal player, ball, possession, and goal behavior with no error artifact.
+- Suggested next playability priorities: a favorite-team season objective layer with explicit progress/rewards, richer pre-advance decision tradeoffs around the existing God Hand/transfer/betting systems, and a compact post-window consequence summary that connects each decision to standings, finance, morale, and player development.
+- Final verification: 52 files / 451 tests, full ESLint, TypeScript production/PWA build, and bundle budgets pass. The 10-season/520-advance browser audit remains 0 errors / 0 warnings; all 18 mobile and 7 desktop routes report no horizontal overflow, clipped labels, undersized primary targets, or runtime errors.
+
+## 2026-07-16 Contextual Transfer AI Phase 1
+
+- User requirement: preserve mobile performance and all UUID-based history while making transfers contextual and believable. Randomness remains seeded, but only operates after hard plausibility constraints and multi-factor scoring.
+- [x] Added a shared pure transfer-decision layer for positional shortage/quality, upgrade value, age/potential, current-season performance, coach-style fit, club reputation reach, seller leverage, market value, financial urgency, and reserved budget.
+- [x] Automatic elite buyers now require a real same-position upgrade and sufficient transfer budget, then use weighted seeded selection rather than a uniform random club. Favorite teams never auto-buy behind the player's back.
+- [x] Automatic sellers now evaluate market-value-anchored offers with a continuous acceptance curve. Implausible bids below half the asking value have zero chance; loyal/ambitious tags, seller finances, player importance, and buyer need remain meaningful.
+- [x] Favorite-team target lists now reflect each club's own squad needs, tactics, affordability, and buyer valuation. Multi-favorite cards show the correct destination club and budget; free agents can be assigned to a selected favorite team.
+- [x] Player bids and counters use contextual continuous probabilities instead of fixed 40%/60% rolls. Staged offers that become unaffordable are withdrawn instead of overdrawing the buyer.
+- [x] Free-agent signing premiums now scale with market value and age instead of a universal EUR5M, closing the obvious high-rating free-agent exploit.
+- [x] Transfer-window UI exposes age, market value, interest reason, club budget, suggested value, and live acceptance probability without changing canonical transfer-history records.
+- Historical compatibility: player UUIDs, stat ownership, transfer records, finance records, and save schema remain intact. New in-progress window context fields are optional for older current-schema saves.
+- Performance architecture: squad/coach/finance profiles are computed once at season-end; player bid probabilities run only on interaction. No new work was added to match simulation or ordinary advance hot paths.
+- Validation found and fixed a one-decimal finance-audit false positive (`77.6` versus `77.60000000000001`) after dynamic fees; the ledger itself was correct.
+- Final verification: 53 files / 462 tests, full ESLint, TypeScript, production/PWA build, and bundle budgets pass. Main entry is 269,612 bytes; initial graph is 675,253 bytes.
+- Ten-season production-browser audit completed 520 advances with 0 errors / 0 warnings, no runtime or route failures, and successful persistence, deep-link, back-navigation, and offline checks.
+- Twenty-season engine sample completed in about 2.6 seconds: 25 ordinary paid market transfers (median EUR10.8M, max EUR82.4M) plus 2 pre-existing 200%-premium fire sales; no data-validation issues occurred.
+- Mobile transfer-window inspection at 390x844 confirmed per-team budgets, dynamic fees, 0% probability for a EUR1M absurd bid, no horizontal overflow, and no console errors. Required deterministic game client completed two iterations and its latest screenshot/state were inspected.
+- Mobile advance audit remains healthy: normal p50/p95 18.8/22.4ms, 4x CPU p50/p95 30.3/44.6ms, max long task 52ms, max timer gap 67.6ms, and 20 concurrent attempts still execute/persist exactly one advance.
+
+### Deferred Transfer Realism
+
+- [x] Interactive transfers now release the buyer's displaced fringe player to the free market; the seller keeps the fee and must solve its own replacement need.
+- [ ] Replace the mandatory exchange player in fire sales with independent buyer release and seller replacement decisions.
+- [ ] Add optional contracts, wages, squad role, playing-time satisfaction, transfer requests, loans, and Bosman/free-transfer lifecycle in a separate schema phase.
+- [x] Add lightweight stable recruitment identities (youth, star, value, balanced) derived from club identity without adding save-schema or hot-path cost.
+
+## 2026-07-16 Transfer Playability Follow-up
+
+- Added stable club recruitment profiles as a secondary transfer-fit signal. Positional need, upgrade quality, affordability, reputation reach, and seller intent remain the primary realism constraints; seeded randomness still prevents identical decisions.
+- Interactive transfers no longer force the buyer's weakest same-position player onto the seller. The displaced player becomes a free agent, the buyer keeps its squad size, and the seller receives only the negotiated fee and carries the resulting squad vacancy.
+- Protected ordinary sellers at the 18-player playable floor and exposed the post-transfer squad count plus likely buyer release directly in the market UI before a bid.
+- Free-market releases now have explicit transfer history/news semantics. Current-season stats for released free agents remain valid, and finance-history validation normalizes floating-point values before comparison.
+- Browser transaction verification confirmed an accepted EUR15.4M move, buyer squad delta 0, seller squad delta -1, free-agent-pool delta +1, exact buyer/seller cash deltas, and 0 validation issues after serialization.
+- Final verification: 53 files / 465 tests, full ESLint, TypeScript production/PWA build, and bundle budgets pass (269,612-byte main entry; 676,093-byte initial graph).
+- Ten-season production audit completed 520 advances with 0 errors / 0 warnings; all audited mobile/desktop routes passed overflow, clipping, touch-target, persistence, navigation, offline, and runtime checks.
+- The required deterministic game client completed two iterations; state and the final screenshot were inspected with coherent player/ball/save rendering and no error artifact.
+- Fire-sale exchange removal and contracts/wages/loans remain intentionally deferred; this pass adds playability without a save-schema expansion.

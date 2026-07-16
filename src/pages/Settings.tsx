@@ -148,7 +148,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
                 {team ? (
                   <div className="flex flex-col items-center gap-1">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
-                    <div className="text-xs text-slate-100 font-medium truncate max-w-full">{team.name}</div>
+                    <div className="text-xs text-slate-100 font-medium whitespace-nowrap" title={team.name}>{team.shortName}</div>
                     <button
                       onClick={() => toggleFavoriteTeam(tid)}
                       className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer"

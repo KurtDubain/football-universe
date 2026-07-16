@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getTierLabel, getTierColor } from '../utils/format';
+import { getTeamName, getTeamShortName, getTierLabel, getTierColor } from '../utils/format';
 import type { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
@@ -609,7 +609,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
                 <div className="flex items-center gap-1 min-w-0">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[e.teamId]?.color ?? '#666' }} />
                   <TeamTag teamId={e.teamId} ts={ts} tb={tb} />
-                  <Link to={`/team/${e.teamId}`} className="text-slate-200 hover:text-blue-400 truncate">{getTeamName(e.teamId, tb)}</Link>
+                  <Link to={`/team/${e.teamId}`} className="text-slate-200 hover:text-blue-400 whitespace-nowrap" title={getTeamName(e.teamId, tb)}>{getTeamShortName(e.teamId, tb)}</Link>
                 </div>
               </td>
               <td className="hidden sm:table-cell text-center px-1 py-1.5 text-slate-400">{e.played}</td>
@@ -640,14 +640,14 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
                     <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
                       <TeamTag teamId={fix.homeTeamId} ts={ts} tb={tb} />
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tb[fix.homeTeamId]?.color ?? '#666' }} />
-                      <span className="text-slate-300 truncate">{getTeamName(fix.homeTeamId, tb)}</span>
+                      <span className="text-slate-300 whitespace-nowrap" title={getTeamName(fix.homeTeamId, tb)}>{getTeamShortName(fix.homeTeamId, tb)}</span>
                     </div>
                     <span className="px-2 text-slate-100 font-bold shrink-0">
                       {has ? `${fix.result!.home} - ${fix.result!.away}` : 'vs'}
                     </span>
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tb[fix.awayTeamId]?.color ?? '#666' }} />
-                      <span className="text-slate-300 truncate">{getTeamName(fix.awayTeamId, tb)}</span>
+                      <span className="text-slate-300 whitespace-nowrap" title={getTeamName(fix.awayTeamId, tb)}>{getTeamShortName(fix.awayTeamId, tb)}</span>
                       <TeamTag teamId={fix.awayTeamId} ts={ts} tb={tb} />
                     </div>
                   </button>

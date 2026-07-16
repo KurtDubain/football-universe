@@ -9,11 +9,11 @@ import type { NewsItem } from '../engine/season/season-manager';
 import {
   applyTransferMove,
   createTransferRecord,
-  FREE_AGENT_SIGNING_FEE,
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from '../engine/transfers/transfer-application';
 import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../types/transfer';
+import { estimateFreeAgentSigningCost } from '../engine/transfers/transfer-decision';
 
 function transferSeason(world: GameWorld): number {
   return world.transferWindow?.season ?? world.seasonState.seasonNumber;
@@ -29,6 +29,16 @@ function transferNewsId(record: TransferRecord, suffix = record.toTeamId): strin
 
 function newsFromTransferRecord(record: TransferRecord, titlePrefix = '转会'): NewsItem {
   const feeText = record.fee ? `，费用约€${record.fee}M` : '';
+  if (record.toTeamId === FREE_MARKET_TEAM_ID) {
+    return {
+      id: transferNewsId(record),
+      seasonNumber: record.season,
+      windowIndex: record.windowIndex,
+      type: 'trophy',
+      title: `${titlePrefix}: ${record.playerName} 离开 ${record.fromTeamName}`,
+      description: `${record.playerName}离开${record.fromTeamName}进入自由市场。${record.reason}。`,
+    };
+  }
   return {
     id: transferNewsId(record),
     seasonNumber: record.season,
@@ -132,6 +142,9 @@ function applyBalancedTransfer(params: {
   const toSquad = world.squads[toTeamId] ?? [];
   const player = fromSquad.find((p) => p.uuid === playerId);
   if (!player) return world;
+  if (fromSquad.length >= 11 && fromSquad.length <= 18) return world;
+  const buyerFinance = world.teamFinances[toTeamId];
+  if (buyerFinance && buyerFinance.cash < fee) return world;
 
   const releaseCandidate = pickTransferReleaseCandidate(toSquad, player);
   const applied = applyTransferMove({
@@ -141,7 +154,7 @@ function applyBalancedTransfer(params: {
     fromTeamId,
     toTeamId,
     displacedPlayerId: releaseCandidate?.uuid,
-    displacedToTeamId: releaseCandidate ? fromTeamId : undefined,
+    displacedToTeamId: releaseCandidate ? FREE_MARKET_TEAM_ID : undefined,
   });
   if (!applied) return world;
   const { squads, playerStats, movedPlayer, displacedPlayer: released } = applied;
@@ -151,10 +164,6 @@ function applyBalancedTransfer(params: {
   let teamFinances = { ...world.teamFinances };
   teamFinances = creditFinance(teamFinances, fromTeamId, fee, season, currentSeason);
   teamFinances = debitFinance(teamFinances, toTeamId, fee, season, currentSeason);
-  if (released) {
-    teamFinances = debitFinance(teamFinances, fromTeamId, FREE_AGENT_SIGNING_FEE, season, currentSeason);
-    teamFinances = creditFinance(teamFinances, toTeamId, FREE_AGENT_SIGNING_FEE, season, currentSeason);
-  }
 
   const windowIndex = transferWindowIndex(world);
   const transferRecord = createTransferRecord({
@@ -175,11 +184,10 @@ function applyBalancedTransfer(params: {
     player: released,
     fromTeamId: toTeamId,
     fromTeamName: toTeamName,
-    toTeamId: fromTeamId,
-    toTeamName: fromTeamName,
-    type: 'free_agent',
-    fee: FREE_AGENT_SIGNING_FEE,
-    reason: '买家阵容腾位，卖家补入替代球员',
+    toTeamId: FREE_MARKET_TEAM_ID,
+    toTeamName: '自由市场',
+    type: 'free',
+    reason: '新援到队后调整阵容，自由身离队',
   }) : null;
   const transferRecords = replacementRecord
     ? [transferRecord, replacementRecord]
@@ -190,11 +198,14 @@ function applyBalancedTransfer(params: {
     squads,
     teamFinances,
     playerStats,
+    freeAgentPool: released
+      ? [...(world.freeAgentPool ?? []).filter(candidate => candidate.uuid !== released.uuid), released]
+      : world.freeAgentPool,
     transferHistory: [...(world.transferHistory ?? []), ...transferRecords],
     newsLog: [
       ...(world.newsLog ?? []),
       newsFromTransferRecord(transferRecord, reason === '玩家主动报价' ? '主动引援' : '接受报价'),
-      ...(replacementRecord ? [newsFromTransferRecord(replacementRecord, '阵容补位')] : []),
+      ...(replacementRecord ? [newsFromTransferRecord(replacementRecord, '阵容清理')] : []),
     ],
   };
 }
@@ -245,9 +256,9 @@ export function signFreeAgent(
   const pool = world.freeAgentPool ?? [];
   const player = pool.find(p => p.uuid === playerUuid);
   if (!player) return null;
-  // Cash check
+  const signingCost = estimateFreeAgentSigningCost(player);
   const finance = world.teamFinances[toTeamId];
-  if (!finance || finance.cash < FREE_AGENT_SIGNING_FEE) return null;
+  if (!finance || finance.cash < signingCost) return null;
 
   const applied = applyTransferMove({
     squads: world.squads,
@@ -264,7 +275,7 @@ export function signFreeAgent(
     ...world.teamFinances,
     [toTeamId]: withTransferExpense(
       finance,
-      FREE_AGENT_SIGNING_FEE,
+      signingCost,
       season,
       world.seasonState.seasonNumber,
     ),
@@ -279,7 +290,7 @@ export function signFreeAgent(
     toTeamId,
     toTeamName: world.teamBases[toTeamId]?.name ?? toTeamId,
     type: 'free_agent',
-    fee: FREE_AGENT_SIGNING_FEE,
+    fee: signingCost,
     reason: '玩家从自由市场签下',
   });
 

@@ -9,6 +9,12 @@ import { syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { SeededRNG } from '../engine/match/rng';
+import {
+  counterAcceptanceProbability,
+  isKeySquadPlayer,
+  sellerAcceptanceProbability,
+  suggestCounterFee,
+} from '../engine/transfers/transfer-decision';
 import { CalendarWindow } from '../types/season';
 import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
@@ -55,7 +61,7 @@ interface GameStore {
   rejectIncomingOffer: (offerId: string) => void;
   counterIncomingOffer: (offerId: string) => void;
   bidForOutgoingTarget: (targetId: string, fee: number) => void;
-  signFromFreeAgentPool: (uuid: string) => void;
+  signFromFreeAgentPool: (uuid: string, teamId?: string) => void;
   closeTransferWindow: (autoResolveRest: boolean) => void;
   resetGame: () => void;
   getCurrentWindow: () => CalendarWindow | null;
@@ -396,8 +402,9 @@ export const useGameStore = create<GameStore>()(
         if (!offer || offer.resolution !== 'pending') return;
         const fee = offer.counterFee ?? offer.fee;
         const newWorld = applyOfferTransfer(world, offer, fee);
+        const resolution = newWorld === world ? 'withdrawn' as const : 'accepted' as const;
         const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
-          ? { ...o, resolution: 'accepted' as const }
+          ? { ...o, resolution }
           : o);
         set({ world: { ...newWorld, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
       },
@@ -418,14 +425,23 @@ export const useGameStore = create<GameStore>()(
         const tw = world.transferWindow;
         const offer = tw.incomingOffers.find(o => o.id === offerId);
         if (!offer || offer.resolution !== 'pending') return;
-        const counterFee = Math.round(offer.fee * 1.3);
-        // 60% chance the buyer accepts the counter
+        const counterFee = suggestCounterFee(offer);
+        const buyerFinance = world.teamFinances[offer.buyerId];
+        const buyerValuation = offer.buyerValuation
+          ?? Math.max(offer.fee * 1.2, (offer.marketValue ?? offer.fee) * 1.05);
+        const acceptanceProbability = counterAcceptanceProbability({
+          counterFee,
+          buyerValuation,
+          buyerCash: buyerFinance?.cash,
+          needScore: offer.needScore,
+        });
         const rng = transferActionRng(world, `counter:${offerId}:${offer.counterFee ?? offer.fee}`);
-        const accepts = rng.next() < 0.6;
+        const accepts = rng.next() < acceptanceProbability;
         if (accepts) {
           const newWorld = applyOfferTransfer(world, offer, counterFee);
+          const resolution = newWorld === world ? 'withdrawn' as const : 'countered_accepted' as const;
           const updatedOffers = tw.incomingOffers.map(o => o.id === offerId
-            ? { ...o, counterFee, resolution: 'countered_accepted' as const }
+            ? { ...o, counterFee, resolution }
             : o);
           set({ world: { ...newWorld, transferWindow: { ...tw, incomingOffers: updatedOffers } }, advanceTick: get().advanceTick + 1 });
         } else {
@@ -451,11 +467,17 @@ export const useGameStore = create<GameStore>()(
           set({ world: { ...world, transferWindow: { ...tw, outgoingTargets: updatedTargets } }, advanceTick: get().advanceTick + 1 });
           return;
         }
-        // AI decision: accept if bid >= suggestedFee × 0.9
-        // Otherwise 40% chance to accept anyway (greedy seller)
+        const sellerSquad = world.squads[target.fromTeamId] ?? [];
+        const player = sellerSquad.find((candidate) => candidate.uuid === target.playerId);
+        if (!player) return;
+        const acceptanceProbability = sellerAcceptanceProbability({
+          bid: fee,
+          askingValue: target.suggestedFee,
+          sellerCash: world.teamFinances[target.fromTeamId]?.cash,
+          keyPlayer: isKeySquadPlayer(sellerSquad, player),
+        });
         const rng = transferActionRng(world, `bid:${targetId}:${fee}`);
-        const meetsAsk = fee >= target.suggestedFee * 0.9;
-        const accepted = meetsAsk || rng.next() < 0.4;
+        const accepted = rng.next() < acceptanceProbability;
         if (accepted) {
           const newWorld = applyOutgoingBid(world, target, fee);
           const resolution = newWorld === world ? 'skipped' as const : 'bid_accepted' as const;
@@ -471,14 +493,15 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      signFromFreeAgentPool: (uuid: string) => {
+      signFromFreeAgentPool: (uuid: string, requestedTeamId?: string) => {
         const { world, favoriteTeamIds } = get();
         if (!world?.transferWindow) return;
         const tw = world.transferWindow;
         if (tw.signedFromPool.includes(uuid)) return;
         if (favoriteTeamIds.length === 0) return;
-        // Sign to first favorite team that has room
-        const targetTeamId = favoriteTeamIds[0];
+        const targetTeamId = requestedTeamId && favoriteTeamIds.includes(requestedTeamId)
+          ? requestedTeamId
+          : favoriteTeamIds[0];
         const newWorld = signFreeAgent(world, uuid, targetTeamId);
         if (!newWorld) return; // sign failed
         set({

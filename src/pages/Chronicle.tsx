@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getCoachName } from '../utils/format';
+import { getTeamName, getTeamShortName, getCoachName } from '../utils/format';
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
 
@@ -174,7 +174,7 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
               return (
                 <div key={tid} className="flex items-center gap-2 text-xs">
                   <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: team?.color ?? '#666' }} />
-                  <Link to={`/team/${tid}`} className="text-slate-200 hover:text-blue-400 w-20 truncate">{getTeamName(tid, tb)}</Link>
+                  <Link to={`/team/${tid}`} className="text-slate-200 hover:text-blue-400 w-20 whitespace-nowrap" title={getTeamName(tid, tb)}>{getTeamShortName(tid, tb)}</Link>
                   <span className="text-slate-500">{initial}</span>
                   <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${Math.min(100, (current / 97) * 100)}%`, backgroundColor: team?.color ?? '#666' }} />
@@ -644,7 +644,7 @@ function StandingsTable({ title, records, tb }: { title: string; records: Season
           <div key={r.teamId} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i === 0 ? 'bg-amber-900/10' : r.relegated ? 'bg-red-900/10' : r.promoted ? 'bg-green-900/10' : ''}`}>
             <span className={`w-4 text-center font-bold ${i === 0 ? 'text-amber-400' : r.relegated ? 'text-red-400' : r.promoted ? 'text-green-400' : 'text-slate-500'}`}>{i + 1}</span>
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
-            <Link to={`/team/${r.teamId}`} className="flex-1 truncate text-slate-200 hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
+            <Link to={`/team/${r.teamId}`} className="flex-1 whitespace-nowrap text-slate-200 hover:text-blue-400" title={getTeamName(r.teamId, tb)}>{getTeamShortName(r.teamId, tb)}</Link>
             <span className="text-slate-500 hidden sm:inline">{r.leagueWon}胜 {r.leagueDrawn}平 {r.leagueLost}负</span>
             <span className="text-slate-500 text-[10px]">{r.leagueGF}-{r.leagueGA}</span>
             <span className="text-slate-400 w-8 text-right">{r.leagueGF - r.leagueGA > 0 ? '+' : ''}{r.leagueGF - r.leagueGA}</span>
@@ -659,12 +659,14 @@ function StandingsTable({ title, records, tb }: { title: string; records: Season
 function MemMatch({ m, tb }: { m: MatchHistoryEntry; tb: Record<string, TeamBase> }) {
   const homeName = getTeamName(m.homeId, tb);
   const awayName = getTeamName(m.awayId, tb);
+  const homeShortName = getTeamShortName(m.homeId, tb);
+  const awayShortName = getTeamShortName(m.awayId, tb);
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.homeId]?.color ?? '#666' }} />
-      <span className="flex-1 truncate text-slate-300 text-right">{homeName}</span>
+      <span className="flex-1 whitespace-nowrap text-slate-300 text-right" title={homeName}>{homeShortName}</span>
       <span className="font-bold tabular-nums text-amber-400 px-2">{m.homeGoals}-{m.awayGoals}</span>
-      <span className="flex-1 truncate text-slate-300">{awayName}</span>
+      <span className="flex-1 whitespace-nowrap text-slate-300" title={awayName}>{awayShortName}</span>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.awayId]?.color ?? '#666' }} />
       <span className="text-[11px] sm:text-[9px] text-slate-600 ml-1">{m.comp}</span>
     </div>
@@ -697,13 +699,13 @@ function ChampCard({ label, team, runnerUp, tb, color }: { label: string; team: 
       <div className="text-[10px] text-slate-500">{label}</div>
       <div className="flex items-center gap-1.5 mt-1">
         <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] sm:text-[8px] font-bold text-white" style={{ backgroundColor: tb[team]?.color ?? '#666' }}>{tb[team]?.shortName?.charAt(0)}</span>
-        <Link to={`/team/${team}`} className="text-xs font-semibold text-slate-200 hover:text-blue-400 truncate">{getTeamName(team, tb)}</Link>
+        <Link to={`/team/${team}`} className="text-xs font-semibold text-slate-200 hover:text-blue-400 whitespace-nowrap" title={getTeamName(team, tb)}>{getTeamShortName(team, tb)}</Link>
       </div>
       {runnerUp && tb[runnerUp] && (
         <div className="flex items-center gap-1 mt-1 text-[11px] sm:text-[9px] text-slate-500">
           <span>亚</span>
           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tb[runnerUp]?.color ?? '#666' }} />
-          <span className="truncate">{getTeamName(runnerUp, tb)}</span>
+          <span className="whitespace-nowrap" title={getTeamName(runnerUp, tb)}>{getTeamShortName(runnerUp, tb)}</span>
         </div>
       )}
     </div>

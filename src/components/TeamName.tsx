@@ -11,26 +11,29 @@ export default function TeamName({
   teamBases,
   showTier = false,
   link = true,
+  compact = false,
   className = '',
 }: {
   teamId: string;
   teamBases: Record<string, TeamBase>;
   showTier?: boolean;
   link?: boolean;
+  compact?: boolean;
   className?: string;
 }) {
   const team = teamBases[teamId];
   if (!team) return <span className={className}>{teamId}</span>;
+  const displayName = compact ? team.shortName || team.name : team.name;
 
   const name = (
-    <span className={`inline-flex items-center gap-1 min-w-0 ${className}`}>
+    <span className={`inline-flex items-center gap-1 min-w-0 max-w-full ${className}`} title={team.name}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
       {showTier && (
         <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium shrink-0 leading-tight ${getTierColor(team.tier)}`}>
           {getTierLabel(team.tier)}
         </span>
       )}
-      <span className="truncate">{team.name}</span>
+      <span className={compact ? 'whitespace-nowrap' : 'truncate'}>{displayName}</span>
     </span>
   );
 

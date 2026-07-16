@@ -141,8 +141,10 @@ export default function Transfers() {
 }
 
 function TransferRow({ record, world, isSwap }: { record: TransferRecord; world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>; isSwap: boolean }) {
-  const fromColor = world.teamBases[record.fromTeamId]?.color ?? '#666';
-  const toColor = world.teamBases[record.toTeamId]?.color ?? '#666';
+  const fromTeam = world.teamBases[record.fromTeamId];
+  const toTeam = world.teamBases[record.toTeamId];
+  const fromColor = fromTeam?.color ?? '#666';
+  const toColor = toTeam?.color ?? '#666';
   // Swap legs (paired free + transfer between the same teams in one window)
   // render with a two-way arrow + amber accent so the user sees them as a
   // swap rather than a release / standalone purchase.
@@ -181,13 +183,13 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
         {/* From → To */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 text-xs">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: fromColor }} />
-          <Link to={`/team/${record.fromTeamId}`} className="text-slate-400 hover:text-blue-300 truncate">
-            {record.fromTeamName}
+          <Link to={`/team/${record.fromTeamId}`} className="text-slate-400 hover:text-blue-300 whitespace-nowrap" title={record.fromTeamName}>
+            {fromTeam?.shortName ?? record.fromTeamName}
           </Link>
           <span className={`${arrowColor} font-bold shrink-0`} title={isSwap ? '互换交易' : undefined}>{arrow}</span>
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: toColor }} />
-          <Link to={`/team/${record.toTeamId}`} className="text-slate-200 hover:text-blue-300 truncate font-medium">
-            {record.toTeamName}
+          <Link to={`/team/${record.toTeamId}`} className="text-slate-200 hover:text-blue-300 whitespace-nowrap font-medium" title={record.toTeamName}>
+            {toTeam?.shortName ?? record.toTeamName}
           </Link>
         </div>
 

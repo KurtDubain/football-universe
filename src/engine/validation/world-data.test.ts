@@ -943,4 +943,68 @@ describe('validateWorldData', () => {
     expect(codes).toContain('transfer_finance_history_mismatch');
     expect(codes).toContain('transfer_news_history_mismatch');
   });
+
+  it('compares transfer finance at the archive one-decimal boundary', () => {
+    const world = initializeGameWorld(2025);
+    const [homeTeamId, awayTeamId] = Object.keys(world.teamBases);
+    const [first, second] = world.squads[homeTeamId];
+    const records = [first, second].map((player, index) => ({
+      season: 1,
+      windowIndex: 5,
+      playerId: player.uuid,
+      playerName: player.name,
+      playerNumber: player.number,
+      position: player.position,
+      fromTeamId: homeTeamId,
+      fromTeamName: world.teamBases[homeTeamId].name,
+      toTeamId: awayTeamId,
+      toTeamName: world.teamBases[awayTeamId].name,
+      type: 'transfer' as const,
+      fee: index === 0 ? 0.1 : 0.2,
+      reason: '浮点边界测试',
+    }));
+    const financeRecord = {
+      season: 1,
+      startCash: 100,
+      endCash: 100,
+      prizeMoney: 0,
+      tvSponsor: 0,
+      transferIncome: 0,
+      salaries: 0,
+      transferExpense: 0,
+    };
+    const validation = validateWorldData({
+      ...world,
+      transferHistory: records,
+      teamFinances: {
+        ...world.teamFinances,
+        [homeTeamId]: {
+          ...world.teamFinances[homeTeamId],
+          history: [{ ...financeRecord, transferIncome: 0.1 + 0.2 }],
+        },
+        [awayTeamId]: {
+          ...world.teamFinances[awayTeamId],
+          history: [{ ...financeRecord, transferExpense: 0.3 }],
+        },
+      },
+    });
+
+    expect(issueCodes(validation)).not.toContain('transfer_finance_history_mismatch');
+  });
+
+  it('keeps current-season stats valid while a released player is in the free market', () => {
+    const world = initializeGameWorld(2026);
+    const teamId = Object.keys(world.teamBases)[0];
+    const released = world.squads[teamId][0];
+    const validation = validateWorldData({
+      ...world,
+      squads: {
+        ...world.squads,
+        [teamId]: world.squads[teamId].filter(player => player.uuid !== released.uuid),
+      },
+      freeAgentPool: [released],
+    });
+
+    expect(issueCodes(validation)).not.toContain('orphan_player_stats');
+  });
 });

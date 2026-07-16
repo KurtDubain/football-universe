@@ -23,6 +23,7 @@ import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
   getTeamName,
+  getTeamShortName,
   getWindowTypeLabel,
   getWindowTypeColor,
   formatForm,
@@ -1047,7 +1048,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
                       <td className="px-1 py-1.5">
                         <div className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: teamBase?.color ?? '#64748b' }} />
-                          <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 truncate">{getTeamName(entry.teamId, world.teamBases)}</Link>
+                          <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 whitespace-nowrap" title={getTeamName(entry.teamId, world.teamBases)}>{getTeamShortName(entry.teamId, world.teamBases)}</Link>
                         </div>
                       </td>
                       <td className="text-center px-1 py-1.5 font-semibold text-slate-200">{entry.points}</td>
@@ -1155,7 +1156,7 @@ function FixtureCard({
         {/* Home */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
+            <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} showTier link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
             <span className="text-[11px] sm:text-[9px] text-slate-500">{homeTeam.overall}</span>
           </div>
         </div>
@@ -1164,7 +1165,7 @@ function FixtureCard({
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center gap-1 justify-end">
             <span className="text-[11px] sm:text-[9px] text-slate-500">{awayTeam.overall}</span>
-            <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} showTier link={false} className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
+            <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} showTier link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
           </div>
         </div>
       </div>

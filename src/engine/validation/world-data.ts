@@ -905,13 +905,20 @@ function validateTransferFinanceHistory(
     const finance = world.teamFinances[row.teamId];
     const history = finance?.history.find((entry) => entry.season === row.season);
     if (!history) continue;
-    const missingIncome = history.transferIncome < row.income;
-    const missingExpense = history.transferExpense < row.expense;
+    // Finance archives round to one decimal. Normalize the reconstructed
+    // transfer sum to the same boundary so 77.6 is not treated as lower than
+    // the IEEE-754 artifact 77.60000000000001.
+    const expectedIncome = Math.round(row.income * 10) / 10;
+    const expectedExpense = Math.round(row.expense * 10) / 10;
+    const actualIncome = Math.round(history.transferIncome * 10) / 10;
+    const actualExpense = Math.round(history.transferExpense * 10) / 10;
+    const missingIncome = actualIncome < expectedIncome;
+    const missingExpense = actualExpense < expectedExpense;
     if (!missingIncome && !missingExpense) continue;
     pushIssue(issues, {
       severity: 'warning',
       code: 'transfer_finance_history_mismatch',
-      message: `Finance history for ${row.teamId} S${row.season} has transfer income/expense ${history.transferIncome}/${history.transferExpense}, below transferHistory expectation ${row.income}/${row.expense}.`,
+      message: `Finance history for ${row.teamId} S${row.season} has transfer income/expense ${history.transferIncome}/${history.transferExpense}, below transferHistory expectation ${expectedIncome}/${expectedExpense}.`,
       teamId: row.teamId,
       season: row.season,
     });
@@ -1408,6 +1415,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
   const teamBaseIds = new Set(Object.keys(world.teamBases ?? {}));
   const teamStateIds = new Set(Object.keys(world.teamStates ?? {}));
   const squadTeamIds = new Set(Object.keys(world.squads ?? {}));
+  const freeAgentIds = new Set((world.freeAgentPool ?? []).map((player) => player.uuid));
   const { activePlayers, activePlayerTeams, duplicatePlayerIds } = indexActivePlayers(world.squads);
   const completedResultWindowCount = (world.seasonState?.calendar ?? [])
     .filter((window) => (window.results?.length ?? 0) > 0)
@@ -1532,7 +1540,7 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       });
     }
 
-    if (!liveTeam && !isKnownHistoricalPlayer(world, playerId)) {
+    if (!liveTeam && !freeAgentIds.has(playerId) && !isKnownHistoricalPlayer(world, playerId)) {
       pushIssue(issues, {
         severity: 'warning',
         code: 'orphan_player_stats',

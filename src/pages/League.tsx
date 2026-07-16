@@ -10,6 +10,7 @@ import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import {
   getTeamName,
+  getTeamShortName,
   formatForm,
   getLeagueName,
 } from '../utils/format';
@@ -327,8 +328,8 @@ export default function League() {
                         <td className="px-1.5 sm:px-2 py-2">
                           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                             <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0" style={{ backgroundColor: teamBase?.color ?? '#64748b' }} />
-                            <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 transition-colors truncate text-xs sm:text-sm">
-                              {getTeamName(entry.teamId, world.teamBases)}
+                            <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 transition-colors whitespace-nowrap text-xs sm:text-sm" title={getTeamName(entry.teamId, world.teamBases)}>
+                              {getTeamShortName(entry.teamId, world.teamBases)}
                             </Link>
                             {teamBase?.region && (
                               <span className="hidden sm:inline text-[11px] sm:text-[9px] text-slate-600 shrink-0">{teamBase.region.split('+')[1]}</span>
@@ -525,13 +526,13 @@ export default function League() {
                                   }}
                                 />
                                 <span
-                                  className={`truncate pr-2 ${
+                                  className={`whitespace-nowrap pr-2 ${
                                     homeWon
                                       ? 'text-green-400 font-bold'
                                       : 'text-slate-200'
                                   }`}
                                 >
-                                  {getTeamName(r.homeTeamId, world.teamBases)}
+                                  {getTeamShortName(r.homeTeamId, world.teamBases)}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1 px-2 shrink-0">
@@ -568,13 +569,13 @@ export default function League() {
                               </div>
                               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                 <span
-                                  className={`truncate pl-2 ${
+                                  className={`whitespace-nowrap pl-2 ${
                                     awayWon
                                       ? 'text-green-400 font-bold'
                                       : 'text-slate-200'
                                   }`}
                                 >
-                                  {getTeamName(r.awayTeamId, world.teamBases)}
+                                  {getTeamShortName(r.awayTeamId, world.teamBases)}
                                 </span>
                                 <span
                                   className="w-2 h-2 rounded-full shrink-0"
@@ -641,8 +642,8 @@ export default function League() {
                                       backgroundColor: homeTeam.color,
                                     }}
                                   />
-                                  <span className="text-sm font-medium text-slate-200 truncate">
-                                    {homeTeam.name}
+                                  <span className="text-sm font-medium text-slate-200 whitespace-nowrap" title={homeTeam.name}>
+                                    {homeTeam.shortName}
                                   </span>
                                   <span className="text-xs text-green-500 shrink-0">
                                     (主)
@@ -657,8 +658,8 @@ export default function League() {
                                   <span className="text-xs text-slate-500 shrink-0">
                                     (客)
                                   </span>
-                                  <span className="text-sm font-medium text-slate-200 truncate">
-                                    {awayTeam.name}
+                                  <span className="text-sm font-medium text-slate-200 whitespace-nowrap" title={awayTeam.name}>
+                                    {awayTeam.shortName}
                                   </span>
                                   <span
                                     className="w-2 h-2 rounded-full shrink-0"

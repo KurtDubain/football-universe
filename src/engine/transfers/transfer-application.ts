@@ -3,7 +3,6 @@ import type { TransferRecord, TransferType } from '../../types/transfer';
 import { syncPlayerStatsTeamIds } from '../players/stats';
 
 export const FREE_MARKET_TEAM_ID = '__free_market__';
-export const FREE_AGENT_SIGNING_FEE = 5;
 
 export function pickFreeSquadNumber(used: Set<number>, preferred: number): number {
   if (!used.has(preferred)) return preferred;
