@@ -127,12 +127,12 @@ function HistoryContent({ world }: { world: GameWorld }) {
 
   return (
     <div className="max-w-4xl space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-100">历史荣誉</h2>
-        <div className="flex bg-slate-800 rounded-lg border border-slate-700 p-0.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h2 className="text-xl font-bold text-slate-100 whitespace-nowrap">历史荣誉</h2>
+        <div className="grid grid-cols-4 w-full sm:w-auto bg-slate-800 rounded-lg border border-slate-700 p-0.5">
           {tabs.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-3 py-1 text-xs rounded-md cursor-pointer transition-colors ${tab === t.key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`min-h-11 px-1 sm:px-3 py-1 text-[11px] sm:text-xs whitespace-nowrap rounded-md cursor-pointer transition-colors ${tab === t.key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
             >{t.label}</button>
           ))}
         </div>

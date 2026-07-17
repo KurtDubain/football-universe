@@ -25,13 +25,22 @@ const Market = lazy(() => import('../pages/Market'));
 const MemorableMatches = lazy(() => import('../pages/MemorableMatches'));
 const AdvancedSearch = lazy(() => import('../pages/AdvancedSearch'));
 
-function RouteLoading({ fullPage = false }: { fullPage?: boolean }) {
+export function RouteLoading({ fullPage = false }: { fullPage?: boolean }) {
   return (
     <div
       role="status"
-      className={`${fullPage ? 'min-h-screen' : 'min-h-[50vh]'} grid place-items-center bg-slate-950 text-sm text-slate-400`}
+      aria-label="正在加载页面"
+      className={`${fullPage ? 'min-h-screen px-5 py-12 bg-slate-900' : 'min-h-72 py-1'} w-full`}
     >
-      正在加载...
+      <span className="sr-only">正在加载...</span>
+      <div className="w-full max-w-4xl mx-auto space-y-4 animate-pulse motion-reduce:animate-none" aria-hidden="true">
+        <div className="h-7 w-32 rounded-md bg-slate-800" />
+        <div className="h-20 rounded-lg border border-slate-700/60 bg-slate-800/70" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="h-36 rounded-lg border border-slate-700/60 bg-slate-800/70" />
+          <div className="h-36 rounded-lg border border-slate-700/60 bg-slate-800/70" />
+        </div>
+      </div>
     </div>
   );
 }

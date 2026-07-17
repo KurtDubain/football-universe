@@ -341,7 +341,7 @@ function buildMergedRounds(rounds: CupRound[]): MergedRound[] {
   return merged;
 }
 
-function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
+export function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   if (rounds.length === 0) return <p className="text-sm text-slate-500">淘汰赛尚未开始</p>;
 
   const merged = buildMergedRounds(rounds);
@@ -351,29 +351,99 @@ function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; tb: Reco
   const hasFinal = merged.some(r => r.label.includes('决赛'));
   const roundCount = merged.length;
 
-  if (hasFinal && roundCount >= 3) {
-    return <SymmetricBracket merged={merged} tb={tb} ts={ts} onClick={onClick} />;
-  }
-
-  // Linear fallback for simple brackets (e.g., early league cup rounds)
   return (
-    <div className="overflow-x-auto pb-4">
-      <div className="flex gap-3 sm:gap-4 min-w-max items-start">
-        {merged.map((mr, ri) => {
-          const n = mr.ties.length;
-          const cellGap = n <= 1 ? 0 : n <= 2 ? 32 : n <= 4 ? 12 : n <= 8 ? 4 : 2;
-          return (
-            <div key={ri} className="flex flex-col">
-              <RoundHeader mr={mr} />
-              <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
-                {mr.ties.map((tie, ti) => (
-                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} />
-                ))}
-                <EmptySlot show={mr.ties.length === 0} />
-              </div>
+    <>
+      <MobileBracket
+        key={merged.map(round => `${round.label}:${round.ties.length}:${round.completed}`).join('|')}
+        merged={merged}
+        tb={tb}
+        ts={ts}
+        onClick={onClick}
+      />
+      <div className="hidden sm:block">
+        {hasFinal && roundCount >= 3 ? (
+          <SymmetricBracket merged={merged} tb={tb} ts={ts} onClick={onClick} />
+        ) : (
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max items-start">
+              {merged.map((mr, ri) => {
+                const n = mr.ties.length;
+                const cellGap = n <= 1 ? 0 : n <= 2 ? 32 : n <= 4 ? 12 : n <= 8 ? 4 : 2;
+                return (
+                  <div key={ri} className="flex flex-col">
+                    <RoundHeader mr={mr} />
+                    <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
+                      {mr.ties.map((tie, ti) => (
+                        <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} />
+                      ))}
+                      <EmptySlot show={mr.ties.length === 0} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export function MobileBracket({ merged, tb, ts, onClick }: {
+  merged: MergedRound[];
+  tb: Record<string, TeamBase>;
+  ts: Record<string, TeamState>;
+  onClick: (f: CupFixture) => void;
+}) {
+  const defaultRound = merged.find(round => !round.completed)?.label ?? merged.at(-1)?.label ?? '';
+  const [selectedLabel, setSelectedLabel] = useState(defaultRound);
+  const selectedRound = merged.find(round => round.label === selectedLabel) ?? merged[0];
+
+  return (
+    <div className="sm:hidden pb-4">
+      {merged.length > 1 && (
+        <div role="tablist" aria-label="杯赛轮次" className="flex gap-1 overflow-x-auto pb-2 scroll-smooth">
+          {merged.map(round => (
+            <button
+              key={round.label}
+              type="button"
+              role="tab"
+              aria-selected={round.label === selectedRound.label}
+              onClick={() => setSelectedLabel(round.label)}
+              className={`min-h-11 px-3 rounded-md border text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                round.label === selectedRound.label
+                  ? 'border-blue-500 bg-blue-600 text-white'
+                  : 'border-slate-700 bg-slate-800 text-slate-400'
+              }`}
+            >
+              {round.label}
+              {round.completed && <span className="ml-1 text-green-300">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div role="tabpanel" className="rounded-lg border border-slate-700/70 bg-slate-800/30 p-2">
+        <RoundHeader mr={selectedRound} />
+        <div className={`grid gap-2 ${selectedRound.ties.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          {selectedRound.ties.map((tie, index) => (
+            <TieCell
+              key={index}
+              tie={tie}
+              mr={selectedRound}
+              tb={tb}
+              ts={ts}
+              onClick={onClick}
+              fluid
+              compactName
+            />
+          ))}
+          {selectedRound.ties.length === 0 && (
+            <div className="col-span-full h-14 rounded-lg border border-dashed border-slate-700/50 flex items-center justify-center text-xs text-slate-600">
+              待定
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -482,7 +552,7 @@ function EmptySlot({ show }: { show: boolean }) {
   );
 }
 
-function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
+function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactName }: {
   tie: MergedTie;
   mr: MergedRound;
   tb: Record<string, TeamBase>;
@@ -490,6 +560,8 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
   onClick: (f: CupFixture) => void;
   compact?: boolean;
   highlight?: boolean;
+  fluid?: boolean;
+  compactName?: boolean;
 }) {
   const t1 = tb[tie.team1Id];
   const t2 = tb[tie.team2Id];
@@ -499,7 +571,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
   const derbyName = isDerby(tie.team1Id, tie.team2Id, tb) ? getDerbyName(tie.team1Id, tie.team2Id, tb) : null;
 
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
-  const cellW = compact ? 'w-28 sm:w-36' : highlight ? 'w-32 sm:w-44' : 'w-30 sm:w-40';
+  const cellW = fluid ? 'w-full min-w-0' : compact ? 'w-28 sm:w-36' : highlight ? 'w-32 sm:w-44' : 'w-30 sm:w-40';
 
   return (
     <button
@@ -514,9 +586,11 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t1?.color ?? '#555' }} />
-        <TeamTag teamId={tie.team1Id} ts={ts} tb={tb} />
+        <span className={compactName ? 'hidden sm:inline-flex' : 'inline-flex'}>
+          <TeamTag teamId={tie.team1Id} ts={ts} tb={tb} />
+        </span>
         <span className={`flex-1 truncate ${w1 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {t1 ? getTeamName(tie.team1Id, tb) : '待定'}
+          {t1 ? (compactName ? getTeamShortName(tie.team1Id, tb) : getTeamName(tie.team1Id, tb)) : '待定'}
         </span>
         {hasResult && (
           <span className={`font-bold tabular-nums ${w1 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg1}</span>
@@ -528,9 +602,11 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight }: {
       {/* Team 2 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w2 ? 'bg-green-900/20' : ''} ${mr.twoLegged ? '' : 'rounded-b-lg'}`}>
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t2?.color ?? '#555' }} />
-        <TeamTag teamId={tie.team2Id} ts={ts} tb={tb} />
+        <span className={compactName ? 'hidden sm:inline-flex' : 'inline-flex'}>
+          <TeamTag teamId={tie.team2Id} ts={ts} tb={tb} />
+        </span>
         <span className={`flex-1 truncate ${w2 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {t2 ? getTeamName(tie.team2Id, tb) : '待定'}
+          {t2 ? (compactName ? getTeamShortName(tie.team2Id, tb) : getTeamName(tie.team2Id, tb)) : '待定'}
         </span>
         {hasResult && (
           <span className={`font-bold tabular-nums ${w2 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg2}</span>

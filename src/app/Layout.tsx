@@ -9,6 +9,7 @@ import { AmbientGlow } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
+import MobileDrawer from '../components/MobileDrawer';
 
 interface LayoutProps {
   children: ReactNode;
@@ -348,23 +349,26 @@ export default function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Mobile nav overlay */}
-      {mobileNavOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="w-64 bg-slate-800 flex flex-col shadow-2xl">
-            <div className="p-3 border-b border-slate-700/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Logo size={28} />
-                <span className="text-sm font-bold text-slate-100">足球联赛宇宙</span>
-              </div>
-              <button onClick={() => setMobileNavOpen(false)} className="p-2 text-slate-400 hover:text-slate-200 cursor-pointer">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg>
-              </button>
-            </div>
-            {navContent}
+      <MobileDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        labelledBy="mobile-navigation-title"
+      >
+        <div className="p-3 border-b border-slate-700/60 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Logo size={28} />
+            <span id="mobile-navigation-title" className="text-sm font-bold text-slate-100">足球联赛宇宙</span>
           </div>
-          <div className="flex-1 bg-black/50" onClick={() => setMobileNavOpen(false)} />
+          <button
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="关闭导航菜单"
+            className="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-slate-200 cursor-pointer"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg>
+          </button>
         </div>
-      )}
+        {navContent}
+      </MobileDrawer>
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">

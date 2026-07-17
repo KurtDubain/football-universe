@@ -149,3 +149,15 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Final verification: 54 files / 469 tests, full ESLint, TypeScript production/PWA build, and bundle budgets pass. Main entry remains 269,615 bytes; initial graph is 676,096 bytes.
 - A real browser advanced 60 windows into S2 and inspected Guangzhou Hengda at 390x844@3 and 1440x900. The panel derived current form/finance, two real memorable losses, and a seven-match Beijing rivalry; both layouts had zero body/panel overflow and zero runtime errors.
 - The required deterministic game client completed two iterations; state and final screenshot were inspected with coherent player, ball, and save rendering and no error artifact.
+
+## 2026-07-17 UI Polish Phase 1
+
+- User requested the first implementation phase from `docs/ui-polish-checklist.md`, followed by direct commit and push.
+- Scope: mobile navigation overlay behavior, mobile cup-bracket readability, mobile league-column semantics, History header wrapping, and lazy-route loading presentation.
+- Added a focused mobile drawer component with modal semantics, background scroll lock, Escape close, focus containment, and focus return. The overlay now sits above every sticky header/action.
+- Mobile cup brackets now show one selected round at a time and render that round as a full-width one/two-column list with explicit team abbreviations. Desktop brackets remain unchanged.
+- Mobile League standings now show `赛/胜/平/负/净/分`, hide the unmatched form header and goals-against column, and suppress zero-match attacking superlatives.
+- History tabs stack below the title on narrow screens with 44px targets. Lazy routes now use a layout-shaped, reduced-motion-aware skeleton instead of a `50vh` black loading panel.
+- Browser inspection passed at `320x568`, `390x844`, `430x932`, and `1440x900`: the drawer covered sticky controls and restored focus, cup matchups used 167px two-column cards without label overflow, League mobile headers/cells matched 8-to-8, History tabs measured 44px, and the loading skeleton was visibly rendered. Browser console errors/warnings were empty.
+- Final verification passed: 57 files / 474 tests, full ESLint, TypeScript, production/PWA build, and bundle budgets (271,545-byte main entry; 678,026-byte initial graph). Match presentation passed desktop, mobile, and reduced-motion rendering checks, and the required game client produced no error artifact.
+- `audit:current` was attempted with ten and two seasons but stalled in its browser-wait phase without producing a report; it was not counted as passed. The phase-specific browser matrix and stable match harness completed successfully.

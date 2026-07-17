@@ -262,7 +262,7 @@ export default function League() {
               <span className="text-slate-500">场均进球</span>
               <span className="ml-2 text-slate-200 font-semibold">{avgGoals}</span>
             </div>
-            {topScorer && (
+            {topScorer && totalPlayed > 0 && (
               <div>
                 <span className="text-slate-500">进攻最强</span>
                 <span className="ml-2 text-slate-200 font-semibold">
@@ -282,14 +282,15 @@ export default function League() {
                     <th className="text-left px-1.5 sm:px-2 py-2">球队</th>
                     <th className="text-center px-1 sm:px-2 py-2">赛</th>
                     <th className="text-center px-1 sm:px-2 py-2">胜</th>
-                    <th className="hidden sm:table-cell text-center px-2 py-2">平</th>
-                    <th className="hidden sm:table-cell text-center px-2 py-2">负</th>
+                    <th className="text-center px-1 sm:px-2 py-2">平</th>
+                    <th className="text-center px-1 sm:px-2 py-2">负</th>
                     <th className="hidden md:table-cell text-center px-2 py-2">进</th>
-                    <th className="text-center px-1 sm:px-2 py-2">失</th>
-                    <th className="text-center px-1 sm:px-2 py-2">净胜</th>
+                    <th className="hidden sm:table-cell text-center px-2 py-2">失</th>
+                    <th className="text-center px-1 sm:px-2 py-2"><span className="sm:hidden">净</span><span className="hidden sm:inline">净胜</span></th>
                     <th className="hidden md:table-cell text-left px-2 py-2">全赛事队内射手</th>
                     <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
-                    <th className="text-center px-1 sm:px-2 py-2">近况</th>
+                    <th className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">形势</th>
+                    <th className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">近况</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,10 +339,10 @@ export default function League() {
                         </td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.won}</td>
-                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.drawn}</td>
-                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.lost}</td>
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.drawn}</td>
+                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.lost}</td>
                         <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsFor}</td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.goalsAgainst}</td>
+                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
                         <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
                           {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
                         </td>
@@ -415,7 +416,7 @@ export default function League() {
                             return null;
                           })()}
                         </td>
-                        <td className="text-center px-1 sm:px-2 py-2">
+                        <td className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">
                           <div className="flex gap-0.5 justify-center">
                             {formatForm(entry.form.slice(-5)).map((f, fi) => (
                               <span key={fi} className={`inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded text-[11px] sm:text-[9px] sm:text-[10px] font-bold text-white ${f.color}`}>
