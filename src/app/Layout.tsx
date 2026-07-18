@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useRef, useCallback, useEffect } from 'react';
+import { type ReactNode, useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
@@ -10,6 +10,7 @@ import { APP_VERSION } from '../version';
 import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 import MobileDrawer from '../components/MobileDrawer';
+import FloatingAdvanceButton from '../components/FloatingAdvanceButton';
 
 interface LayoutProps {
   children: ReactNode;
@@ -448,7 +449,15 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Floating advance button */}
-      {showFloatingBtn && location.pathname !== '/' && <FloatingAdvanceButton />}
+      {showFloatingBtn && location.pathname !== '/' && (
+        <FloatingAdvanceButton
+          stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
+          accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
+          isAdvancing={isAdvancing}
+          disabled={isAdvancing || !currentWindow}
+          onAdvance={advanceWindow}
+        />
+      )}
 
       {/* Achievement toast */}
       <AchievementToastContainer />
@@ -459,70 +468,6 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       )}
     </div>
-  );
-}
-
-function FloatingAdvanceButton() {
-  const advanceWindow = useGameStore(s => s.advanceWindow);
-  const isAdvancing = useGameStore(s => s.isAdvancing);
-  const getCurrentWindow = useGameStore(s => s.getCurrentWindow);
-  const currentWindow = getCurrentWindow();
-
-  const [pos, setPos] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 120 });
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
-  const didMove = useRef(false);
-
-  const clampPosition = useCallback((x: number, y: number) => ({
-    x: Math.max(8, Math.min(window.innerWidth - 64, x)),
-    y: Math.max(8, Math.min(window.innerHeight - 64, y)),
-  }), []);
-
-  useEffect(() => {
-    const handleResize = () => setPos(current => clampPosition(current.x, current.y));
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [clampPosition]);
-
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    setDragging(true);
-    didMove.current = false;
-    dragStart.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [pos]);
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didMove.current = true;
-    setPos(clampPosition(dragStart.current.px + dx, dragStart.current.py + dy));
-  }, [clampPosition, dragging]);
-
-  const onPointerUp = useCallback(() => {
-    setDragging(false);
-  }, []);
-
-  const bgColor = currentWindow ? getWindowTypeColor(currentWindow.type).replace('bg-', '') : 'slate-600';
-
-  return (
-    <button
-      type="button"
-      aria-label={currentWindow ? `推进到下一阶段：${getWindowTypeLabel(currentWindow.type)}` : '赛季已完成'}
-      disabled={!currentWindow || isAdvancing}
-      className={`fixed z-[100] w-14 h-14 rounded-full shadow-lg flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none touch-none transition-shadow ${isAdvancing ? 'opacity-50' : 'hover:shadow-xl'}`}
-      style={{ left: pos.x, top: pos.y, backgroundColor: `var(--color-${bgColor}, #475569)` }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={() => setDragging(false)}
-      onClick={() => {
-        if (!didMove.current && currentWindow && !isAdvancing) advanceWindow();
-      }}
-    >
-      <span className="text-white text-xs font-bold">{isAdvancing ? '...' : '推进'}</span>
-      {currentWindow && <span className="text-white/60 text-[10px] sm:text-[8px] leading-none mt-0.5">{getWindowTypeLabel(currentWindow.type).slice(0, 3)}</span>}
-    </button>
   );
 }
 

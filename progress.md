@@ -171,3 +171,11 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - A separate 125% root-text check kept Chinese team names and controls readable with zero page overflow. Representative screenshots for compact mobile, regular mobile, large text, and desktop were inspected.
 - Final verification passed: 58 files / 477 tests, full ESLint, TypeScript and production/PWA build, bundle budgets (270,994-byte main entry; 680,682-byte initial graph), and desktop/mobile/reduced-motion match-presentation checks.
 - Remaining checklist work is intentionally still visible: global 8-10px label cleanup, remaining numeric typography, old large-radius cards, horizontal-tab edge affordances, and the next page-specific hierarchy phases.
+
+## 2026-07-18 Floating Advance Hotfix
+
+- Reproduced the optional floating advance control at 390x844 and 1440x900. The old 56px circle overloaded one surface with both drag and advance, used a 10px/8px stacked label, defaulted near the bottom with no visible movement affordance, ignored visual-viewport offsets and safe areas, and could be dragged over important text without edge snapping.
+- Replaced it with a compact 8px-radius two-part control: a dedicated 44x48 move handle and an 85x48 one-click advance action. The action uses the shared grass token and play icon; the small current-window dot remains a secondary stage cue.
+- Default placement now respects right/bottom safe-area insets. Pointer movement clamps against `visualViewport`, survives viewport/browser-chrome changes, and snaps to the nearest horizontal edge. Arrow keys move the control in 12px steps and Home returns it to the safe default dock.
+- Focused tests cover viewport clamping, visual-viewport offsets, separated move/action behavior, keyboard movement, and reset. Real mobile/desktop browser checks confirmed 8px radius, valid touch sizes, 12px/16px default margins, left-edge snapping, zero drag-triggered advances, exactly one window advance per action click, and zero console errors.
+- Final verification passed: 60 files / 481 tests, full ESLint, TypeScript and production/PWA build, and bundle budgets (273,073-byte main entry; 682,761-byte initial graph). Default and dragged mobile screenshots plus the desktop screenshot were inspected; the required game client completed two iterations without an error artifact.
