@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import type { TransferRecord } from '../types/transfer';
+import { EmptyState, PageHeader, PageShell, Panel, SectionHeader, SegmentedControl, StatusBadge } from '../components/ui';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = {
@@ -83,60 +84,48 @@ export default function Transfers() {
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
   return (
-    <div className="max-w-4xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-100">转会窗口</h2>
-        <span className="text-xs text-slate-500">共 {transferData.total} 笔</span>
-      </div>
+    <PageShell width="standard" className="tabular-nums">
+      <PageHeader
+        title="转会窗口"
+        meta={<StatusBadge>{transferData.total} 笔</StatusBadge>}
+      />
 
       {/* Filter */}
-      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60 w-fit">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
-            filter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          全部
-        </button>
-        <button
-          onClick={() => setFilter('major')}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
-            filter === 'major' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          强援转会
-        </button>
-      </div>
+      <SegmentedControl
+        value={filter}
+        onChange={setFilter}
+        ariaLabel="转会记录筛选"
+        options={[
+          { value: 'all', label: '全部' },
+          { value: 'major', label: '强援转会' },
+        ]}
+      />
 
       {transferData.bySeasons.length === 0 ? (
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-8 text-center">
-          <div className="text-4xl mb-2">🔄</div>
-          <div className="text-sm text-slate-400">尚无转会记录</div>
-          <div className="text-xs text-slate-500 mt-1">
-            完成一个完整赛季后将自动生成转会窗口
-          </div>
-        </div>
+        <EmptyState
+          title="尚无转会记录"
+          description="完成一个完整赛季后将自动生成转会窗口"
+        />
       ) : (
         <div className="space-y-4">
           {transferData.bySeasons.map(({ season, records, swapIndices }) => (
-            <div key={season} className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
-              <div className="px-4 py-2 bg-slate-700/30 border-b border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-200">第 {season} 赛季</h3>
-                  <span className="text-xs text-slate-500">{records.length} 笔</span>
-                </div>
+            <Panel key={season} padded={false} className="overflow-hidden">
+              <div className="px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--surface-raised)]/40">
+                <SectionHeader
+                  title={`第 ${season} 赛季`}
+                  actions={<StatusBadge>{records.length} 笔</StatusBadge>}
+                />
               </div>
               <div className="divide-y divide-slate-700/40">
                 {records.map((t, i) => (
                   <TransferRow key={i} record={t} world={world} isSwap={swapIndices.has(i)} />
                 ))}
               </div>
-            </div>
+            </Panel>
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

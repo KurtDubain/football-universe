@@ -332,9 +332,9 @@ export default function Layout({ children }: LayoutProps) {
   );
 
   return (
-    <div className="h-[100dvh] bg-slate-900 flex overflow-hidden">
+    <div className="h-[100dvh] bg-[var(--surface-page)] flex overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 bg-slate-800/80 backdrop-blur border-r border-slate-700/60 flex-col shrink-0 relative">
+      <aside className="hidden md:flex w-52 bg-[var(--surface-panel)] border-r border-[var(--border-subtle)] flex-col shrink-0 relative">
         <AmbientGlow height={600} />
         <div className="p-3 border-b border-slate-700/60">
           <div className="flex items-center gap-2">
@@ -373,7 +373,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-12 bg-slate-800/60 backdrop-blur border-b border-slate-700/50 flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
+        <header className="h-12 bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile hamburger */}
             <button
@@ -402,7 +402,7 @@ export default function Layout({ children }: LayoutProps) {
             <button
               onClick={advanceWindow}
               disabled={isAdvancing || !currentWindow}
-              className="h-11 sm:h-auto px-3 sm:px-4 sm:py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-l-lg transition-all cursor-pointer"
+              className="h-11 sm:h-auto px-3 sm:px-4 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed text-white text-sm font-medium rounded-l-md transition-colors cursor-pointer"
             >
               {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
             </button>
@@ -411,7 +411,7 @@ export default function Layout({ children }: LayoutProps) {
                 onClick={() => setShowFastMenu(!showFastMenu)}
                 disabled={isAdvancing}
                 aria-label="打开快进菜单"
-                className="w-11 h-11 sm:w-auto sm:h-auto sm:px-1.5 sm:py-1.5 bg-blue-700 hover:bg-blue-600 disabled:bg-slate-700 text-white text-sm rounded-r-lg transition-all cursor-pointer border-l border-blue-500/30"
+                className="w-11 h-11 sm:w-auto sm:h-auto sm:px-1.5 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] text-white text-sm rounded-r-md transition-colors cursor-pointer border-l border-white/20"
               >
                 ▾
               </button>

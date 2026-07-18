@@ -13,6 +13,7 @@ import {
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
+import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 
 type Tab = 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
 
@@ -284,38 +285,26 @@ export default function Players() {
                   : topDiscipline;
 
   return (
-    <div className="max-w-4xl space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-100">
-          球员中心
-        </h2>
-        <span className="text-xs text-slate-500">
-          {tab === 'careerScorers' || tab === 'careerAssists'
-            ? '生涯总计'
-            : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
-        </span>
-      </div>
+    <PageShell width="standard" className="tabular-nums">
+      <PageHeader
+        title="球员中心"
+        meta={tab === 'careerScorers' || tab === 'careerAssists'
+          ? '生涯总计'
+          : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
+      />
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`min-w-20 sm:min-w-0 sm:flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
-              tab === t.key
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={tab}
+        onChange={setTab}
+        ariaLabel="球员榜单"
+        options={tabs.map(t => ({ value: t.key, label: t.label }))}
+        stretch
+        scrollable
+      />
 
       {/* Table */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
+      <Panel padded={false} className="overflow-hidden tabular-nums">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -406,7 +395,7 @@ export default function Players() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </Panel>
+    </PageShell>
   );
 }

@@ -161,3 +161,13 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Browser inspection passed at `320x568`, `390x844`, `430x932`, and `1440x900`: the drawer covered sticky controls and restored focus, cup matchups used 167px two-column cards without label overflow, League mobile headers/cells matched 8-to-8, History tabs measured 44px, and the loading skeleton was visibly rendered. Browser console errors/warnings were empty.
 - Final verification passed: 57 files / 474 tests, full ESLint, TypeScript, production/PWA build, and bundle budgets (271,545-byte main entry; 678,026-byte initial graph). Match presentation passed desktop, mobile, and reduced-motion rendering checks, and the required game client produced no error artifact.
 - `audit:current` was attempted with ten and two seasons but stalled in its browser-wait phase without producing a report; it was not counted as passed. The phase-specific browser matrix and stable match harness completed successfully.
+
+## 2026-07-18 UI Polish Phase 2
+
+- Established the night-broadcast visual foundation with explicit page, panel, raised, and floating surfaces; primary/secondary/muted text; grass action, status, trophy-gold, and team-identity tokens. Existing CSS variables remain as compatibility aliases while pages migrate.
+- Added lightweight shared `PageShell`, `PageHeader`, `SectionHeader`, `Panel`, `SegmentedControl`, `StatusBadge`, `EmptyState`, and `LoadingSkeleton` primitives. Mobile segmented controls have a stable 44px interaction height; desktop controls compact to 36px.
+- Migrated League, Teams, Players, History, and Transfers to the common page hierarchy and green action selection. League and Player tables use the shared 8px panel treatment; transfer empty/season states and lazy-route skeletons now use the common primitives.
+- Added `verify:ui-foundation`, which creates a deterministic local game and verifies all five migrated routes at 320x568, 390x844, and 1440x900. All 15 route/viewport combinations had zero page overflow, valid title sizing, working selected-tab state, expected mobile target size, and no runtime console errors.
+- A separate 125% root-text check kept Chinese team names and controls readable with zero page overflow. Representative screenshots for compact mobile, regular mobile, large text, and desktop were inspected.
+- Final verification passed: 58 files / 477 tests, full ESLint, TypeScript and production/PWA build, bundle budgets (270,994-byte main entry; 680,682-byte initial graph), and desktop/mobile/reduced-motion match-presentation checks.
+- Remaining checklist work is intentionally still visible: global 8-10px label cleanup, remaining numeric typography, old large-radius cards, horizontal-tab edge affordances, and the next page-specific hierarchy phases.

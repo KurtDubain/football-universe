@@ -13,6 +13,7 @@ import {
 import { buildTeamCoachMap } from '../engine/coaches/coach-lookup';
 import type { TeamTier, TeamBase, TeamState } from '../types/team';
 import type { GameWorld } from '../engine/season/season-manager';
+import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 
 type ViewMode = 'tier' | 'league' | 'region';
 
@@ -92,50 +93,23 @@ function TeamsContent({ world }: { world: GameWorld }) {
   }, [groupedByRegion]);
 
   return (
-    <div className="max-w-6xl space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-100">球队中心</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {teamCount}队 · {leagueCount}级联赛 · {tierCount}档
-          </p>
-        </div>
-
-        {/* View toggle */}
-        <div className="flex bg-slate-800 rounded-lg border border-slate-700 p-0.5 self-start sm:self-auto">
-          <button
-            onClick={() => setViewMode('tier')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              viewMode === 'tier'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            按档次
-          </button>
-          <button
-            onClick={() => setViewMode('league')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              viewMode === 'league'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            按联赛
-          </button>
-          <button
-            onClick={() => setViewMode('region')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-              viewMode === 'region'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            按地区
-          </button>
-        </div>
-      </div>
+    <PageShell width="wide" className="tabular-nums">
+      <PageHeader
+        title="球队中心"
+        description={`${teamCount}队 · ${leagueCount}级联赛 · ${tierCount}档`}
+        actions={(
+          <SegmentedControl
+            value={viewMode}
+            onChange={setViewMode}
+            ariaLabel="球队分组方式"
+            options={[
+              { value: 'tier', label: '按档次' },
+              { value: 'league', label: '按联赛' },
+              { value: 'region', label: '按地区' },
+            ]}
+          />
+        )}
+      />
 
       {/* Team groups */}
       {viewMode === 'tier'
@@ -184,7 +158,7 @@ function TeamsContent({ world }: { world: GameWorld }) {
               />
             );
           })}
-    </div>
+    </PageShell>
   );
 }
 

@@ -6,6 +6,7 @@ import { formatMoney } from '../engine/economy/finance';
 import SeasonReview from '../components/SeasonReview';
 import type { Achievement } from '../engine/achievements';
 import type { GameWorld } from '../engine/season/season-manager';
+import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -126,17 +127,19 @@ function HistoryContent({ world }: { world: GameWorld }) {
   ];
 
   return (
-    <div className="max-w-4xl space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-xl font-bold text-slate-100 whitespace-nowrap">历史荣誉</h2>
-        <div className="grid grid-cols-4 w-full sm:w-auto bg-slate-800 rounded-lg border border-slate-700 p-0.5">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`min-h-11 px-1 sm:px-3 py-1 text-[11px] sm:text-xs whitespace-nowrap rounded-md cursor-pointer transition-colors ${tab === t.key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-            >{t.label}</button>
-          ))}
-        </div>
-      </div>
+    <PageShell width="standard" className="tabular-nums">
+      <PageHeader
+        title="历史荣誉"
+        actions={(
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            ariaLabel="历史荣誉分类"
+            stretch
+            options={tabs.map(t => ({ value: t.key, label: t.label }))}
+          />
+        )}
+      />
 
       {/* Trophy leaderboard — always visible */}
       {trophyCounts.length > 0 && (
@@ -546,7 +549,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

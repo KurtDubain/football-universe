@@ -15,6 +15,7 @@ import {
   getLeagueName,
 } from '../utils/format';
 import { leagueConfigs } from '../config/competitions';
+import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 
 export default function League() {
   const { level } = useParams<{ level: string }>();
@@ -186,41 +187,23 @@ export default function League() {
   };
 
   return (
-    <div className="max-w-5xl space-y-6">
-      {/* ═══════ Header ═══════ */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h2 className="text-lg sm:text-xl font-bold text-slate-100">{getLeagueName(leagueLevel)}</h2>
-        <div className="flex bg-slate-800 rounded-lg border border-slate-700 p-0.5">
-          <button
-            onClick={() => setTab('standings')}
-            className={`px-4 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
-              tab === 'standings'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            积分榜
-          </button>
-          <button
-            onClick={() => setTab('schedule')}
-            className={`px-4 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
-              tab === 'schedule'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            赛程表
-          </button>
-          <button
-            onClick={() => setTab('trend')}
-            className={`px-4 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
-              tab === 'trend' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            走势
-          </button>
-        </div>
-      </div>
+    <PageShell className="tabular-nums">
+      <PageHeader
+        title={getLeagueName(leagueLevel)}
+        meta={`第 ${world.seasonState.seasonNumber} 赛季`}
+        actions={(
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            ariaLabel="联赛视图"
+            options={[
+              { value: 'standings', label: '积分榜' },
+              { value: 'schedule', label: '赛程表' },
+              { value: 'trend', label: '走势' },
+            ]}
+          />
+        )}
+      />
 
       {/* Zone legend */}
       <div className="flex gap-4 text-xs text-slate-400 flex-wrap">
@@ -249,7 +232,7 @@ export default function League() {
       {tab === 'standings' && (
         <>
           {/* Season stats bar */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-wrap gap-6 text-sm">
+          <Panel className="flex flex-wrap gap-6 text-sm tabular-nums">
             <div>
               <span className="text-slate-500">已赛场次</span>
               <span className="ml-2 text-slate-200 font-semibold">{totalPlayed}</span>
@@ -270,10 +253,10 @@ export default function League() {
                 </span>
               </div>
             )}
-          </div>
+          </Panel>
 
           {/* Standings table */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+          <Panel padded={false} className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -431,7 +414,7 @@ export default function League() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </Panel>
         </>
       )}
 
@@ -728,7 +711,7 @@ export default function League() {
         result={selectedResult ?? undefined}
         world={world}
       />
-    </div>
+    </PageShell>
   );
 }
 

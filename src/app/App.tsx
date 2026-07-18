@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import Layout from './Layout';
 import Dashboard from '../pages/Dashboard';
 import Welcome from '../pages/Welcome';
+import { LoadingSkeleton } from '../components/ui';
 
 const Calendar = lazy(() => import('../pages/Calendar'));
 const League = lazy(() => import('../pages/League'));
@@ -26,23 +27,7 @@ const MemorableMatches = lazy(() => import('../pages/MemorableMatches'));
 const AdvancedSearch = lazy(() => import('../pages/AdvancedSearch'));
 
 export function RouteLoading({ fullPage = false }: { fullPage?: boolean }) {
-  return (
-    <div
-      role="status"
-      aria-label="正在加载页面"
-      className={`${fullPage ? 'min-h-screen px-5 py-12 bg-slate-900' : 'min-h-72 py-1'} w-full`}
-    >
-      <span className="sr-only">正在加载...</span>
-      <div className="w-full max-w-4xl mx-auto space-y-4 animate-pulse motion-reduce:animate-none" aria-hidden="true">
-        <div className="h-7 w-32 rounded-md bg-slate-800" />
-        <div className="h-20 rounded-lg border border-slate-700/60 bg-slate-800/70" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="h-36 rounded-lg border border-slate-700/60 bg-slate-800/70" />
-          <div className="h-36 rounded-lg border border-slate-700/60 bg-slate-800/70" />
-        </div>
-      </div>
-    </div>
-  );
+  return <LoadingSkeleton fullPage={fullPage} />;
 }
 
 export default function App() {

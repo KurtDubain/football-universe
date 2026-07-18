@@ -10,6 +10,7 @@ Checkboxes stay open until implementation and the listed acceptance checks both 
 
 - 2026-07-17: Completed a four-agent read-only review covering mobile usability, visual-system consistency, information architecture, and custom visual assets. Audited the deployed game at desktop and `390x844`; core routes had no page-level horizontal overflow and no console errors or warnings. Created this checklist without changing runtime behavior.
 - 2026-07-17: Completed Phase 1 mobile correctness. The navigation drawer now owns overlay/focus behavior, mobile cups use a round selector with readable compact matchups, League columns match their headers, History tabs no longer crush the title, and lazy routes use layout-shaped skeletons. Verified with 474 tests, ESLint, TypeScript, production/PWA build, bundle budgets, browser checks at `320x568`, `390x844`, `430x932`, and `1440x900`, plus the match-presentation harness. The broad `audit:current` route runner was not counted because it stalled in browser waiting without producing a report.
+- 2026-07-18: Completed Phase 2 visual foundations. Added charcoal/grass/gold semantic tokens and shared `PageShell`, header, panel, segmented-control, status, empty, and loading primitives; migrated League, Teams, Players, History, Transfers, the route skeleton, and the global app surfaces without changing simulation or save behavior. A repeatable browser harness checked all five routes at `320x568`, `390x844`, and `1440x900`, including tab state, 44px mobile targets, panel radius, overflow, console errors, and 125% root text sizing. Final verification passed 58 files / 477 tests, ESLint, TypeScript, production/PWA build, bundle budgets, and the existing match-presentation harness. Global tiny-label cleanup, old card radii, tab-edge affordances, and remaining page migrations stay open.
 
 ## Product Direction And Guardrails
 
@@ -69,11 +70,11 @@ Primary files: `src/pages/History.tsx`, `src/App.tsx`.
 
 ### Semantic Tokens
 
-- [ ] Define three surface levels: page, panel, and floating/overlay.
-- [ ] Define primary, secondary, and muted text tokens with WCAG-aware contrast.
-- [ ] Define action, success, warning, and danger tokens with one meaning each.
-- [ ] Define competition gold and team identity colors as explicit extensions.
-- [ ] Replace direct `slate/blue/amber/emerald` usage incrementally in shared shells and newly touched pages.
+- [x] Define three surface levels: page, panel, and floating/overlay.
+- [x] Define primary, secondary, and muted text tokens with WCAG-aware contrast.
+- [x] Define action, success, warning, and danger tokens with one meaning each.
+- [x] Define competition gold and team identity colors as explicit extensions.
+- [x] Replace direct `slate/blue/amber/emerald` usage incrementally in shared shells and newly touched pages.
 
 Primary file: `src/index.css`.
 
@@ -82,16 +83,16 @@ Primary file: `src/index.css`.
 - [ ] Remove essential `8px`, `9px`, and `10px` labels from mobile layouts.
 - [ ] Use `11-12px` only for tertiary labels and `13-14px` for normal body content.
 - [ ] Apply `tabular-nums` consistently to scores, ranks, records, money, percentages, and match clocks.
-- [ ] Define consistent page-title, section-title, panel-title, label, and value styles.
-- [ ] Check Chinese team/player names at large-text browser settings.
+- [x] Define consistent page-title, section-title, panel-title, label, and value styles.
+- [x] Check Chinese team/player names at large-text browser settings.
 
 ### Shared UI Primitives
 
-- [ ] Add or standardize `PageShell`, `PageHeader`, `SectionHeader`, and `Panel`.
-- [ ] Add or standardize `SegmentedControl`, `StatusBadge`, `EmptyState`, and `LoadingSkeleton`.
+- [x] Add or standardize `PageShell`, `PageHeader`, `SectionHeader`, and `Panel`.
+- [x] Add or standardize `SegmentedControl`, `StatusBadge`, `EmptyState`, and `LoadingSkeleton`.
 - [ ] Use stable dimensions for controls and data tiles so dynamic labels do not shift surrounding layout.
 - [ ] Keep operational cards at an `8px` radius or less unless an existing specialized component requires otherwise.
-- [ ] Migrate shared page shells before performing page-specific cosmetic rewrites.
+- [x] Migrate shared page shells before performing page-specific cosmetic rewrites.
 
 ### Reduce Card And Accent Noise
 
