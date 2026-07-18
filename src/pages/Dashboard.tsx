@@ -24,8 +24,6 @@ import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-looku
 import {
   getTeamName,
   getTeamShortName,
-  getWindowTypeLabel,
-  getWindowTypeColor,
   formatForm,
   getCoachName,
   getTierLabel,
@@ -56,8 +54,6 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const lastResults = useGameStore((s) => s.lastResults);
   const lastNews = useGameStore((s) => s.lastNews);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
-  const advanceWindow = useGameStore((s) => s.advanceWindow);
-  const isAdvancing = useGameStore((s) => s.isAdvancing);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const advanceTick = useGameStore((s) => s.advanceTick);
 
@@ -116,8 +112,6 @@ function DashboardContent({ world }: { world: GameWorld }) {
   }, [world?.transferWindow?.status]);
 
   const currentWindow = getCurrentWindow();
-  const calendarLen = world.seasonState.calendar.length;
-  const completedWindows = world.seasonState.calendar.filter((w) => w.completed).length;
 
   // Find the matching fixture for a result
   const findFixtureForResult = (result: MatchResult): MatchFixture => {
@@ -149,17 +143,6 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const closeModal = () => {
     setSelectedFixture(null);
     setSelectedResult(null);
-  };
-
-  // Wrap advanceWindow so clicking advance dismisses any blocking overlay
-  // first. MatchLive (z-[200] full-viewport) intercepts clicks otherwise,
-  // and a user spamming the button mid-celebration would expect it to skip.
-  // Celebration is pointer-events-none so it doesn't actually block — but we
-  // clear it too for visual coherence on the next tick.
-  const handleAdvanceClick = () => {
-    if (liveResult) setLiveResult(null);
-    if (celebrationType) setCelebrationType(null);
-    advanceWindow();
   };
 
   // Check if we have a completed season to review
@@ -198,49 +181,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   });
 
   return (
-    <div className="max-w-6xl flex flex-col h-full">
-      {/* ═══════ Compact Top Bar ═══════ */}
-      <div className="sticky top-0 z-[210] bg-slate-900/95 backdrop-blur-sm flex items-center justify-between gap-2 pb-3 border-b border-slate-700/50 flex-wrap">
-        {/* Left: season + progress */}
-        <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0">
-          <span className="font-semibold text-slate-200">
-            <span className="sm:hidden">S{world.seasonState.seasonNumber}</span>
-            <span className="hidden sm:inline">第{world.seasonState.seasonNumber}赛季</span>
-          </span>
-          <span className="text-slate-500">·</span>
-          <span className="text-xs text-slate-400">{completedWindows}/{calendarLen}</span>
-          <span className="text-slate-500">·</span>
-          <span className="text-xs text-amber-400 font-medium inline-flex items-center gap-1">
-            <Icon name="coin" size={13} accent="#fbbf24" /> {world.coins ?? 1000}
-          </span>
-        </div>
-
-        {/* Center: current window badge */}
-        {currentWindow && (
-          <div className="flex items-center gap-2 min-w-0 order-3 sm:order-none basis-full sm:basis-auto">
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}
-            >
-              {getWindowTypeLabel(currentWindow.type)}
-            </span>
-            <span className="text-xs text-slate-400 truncate">{currentWindow.label}</span>
-          </div>
-        )}
-
-        {/* Right: advance button */}
-        <button
-          onClick={handleAdvanceClick}
-          disabled={isAdvancing || !currentWindow}
-          className="px-3 sm:px-4 py-2 sm:py-1.5 min-h-11 sm:min-h-0 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors cursor-pointer shrink-0"
-        >
-          {isAdvancing
-            ? '模拟中...'
-            : currentWindow
-              ? <>开始模拟 <span className="text-[11px] opacity-80">({currentWindow.fixtures.length}场)</span></>
-              : '赛季已结束'}
-        </button>
-      </div>
-
+    <div data-testid="dashboard" className="max-w-6xl flex flex-col h-full tabular-nums">
       {/* ═══════ Favorite Team Cards (up to 3) ═══════ */}
       {favoriteTeamIds.length > 0 && (() => {
         // Surface any negative-cash favorites as a Phase H alert banner.
@@ -271,7 +212,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
         );
       })()}
       {favoriteTeamIds.length > 0 && (
-        <div className="space-y-1.5 mt-1">
+        <div data-testid="favorite-team-summaries" className="space-y-1.5 mt-1">
           {favoriteTeamIds.map((tid) => {
             const fav = world.teamBases[tid];
             const favState = world.teamStates[tid];
@@ -330,65 +271,6 @@ function DashboardContent({ world }: { world: GameWorld }) {
           })}
         </div>
       )}
-
-      {/* ═══════ Storyline cards for favorites ═══════ */}
-      {favoriteTeamIds.length > 0 && (() => {
-        const cards = generateStorylineCards(world, favoriteTeamIds);
-        if (cards.length === 0) return null;
-        return (
-          <div className="space-y-1.5 mt-1">
-            {cards.map((c, i) => (
-              <div
-                key={`${c.teamId}-${c.type}-${i}`}
-                className="bg-gradient-to-r from-purple-900/15 via-slate-800/80 to-slate-800/40 rounded-lg border border-purple-700/30 px-3 py-2"
-              >
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-base">{c.emoji}</span>
-                  <span className="text-xs font-semibold text-purple-300">{c.title}</span>
-                </div>
-                <p className="text-[11px] text-slate-400 ml-7">{c.body}</p>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* ═══════ Transfer rumors (v18) — favorite teams' involvement ═══════ */}
-      {favoriteTeamIds.length > 0 && (() => {
-        const favSet = new Set(favoriteTeamIds);
-        const rumors = (world.transferRumors ?? []).filter(r =>
-          favSet.has(r.fromTeamId) || favSet.has(r.eliteTeamId)
-        );
-        if (rumors.length === 0) return null;
-        return (
-          <div className="space-y-1.5 mt-1">
-            {rumors.slice(-6).reverse().map((r) => {
-              const intensityColor = r.intensity === 'high' ? 'border-rose-700/50 bg-rose-900/15'
-                : r.intensity === 'medium' ? 'border-amber-700/50 bg-amber-900/15'
-                : 'border-slate-700/60 bg-slate-800/50';
-              const intensityText = r.intensity === 'high' ? '紧锣密鼓' : r.intensity === 'medium' ? '深入接触' : '初步关注';
-              return (
-                <div key={r.id} className={`rounded-lg border px-3 py-2 ${intensityColor}`}>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-base shrink-0"><Icon name="megaphone" size={16} /></span>
-                    <Link to={`/team/${r.eliteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400">
-                      {r.eliteTeamName}
-                    </Link>
-                    <span className="text-slate-500">{intensityText}</span>
-                    <Link to={`/player/${r.candidateUuid}`} className="text-slate-100 font-medium hover:text-blue-400 truncate">
-                      {r.candidateName}
-                    </Link>
-                    <span className="text-[10px] text-slate-500">({r.candidatePosition})</span>
-                    <span className="text-[10px] text-slate-500 ml-auto shrink-0">
-                      来自 <Link to={`/team/${r.fromTeamId}`} className="text-slate-400 hover:text-blue-400">{r.fromTeamName}</Link>
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
 
       {/* ═══════ Tab Bar ═══════ */}
       <div className="flex gap-2 sm:gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
@@ -568,13 +450,13 @@ function MatchdayTab({
   };
 
   // Generate context tips for the whole window
-  const windowTips = generateWindowTips(world, currentWindow.fixtures);
+  const windowTips = generateWindowTips(world, currentWindow.fixtures, focusFixtureIds);
 
   return (
     <div className="space-y-5">
       {/* Focus matches banner */}
       {focusMatches.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-700/30 p-3">
+        <div data-testid="focus-matches" className="bg-gradient-to-r from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-700/30 p-3">
           <h3 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
             <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
           </h3>
@@ -664,7 +546,7 @@ function MatchdayTab({
 
       {/* Context tips banner */}
       {windowTips.length > 0 && (
-        <div className="space-y-1.5">
+        <div data-testid="secondary-match-notices" className="space-y-1.5">
           {windowTips.map((tip, i) => (
             <div key={i} className={`px-3 py-2 rounded-lg text-xs border ${tip.style}`}>
               <span className="font-medium">{tip.tag}</span>
@@ -707,11 +589,13 @@ function MatchdayTab({
 function generateWindowTips(
   world: GameWorld,
   fixtures: MatchFixture[],
+  excludedFixtureIds: ReadonlySet<string> = new Set(),
 ): { tag: string; text: string; style: string }[] {
-  const tips: { tag: string; text: string; style: string }[] = [];
+  const tips: { fixtureId: string; priority: number; tag: string; text: string; style: string }[] = [];
   const seen = new Set<string>();
 
   for (const f of fixtures) {
+    if (excludedFixtureIds.has(f.id)) continue;
     const ht = world.teamBases[f.homeTeamId];
     const at = world.teamBases[f.awayTeamId];
     if (!ht || !at) continue;
@@ -724,6 +608,8 @@ function generateWindowTips(
       const key = `clash-${f.id}`;
       if (!seen.has(key)) {
         tips.push({
+          fixtureId: f.id,
+          priority: 2,
           tag: '强强对话',
           text: `${ht.name} vs ${at.name} — ${getTierLabel(ht.tier)}对决${getTierLabel(at.tier)}`,
           style: 'bg-amber-900/20 border-amber-700/40 text-amber-300',
@@ -740,6 +626,8 @@ function generateWindowTips(
       const key = `upset-${f.id}`;
       if (!seen.has(key)) {
         tips.push({
+          fixtureId: f.id,
+          priority: 3,
           tag: '爆冷预警',
           text: `${weak.name}(${getTierLabel(weak.tier)}) 挑战 ${strong.name}(${getTierLabel(strong.tier)})，实力差距${gap}`,
           style: 'bg-purple-900/20 border-purple-700/40 text-purple-300',
@@ -761,6 +649,8 @@ function generateWindowTips(
           const key = `releg-${f.id}`;
           if (!seen.has(key)) {
             tips.push({
+              fixtureId: f.id,
+              priority: 5,
               tag: '保级生死战',
               text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 败者形势危急`,
               style: 'bg-red-900/20 border-red-700/40 text-red-300',
@@ -774,6 +664,8 @@ function generateWindowTips(
           const key = `title-${f.id}`;
           if (!seen.has(key)) {
             tips.push({
+              fixtureId: f.id,
+              priority: 5,
               tag: '争冠焦点',
               text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 冠军争夺直接对话`,
               style: 'bg-amber-900/20 border-amber-700/40 text-amber-200',
@@ -791,6 +683,8 @@ function generateWindowTips(
       const key = `pressure-${f.homeTeamId}`;
       if (!seen.has(key) && coach) {
         tips.push({
+          fixtureId: f.id,
+          priority: 4,
           tag: '下课危机',
           text: `${ht.name}主帅${coach.name}压力值${hs.coachPressure}，再输恐被解雇`,
           style: 'bg-red-900/15 border-red-700/30 text-red-400',
@@ -800,8 +694,15 @@ function generateWindowTips(
     }
   }
 
-  // Limit to top 4 most important tips
-  return tips.slice(0, 4);
+  const selected: typeof tips = [];
+  const usedFixtures = new Set<string>();
+  for (const tip of tips.sort((a, b) => b.priority - a.priority)) {
+    if (usedFixtures.has(tip.fixtureId)) continue;
+    selected.push(tip);
+    usedFixtures.add(tip.fixtureId);
+    if (selected.length === 2) break;
+  }
+  return selected;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -821,6 +722,8 @@ function ResultsTab({
   onResultClick: (r: MatchResult) => void;
   onLiveView: (r: MatchResult) => void;
 }) {
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+
   if (lastResults.length === 0) {
     return (
       <div className="text-center py-12">
@@ -835,6 +738,7 @@ function ResultsTab({
       <ResultAnimation
         results={lastResults}
         teamBases={world.teamBases}
+        priorityTeamIds={favoriteTeamIds}
         onComplete={() => undefined}
         onResultClick={onResultClick}
         onLiveView={onLiveView}
@@ -875,6 +779,7 @@ function ResultsTab({
 // ══════════════════════════════════════════════════════════════════════
 
 function OverviewTab({ world }: { world: GameWorld }) {
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const leagues = [
     { standings: world.league1Standings, name: '顶级联赛', level: 1 },
     { standings: world.league2Standings, name: '甲级联赛', level: 2 },
@@ -915,6 +820,8 @@ function OverviewTab({ world }: { world: GameWorld }) {
         <StatMini label="超级杯" value={scStatus} sub={world.superCup.winnerId ? `冠军: ${getTeamName(world.superCup.winnerId, world.teamBases)}` : '进行中'} />
         <StatMini label="射手王" value={topScorerText} sub={coachChanges > 0 ? `${coachChanges}次换帅` : '暂无换帅'} />
       </div>
+
+      <FavoriteStoryPanels world={world} favoriteTeamIds={favoriteTeamIds} />
 
       {/* World cup if applicable */}
       {wcStatus && (
@@ -1067,6 +974,60 @@ function OverviewTab({ world }: { world: GameWorld }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; favoriteTeamIds: string[] }) {
+  if (favoriteTeamIds.length === 0) return null;
+
+  const cards = generateStorylineCards(world, favoriteTeamIds);
+  const favoriteSet = new Set(favoriteTeamIds);
+  const rumors = (world.transferRumors ?? [])
+    .filter(r => favoriteSet.has(r.fromTeamId) || favoriteSet.has(r.eliteTeamId))
+    .slice(-6)
+    .reverse();
+
+  if (cards.length === 0 && rumors.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {cards.map((card, index) => (
+        <div
+          key={`${card.teamId}-${card.type}-${index}`}
+          className="rounded-lg border border-purple-700/30 bg-purple-900/10 px-3 py-2"
+        >
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-base" aria-hidden="true">{card.emoji}</span>
+            <span className="text-xs font-semibold text-purple-300">{card.title}</span>
+          </div>
+          <p className="text-xs text-slate-400 ml-7">{card.body}</p>
+        </div>
+      ))}
+
+      {rumors.map((rumor) => {
+        const intensityColor = rumor.intensity === 'high' ? 'border-rose-700/50 bg-rose-900/15'
+          : rumor.intensity === 'medium' ? 'border-amber-700/50 bg-amber-900/15'
+          : 'border-slate-700/60 bg-slate-800/50';
+        const intensityText = rumor.intensity === 'high' ? '紧锣密鼓' : rumor.intensity === 'medium' ? '深入接触' : '初步关注';
+        return (
+          <div key={rumor.id} className={`rounded-lg border px-3 py-2 ${intensityColor}`}>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="shrink-0"><Icon name="megaphone" size={16} /></span>
+              <Link to={`/team/${rumor.eliteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400">
+                {rumor.eliteTeamName}
+              </Link>
+              <span className="text-slate-500">{intensityText}</span>
+              <Link to={`/player/${rumor.candidateUuid}`} className="truncate font-medium text-slate-100 hover:text-blue-400">
+                {rumor.candidateName}
+              </Link>
+              <span className="ml-auto hidden shrink-0 text-xs text-slate-500 sm:inline">
+                来自 <Link to={`/team/${rumor.fromTeamId}`} className="text-slate-400 hover:text-blue-400">{rumor.fromTeamName}</Link>
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -12,6 +12,7 @@ Checkboxes stay open until implementation and the listed acceptance checks both 
 - 2026-07-17: Completed Phase 1 mobile correctness. The navigation drawer now owns overlay/focus behavior, mobile cups use a round selector with readable compact matchups, League columns match their headers, History tabs no longer crush the title, and lazy routes use layout-shaped skeletons. Verified with 474 tests, ESLint, TypeScript, production/PWA build, bundle budgets, browser checks at `320x568`, `390x844`, `430x932`, and `1440x900`, plus the match-presentation harness. The broad `audit:current` route runner was not counted because it stalled in browser waiting without producing a report.
 - 2026-07-18: Completed Phase 2 visual foundations. Added charcoal/grass/gold semantic tokens and shared `PageShell`, header, panel, segmented-control, status, empty, and loading primitives; migrated League, Teams, Players, History, Transfers, the route skeleton, and the global app surfaces without changing simulation or save behavior. A repeatable browser harness checked all five routes at `320x568`, `390x844`, and `1440x900`, including tab state, 44px mobile targets, panel radius, overflow, console errors, and 125% root text sizing. Final verification passed 58 files / 477 tests, ESLint, TypeScript, production/PWA build, bundle budgets, and the existing match-presentation harness. Global tiny-label cleanup, old card radii, tab-edge affordances, and remaining page migrations stay open.
 - 2026-07-18: Fixed the optional floating advance control on mobile and desktop. Replaced the ambiguous draggable circle and 8px stage label with separate 44px move and 85px advance targets, safe-area docking, visual-viewport clamping, edge snapping, keyboard movement, and Home reset. Browser interaction verified that dragging never advances and one action click advances exactly one window; final verification passed 60 files / 481 tests, ESLint, production/PWA build, and bundle budgets.
+- 2026-07-18: Completed Phase 3 Dashboard workflow. The global header now owns the only primary advance action, while favorite teams, tabs, and up to two deduplicated focus notices fill the first mobile viewport. Favorite-team results are pinned above the ordinary sequence; ordinary 6/12/48-result batches reveal in about 960/960/1000ms while important matches keep sequential pauses. `verify:dashboard` passed the full advance/skip flow at `390x844` and `1440x900` with 44px skip targets and zero runtime errors. Final verification passed 61 files / 487 tests, ESLint, TypeScript, production/PWA build, bundle budgets, match presentation, mobile advance performance, and animation performance.
 
 ## Product Direction And Guardrails
 
@@ -106,13 +107,13 @@ Primary file: `src/index.css`.
 
 ### Dashboard
 
-- [ ] Keep one authoritative primary advance action on the Dashboard viewport.
-- [ ] Remove duplicate current-window labels between the global header and page header.
-- [ ] Deduplicate focus-match and strong-matchup messages; show at most two secondary matchup notices.
-- [ ] Prioritize favorite team, focus match, and advance action in the first mobile viewport.
-- [ ] Pin "我的球队本轮赛果" above the general result sequence.
-- [ ] Cap ordinary result reveal time near `1-1.2s`; reserve sequential drama for derbies, upsets, finals, and decisive matches.
-- [ ] Increase the skip-animation interaction target to `44px` without making it visually heavy.
+- [x] Keep one authoritative primary advance action on the Dashboard viewport.
+- [x] Remove duplicate current-window labels between the global header and page header.
+- [x] Deduplicate focus-match and strong-matchup messages; show at most two secondary matchup notices.
+- [x] Prioritize favorite team, focus match, and advance action in the first mobile viewport.
+- [x] Pin "我的球队本轮赛果" above the general result sequence.
+- [x] Cap ordinary result reveal time near `1-1.2s`; reserve sequential drama for derbies, upsets, finals, and decisive matches.
+- [x] Increase the skip-animation interaction target to `44px` without making it visually heavy.
 
 Primary files: `src/pages/Dashboard.tsx`, `src/components/ResultAnimation.tsx`, `src/app/Layout.tsx`.
 
@@ -244,10 +245,10 @@ Primary component: `src/components/Icon.tsx`.
 
 ### Performance
 
-- [ ] Re-run the existing mobile advance and match-animation profiles after UI changes.
+- [x] Re-run the existing mobile advance and match-animation profiles after UI changes.
 - [ ] Confirm new images do not increase match Canvas frame cost through per-frame decoding or allocation.
 - [ ] Confirm route skeletons and banners do not cause significant cumulative layout shift.
-- [ ] Confirm the first game screen remains responsive on mobile CPU throttling.
+- [x] Confirm the first game screen remains responsive on mobile CPU throttling.
 
 ## Recommended Implementation Order
 

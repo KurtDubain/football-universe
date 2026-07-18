@@ -4,14 +4,18 @@ import type { TeamBase } from '../types/team';
 import TeamName from './TeamName';
 import { isDerby, getDerbyName } from '../config/derbies';
 import { EnergyWave } from './CanvasEffects';
+import { getDramaticRevealDelay, getOrdinaryRevealPlan } from './result-reveal-timing';
 
 interface ResultAnimationProps {
   results: MatchResult[];
   teamBases: Record<string, TeamBase>;
+  priorityTeamIds?: string[];
   onComplete: () => void;
   onResultClick: (r: MatchResult) => void;
   onLiveView?: (r: MatchResult) => void;
 }
+
+const EMPTY_TEAM_IDS: string[] = [];
 
 /**
  * Animated results reveal — shows match results one by one with dramatic timing.
@@ -27,7 +31,7 @@ export default function ResultAnimation(props: ResultAnimationProps) {
   return <ResultAnimationBatch key={resultBatchKey(props.results)} {...props} />;
 }
 
-function ResultAnimationBatch({ results, teamBases, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
+function ResultAnimationBatch({ results, teamBases, priorityTeamIds = EMPTY_TEAM_IDS, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
   const [revealedCount, setRevealedCount] = useState(0);
   const completionCalledRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
@@ -42,7 +46,17 @@ function ResultAnimationBatch({ results, teamBases, onComplete, onResultClick, o
       const bKey = getMatchImportance(b, teamBases);
       return aKey - bKey; // lower importance first
     }), [results, teamBases]);
-  const done = revealedCount >= sorted.length;
+  const prioritySet = useMemo(() => new Set(priorityTeamIds), [priorityTeamIds]);
+  const pinned = useMemo(() => sorted.filter(result => (
+    prioritySet.has(result.homeTeamId) || prioritySet.has(result.awayTeamId)
+  )), [prioritySet, sorted]);
+  const sequence = useMemo(() => sorted.filter(result => (
+    !prioritySet.has(result.homeTeamId) && !prioritySet.has(result.awayTeamId)
+  )), [prioritySet, sorted]);
+  const ordinaryCount = useMemo(() => sequence.filter(result => getMatchImportance(result, teamBases) < 2).length, [sequence, teamBases]);
+  const ordinaryPlan = useMemo(() => getOrdinaryRevealPlan(ordinaryCount), [ordinaryCount]);
+  const hasDramaticResult = useMemo(() => sequence.some(result => getMatchImportance(result, teamBases) >= 2), [sequence, teamBases]);
+  const done = revealedCount >= sequence.length;
 
   const completeOnce = useCallback(() => {
     if (completionCalledRef.current) return;
@@ -52,41 +66,73 @@ function ResultAnimationBatch({ results, teamBases, onComplete, onResultClick, o
 
   useEffect(() => {
     if (done) {
-      const timer = window.setTimeout(completeOnce, 800);
+      const timer = window.setTimeout(completeOnce, hasDramaticResult ? 600 : 200);
       return () => clearTimeout(timer);
     }
 
-    const current = sorted[revealedCount];
+    const current = sequence[revealedCount];
     const importance = getMatchImportance(current, teamBases);
-    // Key matches pause longer
-    const delay = importance >= 3 ? 600 : importance >= 2 ? 400 : 200;
+    const dramaticDelay = getDramaticRevealDelay(importance);
+    const delay = dramaticDelay || ordinaryPlan.delayMs;
+    const revealStep = dramaticDelay
+      ? 1
+      : Math.min(ordinaryPlan.step, Math.max(1, ordinaryCount - revealedCount));
 
     const timer = window.setTimeout(() => {
-      setRevealedCount(prev => prev + 1);
+      setRevealedCount(prev => prev + revealStep);
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [completeOnce, done, revealedCount, sorted, teamBases]);
+  }, [completeOnce, done, hasDramaticResult, ordinaryCount, ordinaryPlan, revealedCount, sequence, teamBases]);
 
   const handleSkip = useCallback(() => {
-    setRevealedCount(sorted.length);
+    setRevealedCount(sequence.length);
     completeOnce();
-  }, [completeOnce, sorted.length]);
+  }, [completeOnce, sequence.length]);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
+      {pinned.length > 0 && (
+        <section aria-labelledby="favorite-results-heading" className="space-y-2">
+          <h3 id="favorite-results-heading" className="flex items-center gap-2 text-sm font-semibold text-[var(--text-secondary)]">
+            <span className="h-4 w-1 rounded-full bg-[var(--action)]" aria-hidden="true" />
+            我的球队本轮赛果
+          </h3>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {pinned.map(result => {
+              const importance = getMatchImportance(result, teamBases);
+              return (
+                <AnimatedResultCard
+                  key={result.fixtureId}
+                  result={result}
+                  teamBases={teamBases}
+                  importance={importance}
+                  isNew={false}
+                  onClick={() => onResultClick(result)}
+                  onLiveView={onLiveView && importance >= 2 ? () => onLiveView(result) : undefined}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {pinned.length > 0 && sequence.length > 0 && (
+        <h3 className="text-xs font-semibold text-[var(--text-muted)]">其他赛果</h3>
+      )}
+
       {/* Skip button */}
       {!done && (
         <div className="flex justify-end">
-          <button onClick={handleSkip} className="text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer px-2 py-1">
-            跳过动画 →
+          <button data-testid="skip-result-animation" onClick={handleSkip} className="min-h-11 px-3 text-xs text-slate-500 hover:text-slate-300 cursor-pointer">
+            跳过动画
           </button>
         </div>
       )}
 
       {/* Results grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
-        {sorted.slice(0, revealedCount).map((r, i) => {
+      <div data-testid="result-sequence" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
+        {sequence.slice(0, revealedCount).map((r, i) => {
           const importance = getMatchImportance(r, teamBases);
           const isNew = i === revealedCount - 1 && !done;
           return (
@@ -109,10 +155,10 @@ function ResultAnimationBatch({ results, teamBases, onComplete, onResultClick, o
           <div className="w-24 h-1 bg-slate-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 rounded-full transition-all duration-200"
-              style={{ width: `${(revealedCount / sorted.length) * 100}%` }}
+              style={{ width: `${(revealedCount / sequence.length) * 100}%` }}
             />
           </div>
-          <span className="text-[10px] text-slate-500">{revealedCount}/{sorted.length}</span>
+          <span className="text-xs text-slate-500">{revealedCount}/{sequence.length}</span>
         </div>
       )}
     </div>

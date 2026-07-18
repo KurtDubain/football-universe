@@ -337,6 +337,36 @@ describe('ResultAnimation completion lifecycle', () => {
     expect(onLiveView).toHaveBeenCalledWith(result);
     expect(onResultClick).toHaveBeenCalledTimes(1);
   });
+
+  it('pins favorite-team results above the ordinary reveal sequence', () => {
+    render(<ResultAnimation
+      results={[makeResult('favorite-result'), makeResult('other-result', [], { homeTeamId: 'away', awayTeamId: 'away' })]}
+      teamBases={teamBases}
+      priorityTeamIds={['home']}
+      onComplete={() => undefined}
+      onResultClick={() => undefined}
+    />);
+
+    expect(container.textContent).toContain('我的球队本轮赛果');
+    expect(container.textContent).toContain('其他赛果');
+    expect(container.querySelectorAll('[aria-label^="查看 "]')).toHaveLength(1);
+    expect(button('跳过动画').className).toContain('min-h-11');
+  });
+
+  it('preserves a longer completion beat for a dramatic final', () => {
+    const finalComplete = vi.fn();
+    render(<ResultAnimation
+      results={[makeResult('dramatic-final', [], { roundLabel: 'Final' })]}
+      teamBases={teamBases}
+      onComplete={finalComplete}
+      onResultClick={() => undefined}
+    />);
+    advance(600);
+    expect(container.querySelectorAll('[aria-label^="查看 "]')).toHaveLength(1);
+    expect(finalComplete).not.toHaveBeenCalled();
+    advance(600);
+    expect(finalComplete).toHaveBeenCalledOnce();
+  });
 });
 
 describe('NewsTicker list replacement', () => {

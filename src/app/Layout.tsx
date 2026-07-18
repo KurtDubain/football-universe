@@ -405,7 +405,7 @@ export default function Layout({ children }: LayoutProps) {
               disabled={isAdvancing || !currentWindow}
               className="h-11 sm:h-auto px-3 sm:px-4 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed text-white text-sm font-medium rounded-l-md transition-colors cursor-pointer"
             >
-              {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
+              {isAdvancing ? '...' : currentWindow ? (location.pathname === '/' ? '开始模拟' : '推进') : '完成'}
             </button>
             {currentWindow && (
               <button
