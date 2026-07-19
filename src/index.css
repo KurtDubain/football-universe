@@ -140,7 +140,21 @@ body {
 }
 
 .ui-segmented-stretch { display: flex; width: 100%; }
-.ui-segmented-scrollable { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.ui-segmented-scrollable {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.ui-segmented-scrollable[data-scroll-start='true'][data-scroll-end='false'] {
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+}
+.ui-segmented-scrollable[data-scroll-start='false'][data-scroll-end='true'] {
+  mask-image: linear-gradient(to right, transparent 0, #000 1.5rem, #000 100%);
+}
+.ui-segmented-scrollable[data-scroll-start='false'][data-scroll-end='false'] {
+  mask-image: linear-gradient(to right, transparent 0, #000 1.5rem, #000 calc(100% - 1.5rem), transparent 100%);
+}
 
 .ui-segmented-option {
   min-width: max-content;
@@ -158,6 +172,7 @@ body {
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+  scroll-snap-align: center;
 }
 
 .ui-segmented-stretch .ui-segmented-option { flex: 1 1 0; }

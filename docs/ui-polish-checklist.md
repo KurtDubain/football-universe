@@ -13,6 +13,7 @@ Checkboxes stay open until implementation and the listed acceptance checks both 
 - 2026-07-18: Completed Phase 2 visual foundations. Added charcoal/grass/gold semantic tokens and shared `PageShell`, header, panel, segmented-control, status, empty, and loading primitives; migrated League, Teams, Players, History, Transfers, the route skeleton, and the global app surfaces without changing simulation or save behavior. A repeatable browser harness checked all five routes at `320x568`, `390x844`, and `1440x900`, including tab state, 44px mobile targets, panel radius, overflow, console errors, and 125% root text sizing. Final verification passed 58 files / 477 tests, ESLint, TypeScript, production/PWA build, bundle budgets, and the existing match-presentation harness. Global tiny-label cleanup, old card radii, tab-edge affordances, and remaining page migrations stay open.
 - 2026-07-18: Fixed the optional floating advance control on mobile and desktop. Replaced the ambiguous draggable circle and 8px stage label with separate 44px move and 85px advance targets, safe-area docking, visual-viewport clamping, edge snapping, keyboard movement, and Home reset. Browser interaction verified that dragging never advances and one action click advances exactly one window; final verification passed 60 files / 481 tests, ESLint, production/PWA build, and bundle budgets.
 - 2026-07-18: Completed Phase 3 Dashboard workflow. The global header now owns the only primary advance action, while favorite teams, tabs, and up to two deduplicated focus notices fill the first mobile viewport. Favorite-team results are pinned above the ordinary sequence; ordinary 6/12/48-result batches reveal in about 960/960/1000ms while important matches keep sequential pauses. `verify:dashboard` passed the full advance/skip flow at `390x844` and `1440x900` with 44px skip targets and zero runtime errors. Final verification passed 61 files / 487 tests, ESLint, TypeScript, production/PWA build, bundle budgets, match presentation, mobile advance performance, and animation performance.
+- 2026-07-19: Completed Phase 4 Player and Team hierarchy. Player Detail now uses four position-specific headlines, a single no-appearance state, sample-gated rankings, and position context before efficiency. Player and squad rows are full navigation targets; Team Detail now has `概览 / 阵容 / 历史`, while Team Center uses compact grouped directories. Shared scrollable tabs gained edge fades, scroll snap, and active-tab reveal. `verify:player-team` passed at `320x568`, `390x844`, and `1440x900` with complete names, 44px targets, one-round live data, and zero overflow/runtime errors. Final verification passed 63 files / 493 tests, ESLint, TypeScript, production/PWA build, bundle budgets, shared UI, match presentation, and mobile advance performance.
 
 ## Product Direction And Guardrails
 
@@ -119,22 +120,22 @@ Primary files: `src/pages/Dashboard.tsx`, `src/components/ResultAnimation.tsx`, 
 
 ### Player Detail And Player Center
 
-- [ ] Replace the season-start wall of zero metrics with one compact empty state.
-- [ ] Do not display misleading position ranks before a player has a meaningful sample.
-- [ ] Surface four position-relevant headline metrics for forwards, midfielders, defenders, and goalkeepers.
-- [ ] Move position-performance context above low-value zero efficiency panels.
-- [ ] Keep overflowing Player Center tabs discoverable and automatically reveal the active tab.
+- [x] Replace the season-start wall of zero metrics with one compact empty state.
+- [x] Do not display misleading position ranks before a player has a meaningful sample.
+- [x] Surface four position-relevant headline metrics for forwards, midfielders, defenders, and goalkeepers.
+- [x] Move position-performance context above low-value zero efficiency panels.
+- [x] Keep overflowing Player Center tabs discoverable and automatically reveal the active tab.
 
 Primary files: `src/pages/PlayerDetail.tsx`, `src/pages/Players.tsx`.
 
 ### Team Detail And Team Center
 
-- [ ] Replace fixed-width mobile player-name cells with flexible names and a two-line stat layout.
-- [ ] Make the whole roster row a meaningful player-detail target.
-- [ ] Collapse empty story/rivalry blocks into one compact line until real story content exists.
-- [ ] Add lightweight `概览 / 阵容 / 历史` in-page sections or tabs to shorten the mobile scan path.
-- [ ] Merge basic attributes and current state into one coherent club data area.
-- [ ] Change the Team Center from heavily framed cards toward a compact club directory.
+- [x] Replace fixed-width mobile player-name cells with flexible names and a two-line stat layout.
+- [x] Make the whole roster row a meaningful player-detail target.
+- [x] Collapse empty story/rivalry blocks into one compact line until real story content exists.
+- [x] Add lightweight `概览 / 阵容 / 历史` in-page sections or tabs to shorten the mobile scan path.
+- [x] Merge basic attributes and current state into one coherent club data area.
+- [x] Change the Team Center from heavily framed cards toward a compact club directory.
 
 Primary files: `src/pages/TeamDetail.tsx`, `src/pages/Teams.tsx`.
 

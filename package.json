@@ -22,7 +22,8 @@
     "audit:long-save": "tsx scripts/audit-long-save.ts",
     "verify:match": "tsx scripts/verify-match-presentation.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
-    "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts"
+    "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",
+    "verify:player-team": "tsx scripts/verify-player-team-workflow.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",

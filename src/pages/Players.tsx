@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import {
   getCareerTopAssistRows,
@@ -40,6 +40,7 @@ const rankBadge = (rank: number) => {
 
 export default function Players() {
   const world = useGameStore((s) => s.world);
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('scorers');
 
   const topScorers = useMemo(
@@ -113,7 +114,17 @@ export default function Players() {
     return (
       <tr
         key={stat.playerId}
-        className="border-t border-slate-700/40 hover:bg-slate-700/20 transition-colors"
+        data-testid={hasDetailPage ? 'player-directory-row' : undefined}
+        tabIndex={hasDetailPage ? 0 : undefined}
+        aria-label={hasDetailPage ? `查看球员 ${playerName ?? stat.playerId}` : undefined}
+        onClick={hasDetailPage ? () => navigate(`/player/${stat.playerId}`) : undefined}
+        onKeyDown={hasDetailPage ? (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            navigate(`/player/${stat.playerId}`);
+          }
+        } : undefined}
+        className={`border-t border-slate-700/40 hover:bg-slate-700/20 transition-colors ${hasDetailPage ? 'cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)]' : ''}`}
       >
         {/* Rank */}
         <td className="px-2 sm:px-3 py-2 text-center">
@@ -133,18 +144,9 @@ export default function Players() {
         <td className="px-2 py-2">
           {playerName ? (
             <>
-              {hasDetailPage ? (
-                <Link
-                  to={`/player/${stat.playerId}`}
-                  className="text-sm text-slate-200 hover:text-blue-300 truncate block max-w-[100px] sm:max-w-none"
-                >
-                  {playerName}
-                </Link>
-              ) : (
-                <span className="text-sm text-slate-300 truncate block max-w-[100px] sm:max-w-none">{playerName}</span>
-              )}
+              <span className={`block text-sm ${hasDetailPage ? 'text-slate-200' : 'text-slate-300'}`}>{playerName}</span>
               {sourceLabel && (
-                <span className="mt-0.5 inline-block text-[9px] px-1 py-0.5 rounded bg-slate-700/60 text-slate-500">
+                <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1 py-0.5 text-[11px] text-slate-500">
                   {sourceLabel}
                 </span>
               )}
@@ -159,6 +161,8 @@ export default function Players() {
           {teamBase ? (
             <Link
               to={`/team/${stat.teamId}`}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
               className="flex items-center gap-1.5 hover:text-blue-300 transition-colors group"
             >
               <span

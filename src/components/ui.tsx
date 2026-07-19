@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 
 function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
@@ -112,11 +112,42 @@ export function SegmentedControl<T extends string>({
   stretch = false,
   scrollable = false,
 }: SegmentedControlProps<T>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollEdges, setScrollEdges] = useState({ atStart: true, atEnd: true });
+
+  const updateScrollEdges = useCallback(() => {
+    const element = containerRef.current;
+    if (!element || !scrollable) return;
+    setScrollEdges({
+      atStart: element.scrollLeft <= 2,
+      atEnd: element.scrollLeft + element.clientWidth >= element.scrollWidth - 2,
+    });
+  }, [scrollable]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || !scrollable) return;
+
+    const selected = element.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    selected?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    const frame = window.requestAnimationFrame(updateScrollEdges);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateScrollEdges);
+    observer?.observe(element);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [scrollable, updateScrollEdges, value]);
+
   return (
     <div
+      ref={containerRef}
       role="tablist"
       aria-label={ariaLabel}
       data-ui="segmented-control"
+      data-scroll-start={scrollEdges.atStart}
+      data-scroll-end={scrollEdges.atEnd}
+      onScroll={updateScrollEdges}
       className={cx(
         'ui-segmented',
         stretch && 'ui-segmented-stretch',

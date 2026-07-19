@@ -14,6 +14,8 @@ import {
 } from '../engine/players/player-stat-selectors';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 import type { GameWorld } from '../engine/season/season-manager';
+import { EmptyState, Panel } from '../components/ui';
+import { getPositionHeadlineMetrics } from './player-detail-metrics';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -67,8 +69,9 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   // early return above the hooks.
   const posRanking = useMemo(() => {
     if (!player) return { rank: 0, total: 0 };
+    if ((world.playerStats[uuid]?.appearances ?? 0) < 3) return { rank: 0, total: 0 };
     const allSamePos = getCurrentPlayerStatRows(world)
-      .filter(row => row.identity.position === player.position);
+      .filter(row => row.identity.position === player.position && row.appearances >= 3);
     const score = (s: typeof allSamePos[number]) => {
       if (player.position === 'FW') return s.goals * 2 + s.assists + s.bigChances * 0.3;
       if (player.position === 'MF') return s.assists * 2 + s.goals + s.keyPasses * 0.4;
@@ -194,6 +197,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   const teamTotalGoals = currentTeamClubRows.reduce((sum, row) => sum + row.goals, 0);
   const contribution = teamTotalGoals > 0 ? Math.round((clubGoals / teamTotalGoals) * 100) : 0;
   const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
+  const headlineMetrics = getPositionHeadlineMetrics(player.position, stats);
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -240,49 +244,59 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
         </div>
       </div>
 
-      {/* Current-season player-wide totals across all competitions. */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">当前赛季数据</h3>
-          <span className="text-[10px] text-slate-500">全赛事 · 球员总计</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatBox label="出场" value={appearances} />
-          <StatBox label="首发" value={starts} />
-          <StatBox label="替补登场" value={substituteAppearances} />
-          <StatBox label="出场分钟" value={minutesPlayed} />
-          <StatBox label="进球" value={goals} color="text-amber-400" />
-          <StatBox label="助攻" value={assists} color="text-blue-400" />
-          <StatBox label="黄牌" value={stats?.yellowCards ?? 0} color="text-yellow-400" />
-        </div>
-        {!hasCompletedMatches && (
-          <p className="text-[11px] text-slate-500 text-center">
-            赛季尚未开始，完成首场比赛后生成当前赛季统计。
-          </p>
-        )}
-      </div>
+      {appearances === 0 ? (
+        <Panel padded={false}>
+          <EmptyState
+            title="本赛季尚无出场数据"
+            description={hasCompletedMatches ? '球员登场后，这里会生成位置表现和赛季效率。' : '完成首场比赛后，这里会生成位置表现和赛季效率。'}
+            icon={<Icon name="chart" size={20} />}
+            className="py-7"
+          />
+        </Panel>
+      ) : (
+        <>
+          {/* Current-season player-wide totals across all competitions. */}
+          <section className="space-y-2" aria-labelledby="current-player-stats-heading">
+            <div className="flex items-center justify-between gap-3">
+              <h3 id="current-player-stats-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">当前赛季核心数据</h3>
+              <span className="text-xs text-slate-500">全赛事 · {posLabel[player.position]}</span>
+            </div>
+            <div data-testid="position-headline-metrics" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {headlineMetrics.map(metric => (
+                <StatBox key={metric.label} label={metric.label} value={metric.value} color={metric.color} />
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              {starts}次首发 · {substituteAppearances}次替补 · {minutesPlayed}分钟
+            </p>
+          </section>
 
-      {/* Efficiency & current-club contribution */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">效率与球队贡献</h3>
-          <span className="text-[10px] text-slate-500">效率为赛季总计 · 占比仅计当前俱乐部</span>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-            <div className="text-lg font-bold text-slate-100">{goalsPerApp}</div>
-            <div className="text-[10px] text-slate-500">赛季场均进球</div>
-          </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-            <div className="text-lg font-bold text-slate-100">{assistsPerApp}</div>
-            <div className="text-[10px] text-slate-500">赛季场均助攻</div>
-          </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
-            <div className={`text-lg font-bold ${contribution >= 30 ? 'text-amber-400' : 'text-slate-100'}`}>{contribution}%</div>
-            <div className="text-[10px] text-slate-500">效力本队进球占比</div>
-          </div>
-        </div>
-      </div>
+          {/* Position context is the primary interpretation of the raw totals. */}
+          <PositionPerformanceCard player={player} stats={stats} world={world} />
+
+          {/* Efficiency & current-club contribution */}
+          <section className="space-y-2" aria-labelledby="player-efficiency-heading">
+            <div className="flex items-center justify-between gap-3">
+              <h3 id="player-efficiency-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">效率与球队贡献</h3>
+              <span className="text-xs text-slate-500">赛季总计 / 当前俱乐部</span>
+            </div>
+            <div className="grid grid-cols-3 divide-x divide-slate-700/60 border-y border-slate-700/60 py-3 text-center">
+              <div>
+                <div className="text-lg font-bold text-slate-100">{goalsPerApp}</div>
+                <div className="text-xs text-slate-500">场均进球</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-slate-100">{assistsPerApp}</div>
+                <div className="text-xs text-slate-500">场均助攻</div>
+              </div>
+              <div>
+                <div className={`text-lg font-bold ${contribution >= 30 ? 'text-amber-400' : 'text-slate-100'}`}>{contribution}%</div>
+                <div className="text-xs text-slate-500">本队进球占比</div>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
 
       {currentSeasonClubSplits.length > 1 && (
         <CurrentSeasonClubSplitSection rows={currentSeasonClubSplits} />
@@ -355,9 +369,6 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
 
       {/* Awards (career) */}
       <AwardsSection world={world} playerUuid={uuid!} />
-
-      {/* Position-specific performance card (v19) */}
-      <PositionPerformanceCard player={player} stats={stats} world={world} />
 
       {/* Per-season career history table (v19) */}
       <CareerHistorySection world={world} playerUuid={uuid!} />

@@ -14,10 +14,14 @@ import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '..
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 import { Icon, type IconName } from '../components/Icon';
+import { PageShell, Panel, SegmentedControl } from '../components/ui';
+
+type TeamSection = 'overview' | 'squad' | 'history';
 
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
   const world = useGameStore((s) => s.world);
+  const [section, setSection] = useState<TeamSection>('overview');
 
   if (!world || !id) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -36,123 +40,103 @@ export default function TeamDetail() {
   const coachId = getTeamCoachId(world.coachStates, id);
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <PageShell width="standard" className="tabular-nums">
       {/* Header */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 sm:p-5">
+      <Panel className="p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <TeamBadge shortName={base.shortName} color={base.color} size={48} />
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-100">{base.name}</h2>
+          <div className="min-w-0">
+            <h1 className="break-words text-xl font-bold text-slate-100 sm:text-2xl">{base.name}</h1>
             <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
               <span className="text-xs text-slate-400">{getLeagueName(state.leagueLevel)}</span>
               <span className="text-xs text-slate-500">OVR {base.overall}</span>
-              <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">
+              <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300" aria-label={`期望等级 ${base.expectation}`}>
                 {'★'.repeat(base.expectation)}
               </span>
             </div>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      <TeamStoryPanel teamId={id} />
+      <SegmentedControl
+        value={section}
+        onChange={setSection}
+        ariaLabel="球队详情分区"
+        stretch
+        options={[
+          { value: 'overview', label: '概览' },
+          { value: 'squad', label: '阵容' },
+          { value: 'history', label: '历史' },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-        {/* Base Attributes */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-          <h3 className="text-sm font-semibold text-slate-200 mb-3">
-            基础属性
-          </h3>
-          <div className="space-y-2">
-            <AttrBar label="综合" value={base.overall} />
-            <AttrBar label="进攻" value={base.attack} color="bg-red-500" />
-            <AttrBar label="中场" value={base.midfield} color="bg-amber-500" />
-            <AttrBar label="防守" value={base.defense} color="bg-blue-500" />
-            <AttrBar label="稳定" value={base.stability} color="bg-green-500" />
-            <AttrBar label="深度" value={base.depth} color="bg-purple-500" />
-            <AttrBar label="声望" value={base.reputation} color="bg-sky-500" />
-          </div>
-        </div>
+      {section === 'overview' && (
+        <>
+          <TeamStoryPanel teamId={id} />
 
-        {/* Current State */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-          <h3 className="text-sm font-semibold text-slate-200 mb-3">
-            当前状态
-          </h3>
-          <div className="space-y-2">
-            <StateBar label="士气" value={state.morale} max={100} color="bg-green-500" />
-            <StateBar
-              label="疲劳"
-              value={state.fatigue}
-              max={100}
-              color="bg-red-500"
-              inverted
-            />
-            <StateBar
-              label="动力"
-              value={state.momentum + 10}
-              max={20}
-              color="bg-amber-500"
-            />
-            <StateBar
-              label="球员健康"
-              value={state.squadHealth}
-              max={100}
-              color="bg-blue-500"
-            />
-            <StateBar
-              label="教练压力"
-              value={state.coachPressure}
-              max={100}
-              color="bg-orange-500"
-              inverted
-            />
-          </div>
+          <Panel padded={false}>
+            <div className="grid grid-cols-1 divide-y divide-slate-700/60 md:grid-cols-2 md:divide-x md:divide-y-0">
+              {/* Base Attributes */}
+              <section className="p-4" aria-labelledby="team-ability-heading">
+                <h2 id="team-ability-heading" className="mb-3 text-sm font-semibold text-slate-200">球队实力</h2>
+                <div className="space-y-2">
+                  <AttrBar label="综合" value={base.overall} />
+                  <AttrBar label="进攻" value={base.attack} color="bg-red-500" />
+                  <AttrBar label="中场" value={base.midfield} color="bg-amber-500" />
+                  <AttrBar label="防守" value={base.defense} color="bg-blue-500" />
+                  <AttrBar label="稳定" value={base.stability} color="bg-green-500" />
+                  <AttrBar label="深度" value={base.depth} color="bg-purple-500" />
+                  <AttrBar label="声望" value={base.reputation} color="bg-sky-500" />
+                </div>
+              </section>
 
-          {/* Form */}
-          <div className="mt-4">
-            <span className="text-xs text-slate-400">近期战绩: </span>
-            <div className="flex gap-1 mt-1">
-              {state.recentForm.length === 0 ? (
-                <span className="text-xs text-slate-500">暂无</span>
-              ) : (
-                formatForm(state.recentForm).map((f, i) => (
-                  <span
-                    key={i}
-                    className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold text-white ${f.color}`}
-                  >
-                    {f.label}
-                  </span>
-                ))
-              )}
+              {/* Current State */}
+              <section className="p-4" aria-labelledby="team-state-heading">
+                <h2 id="team-state-heading" className="mb-3 text-sm font-semibold text-slate-200">当前状态</h2>
+                <div className="space-y-2">
+                  <StateBar label="士气" value={state.morale} max={100} color="bg-green-500" />
+                  <StateBar label="疲劳" value={state.fatigue} max={100} color="bg-red-500" inverted />
+                  <StateBar label="动力" value={state.momentum + 10} max={20} color="bg-amber-500" />
+                  <StateBar label="球员健康" value={state.squadHealth} max={100} color="bg-blue-500" />
+                  <StateBar label="教练压力" value={state.coachPressure} max={100} color="bg-orange-500" inverted />
+                </div>
+
+                <div className="mt-4">
+                  <span className="text-xs text-slate-400">近期战绩</span>
+                  <div className="flex gap-1 mt-1">
+                    {state.recentForm.length === 0 ? (
+                      <span className="text-xs text-slate-500">暂无</span>
+                    ) : formatForm(state.recentForm).map((f, i) => (
+                      <span key={i} className={`inline-flex h-6 w-6 items-center justify-center rounded text-xs font-bold text-white ${f.color}`}>
+                        {f.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </section>
             </div>
-          </div>
-        </div>
-      </div>
+          </Panel>
 
-      {/* Coach */}
-      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-        <h3 className="text-sm font-semibold text-slate-200 mb-2">
-          现任教练
-        </h3>
-        {coachId ? (
-          <div className="flex items-center gap-3">
-            <Link
-              to={`/coach/${coachId}`}
-              className="text-blue-400 hover:text-blue-300"
-            >
-              {getCoachName(coachId, world.coachBases)}
-            </Link>
-            {world.coachBases[coachId] && (
-              <span className="text-xs text-slate-400">
-                评分: {world.coachBases[coachId].rating}
-              </span>
-            )}
-            <FireCoachButton teamId={id!} />
-          </div>
-        ) : (
-          <span className="text-sm text-slate-500">暂无教练</span>
-        )}
-      </div>
+          {/* Coach */}
+          <Panel>
+            <h2 className="mb-2 text-sm font-semibold text-slate-200">现任教练</h2>
+            {coachId ? (
+              <div className="flex items-center gap-3">
+                <Link to={`/coach/${coachId}`} className="text-blue-400 hover:text-blue-300">
+                  {getCoachName(coachId, world.coachBases)}
+                </Link>
+                {world.coachBases[coachId] && <span className="text-xs text-slate-400">评分: {world.coachBases[coachId].rating}</span>}
+                <FireCoachButton teamId={id!} />
+              </div>
+            ) : <span className="text-sm text-slate-500">暂无教练</span>}
+          </Panel>
+
+          <FinancePanel teamId={id} />
+        </>
+      )}
+
+      {section === 'history' && (
+        <>
 
       {/* Coach history for this team */}
       {(() => {
@@ -222,9 +206,6 @@ export default function TeamDetail() {
           );
         })()}
       </div>
-
-      {/* ═══ 财政状态（Phase H） ═══ */}
-      <FinancePanel teamId={id} />
 
       {/* Season records */}
       {records.length > 0 && (
@@ -359,15 +340,22 @@ export default function TeamDetail() {
         </div>
       )}
 
-      {/* ═══ 伤员 / 停赛 ═══ */}
-      <InjuryBoard teamId={id} />
+        </>
+      )}
 
-      {/* ═══ 球员加成 (v3.8.1) ═══ */}
-      <PlayerBoostsCard teamId={id} />
+      {section === 'squad' && (
+        <>
+          {/* ═══ 伤员 / 停赛 ═══ */}
+          <InjuryBoard teamId={id} />
 
-      {/* ═══ 阵容名单 ═══ */}
-      <SquadRoster teamId={id} />
-    </div>
+          {/* ═══ 球员加成 (v3.8.1) ═══ */}
+          <PlayerBoostsCard teamId={id} />
+
+          {/* ═══ 阵容名单 ═══ */}
+          <SquadRoster teamId={id} />
+        </>
+      )}
+    </PageShell>
   );
 }
 
@@ -390,7 +378,18 @@ const storyMomentMeta: Record<TeamStoryMomentKind, { icon: IconName; color: stri
 function TeamStoryPanel({ teamId }: { teamId: string }) {
   const world = useGameStore((s) => s.world);
   const story = useMemo(() => world ? buildTeamStory(world, teamId) : null, [world, teamId]);
-  if (!world || !story) return null;
+  if (!world) return null;
+  if (!story || (story.moments.length === 0 && !story.rivalry)) {
+    return (
+      <Panel className="flex items-center gap-3 py-3" data-testid="compact-team-story">
+        <Icon name="building" size={16} className="shrink-0 text-slate-500" />
+        <div className="min-w-0 text-xs text-slate-500">
+          <span className="mr-2 font-semibold text-slate-300">球队故事</span>
+          {story?.chapter.summary ?? '赛季推进后，这里会记录球队转折与焦点对手。'}
+        </div>
+      </Panel>
+    );
+  }
 
   const tone = storyToneClasses[story.chapter.tone];
   return (
@@ -399,13 +398,13 @@ function TeamStoryPanel({ teamId }: { teamId: string }) {
         <h3 id="team-story-heading" className="text-sm font-semibold text-slate-200 inline-flex items-center gap-2">
           <Icon name="building" size={15} /> 球队故事
         </h3>
-        <span className="text-[10px] text-slate-500">依据真实历程即时生成</span>
+        <span className="text-xs text-slate-500">依据真实历程即时生成</span>
       </div>
 
       <div className={`px-4 py-3 border-l-4 ${tone.border}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] text-slate-500 mb-0.5">当前篇章</div>
+            <div className="mb-0.5 text-[11px] text-slate-500">当前篇章</div>
             <div className={`text-base font-bold ${tone.title}`}>{story.chapter.title}</div>
             <p className="text-xs text-slate-400 leading-relaxed mt-1 max-w-3xl">{story.chapter.summary}</p>
           </div>
@@ -414,7 +413,7 @@ function TeamStoryPanel({ teamId }: { teamId: string }) {
         {story.chapter.signals.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
             {story.chapter.signals.map(signal => (
-              <span key={signal} className={`text-[10px] px-2 py-1 rounded ${tone.badge}`}>{signal}</span>
+              <span key={signal} className={`rounded px-2 py-1 text-[11px] ${tone.badge}`}>{signal}</span>
             ))}
           </div>
         )}
@@ -437,7 +436,7 @@ function TeamStoryPanel({ teamId }: { teamId: string }) {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-2 flex-wrap">
                         <span className="text-xs font-medium text-slate-200">{moment.title}</span>
-                        <span className="text-[10px] text-slate-600">S{moment.season}</span>
+                        <span className="text-[11px] text-slate-600">S{moment.season}</span>
                       </span>
                       <span className="block text-[11px] text-slate-500 leading-relaxed mt-0.5">{moment.detail}</span>
                     </span>
@@ -463,7 +462,7 @@ function TeamStoryPanel({ teamId }: { teamId: string }) {
                 <Link to={`/team/${story.rivalry.opponentId}`} className="text-sm font-semibold text-blue-300 hover:text-blue-200 truncate">
                   {story.rivalry.opponentName}
                 </Link>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 shrink-0">{story.rivalry.label}</span>
+                <span className="shrink-0 rounded bg-red-900/30 px-1.5 py-0.5 text-[11px] text-red-300">{story.rivalry.label}</span>
               </div>
               <div className="grid grid-cols-4 gap-1 mt-3 text-center">
                 <StoryStat value={story.rivalry.meetings} label="交锋" />
@@ -488,7 +487,7 @@ function StoryStat({ value, label, valueClass = 'text-slate-200' }: { value: num
   return (
     <div>
       <div className={`text-base font-bold tabular-nums ${valueClass}`}>{value}</div>
-      <div className="text-[10px] text-slate-600">{label}</div>
+      <div className="text-[11px] text-slate-600">{label}</div>
     </div>
   );
 }
@@ -507,30 +506,30 @@ function PlayerBoostsCard({ teamId }: { teamId: string }) {
   const cls = (n: number) => n > 0 ? 'text-emerald-300' : n < 0 ? 'text-red-300' : 'text-slate-400';
   const sign = (n: number) => n > 0 ? `+${n}` : `${n}`;
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="rounded-lg border border-slate-700/60 bg-slate-800 p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          🛡️ 球员阵容加成
+        <h3 className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <Icon name="shield" size={14} /> 球员阵容加成
         </h3>
-        <span className="text-[10px] text-slate-500">主力贡献(伤停不计) · ±15 封顶</span>
+        <span className="text-xs text-slate-500">主力贡献(伤停不计) · ±15 封顶</span>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="text-center">
           <div className={`text-2xl font-bold ${cls(boosts.attack)}`}>{sign(boosts.attack)}</div>
-          <div className="text-[10px] text-slate-500">进攻</div>
+          <div className="text-xs text-slate-500">进攻</div>
         </div>
         <div className="text-center">
           <div className={`text-2xl font-bold ${cls(boosts.midfield)}`}>{sign(boosts.midfield)}</div>
-          <div className="text-[10px] text-slate-500">中场</div>
+          <div className="text-xs text-slate-500">中场</div>
         </div>
         <div className="text-center">
           <div className={`text-2xl font-bold ${cls(boosts.defense)}`}>{sign(boosts.defense)}</div>
-          <div className="text-[10px] text-slate-500">防守</div>
+          <div className="text-xs text-slate-500">防守</div>
         </div>
       </div>
       {(injured + suspended) > 0 && (
-        <div className="mt-2 text-[10px] text-amber-400 text-center">
-          ⚠ 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''} — 加成已扣除
+        <div className="mt-2 flex items-center justify-center gap-1 text-center text-xs text-amber-400">
+          <Icon name="warning" size={13} /> 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''}，加成已扣除
         </div>
       )}
     </div>
@@ -722,12 +721,14 @@ function SquadRoster({ teamId }: { teamId: string }) {
                 const isSuspended = suspendedUntil > currentWindowIdx;
 
                 return (
-                  <div
+                  <Link
                     key={player.uuid}
-                    className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-4 py-2 hover:bg-slate-700/20 transition-colors ${isInjured ? 'opacity-70' : ''}`}
+                    to={`/player/${player.uuid}`}
+                    data-testid="squad-player-row"
+                    className={`flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-slate-700/25 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)] sm:px-4 ${isInjured ? 'opacity-70' : ''}`}
                   >
-                    {/* Number badge — clickable */}
-                    <Link to={`/player/${player.uuid}`} className="w-8 h-8 rounded-lg bg-slate-700/80 flex items-center justify-center shrink-0 hover:bg-blue-900/40 transition-colors relative">
+                    {/* Number badge */}
+                    <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-700/80">
                       <span className="text-xs font-bold text-slate-200">
                         {player.number}
                       </span>
@@ -743,51 +744,50 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           title="停赛"
                         />
                       )}
-                    </Link>
+                    </span>
 
-                    {/* Name */}
-                    <Link
-                      to={`/player/${player.uuid}`}
-                      className={`text-sm hover:text-blue-300 truncate w-16 sm:w-24 shrink-0 ${isInjured ? 'text-slate-500 line-through' : 'text-slate-200'}`}
-                    >
-                      {player.name ?? `${player.number}号`}
-                    </Link>
-
-                    {/* Position + star */}
-                    <div className="flex items-center gap-1 w-10 shrink-0">
-                      <span className={`text-[10px] font-medium ${posBgColor[player.position]} px-1 py-0.5 rounded`}>
-                        {posLabel[player.position]}
-                      </span>
-                    </div>
-
-                    {/* Rating bar */}
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <div className="flex-1 bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${posBarColor[player.position]}`}
-                          style={{ width: `${player.rating}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-slate-300 font-mono w-6 text-right shrink-0">
-                        {player.rating}
-                      </span>
-                      {isStar && (
-                        <span className="text-amber-400 text-xs shrink-0" title="球队核心">
-                          ★
+                    {/* Flexible identity and mobile stat line */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`min-w-0 break-words text-sm font-medium leading-5 ${isInjured ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                          {player.name ?? `${player.number}号`}
                         </span>
-                      )}
+                        <span className={`shrink-0 rounded px-1 py-0.5 text-[11px] font-medium ${posBgColor[player.position]}`}>
+                          {posLabel[player.position]}
+                        </span>
+                        {isStar && <span className="shrink-0 text-xs text-amber-400" title="球队核心">★</span>}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500 sm:hidden">
+                        {stats && stats.appearances > 0 ? (
+                          <>
+                            <span>{stats.appearances}场/{stats.starts ?? 0}首发</span>
+                            {(player.position === 'FW' || player.position === 'MF') && <span>{stats.goals}球/{stats.assists}助</span>}
+                            {(player.position === 'GK' || player.position === 'DF') && <span>{stats.cleanSheets}零封</span>}
+                            {player.position === 'GK' && <span>{stats.saves}神扑</span>}
+                            {player.position === 'DF' && <span>{stats.keyBlocks}封堵</span>}
+                          </>
+                        ) : <span>本季尚未出场</span>}
+                      </div>
                     </div>
 
-                    {/* Season stats */}
-                    <div className="flex w-full sm:w-auto items-center justify-end sm:justify-start flex-wrap gap-2 sm:gap-3 text-[11px] sm:shrink-0 pl-10 sm:pl-0">
+                    {/* Rating */}
+                    <div className="flex w-16 shrink-0 items-center gap-1.5 sm:w-24">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700">
+                        <div className={`h-full rounded-full ${posBarColor[player.position]}`} style={{ width: `${player.rating}%` }} />
+                      </div>
+                      <span className="w-6 shrink-0 text-right font-mono text-xs text-slate-300">{player.rating}</span>
+                    </div>
+
+                    {/* Desktop season stats */}
+                    <div className="hidden max-w-[26rem] shrink-0 flex-wrap items-center justify-end gap-2 text-xs sm:flex">
                       {player.marketValue !== undefined && player.marketValue > 0 && (
-                        <span className="text-emerald-400 hidden sm:inline">
+                        <span className="text-emerald-400">
                           €{player.marketValue >= 10 ? Math.round(player.marketValue) : player.marketValue.toFixed(1)}M
                         </span>
                       )}
                       {stats && stats.appearances > 0 ? (
                         <>
-                          <span className="text-slate-400 hidden sm:inline">
+                          <span className="text-slate-400">
                             {stats.appearances}场 · {stats.starts ?? 0}首发 · {stats.substituteAppearances ?? 0}替补 · {stats.minutesPlayed ?? 0}分钟
                           </span>
                           {stats.goals > 0 && (
@@ -816,7 +816,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                             </span>
                           )}
                           {(player.position === 'MF' || player.position === 'FW') && stats.keyPasses > stats.assists && (
-                            <span className="text-emerald-300 hidden sm:inline">
+                            <span className="text-emerald-300">
                               {stats.keyPasses}威胁传球
                             </span>
                           )}
@@ -832,10 +832,10 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           )}
                         </>
                       ) : (
-                        <span className="text-slate-600 text-[10px]">本季尚未出场</span>
+                        <span className="text-xs text-slate-600">本季尚未出场</span>
                       )}
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
