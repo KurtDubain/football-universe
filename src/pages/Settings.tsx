@@ -10,6 +10,7 @@ import { setLanguage } from '../i18n';
 import { BALANCE } from '../config/balance';
 import type { GameWorld } from '../engine/season/season-manager';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
+import { CHANGELOG } from '../config/changelog';
 
 const DevDataHealthPanel = import.meta.env.DEV
   ? lazy(() => import('../components/DataHealthPanel'))
@@ -82,7 +83,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
     },
     {
       key: 'cups', title: '杯赛赛制', icon: '🏆',
-      content: '联赛杯：32队单场淘汰，5轮(R32→R16→QF→SF→决赛)。超级杯：16队(10顶+4甲+2乙)，4组循环赛取前2名进入淘汰赛(主客两回合)，决赛单场。环球冠军杯：每4个赛季举办一次，全部32队参赛，8组4队循环赛+淘汰赛，最高荣誉。',
+      content: '联赛杯：32队单场淘汰。超级杯：16队分组后进入淘汰赛。洲际杯：S2起每4季举办一次，大陆8队、南洲和东洲各4队，按近5季俱乐部积分取得资格。环球冠军杯：每4季举办一次，全部32队参赛，是最高荣誉。',
     },
     {
       key: 'match', title: '比赛模拟', icon: '⚽',
@@ -222,6 +223,28 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <span className="text-slate-200">v{APP_VERSION}</span>
         </div>
       </div>
+
+      {/* Release notes */}
+      <section className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
+        <div className="border-b border-slate-700/60 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">更新日志</h3>
+        </div>
+        <div className="divide-y divide-slate-700/50">
+          {CHANGELOG.map((release, index) => (
+            <details key={release.version} open={index === 0} className="group">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2.5 hover:bg-slate-700/30">
+                <span className={index === 0 ? 'text-sm font-bold text-emerald-300' : 'text-sm font-semibold text-slate-300'}>v{release.version}</span>
+                <span className="min-w-0 flex-1 text-sm text-slate-200">{release.title}</span>
+                <span className="text-[11px] text-slate-600">{release.date}</span>
+                <span aria-hidden="true" className="text-xs text-slate-500 group-open:rotate-180">▼</span>
+              </summary>
+              <ul className="space-y-1.5 px-4 pb-3 pl-8 text-xs leading-relaxed text-slate-400">
+                {release.items.map(item => <li key={item} className="list-disc">{item}</li>)}
+              </ul>
+            </details>
+          ))}
+        </div>
+      </section>
 
       {/* Runtime stats */}
       {world.honorHistory.length > 0 && (

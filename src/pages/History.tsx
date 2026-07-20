@@ -7,6 +7,7 @@ import SeasonReview from '../components/SeasonReview';
 import type { Achievement } from '../engine/achievements';
 import type { GameWorld } from '../engine/season/season-manager';
 import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
+import { rankClubCoefficients } from '../engine/rankings/club-coefficient';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -17,7 +18,7 @@ export default function History() {
 
 function HistoryContent({ world }: { world: GameWorld }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
-  const [tab, setTab] = useState<'seasons' | 'records' | 'coaches' | 'hall'>('seasons');
+  const [tab, setTab] = useState<'seasons' | 'coefficient' | 'records' | 'coaches' | 'hall'>('seasons');
 
   const honors = world.honorHistory;
 
@@ -47,6 +48,11 @@ function HistoryContent({ world }: { world: GameWorld }) {
     });
   }
   wealthRanking.sort((a, b) => b.cash - a.cash);
+
+  const coefficientRanking = useMemo(
+    () => rankClubCoefficients(world.teamBases, world.teamSeasonRecords),
+    [world.teamBases, world.teamSeasonRecords],
+  );
 
   // Fun records computed from season records
   const funRecords = useMemo(() => {
@@ -121,6 +127,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
 
   const tabs = [
     { key: 'seasons' as const, label: '赛季历史' },
+    { key: 'coefficient' as const, label: '俱乐部积分' },
     { key: 'records' as const, label: '趣味数据' },
     { key: 'hall' as const, label: '荣誉殿堂' },
     { key: 'coaches' as const, label: '名帅殿堂' },
@@ -141,8 +148,8 @@ function HistoryContent({ world }: { world: GameWorld }) {
         )}
       />
 
-      {/* Trophy leaderboard — always visible */}
-      {trophyCounts.length > 0 && (
+      {/* Trophy leaderboard */}
+      {tab === 'hall' && trophyCounts.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">历史奖杯榜</h3>
           <div className="space-y-1.5">
@@ -159,8 +166,8 @@ function HistoryContent({ world }: { world: GameWorld }) {
         </div>
       )}
 
-      {/* Phase H — wealth leaderboard (current cash) */}
-      {wealthRanking.length > 0 && (
+      {/* Current cash belongs to the statistics view. */}
+      {tab === 'records' && wealthRanking.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">财富榜</h3>
@@ -181,7 +188,9 @@ function HistoryContent({ world }: { world: GameWorld }) {
             </div>
             {/* Poorest 5 (only show if any have negative cash, OR show bottom 5) */}
             <div className="space-y-1.5">
-              <div className="text-[10px] text-red-400/80 uppercase tracking-wider mb-1">财政告急</div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
+                {wealthRanking.some(team => team.cash < 0) ? '财政告急' : '现金榜末位'}
+              </div>
               {(() => {
                 const slice = wealthRanking.slice(-5).reverse();
                 return slice.map((t, i) => {
@@ -250,6 +259,54 @@ function HistoryContent({ world }: { world: GameWorld }) {
             </div>
           )}
         </>
+      )}
+
+      {/* ═══ Tab: 俱乐部积分 ═══ */}
+      {tab === 'coefficient' && (
+        <section className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
+          <div className="border-b border-slate-700 px-4 py-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100">五赛季俱乐部积分</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                  联赛与杯赛成绩计分，近季权重更高；洲际杯按区域积分排名取得资格。
+                </p>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                {world.seasonState.seasonNumber % 4 === 2 ? '本届' : '下一届'}：S{world.seasonState.seasonNumber + ((2 - world.seasonState.seasonNumber) % 4 + 4) % 4}
+              </span>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-700/60">
+            {coefficientRanking.map(entry => {
+              const team = world.teamBases[entry.teamId];
+              const hasHistory = entry.seasons.length > 0;
+              return (
+                <div key={entry.teamId} data-testid="club-coefficient-row" className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 sm:grid-cols-[2.5rem_minmax(10rem,1fr)_minmax(12rem,auto)_4.5rem] sm:px-4">
+                  <span className={`text-center text-sm font-bold ${entry.rank <= 3 ? 'text-amber-300' : 'text-slate-500'}`}>{entry.rank}</span>
+                  <Link to={`/team/${entry.teamId}`} className="min-w-0 text-sm font-medium text-slate-200 hover:text-emerald-300">
+                    <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: team?.color ?? '#64748b' }} />
+                    {team?.name ?? entry.teamId}
+                    <span className="ml-2 text-[11px] font-normal text-slate-600">{team?.region?.split('+')[0]}</span>
+                  </Link>
+                  <div className="hidden justify-end gap-1 sm:flex" title={entry.seasons.map(season => `S${season.seasonNumber}: ${season.rawPoints} × ${season.weight} = ${season.points}`).join('\n')}>
+                    {entry.seasons.length > 0 ? entry.seasons.map(season => (
+                      <span key={season.seasonNumber} className="rounded border border-slate-700 bg-slate-900/50 px-1.5 py-0.5 text-[10px] text-slate-500">
+                        S{season.seasonNumber} {season.points}
+                      </span>
+                    )) : <span className="text-[11px] text-slate-600">暂无赛季积分</span>}
+                  </div>
+                  <span className={`text-right text-sm font-bold ${hasHistory ? 'text-emerald-300' : 'text-slate-500'}`}>{entry.points.toFixed(1)}</span>
+                </div>
+              );
+            })}
+          </div>
+          {world.honorHistory.length === 0 && (
+            <p className="border-t border-slate-700 px-4 py-3 text-[11px] text-slate-500">
+              完成首个赛季后开始累计；当前同为 0 分，暂按俱乐部声望与实力排序。
+            </p>
+          )}
+        </section>
       )}
 
       {/* ═══ Tab: 趣味数据 ═══ */}
@@ -523,7 +580,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
       {/* ═══ Tab: 名帅殿堂 ═══ */}
       {tab === 'coaches' && (
         <div className="space-y-2">
-          {coachStats.filter(Boolean).map((cs) => {
+          {coachStats.filter(cs => cs && (cs.trophies > 0 || cs.totalSeasons > 1)).map((cs) => {
             const c = cs!;
             return (
               <Link key={c.coachId} to={`/coach/${c.coachId}`} className="block bg-slate-800 rounded-xl border border-slate-700 p-3 hover:border-slate-600 transition-colors hover-lift">
@@ -547,6 +604,9 @@ function HistoryContent({ world }: { world: GameWorld }) {
               </Link>
             );
           })}
+          {coachStats.every(cs => !cs || (cs.trophies === 0 && cs.totalSeasons <= 1)) && (
+            <p className="py-8 text-center text-sm text-slate-500">完成更多赛季后，具有代表性履历的教练会进入名帅殿堂。</p>
+          )}
         </div>
       )}
     </PageShell>

@@ -4,6 +4,7 @@ import type { TeamBase, TeamState } from '../../types/team';
 import { calculateMarketOdds, predictMatch } from './prediction';
 import { SeededRNG } from './rng';
 import { simulateMatch } from './simulator';
+import type { Player, PlayerPosition } from '../../types/player';
 
 function team(id: string, overall: number): TeamBase {
   return {
@@ -26,6 +27,26 @@ function fixture(neutral = false): MatchFixture {
     id: 'forecast', homeTeamId: 'home', awayTeamId: 'away', competitionType: 'league',
     competitionName: '测试联赛', roundLabel: 'R1', isNeutralVenue: neutral,
   };
+}
+
+function squad(teamId: string, starInjuredUntil = 0): Player[] {
+  const positions: PlayerPosition[] = [
+    'GK', 'GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW', 'FW',
+  ];
+  return positions.map((position, index) => ({
+    uuid: `${teamId}-${index}`,
+    teamId,
+    name: `${teamId}-${index}`,
+    number: index + 1,
+    position,
+    rating: index === 11 ? 96 : 78 - index * 0.2,
+    peakRating: index === 11 ? 96 : 80,
+    peakAge: 27,
+    goalScoring: position === 'FW' ? 75 : 20,
+    marketValue: 20,
+    age: 26,
+    ...(index === 11 && starInjuredUntil > 0 ? { injuredUntilWindow: starInjuredUntil } : {}),
+  }));
 }
 
 describe('shared match forecast', () => {
@@ -68,5 +89,48 @@ describe('shared match forecast', () => {
     expect(simulated.prediction?.homeWinPct).toBe(prediction.homeWinPct);
     expect(simulated.prediction?.drawPct).toBe(prediction.drawPct);
     expect(simulated.prediction?.awayWinPct).toBe(prediction.awayWinPct);
+  });
+
+  it('keeps injury-adjusted squad boosts identical in prediction and simulation', () => {
+    const home = team('home', 82);
+    const away = team('away', 82);
+    const homeState = state('home');
+    const awayState = state('away');
+    const matchFixture = fixture();
+    const injuredHome = squad('home', 20);
+    const awaySquad = squad('away');
+    const prediction = predictMatch(home, away, homeState, awayState, null, null, {
+      fixture: matchFixture,
+      homeSquad: injuredHome,
+      awaySquad,
+      globalWindowIdx: 10,
+    });
+    const healthyPrediction = predictMatch(home, away, homeState, awayState, null, null, {
+      fixture: matchFixture,
+      homeSquad: squad('home'),
+      awaySquad,
+      globalWindowIdx: 10,
+    });
+    const simulated = simulateMatch({
+      homeTeam: home,
+      awayTeam: away,
+      homeState,
+      awayState,
+      homeCoach: null,
+      awayCoach: null,
+      homeSquad: injuredHome,
+      awaySquad,
+      globalWindowIdx: 10,
+      competitionType: 'league',
+      isKnockout: false,
+      rng: new SeededRNG(91),
+    }, matchFixture).matchResult;
+
+    expect(prediction.homeWinPct).toBeLessThan(healthyPrediction.homeWinPct);
+    expect(simulated.prediction).toMatchObject({
+      homeWinPct: prediction.homeWinPct,
+      drawPct: prediction.drawPct,
+      awayWinPct: prediction.awayWinPct,
+    });
   });
 });

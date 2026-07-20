@@ -202,3 +202,18 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Added focused metric and segmented-control interaction tests plus `verify:player-team`. Production-browser verification passed at 320x568, 390x844, and 1440x900 with active tabs visible, one season-start empty state, four live headline metrics after one advance, complete names, zero page overflow, and zero runtime errors.
 - Final verification passed 63 files / 493 tests, ESLint, TypeScript and production/PWA build, bundle budgets (273,051-byte main entry; 683,405-byte initial graph), shared UI and match-presentation matrices. Production mobile advance remained healthy at 18/20.7ms p50/p95 normally and 28.5/39.6ms under 4x CPU, with no long tasks and exactly one accepted/persisted rapid advance.
 - The standard game client completed two iterations; the Welcome screen and ambient canvas screenshots were inspected without an error artifact. Simulation, persistence, historical-data, and save-schema behavior were not changed.
+
+## 2026-07-20 Club Identity And Long-Term Competitions
+
+- Replaced the saturated squad-boost sum with weighted 4-3-3 unit quality, one-decimal output, and a visible full-strength versus injury/suspension loss report. Prediction and simulation share the same availability-adjusted result.
+- Added a derived five-season club coefficient with recency weights and a complete History leaderboard. Reputation/overall only break ties before enough results exist.
+- Continental cups now run in S2/S6/S10..., use regional coefficient qualification, field 8 Mainland and 4 Southern/Eastern clubs, and complete in three calendar windows. Draw news reports qualification context instead of every fixture.
+- Added shared news curation for priority, deduplication, favorite-team relevance, and headline/notable/brief presentation without changing the persisted news schema.
+- Added typed in-game release notes, bumped to v4.8.0, and added changelog/package/app-version consistency verification.
+- A ten-season audit exposed a real season-end bug: youth replacements and returning free agents could enter a World Cup tail without player stat rows. The canonical stat sync now creates missing zero rows and club segments before those matches.
+- Final evidence: 65 files / 504 tests, ESLint, TypeScript, production/PWA build, bundle/changelog checks, 509-advance S10 audit at 0 errors/warnings, and mobile/desktop browser workflow verification all pass. Required game client screenshots were inspected with no error artifact.
+
+### Remaining Ideas
+
+- History/Chronicle/Legends responsibility cleanup, transfer-page terminology, Welcome first-run hierarchy, and the optional custom visual asset system remain open in `docs/ui-polish-checklist.md`.
+- Fire-sale exchange independence and contracts/wages/loans remain intentionally deferred; neither is required for the current data-consistent gameplay loop.

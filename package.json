@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.7.0",
+  "version": "4.8.0",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "bundle:check": "tsx scripts/check-bundle-size.ts",
+    "changelog:check": "tsx scripts/check-changelog.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "screenshots": "tsx scripts/screenshot.ts",
@@ -23,7 +24,8 @@
     "verify:match": "tsx scripts/verify-match-presentation.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",
-    "verify:player-team": "tsx scripts/verify-player-team-workflow.ts"
+    "verify:player-team": "tsx scripts/verify-player-team-workflow.ts",
+    "verify:club-story": "tsx scripts/verify-club-story-workflow.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",

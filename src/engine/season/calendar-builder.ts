@@ -10,7 +10,7 @@ export interface CalendarBuildInput {
   leagueCupR1Fixtures: CupFixture[];
   superCupGroupRoundFixtures: CupFixture[][]; // 6 rounds of group fixtures
   /**
-   * When true, append 4 continental_cup windows interleaved with league
+   * When true, append 3 continental_cup windows interleaved with league
    * windows. The fixtures themselves are populated dynamically by the window
    * handler at execution time (which inspects `world.continentalCups`); we
    * just reserve the slots here.
@@ -41,9 +41,9 @@ function cupFixturesToMatchFixtures(
  * - 5 league cup rounds inserted between league windows
  * - 6 super cup group rounds inserted between league windows
  * - Super cup knockout windows (QF L1, QF L2, SF L1, SF L2, Final) — fixtures TBD
- * - 4 continental cup windows when `includeContinentalCup` (odd seasons) —
- *   one for each round of the 大陆杯 (R16/QF/SF/Final), with the smaller
- *   8-team cups joining from QF onward. Fixtures are populated dynamically
+ * - 3 continental cup windows when `includeContinentalCup` (S2, S6, ...) —
+ *   one for each round of the 大陆杯 (QF/SF/Final), with the smaller
+ *   4-team cups completing in the first two windows. Fixtures are populated dynamically
  *   at execution time from `world.continentalCups`.
  * - Relegation playoff + season end
  */
@@ -58,7 +58,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   let lowR = 0;   // 0-13
   let scGroupR = 0; // 0-5 super cup group rounds
   let lcR = 0;    // 0-4 league cup rounds
-  let ccR = 0;    // 0-3 continental cup rounds (odd seasons only)
+  let ccR = 0;    // 0-2 continental cup rounds (qualification seasons only)
 
   // Helper to create a league window
   function addLeagueWindow() {
@@ -149,16 +149,12 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   }
 
   /**
-   * Continental cup round window — round 1 plays only the 16-team mainland
-   * cup (R16). Rounds 2-4 play QF / SF / Final for all three cups in
-   * parallel. Fixtures are populated by the window handler at exec time
-   * since they depend on the live cup state.
+   * Continental cup round window. All active regional cups play in parallel;
+   * the four-team cups finish one window before the Mainland final.
    */
   function addContinentalCupWindow() {
-    if (!includeContinentalCup || ccR >= 4) return;
-    // 大陆杯 has 4 rounds (R16/QF/SF/Final); 南/东 have 3 rounds (QF/SF/Final).
-    // ccR=0 → only mainland_cup R16.  ccR>=1 → all three play their next round.
-    const labels = ['R16 / 首轮', 'QF / 八强', 'SF / 四强', 'Final / 决赛'];
+    if (!includeContinentalCup || ccR >= 3) return;
+    const labels = ['资格队首轮', '四强 / 地区决赛', '大陆杯决赛'];
     windows.push({
       id: windowId++,
       type: 'continental_cup',
@@ -194,7 +190,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W6: League R5 (all tiers)
   addLeagueWindow(); // topR5 + midR3 + lowR3
 
-  // CC R1 (16-team mainland cup R16)  — only odd seasons
+  // Continental first round — only S2, S6, S10... seasons
   addContinentalCupWindow();
 
   // W7: Super Cup Group R2
@@ -218,7 +214,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W13: League R9 (all tiers)
   addLeagueWindow(); // topR9 + midR5 + lowR5
 
-  // CC R2 (QF for all three cups)
+  // Continental second round
   addContinentalCupWindow();
 
   // W14: League R10 (top only)
@@ -239,7 +235,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   // W19: League R13 (all tiers)
   addLeagueWindow(); // topR13 + midR7 + lowR7
 
-  // CC R3 (SF for all three cups)
+  // Continental final window for the Mainland cup
   addContinentalCupWindow();
 
   // W20: Super Cup Group R5
@@ -259,9 +255,6 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
 
   // W25: League R17 (all tiers)
   addLeagueWindow(); // topR17 + midR9 + lowR9
-
-  // CC R4 (Final for all three cups)
-  addContinentalCupWindow();
 
   // W26: League Cup SF
   addLeagueCupWindow();

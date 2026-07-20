@@ -198,13 +198,20 @@ describe('processTransferWindow (uuid-stable)', () => {
     expect(swappedDown!.teamId).toBe('weak');
   });
 
-  it('returns playerStats with the same uuid keys (only teamId values updated)', () => {
+  it('preserves existing stat keys and fills missing active-player rows', () => {
     const world = buildWorld();
     const result = seedWithTransfer(world);
 
-    // Keys are unchanged — uuids never mutate
-    expect(Object.keys(result.playerStats).sort())
-      .toEqual(Object.keys(world.playerStats).sort());
+    // Existing UUID rows never mutate or disappear. A deliberately sparse
+    // fixture may gain zero rows for other active squad members.
+    const originalKeys = new Set(Object.keys(world.playerStats));
+    expect(Object.keys(world.playerStats).every(uuid => result.playerStats[uuid])).toBe(true);
+    for (const [uuid, stat] of Object.entries(result.playerStats)) {
+      if (originalKeys.has(uuid)) continue;
+      expect(stat.playerId).toBe(uuid);
+      expect(stat.appearances).toBe(0);
+      expect(stat.goals).toBe(0);
+    }
 
     // The candidate's stat row is still keyed by the same uuid, but
     // `teamId` now reflects the new club so future-season top-scorer rolls

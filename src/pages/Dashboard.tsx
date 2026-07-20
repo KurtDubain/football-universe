@@ -5,7 +5,7 @@ import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import { Icon } from '../components/Icon';
 import type { MatchFixture, MatchResult } from '../types/match';
-import type { GameWorld } from '../engine/season/season-manager';
+import type { GameWorld, NewsItem } from '../engine/season/season-manager';
 import type { TeamBase } from '../types/team';
 import type { PlayerSeasonStats } from '../types/player';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -29,6 +29,7 @@ import {
   getTierLabel,
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
+import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 
 /**
  * Compact money formatter for chip display.
@@ -718,11 +719,18 @@ function ResultsTab({
 }: {
   world: GameWorld;
   lastResults: MatchResult[];
-  lastNews: { id: string; type: string; title: string; description: string }[];
+  lastNews: NewsItem[];
   onResultClick: (r: MatchResult) => void;
   onLiveView: (r: MatchResult) => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const favoriteTeamNames = favoriteTeamIds
+    .map(teamId => world.teamBases[teamId]?.name ?? '')
+    .filter(Boolean);
+  const curatedNews = curateNewsFeed(
+    lastNews.length > 0 ? lastNews : world.newsLog.slice(-20),
+    { favoriteTeamNames, limit: 8 },
+  );
 
   if (lastResults.length === 0) {
     return (
@@ -752,7 +760,7 @@ function ResultsTab({
             新闻动态
           </h3>
           <div className="space-y-1.5">
-            {(lastNews.length > 0 ? lastNews : world.newsLog.slice(-8).reverse()).map(
+            {curatedNews.map(
               (news) => (
                 <div
                   key={news.id}
@@ -762,7 +770,12 @@ function ResultsTab({
                     borderLeftColor: getNewsBorderColor(news.type),
                   }}
                 >
-                  <p className="text-sm text-slate-200">{news.title}</p>
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 text-sm text-slate-200">{news.title}</p>
+                    <span className="shrink-0 text-[10px] text-slate-600">
+                      {getNewsTier(news, favoriteTeamNames) === 'headline' ? '头条' : getNewsTier(news, favoriteTeamNames) === 'notable' ? '关注' : '简讯'}
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5">{news.description}</p>
                 </div>
               )

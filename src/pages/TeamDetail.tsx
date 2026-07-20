@@ -8,7 +8,7 @@ import {
 } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import { formatMoney } from '../engine/economy/finance';
-import { computePlayerBoosts } from '../engine/players/player-boosts';
+import { computePlayerBoostReport } from '../engine/players/player-boosts';
 import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
 import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '../engine/season/team-story';
 import type { Player, PlayerPosition } from '../types/player';
@@ -500,18 +500,20 @@ function PlayerBoostsCard({ teamId }: { teamId: string }) {
   if (!world) return null;
   const squad = world.squads[teamId] ?? [];
   if (squad.length === 0) return null;
-  const boosts = computePlayerBoosts(squad, world.totalElapsedWindows ?? 0);
+  const report = computePlayerBoostReport(squad, world.totalElapsedWindows ?? 0);
+  const boosts = report.current;
   const injured = squad.filter(p => (p.injuredUntilWindow ?? 0) > (world.totalElapsedWindows ?? 0)).length;
   const suspended = squad.filter(p => (p.suspendedUntilWindow ?? 0) > (world.totalElapsedWindows ?? 0)).length;
   const cls = (n: number) => n > 0 ? 'text-emerald-300' : n < 0 ? 'text-red-300' : 'text-slate-400';
-  const sign = (n: number) => n > 0 ? `+${n}` : `${n}`;
+  const sign = (n: number) => n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1);
+  const loss = Object.values(report.absenceLoss).some(value => value > 0);
   return (
     <div className="rounded-lg border border-slate-700/60 bg-slate-800 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
           <Icon name="shield" size={14} /> 球员阵容加成
         </h3>
-        <span className="text-xs text-slate-500">主力贡献(伤停不计) · ±15 封顶</span>
+        <span className="text-xs text-slate-500">可用首发质量 · ±15 极限</span>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="text-center">
@@ -528,8 +530,16 @@ function PlayerBoostsCard({ teamId }: { teamId: string }) {
         </div>
       </div>
       {(injured + suspended) > 0 && (
-        <div className="mt-2 flex items-center justify-center gap-1 text-center text-xs text-amber-400">
-          <Icon name="warning" size={13} /> 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''}，加成已扣除
+        <div className="mt-3 border-t border-slate-700/60 pt-2 text-center text-xs text-amber-300">
+          <div className="flex items-center justify-center gap-1">
+            <Icon name="warning" size={13} /> 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''}
+          </div>
+          {loss && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              满员可达 攻{sign(report.fullStrength.attack)} / 中{sign(report.fullStrength.midfield)} / 防{sign(report.fullStrength.defense)}
+              {' · '}当前损失 {report.absenceLoss.attack.toFixed(1)} / {report.absenceLoss.midfield.toFixed(1)} / {report.absenceLoss.defense.toFixed(1)}
+            </p>
+          )}
         </div>
       )}
     </div>

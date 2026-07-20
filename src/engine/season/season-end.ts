@@ -17,7 +17,7 @@ import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
-import { syncPlayerStatsTeamIds } from '../players/stats';
+import { syncPlayerStatSegments, syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
 import {
@@ -84,6 +84,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   let playerAwardsHistory = world.playerAwardsHistory;
   let transferHistory = world.transferHistory;
   let playerStats = world.playerStats;
+  let playerStatSegments = world.playerStatSegments ?? {};
   let squads = world.squads;
   // ── A2 retirement / coach-pool locals (introduced in v11) ──
   // Initialised to (defensive) empty arrays so legacy worlds that haven't yet
@@ -628,7 +629,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     // hasn't happened yet; reading world.worldCup.winnerId here gives
     // undefined every time, which is why this used to silently lose
     // prize money every WC year.
-    // Continental cups — region-aware tier (mainland 16-team, others 8-team)
+    // Continental cups — region-aware tier (mainland 8-team, others 4-team)
     const continentalConfigs: Array<[typeof continentalCups.mainland_cup, typeof LEAGUE_CUP_TIERS]> = [
       [continentalCups.mainland_cup, MAINLAND_CUP_TIERS],
       [continentalCups.southern_cup, SMALL_CONTINENTAL_CUP_TIERS],
@@ -832,6 +833,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     league1Champion || null,
     world.totalElapsedWindows ?? 0,
   );
+  playerStats = syncPlayerStatsTeamIds(playerStats, squads);
+  playerStatSegments = syncPlayerStatSegments(playerStatSegments, squads);
 
   // Promoted teams
   for (const p of actualPromoted) {
@@ -1389,6 +1392,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     predictionHistory,
     squads,
     playerStats,
+    playerStatSegments,
     playerAwardsHistory,
     transferHistory,
     retirementHistory,

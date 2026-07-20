@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useEffect } from 'react';
+import { type ReactNode, useState, useEffect, useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
@@ -52,7 +52,7 @@ const navSections = [
 ];
 
 /**
- * Continental cup navigation entries — visible only in odd seasons when the
+ * Continental cup navigation entries — visible only in scheduled seasons when the
  * corresponding cup state is non-null. Each entry hides naturally when the
  * cup didn't run for that region this season (e.g. shrinking after a
  * mid-game team migration).
@@ -72,6 +72,10 @@ export default function Layout({ children }: LayoutProps) {
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const resetGame = useGameStore((s) => s.resetGame);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const favoriteTeamNames = useMemo(
+    () => favoriteTeamIds.map(id => world?.teamBases[id]?.name ?? '').filter(Boolean),
+    [favoriteTeamIds, world?.teamBases],
+  );
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
@@ -205,7 +209,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         )}
 
-        {/* Continental cups — odd seasons only, only render the regions that
+        {/* Continental cups — scheduled seasons only, only render the regions that
             actually have a cup running this season. */}
         {(() => {
           const cc = world?.continentalCups;
@@ -432,7 +436,10 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         {/* News ticker at top */}
-        <NewsTicker news={world?.newsLog.slice(-20) ?? []} />
+        <NewsTicker
+          news={world?.newsLog.slice(-20) ?? []}
+          favoriteTeamNames={favoriteTeamNames}
+        />
 
         {saveNearCapacity && (
           <div role="status" className="px-3 sm:px-5 py-2 bg-amber-950/60 border-b border-amber-700/50 text-amber-100 text-xs flex items-center gap-2">

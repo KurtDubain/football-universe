@@ -70,6 +70,26 @@ describe('initializeGameWorld', () => {
     expect(a.leagueCup.rounds[0].fixtures.length).toBe(b.leagueCup.rounds[0].fixtures.length);
   });
 
+  it('schedules compact continental cups every four seasons from season two', () => {
+    const seasonOne = initializeGameWorld(2024);
+    expect(Object.values(seasonOne.continentalCups).every(cup => cup === null)).toBe(true);
+    expect(seasonOne.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
+
+    const seasonTwo = initializeNewSeason(seasonOne);
+    expect(seasonTwo.continentalCups.mainland_cup?.rounds[0].fixtures).toHaveLength(4);
+    expect(seasonTwo.continentalCups.southern_cup?.rounds[0].fixtures).toHaveLength(2);
+    expect(seasonTwo.continentalCups.eastern_cup?.rounds[0].fixtures).toHaveLength(2);
+    expect(seasonTwo.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(3);
+
+    const seasonThree = initializeNewSeason(seasonTwo);
+    expect(Object.values(seasonThree.continentalCups).every(cup => cup === null)).toBe(true);
+    const seasonSix = initializeNewSeason({
+      ...seasonThree,
+      seasonState: { ...seasonThree.seasonState, seasonNumber: 5 },
+    });
+    expect(seasonSix.continentalCups.mainland_cup).not.toBeNull();
+  });
+
   it('generates squads and player stats from custom final teams', () => {
     const customTeams = makeCustomTeams();
     const customIds = customTeams.map((team) => team.id).sort();

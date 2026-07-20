@@ -141,11 +141,11 @@ Primary files: `src/pages/TeamDetail.tsx`, `src/pages/Teams.tsx`.
 
 ### History, Chronicle, And Legends
 
-- [ ] Make the History tabs own their content: trophies under honors, finance under statistics, and coaches under the coach hall.
-- [ ] Rename "财政告急" to a neutral label when the lowest-cash club is still solvent.
-- [ ] Show only coaches with meaningful trophies or completed-season achievements in the hall of fame.
+- [x] Make the History tabs own their content: trophies under honors, finance under statistics, and coaches under the coach hall.
+- [x] Rename "财政告急" to a neutral label when the lowest-cash club is still solvent.
+- [x] Show only coaches with meaningful trophies or completed-season achievements in the hall of fame.
 - [ ] Keep responsibilities distinct: History for records, Chronicle for season stories, Legends for retired people.
-- [ ] Verify no History tab starts with unrelated content or produces an unnecessarily long season-one page.
+- [x] Verify no History tab starts with unrelated content or produces an unnecessarily long season-one page.
 
 Primary files: `src/pages/History.tsx`, `src/pages/Chronicle.tsx`, `src/pages/Legends.tsx`.
 

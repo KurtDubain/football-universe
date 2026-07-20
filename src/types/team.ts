@@ -50,7 +50,7 @@ export interface SeasonRecord {
   worldCupResult?: string;
   /**
    * Continental cup result — one of '冠军' | '亚军' | '四强' | '八强' | '16强' |
-   * '未参加'. Populated only in odd seasons when the team's region had a
+   * '未参加'. Populated only in a continental-cup season when the team's region had a
    * continental cup running. Off-year rows leave it undefined; the UI
    * displays '—' for those.
    */

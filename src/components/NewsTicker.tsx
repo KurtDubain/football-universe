@@ -1,12 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { NewsItem } from '../engine/season/season-manager';
 import { Icon, IconName } from './Icon';
-
-const priorityMap: Record<string, number> = {
-  trophy: 10, upset: 8, coach_fired: 7, coach_hired: 6, retirement: 6,
-  injury: 6, fire_sale: 6, prize_money: 4, promotion: 5, relegation: 5,
-  streak: 4, match_result: 2, rumor: 3,
-};
+import { curateNewsFeed } from '../engine/season/news-feed';
 
 const typeIcon: Record<string, IconName> = {
   trophy: 'trophy', upset: 'fire', coach_fired: 'clipboard', coach_hired: 'check',
@@ -38,15 +33,15 @@ const typeBg: Record<string, string> = {
   rumor: 'border-l-purple-400',
 };
 
-export default function NewsTicker({ news }: { news: NewsItem[] }) {
+const EMPTY_TEAM_NAMES: string[] = [];
+
+export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES }: { news: NewsItem[]; favoriteTeamNames?: string[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const sorted = useMemo(() =>
-    [...news]
-      .sort((a, b) => (priorityMap[b.type] ?? 0) - (priorityMap[a.type] ?? 0))
-      .slice(0, 8),
-    [news]
+  const sorted = useMemo(
+    () => curateNewsFeed(news, { favoriteTeamNames, limit: 8 }),
+    [favoriteTeamNames, news],
   );
 
   useEffect(() => {

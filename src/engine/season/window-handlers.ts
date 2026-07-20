@@ -550,9 +550,9 @@ export function handleWorldCup(
  * in parallel. Cups are disjoint by team so a single window can play matches
  * across all three without conflict.
  *
- * Round 1 (R16) only the 16-team mainland cup plays — the smaller 8-team
- * cups don't have an R16. From round 2 onward all three cups play QF / SF /
- * Final on the same window.
+ * All active cups play their current round in parallel. The four-team South
+ * and East cups complete after two windows; the eight-team Mainland cup uses
+ * the third window for its final.
  */
 export function handleContinentalCup(
   world: GameWorld,

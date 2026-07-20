@@ -128,7 +128,7 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
 // ══════════════════════════════════════════════════════════════
 
 function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
-  const teamCount = cup.region === '大陆' ? 16 : 8;
+  const teamCount = cup.region === '大陆' ? 8 : 4;
   const headerAccent = cup.region === '大陆' ? 'text-orange-300'
     : cup.region === '南洲' ? 'text-cyan-300'
     : 'text-pink-300';
@@ -140,12 +140,12 @@ function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState
         {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
       </div>
       <RulesCard lines={[
-        `参赛: ${cup.region}地区 ${teamCount} 支强队 (按综合实力筛选)`,
+        `参赛: ${cup.region}地区俱乐部积分前 ${teamCount} 名`,
         '赛制: 单场淘汰制，平局进入加时 + 点球',
         cup.region === '大陆'
-          ? '轮次: 第一轮(16→8) → 八强 → 四强 → 决赛'
-          : '轮次: 八强 → 四强 → 决赛',
-        '每两个赛季举办一次（奇数赛季）',
+          ? '轮次: 八强 → 四强 → 决赛'
+          : '轮次: 四强 → 决赛',
+        '每四个赛季举办一次（S2、S6、S10…）',
       ]} />
       <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
     </div>

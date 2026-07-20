@@ -471,6 +471,55 @@ Evidence (2026-07-16): `pnpm audit:animation-performance` passed at `390x844@3` 
 - [x] Step 7: Expand defensive, goalkeeper, and midfielder metrics in the UI.
 - [x] Step 8: Update docs, Node version constraints, and final regression tests.
 
+## 16. Club Identity And Long-Term Competition Pass (2026-07-20)
+
+Scope: add more variation to squad strength, make continental cups rarer and more prestigious, turn historical results into a visible club coefficient, improve news signal, and expose release notes in-game. Keep all new rankings derived from existing history so saves stay compact and no parallel source of truth is introduced.
+
+### P0: Squad Contribution Balance
+
+- [x] Replace the saturated position-sum formula with an 11-player shape (`1 GK / 4 DF / 3 MF / 3 FW`) and weighted unit quality.
+- [x] Keep the visible `+/-15` safety cap, but tune ordinary elite squads below it so top-flight clubs do not collapse to the same value.
+- [x] Preserve fractional differences so one missing key player can affect the displayed and simulated contribution.
+- [x] Apply the same full-squad availability calculation to simulation, prediction, and Team Detail.
+- [x] Show the current injury/suspension loss against the same squad at full availability.
+- [x] Add distribution, weak-squad, bench-depth, injury, suspension, and prediction/simulation consistency tests.
+
+### P1: Club Coefficient And Continental Prestige
+
+- [x] Derive a rolling five-season club coefficient from league level/position and domestic, continental, and world cup progress.
+- [x] Weight recent seasons more heavily, expose per-season point breakdowns, and keep reputation/overall as tie-breakers only.
+- [x] Add a complete club coefficient leaderboard under History with useful empty-state behavior in season one.
+- [x] Use coefficient ranking to select continental cup entrants, with a deterministic sporting fallback before enough history exists.
+- [x] Move continental cups to seasons `S2, S6, S10...`, avoiding the four-season World Cup cycle.
+- [x] Reduce the fields to eight Mainland clubs and four Southern/Eastern clubs, playing three synchronized knockout windows.
+- [x] Replace fixture-dump draw news with concise qualification and prestige context.
+- [x] Verify season scheduling, regional qualification, deterministic draws, cup advancement, finance awards, season records, and long-save invariants.
+
+### P1: News Signal And Story Density
+
+- [x] Define one shared news-priority model used by the global ticker and Dashboard.
+- [x] Deduplicate repeated items while preserving deterministic order and favor stories involving followed clubs.
+- [x] Separate headline/notable/brief presentation without expanding the persisted news schema.
+- [x] Keep trophy, qualification, promotion/relegation, coach, injury, transfer, upset, and streak stories visible ahead of routine notices.
+- [x] Add focused tests for priority, deduplication, favorite-club relevance, and bounded feed length.
+
+### P1: In-Game Release Notes
+
+- [x] Add a typed release-note source whose first entry must match `APP_VERSION` and `package.json`.
+- [x] Show current and recent release notes in Settings with readable mobile disclosure controls.
+- [x] Record this release and the preceding UI pass; require future user-facing releases to update the same file.
+- [x] Add an automated changelog consistency check to the verification scripts.
+
+### Acceptance
+
+- [x] Full Vitest, ESLint, TypeScript, production/PWA build, and bundle budgets pass.
+- [x] Fixed-seed multi-season validation completes with zero data errors or warnings.
+- [x] Team Detail, History coefficient ranking, Dashboard news, Settings changelog, and continental cup UI pass at `390x844` and `1440x900` with no overflow or runtime errors.
+- [x] The measured player-boost distribution contains meaningful variance and no majority of top-flight teams at `+15` in all three units.
+- [x] Update this section only from recorded evidence; commit and push follow as the final delivery step.
+
+Evidence (2026-07-20): full repository verification passed `65` files / `504` tests, ESLint, TypeScript, production/PWA build, changelog consistency, and bundle budgets (`274,160` byte main entry; `686,210` byte initial graph). A fixed-seed audit completed `509` advances through S10 with `0 errors / 0 warnings`; continental cups appeared only in S2/S6/S10 with three windows and all regional cups completed. Browser verification passed the complete workflow at `390x844` and `1440x900`, including 32 coefficient rows, visible injury loss, curated news, release notes, S2 qualification, and zero overflow/runtime errors. The audit also exposed and fixed missing current-season rows for youth replacements/returning free agents before World Cup tails.
+
 ## Notes From Initial Code Review
 
 - `src/pages/Players.tsx` currently reads top scorers and assists from `world.playerStats` and resolves player identity through current squads.

@@ -508,5 +508,29 @@ export function syncPlayerStatsTeamIds(
       out[uuid] = stat;
     }
   }
+  // Season-end youth replacements and returning free agents can enter an
+  // active squad without an existing current-season row. Create it here so
+  // a following World Cup fixture cannot silently drop their contribution.
+  for (const [uuid, teamId] of uuidToTeam) {
+    if (out[uuid]) continue;
+    out[uuid] = emptyPlayerStat(uuid, teamId);
+    touched = true;
+  }
   return touched ? out : playerStats;
+}
+
+export function syncPlayerStatSegments(
+  playerStatSegments: Record<string, PlayerTeamSeasonStats>,
+  squads: Record<string, Player[]>,
+): Record<string, PlayerTeamSeasonStats> {
+  let out = playerStatSegments;
+  for (const [teamId, squad] of Object.entries(squads)) {
+    for (const player of squad) {
+      const key = playerTeamStatKey(player.uuid, teamId);
+      if (out[key]) continue;
+      if (out === playerStatSegments) out = { ...playerStatSegments };
+      out[key] = emptyPlayerStat(player.uuid, teamId);
+    }
+  }
+  return out;
 }

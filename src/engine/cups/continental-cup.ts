@@ -4,10 +4,9 @@ import { SeededRNG } from '../match/rng';
 import { drawSimpleKnockout } from './draw';
 
 /**
- * Continental cups (Phase C) — three intra-continent knockouts that fire on
- * odd seasons (S1, S3, S5, ..., S17, S19). Single-leg knockout, mirrors
- * `league-cup.ts` but with a region tag and variable team-count entry round
- * (16 → R16, 8 → QF).
+ * Continental cups — three intra-continent knockouts that run every four
+ * seasons (S2, S6, S10, ...). Single-leg knockout with a compact,
+ * qualification-only field (8 Mainland clubs, 4 Southern/Eastern clubs).
  *
  * Naming convention for fixture IDs:
  *   CC-{type}-S{season}-{round}-M{n}
@@ -18,8 +17,8 @@ import { drawSimpleKnockout } from './draw';
  * the three without re-reading `region`.
  */
 
-const ROUND_NAMES_16 = ['R16', 'QF', 'SF', 'Final'] as const;
 const ROUND_NAMES_8  = ['QF', 'SF', 'Final'] as const;
+const ROUND_NAMES_4  = ['SF', 'Final'] as const;
 
 type RegionToType = {
   '大陆': 'mainland_cup';
@@ -60,8 +59,8 @@ function fixtureIdPrefix(type: ContinentalCupState['type'], season: number): str
 }
 
 /**
- * Initialize a continental cup. Validates team count by region (16 for 大陆,
- * 8 for 南洲 / 东洲), draws the first round via `drawSimpleKnockout`.
+ * Initialize a continental cup. Validates team count by region (8 for 大陆,
+ * 4 for 南洲 / 东洲), draws the first round via `drawSimpleKnockout`.
  *
  * Throws if the team count doesn't match the region's required size — caller
  * should never call this with an empty team list (off-year detection lives
@@ -73,14 +72,14 @@ export function initContinentalCup(
   seasonNumber: number,
   rng: SeededRNG,
 ): ContinentalCupState {
-  const expectedSize = region === '大陆' ? 16 : 8;
+  const expectedSize = region === '大陆' ? 8 : 4;
   if (teamIds.length !== expectedSize) {
     throw new Error(
       `${REGION_TO_NAME[region]} requires exactly ${expectedSize} teams, got ${teamIds.length}`,
     );
   }
   const type = REGION_TO_TYPE[region];
-  const roundNames = region === '大陆' ? ROUND_NAMES_16 : ROUND_NAMES_8;
+  const roundNames = region === '大陆' ? ROUND_NAMES_8 : ROUND_NAMES_4;
 
   const pairs = drawSimpleKnockout(teamIds, rng);
   const prefix = fixtureIdPrefix(type, seasonNumber);
@@ -150,7 +149,7 @@ export function advanceContinentalCup(
   }
   currentRound.completed = true;
 
-  const roundNames = cup.region === '大陆' ? ROUND_NAMES_16 : ROUND_NAMES_8;
+  const roundNames = cup.region === '大陆' ? ROUND_NAMES_8 : ROUND_NAMES_4;
   if (cup.currentRound >= roundNames.length) {
     // Final just played — winner is the lone surviving entry.
     return {

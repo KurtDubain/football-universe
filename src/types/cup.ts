@@ -20,11 +20,11 @@ export interface CupState {
 }
 
 /**
- * Continental cups (Phase C) — three intra-continent knockouts that run every
- * other (odd) season:
- *   大陆杯 / mainland_cup — 16 teams (R16 → QF → SF → Final)
- *   南洲杯 / southern_cup — 8 teams (QF → SF → Final)
- *   东洲杯 / eastern_cup  — 8 teams (QF → SF → Final)
+ * Continental cups — three coefficient-qualified knockouts that run every
+ * four seasons (S2, S6, S10...):
+ *   大陆杯 / mainland_cup — 8 teams (QF → SF → Final)
+ *   南洲杯 / southern_cup — 4 teams (SF → Final)
+ *   东洲杯 / eastern_cup  — 4 teams (SF → Final)
  *
  * The shape extends `CupState` so existing bracket-rendering logic and the
  * Cup page work without bifurcation. `region` is carried so news / UI can

@@ -2,60 +2,80 @@ import { Player, PlayerPosition } from '../../types/player';
 import { BALANCE } from '../../config/balance';
 
 /**
- * Phase 1B — player-derived squad boost.
- *
- * Players contribute additive ±X to a team's attack/midfield/defense
- * stats in the same slot as coach buffs. Designed to feel like:
- *   - star-loaded teams are MEANINGFULLY stronger (but not 2× stronger)
- *   - injuries to key players visibly weaken the team next match
- *   - benching weakens you, signing stars strengthens you
- *
- * KEY INVARIANT: team.overall remains the foundation. Boosts are
- * additive ±cap and never replace the base. A weak team with stars
- * is still weaker than an elite team, just by a smaller margin.
- *
- * Algorithm (per-position-average, NOT per-player-sum — sum-based
- * formulas saturate the cap with 12 starters even at small per-player
- * deltas, flattening every team to either +cap or -cap):
- *
- *   1. Filter out injured / suspended players (they can't play, can't buff)
- *   2. Pick top N "starters" per position (rating desc):
- *        GK: 1, DF: 4, MF: 4, FW: 3 → 12 starters total
- *   3. For each position:
- *        avg = mean rating of those starters
- *        delta = avg - BASELINE_RATING   // baseline = 60
- *        attack += delta × posWeight.attack
- *        midfield += delta × posWeight.midfield
- *        defense += delta × posWeight.defense
- *   4. Clamp each side to ±PLAYER_BOOST_CAP (default ±15)
- *   5. Multiply by PLAYER_BOOST_WEIGHT (0 disables, 1 = full effect)
- *
- * Realistic outputs:
- *   - Fresh elite team (avg starter ~85): all sides at +cap 15
- *   - Mature top team (avg starter ~60-65): mixed ±5 to ±10
- *   - Weak team (avg ~40-50): -10 to -cap
+ * Player-derived match strength. Team attributes remain the foundation; this
+ * is a compact way to make the actual available XI and injuries matter.
  */
 
 const BASELINE_RATING = 60;
+const EMERGENCY_RATING = 40;
+const QUALITY_TO_BOOST = 0.45;
 
 const STARTERS_PER_POSITION: Record<PlayerPosition, number> = {
   GK: 1,
   DF: 4,
-  MF: 4,
+  MF: 3,
   FW: 3,
-};
-
-const POSITION_SIDE_WEIGHTS: Record<PlayerPosition, { attack: number; midfield: number; defense: number }> = {
-  FW: { attack: 1.0, midfield: 0.2, defense: 0   },
-  MF: { attack: 0.4, midfield: 0.8, defense: 0.2 },
-  DF: { attack: 0,   midfield: 0.2, defense: 1.0 },
-  GK: { attack: 0,   midfield: 0,   defense: 0.8 },
 };
 
 export interface PlayerBoosts {
   attack: number;
   midfield: number;
   defense: number;
+}
+
+export interface PlayerBoostReport {
+  current: PlayerBoosts;
+  fullStrength: PlayerBoosts;
+  absenceLoss: PlayerBoosts;
+}
+
+function roundOne(value: number): number {
+  const rounded = Math.round(value * 10) / 10;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function positionQuality(players: Player[], position: PlayerPosition): number {
+  const slots = STARTERS_PER_POSITION[position];
+  const ratings = players
+    .filter(player => player.position === position)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, slots)
+    .map(player => player.rating);
+
+  while (ratings.length < slots) ratings.push(EMERGENCY_RATING);
+  return ratings.reduce((sum, rating) => sum + rating, 0) / slots;
+}
+
+function calculateBoosts(players: Player[]): PlayerBoosts {
+  const goalkeeper = positionQuality(players, 'GK');
+  const defense = positionQuality(players, 'DF');
+  const midfield = positionQuality(players, 'MF');
+  const attack = positionQuality(players, 'FW');
+
+  // Each unit is a weighted quality average, so adding more players cannot
+  // push every elite team into the cap. Adjacent units still influence play.
+  const unitQuality = {
+    attack: attack * 0.7 + midfield * 0.3,
+    midfield: midfield * 0.7 + attack * 0.15 + defense * 0.15,
+    defense: defense * 0.65 + goalkeeper * 0.25 + midfield * 0.1,
+  };
+
+  const cap = BALANCE.PLAYER_BOOST_CAP;
+  const weight = BALANCE.PLAYER_BOOST_WEIGHT;
+  const toBoost = (quality: number) => roundOne(
+    Math.max(-cap, Math.min(cap, (quality - BASELINE_RATING) * QUALITY_TO_BOOST)) * weight,
+  );
+
+  return {
+    attack: toBoost(unitQuality.attack),
+    midfield: toBoost(unitQuality.midfield),
+    defense: toBoost(unitQuality.defense),
+  };
+}
+
+function isAvailable(player: Player, globalWindowIdx: number): boolean {
+  return (player.injuredUntilWindow ?? 0) <= globalWindowIdx
+    && (player.suspendedUntilWindow ?? 0) <= globalWindowIdx;
 }
 
 export function computePlayerBoosts(
@@ -65,39 +85,27 @@ export function computePlayerBoosts(
   if (!squad || squad.length === 0 || (BALANCE.PLAYER_BOOST_WEIGHT as number) === 0) {
     return { attack: 0, midfield: 0, defense: 0 };
   }
-  // Filter out injured / suspended — they don't play, don't contribute.
-  const available = squad.filter(p =>
-    (p.injuredUntilWindow ?? 0) <= globalWindowIdx
-    && (p.suspendedUntilWindow ?? 0) <= globalWindowIdx,
-  );
+  return calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)));
+}
 
-  // Pick top N per position by rating
-  const byPos: Record<PlayerPosition, Player[]> = { GK: [], DF: [], MF: [], FW: [] };
-  for (const p of available) byPos[p.position].push(p);
-  for (const pos of ['GK', 'DF', 'MF', 'FW'] as PlayerPosition[]) {
-    byPos[pos].sort((a, b) => b.rating - a.rating);
-    byPos[pos] = byPos[pos].slice(0, STARTERS_PER_POSITION[pos]);
+export function computePlayerBoostReport(
+  squad: Player[] | undefined,
+  globalWindowIdx: number,
+): PlayerBoostReport {
+  if (!squad || squad.length === 0 || (BALANCE.PLAYER_BOOST_WEIGHT as number) === 0) {
+    const zero = { attack: 0, midfield: 0, defense: 0 };
+    return { current: zero, fullStrength: zero, absenceLoss: zero };
   }
 
-  let attack = 0;
-  let midfield = 0;
-  let defense = 0;
-  for (const pos of ['GK', 'DF', 'MF', 'FW'] as PlayerPosition[]) {
-    const starters = byPos[pos];
-    if (starters.length === 0) continue;
-    const avg = starters.reduce((s, p) => s + p.rating, 0) / starters.length;
-    const delta = avg - BASELINE_RATING;
-    const weights = POSITION_SIDE_WEIGHTS[pos];
-    attack   += delta * weights.attack;
-    midfield += delta * weights.midfield;
-    defense  += delta * weights.defense;
-  }
-
-  const cap = BALANCE.PLAYER_BOOST_CAP;
-  const wt = BALANCE.PLAYER_BOOST_WEIGHT;
+  const current = calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)));
+  const fullStrength = calculateBoosts(squad);
   return {
-    attack:   Math.round(Math.max(-cap, Math.min(cap, attack))   * wt),
-    midfield: Math.round(Math.max(-cap, Math.min(cap, midfield)) * wt),
-    defense:  Math.round(Math.max(-cap, Math.min(cap, defense))  * wt),
+    current,
+    fullStrength,
+    absenceLoss: {
+      attack: roundOne(Math.max(0, fullStrength.attack - current.attack)),
+      midfield: roundOne(Math.max(0, fullStrength.midfield - current.midfield)),
+      defense: roundOne(Math.max(0, fullStrength.defense - current.defense)),
+    },
   };
 }

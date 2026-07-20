@@ -374,13 +374,13 @@ export const CUP_PRIZE = {
   world_cup_semi: 15,
   world_cup_runner_up: 30,
   world_cup_winner: 60,
-  // 大陆杯 (16-team knockout)
-  continental_cup_r8: 4,      // won R16
+  // 大陆杯 (8-team coefficient-qualified knockout)
+  continental_cup_r8: 4,
   continental_cup_semi: 10,
   continental_cup_runner_up: 25,
   continental_cup_winner: 45,
-  // 南洲杯 / 东洲杯 (8-team knockout)
-  small_continental_cup_sf: 8,    // won R8
+  // 南洲杯 / 东洲杯 (4-team coefficient-qualified knockout)
+  small_continental_cup_sf: 8,
   small_continental_cup_runner_up: 20,
   small_continental_cup_winner: 40,
 };
@@ -439,25 +439,21 @@ export const WORLD_CUP_TIERS: CupTierConfig = {
   r16LoserPrize: CUP_PRIZE.world_cup_r16,
 };
 
-// 大陆杯: 16-team knockout, 4 rounds (R16 → R8 → SF → Final)
-//   First round = R16, gets €0. R8 (= "quarter" in our 4-round labeling)
-//   gets the continental_cup_r8 prize.
+// 大陆杯: 8-team knockout, 3 rounds (QF → SF → Final).
 export const MAINLAND_CUP_TIERS: CupTierConfig = {
   finalWinnerPrize: CUP_PRIZE.continental_cup_winner,
   finalRunnerUpPrize: CUP_PRIZE.continental_cup_runner_up,
   semiLoserPrize: CUP_PRIZE.continental_cup_semi,
   quarterLoserPrize: CUP_PRIZE.continental_cup_r8,
-  r16LoserPrize: 0,            // R16 is the first round in this 16-team cup
+  r16LoserPrize: 0,
 };
 
-// 南洲杯 / 东洲杯: 8-team knockout, 3 rounds (R8 → SF → Final)
-//   R8 is the first round (rounds.at(-3)) → €0.
-//   SF (rounds.at(-2)) gets small_continental_cup_sf prize.
+// 南洲杯 / 东洲杯: 4-team knockout, 2 rounds (SF → Final).
 export const SMALL_CONTINENTAL_CUP_TIERS: CupTierConfig = {
   finalWinnerPrize: CUP_PRIZE.small_continental_cup_winner,
   finalRunnerUpPrize: CUP_PRIZE.small_continental_cup_runner_up,
   semiLoserPrize: CUP_PRIZE.small_continental_cup_sf,
-  quarterLoserPrize: 0,        // first round = R8 = "quarter" → no prize
+  quarterLoserPrize: 0,
   r16LoserPrize: 0,
 };
 
@@ -634,8 +630,7 @@ export function applyIncome(
   // finalizeWorldCup runs after the WC final and mutates teamFinances
   // directly + patches the just-archived FinanceSeasonRecord.
 
-  // Continental cups (region-aware tier — mainland uses 16-team config,
-  // southern/eastern use 8-team config)
+  // Continental cups (region-aware 8-team / 4-team prize tiers)
   const continentalCupConfigs: Array<[ContinentalCupState | null | undefined, CupTierConfig]> = [
     [world.continentalCups?.mainland_cup, MAINLAND_CUP_TIERS],
     [world.continentalCups?.southern_cup, SMALL_CONTINENTAL_CUP_TIERS],

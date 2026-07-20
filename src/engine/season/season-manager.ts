@@ -39,6 +39,7 @@ import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
 import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
 import { initTeamFinances } from '../economy/finance';
+import { rankClubCoefficients } from '../rankings/club-coefficient';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -82,13 +83,13 @@ export interface GameWorld {
   superCup: SuperCupState;
   worldCup: WorldCupState | null;
   /**
-   * Continental cups (Phase C). Populated only in odd seasons (S % 2 === 1)
-   * after `initializeNewSeason`; null in even seasons. Each region's cup is
+   * Continental cups. Populated every four seasons (S2, S6, S10...)
+   * after `initializeNewSeason`; null in off-years. Each region's cup is
    * independent — disjoint team rosters mean all three can play on the same
    * continental_cup window without conflict.
    *
    * Initialised by `initializeNewSeason` to `{ mainland_cup: null,
-   * southern_cup: null, eastern_cup: null }` in even seasons; in odd seasons
+   * southern_cup: null, eastern_cup: null }` in off-years; in cup seasons
    * each entry is replaced with a `ContinentalCupState`.
    *
    * Trophies are attributed via the `mainland_cup` / `southern_cup` /
@@ -559,19 +560,16 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
 
   const superCup = initSuperCup(superCupTeams, seasonNumber, rng, superCupConfig.awayGoalRule);
 
-  // ── Continental cups (Phase C) ──
-  // Fire in odd seasons (S1, S3, ..., S17, S19) — never collides with WC
-  // (every-4 schedule on even seasons). Each region's eligible roster is
-  // filtered by region prefix; the region size determines whether the cup
-  // initialises (16 for 大陆, 8 for 南洲 / 东洲). If a region is short of teams
-  // (e.g. due to migration edge cases), the cup is skipped silently for that
-  // region. We never throw here — schedule integrity > strict count.
+  // ── Continental cups ──
+  // S2, S6, S10...: rare enough to matter and offset from the World Cup.
+  // Qualification is based on the rolling club coefficient; reputation and
+  // overall only break ties when little or no history exists.
   const continentalCups: GameWorld['continentalCups'] = {
     mainland_cup: null,
     southern_cup: null,
     eastern_cup: null,
   };
-  const isContinentalCupSeason = seasonNumber % 2 === 1;
+  const isContinentalCupSeason = seasonNumber % 4 === 2;
   if (isContinentalCupSeason) {
     const teamsByRegion: Record<CupRegion, string[]> = { '大陆': [], '南洲': [], '东洲': [] };
     for (const teamId of allTeamIds) {
@@ -581,24 +579,19 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
         teamsByRegion[cont].push(teamId);
       }
     }
-    // 大陆杯: pick the top 16 by overall (since the continent has > 16 teams).
-    if (teamsByRegion['大陆'].length >= 16) {
-      const top16 = [...teamsByRegion['大陆']]
-        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
-        .slice(0, 16);
-      continentalCups.mainland_cup = initContinentalCup('大陆', top16, seasonNumber, rng);
+    const coefficient = rankClubCoefficients(world.teamBases, world.teamSeasonRecords);
+    const coefficientRank = new Map(coefficient.map(entry => [entry.teamId, entry.rank]));
+    const regionalRanking = (region: CupRegion) => [...teamsByRegion[region]]
+      .sort((a, b) => (coefficientRank.get(a) ?? 999) - (coefficientRank.get(b) ?? 999));
+
+    if (teamsByRegion['大陆'].length >= 8) {
+      continentalCups.mainland_cup = initContinentalCup('大陆', regionalRanking('大陆').slice(0, 8), seasonNumber, rng);
     }
-    if (teamsByRegion['南洲'].length >= 8) {
-      const top8 = [...teamsByRegion['南洲']]
-        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
-        .slice(0, 8);
-      continentalCups.southern_cup = initContinentalCup('南洲', top8, seasonNumber, rng);
+    if (teamsByRegion['南洲'].length >= 4) {
+      continentalCups.southern_cup = initContinentalCup('南洲', regionalRanking('南洲').slice(0, 4), seasonNumber, rng);
     }
-    if (teamsByRegion['东洲'].length >= 8) {
-      const top8 = [...teamsByRegion['东洲']]
-        .sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0))
-        .slice(0, 8);
-      continentalCups.eastern_cup = initContinentalCup('东洲', top8, seasonNumber, rng);
+    if (teamsByRegion['东洲'].length >= 4) {
+      continentalCups.eastern_cup = initContinentalCup('东洲', regionalRanking('东洲').slice(0, 4), seasonNumber, rng);
     }
   }
 
@@ -665,18 +658,22 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     description: scGroupInfo,
   });
 
-  // Continental cups draw (odd seasons only)
+  // Continental qualification and draw
   if (isContinentalCupSeason) {
+    const coefficient = rankClubCoefficients(world.teamBases, world.teamSeasonRecords);
+    const coefficientRank = new Map(coefficient.map(entry => [entry.teamId, entry.rank]));
     for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
       if (!cup) continue;
-      const fixturePreview = cup.rounds[0].fixtures
-        .map(f => `${world.teamBases[f.homeTeamId]?.shortName ?? f.homeTeamId} vs ${world.teamBases[f.awayTeamId]?.shortName ?? f.awayTeamId}`)
+      const qualifierIds = cup.rounds[0].fixtures.flatMap(fixture => [fixture.homeTeamId, fixture.awayTeamId]);
+      const qualifierNames = qualifierIds
+        .sort((a, b) => (coefficientRank.get(a) ?? 999) - (coefficientRank.get(b) ?? 999))
+        .map(id => `${world.teamBases[id]?.shortName ?? id}(#${coefficientRank.get(id) ?? '-'})`)
         .join('、');
       drawNews.push({
         id: `draw-cc-${cup.type}-S${seasonNumber}`,
         seasonNumber, windowIndex: 0, type: 'match_result',
-        title: `${cup.name}抽签揭晓 — ${cup.region}地区${cup.rounds[0].fixtures.length * 2}队角逐`,
-        description: `第${seasonNumber}赛季${cup.name}首轮对阵: ${fixturePreview}`,
+        title: `${cup.name}资格揭晓 · 四年一届`,
+        description: `${cup.region}积分领先的${qualifierIds.length}队入围：${qualifierNames}`,
       });
     }
   }

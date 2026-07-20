@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { syncPlayerStatsTeamIds } from './stats';
+import { playerTeamStatKey, syncPlayerStatSegments, syncPlayerStatsTeamIds } from './stats';
 import type { Player, PlayerSeasonStats } from '../../types/player';
 
 /**
@@ -92,5 +92,27 @@ describe('syncPlayerStatsTeamIds', () => {
     }
     expect(byTeam.newTeam).toBe(10); // p-1 goals counted under newTeam
     expect(byTeam.oldTeam).toBe(3);  // only p-other left in oldTeam
+  });
+
+  it('creates zero rows for active players that do not have current-season stats yet', () => {
+    const player = mkPlayer('new-youth', 'team-b');
+    const synced = syncPlayerStatsTeamIds({}, { 'team-b': [player] });
+    expect(synced['new-youth']).toMatchObject({
+      playerId: 'new-youth',
+      teamId: 'team-b',
+      appearances: 0,
+      goals: 0,
+    });
+  });
+
+  it('creates the current club segment without replacing historical segments', () => {
+    const player = mkPlayer('moved', 'team-b');
+    const oldKey = playerTeamStatKey('moved', 'team-a');
+    const oldSegment = mkStat('moved', 'team-a');
+    const synced = syncPlayerStatSegments({ [oldKey]: oldSegment }, { 'team-b': [player] });
+    expect(synced[oldKey]).toBe(oldSegment);
+    expect(synced[playerTeamStatKey('moved', 'team-b')]).toMatchObject({
+      playerId: 'moved', teamId: 'team-b', appearances: 0,
+    });
   });
 });
