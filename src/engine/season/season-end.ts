@@ -235,7 +235,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   if (league1Champion) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-l1'),
-      seasonNumber, windowIndex, type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy', importance: 'major',
       title: `${world.teamBases[league1Champion]?.name} 夺得顶级联赛冠军!`,
       description: `${world.teamBases[league1Champion]?.name} 加冕顶级联赛冠军，以${world.league1Standings[0]?.points}分的成绩登顶。`,
     });
@@ -243,7 +243,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   if (league2Champion) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-l2'),
-      seasonNumber, windowIndex, type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy', importance: 'normal',
       title: `${world.teamBases[league2Champion]?.name} 夺得甲级联赛冠军!`,
       description: `${world.teamBases[league2Champion]?.name} 以${world.league2Standings[0]?.points}分荣膺甲级联赛冠军。`,
     });
@@ -251,7 +251,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   if (leagueCupWinner) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-lc'),
-      seasonNumber, windowIndex, type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy', importance: 'major',
       title: `${world.teamBases[leagueCupWinner]?.name} 夺得联赛杯冠军!`,
       description: `${world.teamBases[leagueCupWinner]?.name} 捧得联赛杯冠军奖杯。`,
     });
@@ -259,7 +259,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   if (superCupWinner) {
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'trophy-sc'),
-      seasonNumber, windowIndex, type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy', importance: 'major',
       title: `${world.teamBases[superCupWinner]?.name} 夺得超级杯冠军!`,
       description: `${world.teamBases[superCupWinner]?.name} 赢得超级杯冠军荣耀。`,
     });
@@ -272,7 +272,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     const winnerName = world.teamBases[cup.winnerId]?.name ?? cup.winnerId;
     news.push({
       id: createNewsId(seasonNumber, windowIndex, `trophy-${cup.type}`),
-      seasonNumber, windowIndex, type: 'trophy',
+      seasonNumber, windowIndex, type: 'trophy', importance: 'major',
       title: `${winnerName} 夺得${cup.name}冠军！`,
       description: `${winnerName} 在${cup.region}地区${cup.name}决赛中胜出，捧起冠军奖杯。`,
     });
@@ -286,7 +286,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       const awayScore = finalFix.result?.away ?? 0;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `trophy-${cup.type}-ru`),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'normal',
         title: `${ruName} ${cup.name}决赛失利`,
         description: `${ruName} 在${cup.name}决赛中以 ${finalFix.homeTeamId === runnerUp ? homeScore : awayScore}-${finalFix.homeTeamId === runnerUp ? awayScore : homeScore} 不敌 ${winnerName}，屈居亚军。`,
       });
@@ -294,28 +294,36 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   }
 
   // ── Multi-crown detection ──
-  const allWinners = [league1Champion, leagueCupWinner, superCupWinner, worldCupWinner].filter(Boolean);
+  const allWinners = [
+    league1Champion,
+    leagueCupWinner,
+    superCupWinner,
+    worldCupWinner,
+    mainlandCupWinner,
+    southernCupWinner,
+    easternCupWinner,
+  ].filter(Boolean);
   const crownCounts = new Map<string, number>();
   for (const w of allWinners) { if (w) crownCounts.set(w, (crownCounts.get(w) ?? 0) + 1); }
   for (const [teamId, count] of crownCounts) {
     if (count >= 4) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'major',
         title: `四冠王！${world.teamBases[teamId]?.name} 包揽所有冠军！`,
         description: `${world.teamBases[teamId]?.name}创造历史，在一个赛季内夺得全部冠军头衔！`,
       });
     } else if (count >= 3) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'major',
         title: `三冠王！${world.teamBases[teamId]?.name} 创造伟业！`,
         description: `${world.teamBases[teamId]?.name}一个赛季夺得三座冠军奖杯，成就三冠王荣耀！`,
       });
     } else if (count >= 2) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `crown-${teamId}`),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'major',
         title: `双冠王！${world.teamBases[teamId]?.name}`,
         description: `${world.teamBases[teamId]?.name}本赛季荣获两座冠军奖杯，成就双冠王！`,
       });
@@ -739,7 +747,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     for (const t of topTransfers) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `transfer-${t.playerId}`),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'minor',
         title: `🔄 转会: ${t.playerName} 加盟 ${t.toTeamName}`,
         description: `${t.playerName}从${t.fromTeamName}转会至${t.toTeamName}${t.fee ? `，转会费约€${t.fee}M` : ''}。${t.reason}。`,
       });
@@ -748,7 +756,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       const total = transferResult.transfers.filter((t) => t.type === 'transfer').length;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, 'transfer-summary'),
-        seasonNumber, windowIndex, type: 'trophy',
+        seasonNumber, windowIndex, type: 'trophy', importance: 'minor',
         title: `转会窗口: 共完成 ${total} 笔转会`,
         description: `本赛季转会窗口共有${total}名球员易主，详情查看转会页面。`,
       });
@@ -1165,8 +1173,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       for (const a of newAch) {
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `ach-${a.id}`),
-          seasonNumber, windowIndex, type: 'trophy',
-          title: `成就解锁: ${a.title}`,
+          seasonNumber, windowIndex, type: 'trophy', importance: 'minor',
+          title: `${world.teamBases[teamId]?.name ?? teamId} 解锁成就: ${a.title}`,
           description: a.description,
         });
       }
@@ -1588,6 +1596,16 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
     const teamFinances = { ...updatedWorld.teamFinances };
     const newsLog = [...updatedWorld.newsLog];
     const windowIndex = updatedWorld.seasonState.currentWindowIndex;
+    const winnerName = updatedWorld.teamBases[wcWinnerId]?.name ?? wcWinnerId;
+    newsLog.push({
+      id: createNewsId(sn, windowIndex, 'trophy-world-cup'),
+      seasonNumber: sn,
+      windowIndex,
+      type: 'trophy',
+      importance: 'major',
+      title: `${winnerName} 夺得环球冠军杯冠军！`,
+      description: `${winnerName} 在第${sn}届环球冠军杯决赛中胜出，登上世界之巅。`,
+    });
     // Sort recipients by amount desc so the news log surfaces winner first
     const recipients = Object.entries(wcPrizes).sort((a, b) => b[1] - a[1]);
     for (const [teamId, amount] of recipients) {

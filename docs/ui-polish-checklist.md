@@ -14,6 +14,8 @@ Checkboxes stay open until implementation and the listed acceptance checks both 
 - 2026-07-18: Fixed the optional floating advance control on mobile and desktop. Replaced the ambiguous draggable circle and 8px stage label with separate 44px move and 85px advance targets, safe-area docking, visual-viewport clamping, edge snapping, keyboard movement, and Home reset. Browser interaction verified that dragging never advances and one action click advances exactly one window; final verification passed 60 files / 481 tests, ESLint, production/PWA build, and bundle budgets.
 - 2026-07-18: Completed Phase 3 Dashboard workflow. The global header now owns the only primary advance action, while favorite teams, tabs, and up to two deduplicated focus notices fill the first mobile viewport. Favorite-team results are pinned above the ordinary sequence; ordinary 6/12/48-result batches reveal in about 960/960/1000ms while important matches keep sequential pauses. `verify:dashboard` passed the full advance/skip flow at `390x844` and `1440x900` with 44px skip targets and zero runtime errors. Final verification passed 61 files / 487 tests, ESLint, TypeScript, production/PWA build, bundle budgets, match presentation, mobile advance performance, and animation performance.
 - 2026-07-19: Completed Phase 4 Player and Team hierarchy. Player Detail now uses four position-specific headlines, a single no-appearance state, sample-gated rankings, and position context before efficiency. Player and squad rows are full navigation targets; Team Detail now has `概览 / 阵容 / 历史`, while Team Center uses compact grouped directories. Shared scrollable tabs gained edge fades, scroll snap, and active-tab reveal. `verify:player-team` passed at `320x568`, `390x844`, and `1440x900` with complete names, 44px targets, one-round live data, and zero overflow/runtime errors. Final verification passed 63 files / 493 tests, ESLint, TypeScript, production/PWA build, bundle budgets, shared UI, match presentation, and mobile advance performance.
+- 2026-07-20: Removed the deferred Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign from the roadmap. Existing routes remain supported and stay in the regression matrix; this only narrows future polish work to higher-value gameplay and visual-system tasks.
+- 2026-07-20: Completed a four-agent v4.8.1 follow-up audit. Fixed mobile History tab clipping, keyboard access for the global news ticker, and contrast/terminology on new boost, news-tier, and changelog metadata. The refreshed browser harness passed at `320x568`, `390x844`, and `1440x900`; all five History tabs remained reachable and active, ticker controls worked with Enter, and no overflow or runtime errors appeared. Full verification passed 66 files / 514 tests, production/PWA build, and bundle budgets.
 
 ## Product Direction And Guardrails
 
@@ -144,27 +146,9 @@ Primary files: `src/pages/TeamDetail.tsx`, `src/pages/Teams.tsx`.
 - [x] Make the History tabs own their content: trophies under honors, finance under statistics, and coaches under the coach hall.
 - [x] Rename "财政告急" to a neutral label when the lowest-cash club is still solvent.
 - [x] Show only coaches with meaningful trophies or completed-season achievements in the hall of fame.
-- [ ] Keep responsibilities distinct: History for records, Chronicle for season stories, Legends for retired people.
 - [x] Verify no History tab starts with unrelated content or produces an unnecessarily long season-one page.
 
 Primary files: `src/pages/History.tsx`, `src/pages/Chronicle.tsx`, `src/pages/Legends.tsx`.
-
-### Transfer Pages
-
-- [ ] Rename `/transfers` UI from "转会窗口" to "转会记录" where it represents historical transactions.
-- [ ] Rename "强援转会" to "付费转会" unless the filter gains a real quality threshold.
-- [ ] Make player and team identities clickable in the market where navigation is expected.
-- [ ] Group budget change, post-deal squad impact, and displaced player into a readable "交易影响" area.
-
-Primary files: `src/pages/Transfers.tsx`, `src/pages/Market.tsx`, `src/app/Layout.tsx`.
-
-### Welcome And First Run
-
-- [ ] Bring the mobile new-game setup into or partially into the first viewport.
-- [ ] Replace generic feature-card/emoji presentation with the actual game setup experience.
-- [ ] Treat a future night-stadium illustration as a full-bleed background, not a split hero card.
-
-Primary file: `src/pages/Welcome.tsx`.
 
 ## 4. P1 Custom Visual Asset System
 
@@ -256,7 +240,7 @@ Primary component: `src/components/Icon.tsx`.
 1. Mobile drawer, Cup bracket, League columns, History header, and route-loading defects.
 2. Semantic tokens, typography, shared page shell, segmented control, and skeleton primitives.
 3. Dashboard hierarchy, result timing, favorite-team result, and touch-target normalization.
-4. Player, Team, History, and Transfer information hierarchy.
+4. Player, Team, and History information hierarchy.
 5. Icon cleanup and modular club-badge system.
 6. Competition badges, trophies, event stamps, and Team Detail banner.
 7. Match texture, scoreboard treatment, story marks, and final motion/accessibility pass.

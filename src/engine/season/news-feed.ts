@@ -18,6 +18,18 @@ const TYPE_PRIORITY: Record<NewsItem['type'], number> = {
   match_result: 30,
 };
 
+const IMPORTANCE_ADJUSTMENT: Record<NonNullable<NewsItem['importance']>, number> = {
+  major: 32,
+  normal: 0,
+  minor: -44,
+};
+
+function newsScore(item: NewsItem, favoriteTeamNames: string[]): number {
+  return (TYPE_PRIORITY[item.type] ?? 0)
+    + (item.importance ? IMPORTANCE_ADJUSTMENT[item.importance] : 0)
+    + (mentionsFavorite(item, favoriteTeamNames) ? 18 : 0);
+}
+
 function normalizedTitle(item: NewsItem): string {
   return `${item.type}:${item.title.replace(/[\s—·:：,，。]/g, '').toLowerCase()}`;
 }
@@ -29,7 +41,7 @@ function mentionsFavorite(item: NewsItem, favoriteTeamNames: string[]): boolean 
 }
 
 export function getNewsTier(item: NewsItem, favoriteTeamNames: string[] = []): NewsTier {
-  const priority = (TYPE_PRIORITY[item.type] ?? 0) + (mentionsFavorite(item, favoriteTeamNames) ? 18 : 0);
+  const priority = newsScore(item, favoriteTeamNames);
   if (priority >= 76) return 'headline';
   if (priority >= 48) return 'notable';
   return 'brief';
@@ -53,8 +65,8 @@ export function curateNewsFeed(
       return true;
     })
     .sort((a, b) => {
-      const aScore = (TYPE_PRIORITY[a.item.type] ?? 0) + (mentionsFavorite(a.item, favoriteTeamNames) ? 18 : 0);
-      const bScore = (TYPE_PRIORITY[b.item.type] ?? 0) + (mentionsFavorite(b.item, favoriteTeamNames) ? 18 : 0);
+      const aScore = newsScore(a.item, favoriteTeamNames);
+      const bScore = newsScore(b.item, favoriteTeamNames);
       return bScore - aScore || b.index - a.index;
     })
     .slice(0, Math.max(0, limit))

@@ -48,6 +48,7 @@ export interface NewsItem {
   seasonNumber: number;
   windowIndex: number;
   type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor';
+  importance?: 'major' | 'normal' | 'minor';
   title: string;
   description: string;
 }
@@ -358,8 +359,22 @@ function snapshotPlayerStatsHistory(
       keyPasses: stat.keyPasses,
     };
     const existing = next[uuid] ?? [];
-    // Avoid double-snapshot if this exact (season,teamId) row already there
-    if (existing.some(e => e.season === seasonJustFinished && e.teamId === seasonTeamId)) continue;
+    const existingIndex = existing.findIndex(e => e.season === seasonJustFinished && e.teamId === seasonTeamId);
+    if (existingIndex >= 0) {
+      const frozen = existing[existingIndex];
+      const refreshed = {
+        ...entry,
+        teamName: frozen.teamName,
+        teamShortName: frozen.teamShortName,
+        playerName: frozen.playerName,
+        playerNumber: frozen.playerNumber,
+        position: frozen.position,
+        rating: frozen.rating,
+        age: frozen.age,
+      };
+      next[uuid] = existing.map((value, index) => index === existingIndex ? refreshed : value);
+      continue;
+    }
     const merged = [...existing, entry];
     next[uuid] = merged.length > PLAYER_STATS_HISTORY_CAP
       ? merged.slice(-PLAYER_STATS_HISTORY_CAP)
@@ -612,7 +627,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     league3Fixtures,
     leagueCupR1Fixtures,
     superCupGroupRoundFixtures,
-    includeContinentalCup: isContinentalCupSeason,
+    continentalCupRounds: continentalCups.mainland_cup
+      ? 3
+      : (continentalCups.southern_cup || continentalCups.eastern_cup ? 2 : 0),
   };
   const calendar = buildSeasonCalendar(calendarInput);
 
@@ -671,9 +688,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
         .join('、');
       drawNews.push({
         id: `draw-cc-${cup.type}-S${seasonNumber}`,
-        seasonNumber, windowIndex: 0, type: 'match_result',
+        seasonNumber, windowIndex: 0, type: 'match_result', importance: 'major',
         title: `${cup.name}资格揭晓 · 四年一届`,
-        description: `${cup.region}积分领先的${qualifierIds.length}队入围：${qualifierNames}`,
+        description: `${cup.region}积分领先的${qualifierIds.length}队入围：${qualifierNames}。完整名单：${qualifierIds.map(id => world.teamBases[id]?.name ?? id).join('、')}`,
       });
     }
   }
@@ -941,6 +958,14 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
 
   // Season end is a special case — delegates to season-end module
   if (window.type === 'season_end') {
+    // Freeze the completed season before annual revaluation ages players and
+    // recalculates ratings. initializeNewSeason is idempotent for this row and
+    // will therefore only reset the live counters later.
+    world = {
+      ...world,
+      playerStatsHistory: snapshotPlayerStatsHistory(world, world.seasonState.seasonNumber),
+    };
+    const newsCountBeforeSeasonEnd = world.newsLog.length;
     let updatedWorld = handleSeasonEnd({
       ...world,
       seasonState: { ...world.seasonState },
@@ -972,7 +997,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     return {
       world: updatedWorld,
       results: [],
-      news: preNews,
+      news: [...preNews, ...updatedWorld.newsLog.slice(newsCountBeforeSeasonEnd)],
     };
   }
 
@@ -1109,9 +1134,12 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
 
   // WC phase just ended — finalize WC results and start next season.
   // v23 — non-blocking: transferWindow no longer gates initializeNewSeason.
+  let completionNews: NewsItem[] = [];
   if (isSeasonDone && updatedSeasonState.worldCupPhase) {
+    const newsCountBeforeCompletion = updatedWorld.newsLog.length;
     updatedWorld = finalizeWorldCup(updatedWorld);
     updatedWorld = initializeNewSeason(updatedWorld);
+    completionNews = updatedWorld.newsLog.slice(newsCountBeforeCompletion);
   }
 
   // Pre-populate NEXT window if it needs dynamic fixtures
@@ -1135,7 +1163,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   return {
     world: updatedWorld,
     results: windowResult.results,
-    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news],
+    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news, ...completionNews],
   };
 }
 

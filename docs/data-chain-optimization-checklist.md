@@ -478,11 +478,14 @@ Scope: add more variation to squad strength, make continental cups rarer and mor
 ### P0: Squad Contribution Balance
 
 - [x] Replace the saturated position-sum formula with an 11-player shape (`1 GK / 4 DF / 3 MF / 3 FW`) and weighted unit quality.
+- [x] Preserve that shape in the actual 14-player matchday cut instead of selecting by rating alone.
 - [x] Keep the visible `+/-15` safety cap, but tune ordinary elite squads below it so top-flight clubs do not collapse to the same value.
 - [x] Preserve fractional differences so one missing key player can affect the displayed and simulated contribution.
 - [x] Apply the same full-squad availability calculation to simulation, prediction, and Team Detail.
 - [x] Show the current injury/suspension loss against the same squad at full availability.
 - [x] Add distribution, weak-squad, bench-depth, injury, suspension, and prediction/simulation consistency tests.
+- [x] Keep emergency-floor selection explicit: available players start first and unavailable emergency participants carry a lower strength contribution.
+- [x] Freeze completed-season player age/rating before annual revaluation changes the live squad.
 
 ### P1: Club Coefficient And Continental Prestige
 
@@ -492,6 +495,8 @@ Scope: add more variation to squad strength, make continental cups rarer and mor
 - [x] Use coefficient ranking to select continental cup entrants, with a deterministic sporting fallback before enough history exists.
 - [x] Move continental cups to seasons `S2, S6, S10...`, avoiding the four-season World Cup cycle.
 - [x] Reduce the fields to eight Mainland clubs and four Southern/Eastern clubs, playing three synchronized knockout windows.
+- [x] Reserve only the rounds required by cups that actually initialized, so custom regions cannot create empty advances.
+- [x] Count continental champions in same-season multi-crown stories and long-term trophy achievements.
 - [x] Replace fixture-dump draw news with concise qualification and prestige context.
 - [x] Verify season scheduling, regional qualification, deterministic draws, cup advancement, finance awards, season records, and long-save invariants.
 
@@ -499,8 +504,9 @@ Scope: add more variation to squad strength, make continental cups rarer and mor
 
 - [x] Define one shared news-priority model used by the global ticker and Dashboard.
 - [x] Deduplicate repeated items while preserving deterministic order and favor stories involving followed clubs.
-- [x] Separate headline/notable/brief presentation without expanding the persisted news schema.
+- [x] Separate headline/notable/brief presentation with one optional importance hint and no parallel feed state.
 - [x] Keep trophy, qualification, promotion/relegation, coach, injury, transfer, upset, and streak stories visible ahead of routine notices.
+- [x] Return season-end stories to the current advance result and curate the full bounded log before applying a display limit.
 - [x] Add focused tests for priority, deduplication, favorite-club relevance, and bounded feed length.
 
 ### P1: In-Game Release Notes
@@ -509,6 +515,7 @@ Scope: add more variation to squad strength, make continental cups rarer and mor
 - [x] Show current and recent release notes in Settings with readable mobile disclosure controls.
 - [x] Record this release and the preceding UI pass; require future user-facing releases to update the same file.
 - [x] Add an automated changelog consistency check to the verification scripts.
+- [x] Run the changelog consistency check in CI.
 
 ### Acceptance
 
@@ -519,6 +526,8 @@ Scope: add more variation to squad strength, make continental cups rarer and mor
 - [x] Update this section only from recorded evidence; commit and push follow as the final delivery step.
 
 Evidence (2026-07-20): full repository verification passed `65` files / `504` tests, ESLint, TypeScript, production/PWA build, changelog consistency, and bundle budgets (`274,160` byte main entry; `686,210` byte initial graph). A fixed-seed audit completed `509` advances through S10 with `0 errors / 0 warnings`; continental cups appeared only in S2/S6/S10 with three windows and all regional cups completed. Browser verification passed the complete workflow at `390x844` and `1440x900`, including 32 coefficient rows, visible injury loss, curated news, release notes, S2 qualification, and zero overflow/runtime errors. The audit also exposed and fixed missing current-season rows for youth replacements/returning free agents before World Cup tails.
+
+Post-review evidence (v4.8.1, 2026-07-20): four independent read-only audits found and the implementation fixed matchday position truncation, injury reverse-gain, post-aging history snapshots, empty custom-region cup windows, continental multi-crown omissions, season-end headline loss, mobile History tab clipping, ticker keyboard access, and low-contrast metadata. Full verification passed `66` files / `514` tests, ESLint, TypeScript, production/PWA build, CI changelog consistency, and bundle budgets (`274,691` byte main entry; `687,732` byte initial graph). A fresh fixed-seed engine audit completed `509` advances through S10 with S2/S6/S10 cup windows and `0 errors / 0 warnings`; browser verification passed at `320x568`, `390x844`, and `1440x900` with all five History tabs reachable, keyboard-operable news, and zero overflow/runtime errors. A dedicated World Cup-season test confirms post-tournament stats/news refresh without replacing the pre-aging player identity. Legacy pre-v4.8 cup migration remains intentionally out of scope.
 
 ## Notes From Initial Code Review
 

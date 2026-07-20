@@ -20,6 +20,15 @@ interface SeasonRec {
   cupResult?: string;
   superCupResult?: string;
   worldCupResult?: string;
+  continentalCupResult?: string;
+}
+
+function titleCount(record: SeasonRec): number {
+  return Number(record.leaguePosition === 1)
+    + Number(record.cupResult === '冠军')
+    + Number(record.superCupResult === '冠军')
+    + Number(record.worldCupResult === '冠军')
+    + Number(record.continentalCupResult === '冠军');
 }
 
 const ACHIEVEMENT_DEFS = [
@@ -48,9 +57,9 @@ const ACHIEVEMENT_DEFS = [
   { id: 'cup_dynasty', title: '杯赛之王', check: (s: SeasonRec, rec: SeasonRec[]) => rec.filter(r => r.cupResult === '冠军').length >= 5, desc: (t: string) => `${t}5+次捧起联赛杯，杯赛专家` },
 
   // ──── Multi-crown (多冠类) ────
-  { id: 'double_crown', title: '双冠王', check: (s: SeasonRec) => { let c = 0; if (s.leaguePosition === 1) c++; if (s.cupResult === '冠军') c++; if (s.superCupResult === '冠军') c++; if (s.worldCupResult === '冠军') c++; return c >= 2; }, desc: (t: string) => `${t}单赛季夺得双冠` },
-  { id: 'triple_crown', title: '三冠王', check: (s: SeasonRec) => { let c = 0; if (s.leaguePosition === 1) c++; if (s.cupResult === '冠军') c++; if (s.superCupResult === '冠军') c++; if (s.worldCupResult === '冠军') c++; return c >= 3; }, desc: (t: string) => `${t}单赛季夺得三冠，名垂青史` },
-  { id: 'quadruple', title: '四冠王', check: (s: SeasonRec) => { let c = 0; if (s.leaguePosition === 1) c++; if (s.cupResult === '冠军') c++; if (s.superCupResult === '冠军') c++; if (s.worldCupResult === '冠军') c++; return c >= 4; }, desc: (t: string) => `${t}包揽全部冠军，四冠王传奇` },
+  { id: 'double_crown', title: '双冠王', check: (s: SeasonRec) => titleCount(s) >= 2, desc: (t: string) => `${t}单赛季夺得双冠` },
+  { id: 'triple_crown', title: '三冠王', check: (s: SeasonRec) => titleCount(s) >= 3, desc: (t: string) => `${t}单赛季夺得三冠，名垂青史` },
+  { id: 'quadruple', title: '四冠王', check: (s: SeasonRec) => titleCount(s) >= 4, desc: (t: string) => `${t}单赛季夺得四座冠军，写下传奇` },
 
   // ──── Underdog (黑马类) ────
   { id: 'underdog_promo_to_top', title: '冲入顶级', check: (_: SeasonRec, rec: SeasonRec[]) => { const promos = rec.filter(r => r.promoted); return promos.length >= 1 && rec[rec.length - 1]?.leaguePosition !== undefined; }, desc: (t: string) => `${t}从底层杀入顶级联赛` },
@@ -67,20 +76,14 @@ const ACHIEVEMENT_DEFS = [
   { id: 'collector_3', title: '奖杯收藏家', check: (_: SeasonRec, rec: SeasonRec[]) => {
     let cups = 0;
     for (const r of rec) {
-      if (r.leaguePosition === 1) cups++;
-      if (r.cupResult === '冠军') cups++;
-      if (r.superCupResult === '冠军') cups++;
-      if (r.worldCupResult === '冠军') cups++;
+      cups += titleCount(r);
     }
     return cups >= 5;
   }, desc: (t: string) => `${t}累计夺得5座以上奖杯` },
   { id: 'legend_team', title: '传奇队伍', check: (_: SeasonRec, rec: SeasonRec[]) => {
     let cups = 0;
     for (const r of rec) {
-      if (r.leaguePosition === 1) cups++;
-      if (r.cupResult === '冠军') cups++;
-      if (r.superCupResult === '冠军') cups++;
-      if (r.worldCupResult === '冠军') cups++;
+      cups += titleCount(r);
     }
     return cups >= 15;
   }, desc: (t: string) => `${t}累计15+奖杯，传奇地位无可撼动` },

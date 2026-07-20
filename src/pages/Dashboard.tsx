@@ -725,14 +725,17 @@ function ResultsTab({
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const favoriteTeamNames = favoriteTeamIds
-    .map(teamId => world.teamBases[teamId]?.name ?? '')
+    .flatMap(teamId => {
+      const team = world.teamBases[teamId];
+      return team ? [team.name, team.shortName] : [];
+    })
     .filter(Boolean);
   const curatedNews = curateNewsFeed(
-    lastNews.length > 0 ? lastNews : world.newsLog.slice(-20),
+    lastNews.length > 0 ? lastNews : world.newsLog,
     { favoriteTeamNames, limit: 8 },
   );
 
-  if (lastResults.length === 0) {
+  if (lastResults.length === 0 && curatedNews.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-sm text-slate-500">暂无比赛结果，请先推进模拟</p>
@@ -742,15 +745,18 @@ function ResultsTab({
 
   return (
     <div className="space-y-4">
-      {/* Animated result reveal */}
-      <ResultAnimation
-        results={lastResults}
-        teamBases={world.teamBases}
-        priorityTeamIds={favoriteTeamIds}
-        onComplete={() => undefined}
-        onResultClick={onResultClick}
-        onLiveView={onLiveView}
-      />
+      {lastResults.length > 0 ? (
+        <ResultAnimation
+          results={lastResults}
+          teamBases={world.teamBases}
+          priorityTeamIds={favoriteTeamIds}
+          onComplete={() => undefined}
+          onResultClick={onResultClick}
+          onLiveView={onLiveView}
+        />
+      ) : (
+        <p className="text-xs text-slate-400">本次推进完成了赛季结算，重点动态如下。</p>
+      )}
 
       {/* News feed */}
       {(lastNews.length > 0 || world.newsLog.length > 0) && (
@@ -772,8 +778,8 @@ function ResultsTab({
                 >
                   <div className="flex items-start gap-2">
                     <p className="min-w-0 flex-1 text-sm text-slate-200">{news.title}</p>
-                    <span className="shrink-0 text-[10px] text-slate-600">
-                      {getNewsTier(news, favoriteTeamNames) === 'headline' ? '头条' : getNewsTier(news, favoriteTeamNames) === 'notable' ? '关注' : '简讯'}
+                    <span className="shrink-0 text-[11px] text-slate-400">
+                      {getNewsTier(news, favoriteTeamNames) === 'headline' ? '头条' : getNewsTier(news, favoriteTeamNames) === 'notable' ? '重点' : '简讯'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{news.description}</p>

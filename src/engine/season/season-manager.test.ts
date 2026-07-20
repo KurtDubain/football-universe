@@ -90,6 +90,17 @@ describe('initializeGameWorld', () => {
     expect(seasonSix.continentalCups.mainland_cup).not.toBeNull();
   });
 
+  it('does not reserve empty continental windows when custom regions have no eligible cup', () => {
+    const seasonOne = initializeGameWorld(2024, {
+      gameMode: 'sandbox',
+      customTeams: makeCustomTeams().map(team => ({ ...team, region: '自定义洲+地区' })),
+    });
+    const seasonTwo = initializeNewSeason(seasonOne);
+
+    expect(Object.values(seasonTwo.continentalCups).every(cup => cup === null)).toBe(true);
+    expect(seasonTwo.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
+  });
+
   it('generates squads and player stats from custom final teams', () => {
     const customTeams = makeCustomTeams();
     const customIds = customTeams.map((team) => team.id).sort();
@@ -248,6 +259,50 @@ describe('executeCurrentWindow', () => {
 
     // We should have moved at least once (probably 5 times).
     expect(world.seasonState.currentWindowIndex).not.toBe(startIdx);
+  });
+
+  it('archives completed-season player identity before annual aging and revaluation', () => {
+    let world = initializeGameWorld(2024);
+    while (getCurrentWindow(world)?.type !== 'season_end') {
+      world = executeCurrentWindow(world).world;
+    }
+    const player = Object.values(world.squads).flat().find(entry => world.playerStats[entry.uuid]?.appearances > 0)!;
+    const finishedIdentity = { age: player.age, rating: player.rating };
+
+    const rollover = executeCurrentWindow(world);
+    world = rollover.world;
+    const archived = world.playerStatsHistory[player.uuid]?.find(entry => entry.season === 1);
+
+    expect(archived).toMatchObject(finishedIdentity);
+    expect(Object.values(world.squads).flat().find(entry => entry.uuid === player.uuid)?.age).toBe(finishedIdentity.age + 1);
+    expect(rollover.news.some(item => item.type === 'trophy' && item.importance === 'major')).toBe(true);
+  });
+
+  it('refreshes World Cup season stats without replacing the pre-aging identity', () => {
+    let world = initializeGameWorld(20260720);
+    while (world.seasonState.seasonNumber < 4 || getCurrentWindow(world)?.type !== 'season_end') {
+      world = executeCurrentWindow(world).world;
+    }
+    const identityByPlayer = new Map(Object.values(world.squads).flat().map(player => [
+      player.uuid,
+      { age: player.age, rating: player.rating },
+    ]));
+    world = executeCurrentWindow(world).world;
+    const worldCupTeamId = world.worldCup!.participantIds[0];
+    const starter = [...world.squads[worldCupTeamId]].sort((a, b) => b.rating - a.rating)[0];
+    const domesticAppearances = world.playerStats[starter.uuid].appearances;
+
+    let completionNews = [] as ReturnType<typeof executeCurrentWindow>['news'];
+    while (world.seasonState.seasonNumber === 4) {
+      const result = executeCurrentWindow(world);
+      world = result.world;
+      completionNews = result.news;
+    }
+    const archived = world.playerStatsHistory[starter.uuid]?.find(entry => entry.season === 4);
+
+    expect(archived).toMatchObject(identityByPlayer.get(starter.uuid)!);
+    expect(archived!.appearances).toBeGreaterThan(domesticAppearances);
+    expect(completionNews.some(item => item.title.includes('环球冠军杯冠军') && item.importance === 'major')).toBe(true);
   });
 
   it('long smoke test: advances multiple seasons without validation errors', () => {

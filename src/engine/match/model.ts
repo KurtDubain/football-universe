@@ -48,7 +48,9 @@ export function computeMatchdayPlayerBoosts(
   globalWindowIdx: number,
 ): PlayerBoosts {
   const selection = selectMatchday(squad, globalWindowIdx);
-  const starters = selection ? selectStartingEleven(selection.players) : undefined;
+  const starters = selection
+    ? selectStartingEleven(selection.players, selection.unavailablePlayerIds)
+    : undefined;
   return computePlayerBoosts(starters, globalWindowIdx);
 }
 

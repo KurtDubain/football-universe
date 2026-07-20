@@ -535,7 +535,7 @@ function PlayerBoostsCard({ teamId }: { teamId: string }) {
             <Icon name="warning" size={13} /> 当前 {injured > 0 ? `${injured}人伤停` : ''}{injured > 0 && suspended > 0 ? '、' : ''}{suspended > 0 ? `${suspended}人停赛` : ''}
           </div>
           {loss && (
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-xs text-slate-400">
               满员可达 攻{sign(report.fullStrength.attack)} / 中{sign(report.fullStrength.midfield)} / 防{sign(report.fullStrength.defense)}
               {' · '}当前损失 {report.absenceLoss.attack.toFixed(1)} / {report.absenceLoss.midfield.toFixed(1)} / {report.absenceLoss.defense.toFixed(1)}
             </p>

@@ -16,10 +16,13 @@ function byRatingThenId(a: Player, b: Player): number {
   return b.rating - a.rating || a.uuid.localeCompare(b.uuid);
 }
 
-export function selectStartingEleven(players: Player[]): Player[] {
+export function selectStartingEleven(players: Player[], unavailablePlayerIds: Set<string> = new Set()): Player[] {
   const selected: Player[] = [];
   const selectedIds = new Set<string>();
-  const sorted = [...players].sort(byRatingThenId);
+  const sorted = [...players].sort((a, b) => {
+    const availability = Number(unavailablePlayerIds.has(a.uuid)) - Number(unavailablePlayerIds.has(b.uuid));
+    return availability || byRatingThenId(a, b);
+  });
 
   for (const position of ['GK', 'DF', 'MF', 'FW'] as const) {
     const candidates = sorted.filter(player => player.position === position);
@@ -50,7 +53,7 @@ export function buildMatchParticipation(
   rng: SeededRNG,
 ): MatchParticipation | undefined {
   if (!selection) return undefined;
-  const starters = selectStartingEleven(selection.players);
+  const starters = selectStartingEleven(selection.players, selection.unavailablePlayerIds);
   const starterIds = new Set(starters.map(player => player.uuid));
   const bench = selection.players.filter(player => !starterIds.has(player.uuid)).sort(byRatingThenId);
   const activeOutIds = new Set<string>();

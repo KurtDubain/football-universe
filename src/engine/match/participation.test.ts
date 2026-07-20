@@ -49,6 +49,14 @@ describe('match participation', () => {
     expect(starters.filter(entry => entry.position === 'GK')).toHaveLength(1);
   });
 
+  it('uses available players before emergency-floor unavailable players', () => {
+    const unavailable = new Set(['p5', 'p6', 'p10', 'p14']);
+    const starters = selectStartingEleven(fullSquad, unavailable);
+
+    expect(starters.filter(entry => unavailable.has(entry.uuid))).toHaveLength(1);
+    expect(starters.filter(entry => !unavailable.has(entry.uuid))).toHaveLength(10);
+  });
+
   it('keeps a goalkeeper-only bench unused and credits no false appearance', () => {
     const players = [...fullSquad.slice(0, 11), player('p20', 'GK', 50)];
     const participation = buildMatchParticipation(selection(players), 90, new SeededRNG(1))!;

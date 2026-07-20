@@ -7,7 +7,10 @@ import { BALANCE } from '../../config/balance';
  */
 
 const BASELINE_RATING = 60;
-const EMERGENCY_RATING = 40;
+// Lower than the minimum generated rating, so losing a player can never make
+// a unit stronger. In an emergency-floor XI this is the explicit fitness cost
+// of fielding an otherwise unavailable player.
+const EMERGENCY_RATING = 30;
 const QUALITY_TO_BOOST = 0.45;
 
 const STARTERS_PER_POSITION: Record<PlayerPosition, number> = {

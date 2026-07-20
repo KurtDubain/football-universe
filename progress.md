@@ -213,7 +213,15 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - A ten-season audit exposed a real season-end bug: youth replacements and returning free agents could enter a World Cup tail without player stat rows. The canonical stat sync now creates missing zero rows and club segments before those matches.
 - Final evidence: 65 files / 504 tests, ESLint, TypeScript, production/PWA build, bundle/changelog checks, 509-advance S10 audit at 0 errors/warnings, and mobile/desktop browser workflow verification all pass. Required game client screenshots were inspected with no error artifact.
 
+## 2026-07-20 v4.8.1 Independent Follow-up Audit
+
+- Removed the low-priority Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign from the UI roadmap without removing or dropping regression coverage for the existing routes.
+- Four independent read-only audits reviewed squad boosts/history, continental cups/coefficient, news/changelog, and desktop/mobile UX. Legacy pre-v4.8 cup migration was explicitly excluded per product direction.
+- Fixed the current-version findings: balanced matchday selection, available-first emergency lineups, non-beneficial vacancy strength, pre-aging player-history snapshots, custom-region empty cup windows, continental multi-crown counts, season-end news return/priority, favorite short-name relevance, mobile History tabs, ticker keyboard access, and metadata contrast/wording.
+- Released the fixes as v4.8.1 and added the changelog consistency command to CI.
+- Verification passed 66 files / 514 tests, ESLint, TypeScript, production/PWA build, changelog consistency, and bundle budgets (274,691-byte main entry; 687,732-byte initial graph). A fresh fixed-seed engine audit completed 509 advances through S10 with S2/S6/S10 continental windows and 0 errors / 0 warnings. A focused World Cup-season test confirms tournament stats and champion news refresh without overwriting pre-aging identity. Browser workflow verification passed at 320x568, 390x844, and 1440x900 with no overflow or runtime errors; representative screenshots were inspected.
+
 ### Remaining Ideas
 
-- History/Chronicle/Legends responsibility cleanup, transfer-page terminology, Welcome first-run hierarchy, and the optional custom visual asset system remain open in `docs/ui-polish-checklist.md`.
+- The optional custom visual asset system remains open in `docs/ui-polish-checklist.md`; the low-priority Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign were removed from the roadmap on 2026-07-20.
 - Fire-sale exchange independence and contracts/wages/loans remain intentionally deferred; neither is required for the current data-consistent gameplay loop.

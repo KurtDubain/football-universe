@@ -64,8 +64,11 @@ export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES 
   return (
     <div className="relative shrink-0">
       {/* Main ticker bar */}
-      <div
-        className="h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors"
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="global-news-list"
+        className="w-full h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
         onClick={() => setExpanded(previous => !previous)}
       >
         <span className="text-xs shrink-0 text-slate-300">
@@ -80,15 +83,16 @@ export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES 
           )}
           <span className="text-[10px] text-slate-600">{expanded ? '▲' : '▼'}</span>
         </div>
-      </div>
+      </button>
 
       {/* Expanded news panel */}
       {expanded && (
-        <div className="absolute left-0 right-0 top-full bg-slate-800 border-b border-slate-700 shadow-xl z-[55] max-h-60 overflow-y-auto animate-slide-down">
+        <div id="global-news-list" className="absolute left-0 right-0 top-full bg-slate-800 border-b border-slate-700 shadow-xl z-[55] max-h-60 overflow-y-auto animate-slide-down">
           {sorted.map((n, i) => (
-            <div
+            <button
+              type="button"
               key={n.id}
-              className={`flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
+              className={`w-full text-left flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
               onClick={() => { setSelectedId(n.id); setExpanded(false); }}
             >
               <span className="text-xs mt-0.5 shrink-0 text-slate-300">
@@ -101,7 +105,7 @@ export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES 
                 )}
               </div>
               <span className="text-[9px] text-slate-600 shrink-0 mt-0.5">S{n.seasonNumber}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

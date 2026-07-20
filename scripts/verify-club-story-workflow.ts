@@ -3,6 +3,7 @@ import { chromium, type ConsoleMessage, type Page } from 'playwright';
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:5173').replace(/\/$/, '');
 const seed = 20260720;
 const viewports = [
+  { name: 'compact-mobile', width: 320, height: 568, isMobile: true, hasTouch: true },
   { name: 'mobile', width: 390, height: 844, isMobile: true, hasTouch: true },
   { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
 ] as const;
@@ -63,6 +64,14 @@ async function main(): Promise<void> {
       const fixture = await initializeGame(page);
 
       await page.goto(`${baseUrl}/history?audit=1`, { waitUntil: 'networkidle' });
+      for (const tabName of ['赛季历史', '俱乐部积分', '趣味数据', '荣誉殿堂', '名帅殿堂']) {
+        const tab = page.getByRole('tab', { name: tabName, exact: true });
+        await tab.click();
+        const box = await tab.boundingBox();
+        if (!box || box.x < -1 || box.x + box.width > viewport.width + 1) {
+          throw new Error(`${viewport.name}: active History tab ${tabName} is outside the viewport`);
+        }
+      }
       await page.getByRole('tab', { name: '俱乐部积分', exact: true }).click();
       const coefficientRows = await page.getByTestId('club-coefficient-row').count();
       if (coefficientRows !== 32) throw new Error(`${viewport.name}: expected 32 coefficient rows, got ${coefficientRows}`);
@@ -99,11 +108,11 @@ async function main(): Promise<void> {
       await page.screenshot({ path: `/tmp/football-squad-boost-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText('v4.8.0', { exact: true }).first().waitFor({ state: 'visible' });
-      await page.getByText('俱乐部脉络', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText(/重做球员阵容加成/).waitFor({ state: 'visible' });
+      await page.getByText('v4.8.1', { exact: true }).first().waitFor({ state: 'visible' });
+      await page.getByText('一致性复核', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText(/修正比赛日位置失衡/).waitFor({ state: 'visible' });
       await assertNoOverflow(page, `${viewport.name} changelog`);
-      await page.getByText('俱乐部脉络', { exact: true }).scrollIntoViewIfNeeded();
+      await page.getByText('一致性复核', { exact: true }).scrollIntoViewIfNeeded();
       await page.screenshot({ path: `/tmp/football-changelog-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
@@ -113,7 +122,18 @@ async function main(): Promise<void> {
         const state = store?.getState();
         return Boolean(state && !state.isAdvancing && state.lastNews.length > 0);
       });
-      await page.getByText(/头条|关注|简讯/).first().waitFor({ state: 'visible' });
+      await page.getByText(/头条|重点|简讯/).first().waitFor({ state: 'visible' });
+      const ticker = page.locator('button[aria-controls="global-news-list"]');
+      await ticker.focus();
+      await page.keyboard.press('Enter');
+      if (await ticker.getAttribute('aria-expanded') !== 'true') {
+        throw new Error(`${viewport.name}: news ticker did not open from the keyboard`);
+      }
+      await page.locator('#global-news-list button').first().focus();
+      await page.keyboard.press('Enter');
+      if (await ticker.getAttribute('aria-expanded') !== 'false') {
+        throw new Error(`${viewport.name}: news item did not close the ticker from the keyboard`);
+      }
       await page.screenshot({ path: `/tmp/football-news-${viewport.name}.png`, animations: 'disabled' });
 
       await page.evaluate(async () => {

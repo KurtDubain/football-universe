@@ -143,6 +143,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
             onChange={setTab}
             ariaLabel="历史荣誉分类"
             stretch
+            scrollable
             options={tabs.map(t => ({ value: t.key, label: t.label }))}
           />
         )}

@@ -34,4 +34,17 @@ describe('news feed curation', () => {
     ], { favoriteTeamNames: ['北城'], limit: 2 });
     expect(curated.map(item => item.id)).toEqual(['favorite', 'other']);
   });
+
+  it('keeps major championships ahead of routine trophy-shaped notices', () => {
+    const champion = { ...news('champion', 'trophy', '大陆杯冠军诞生'), importance: 'major' as const };
+    const achievement = { ...news('achievement', 'trophy', '北城解锁成就: 钢铁防线'), importance: 'minor' as const };
+
+    expect(curateNewsFeed([champion, achievement]).map(item => item.id)).toEqual(['champion', 'achievement']);
+    expect(getNewsTier(achievement)).toBe('notable');
+  });
+
+  it('recognizes short-name aliases in qualification news', () => {
+    const qualification = { ...news('draw', 'match_result', '大陆杯资格揭晓', '楚门(#3)入围'), importance: 'major' as const };
+    expect(getNewsTier(qualification, ['楚门世界', '楚门'])).toBe('headline');
+  });
 });

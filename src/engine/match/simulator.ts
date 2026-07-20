@@ -206,8 +206,8 @@ export function simulateMatch(
   const globalWindowIdx = ctx.globalWindowIdx ?? 0;
   const homeSelection = selectMatchday(ctx.homeSquad, globalWindowIdx);
   const awaySelection = selectMatchday(ctx.awaySquad, globalWindowIdx);
-  const homeStarters = selectStartingEleven(homeSelection?.players ?? []);
-  const awayStarters = selectStartingEleven(awaySelection?.players ?? []);
+  const homeStarters = selectStartingEleven(homeSelection?.players ?? [], homeSelection?.unavailablePlayerIds);
+  const awayStarters = selectStartingEleven(awaySelection?.players ?? [], awaySelection?.unavailablePlayerIds);
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
   const homeBoosts = computePlayerBoosts(homeStarters, globalWindowIdx);

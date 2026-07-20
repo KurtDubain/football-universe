@@ -73,7 +73,10 @@ export default function Layout({ children }: LayoutProps) {
   const resetGame = useGameStore((s) => s.resetGame);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const favoriteTeamNames = useMemo(
-    () => favoriteTeamIds.map(id => world?.teamBases[id]?.name ?? '').filter(Boolean),
+    () => favoriteTeamIds.flatMap(id => {
+      const team = world?.teamBases[id];
+      return team ? [team.name, team.shortName] : [];
+    }).filter(Boolean),
     [favoriteTeamIds, world?.teamBases],
   );
   const location = useLocation();
@@ -437,7 +440,7 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* News ticker at top */}
         <NewsTicker
-          news={world?.newsLog.slice(-20) ?? []}
+          news={world?.newsLog ?? []}
           favoriteTeamNames={favoriteTeamNames}
         />
 

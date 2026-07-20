@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -35,6 +37,11 @@ jobs:
 
       - name: Type check
         run: pnpm exec tsc -b
+
+      - name: Changelog consistency
+        env:
+          CHANGELOG_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: pnpm changelog:check
 
       - name: Test
         run: pnpm test

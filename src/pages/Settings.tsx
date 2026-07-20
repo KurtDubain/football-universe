@@ -235,7 +235,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2.5 hover:bg-slate-700/30">
                 <span className={index === 0 ? 'text-sm font-bold text-emerald-300' : 'text-sm font-semibold text-slate-300'}>v{release.version}</span>
                 <span className="min-w-0 flex-1 text-sm text-slate-200">{release.title}</span>
-                <span className="text-[11px] text-slate-600">{release.date}</span>
+                <span className="text-xs text-slate-400">{release.date}</span>
                 <span aria-hidden="true" className="text-xs text-slate-500 group-open:rotate-180">▼</span>
               </summary>
               <ul className="space-y-1.5 px-4 pb-3 pl-8 text-xs leading-relaxed text-slate-400">

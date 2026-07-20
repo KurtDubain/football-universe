@@ -35,6 +35,7 @@ function newsFromTransferRecord(record: TransferRecord, titlePrefix = '转会'):
       seasonNumber: record.season,
       windowIndex: record.windowIndex,
       type: 'trophy',
+      importance: 'minor',
       title: `${titlePrefix}: ${record.playerName} 离开 ${record.fromTeamName}`,
       description: `${record.playerName}离开${record.fromTeamName}进入自由市场。${record.reason}。`,
     };
@@ -44,6 +45,7 @@ function newsFromTransferRecord(record: TransferRecord, titlePrefix = '转会'):
     seasonNumber: record.season,
     windowIndex: record.windowIndex,
     type: 'trophy',
+    importance: 'minor',
     title: `${titlePrefix}: ${record.playerName} 加盟 ${record.toTeamName}`,
     description: `${record.playerName} 从 ${record.fromTeamName} 前往 ${record.toTeamName}${feeText}。${record.reason}。`,
   };

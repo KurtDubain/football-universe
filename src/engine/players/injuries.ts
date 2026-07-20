@@ -235,14 +235,26 @@ export interface MatchdaySelection {
 }
 
 function selectBalancedTop14(players: Player[]): Player[] {
-  const selected = [...players].sort((a, b) => b.rating - a.rating).slice(0, 14);
-  if (selected.some((player) => player.position === 'GK')) return selected;
-  const goalkeeper = [...players]
-    .filter((player) => player.position === 'GK')
-    .sort((a, b) => b.rating - a.rating)[0];
-  if (!goalkeeper || selected.length === 0) return selected;
-  selected[selected.length - 1] = goalkeeper;
-  return selected;
+  const sorted = [...players].sort((a, b) => b.rating - a.rating || a.uuid.localeCompare(b.uuid));
+  const selected: Player[] = [];
+  const selectedIds = new Set<string>();
+  const starterShape = { GK: 1, DF: 4, MF: 3, FW: 3 } as const;
+
+  // Preserve a playable 4-3-3 before filling the three highest-rated bench
+  // places. A pure top-14 cut can accidentally remove most defenders.
+  for (const position of ['GK', 'DF', 'MF', 'FW'] as const) {
+    for (const player of sorted.filter(entry => entry.position === position).slice(0, starterShape[position])) {
+      selected.push(player);
+      selectedIds.add(player.uuid);
+    }
+  }
+  for (const player of sorted) {
+    if (selected.length >= Math.min(14, players.length)) break;
+    if (selectedIds.has(player.uuid)) continue;
+    selected.push(player);
+    selectedIds.add(player.uuid);
+  }
+  return selected.sort((a, b) => b.rating - a.rating || a.uuid.localeCompare(b.uuid));
 }
 
 export function selectMatchday(

@@ -3,6 +3,9 @@ import { computePlayerBoostReport, computePlayerBoosts } from './player-boosts';
 import type { Player } from '../../types/player';
 import { defaultTeams } from '../../config/teams';
 import { generateAllSquads } from './generator';
+import { selectMatchday } from './injuries';
+import { selectStartingEleven } from '../match/participation';
+import { computeMatchdayPlayerBoosts } from '../match/model';
 
 function mk(uuid: string, position: 'FW'|'MF'|'DF'|'GK', rating: number, overrides: Partial<Player> = {}): Player {
   return {
@@ -104,6 +107,22 @@ describe('computePlayerBoosts', () => {
     expect(report.absenceLoss.midfield).toBeGreaterThan(0);
   });
 
+  it('never improves a unit when a minimum-rating player becomes unavailable', () => {
+    const squad = [
+      mk('gk', 'GK', 35),
+      ...Array.from({ length: 4 }, (_, i) => mk(`df-${i}`, 'DF', 35)),
+      ...Array.from({ length: 3 }, (_, i) => mk(`mf-${i}`, 'MF', 35)),
+      ...Array.from({ length: 3 }, (_, i) => mk(`fw-${i}`, 'FW', 35)),
+    ];
+    const healthy = computePlayerBoosts(squad, 10);
+    squad.at(-1)!.injuredUntilWindow = 20;
+    const injured = computePlayerBoosts(squad, 10);
+
+    expect(injured.attack).toBeLessThan(healthy.attack);
+    expect(injured.midfield).toBeLessThanOrEqual(healthy.midfield);
+    expect(injured.defense).toBeLessThanOrEqual(healthy.defense);
+  });
+
   it('keeps the generated top-flight distribution varied instead of all +15', () => {
     const { squads } = generateAllSquads(defaultTeams, 20260720);
     const boosts = defaultTeams
@@ -114,5 +133,19 @@ describe('computePlayerBoosts', () => {
     );
     expect(fullyCapped.length).toBe(0);
     expect(new Set(boosts.map(boost => boost.attack)).size).toBeGreaterThanOrEqual(8);
+  });
+
+  it('keeps generated healthy matchdays in 4-3-3 and aligned with the team report', () => {
+    const { squads } = generateAllSquads(defaultTeams, 20260720);
+    for (const team of defaultTeams.filter(entry => entry.initialLeagueLevel === 1)) {
+      const squad = squads[team.id];
+      const selection = selectMatchday(squad, 0)!;
+      const starters = selectStartingEleven(selection.players, selection.unavailablePlayerIds);
+      expect(starters.filter(entry => entry.position === 'GK')).toHaveLength(1);
+      expect(starters.filter(entry => entry.position === 'DF')).toHaveLength(4);
+      expect(starters.filter(entry => entry.position === 'MF')).toHaveLength(3);
+      expect(starters.filter(entry => entry.position === 'FW')).toHaveLength(3);
+      expect(computeMatchdayPlayerBoosts(squad, 0)).toEqual(computePlayerBoostReport(squad, 0).current);
+    }
   });
 });

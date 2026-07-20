@@ -10,12 +10,12 @@ export interface CalendarBuildInput {
   leagueCupR1Fixtures: CupFixture[];
   superCupGroupRoundFixtures: CupFixture[][]; // 6 rounds of group fixtures
   /**
-   * When true, append 3 continental_cup windows interleaved with league
+   * Number of continental rounds to append (0, 2, or 3) interleaved with league
    * windows. The fixtures themselves are populated dynamically by the window
    * handler at execution time (which inspects `world.continentalCups`); we
    * just reserve the slots here.
    */
-  includeContinentalCup?: boolean;
+  continentalCupRounds?: number;
 }
 
 function cupFixturesToMatchFixtures(
@@ -41,14 +41,14 @@ function cupFixturesToMatchFixtures(
  * - 5 league cup rounds inserted between league windows
  * - 6 super cup group rounds inserted between league windows
  * - Super cup knockout windows (QF L1, QF L2, SF L1, SF L2, Final) — fixtures TBD
- * - 3 continental cup windows when `includeContinentalCup` (S2, S6, ...) —
+ * - 2-3 continental cup windows in active seasons (S2, S6, ...) —
  *   one for each round of the 大陆杯 (QF/SF/Final), with the smaller
  *   4-team cups completing in the first two windows. Fixtures are populated dynamically
  *   at execution time from `world.continentalCups`.
  * - Relegation playoff + season end
  */
 export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[] {
-  const { seasonNumber, league1Fixtures, league2Fixtures, league3Fixtures, includeContinentalCup } = input;
+  const { seasonNumber, league1Fixtures, league2Fixtures, league3Fixtures, continentalCupRounds = 0 } = input;
   const windows: CalendarWindow[] = [];
   let windowId = 0;
 
@@ -153,7 +153,7 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
    * the four-team cups finish one window before the Mainland final.
    */
   function addContinentalCupWindow() {
-    if (!includeContinentalCup || ccR >= 3) return;
+    if (ccR >= continentalCupRounds) return;
     const labels = ['资格队首轮', '四强 / 地区决赛', '大陆杯决赛'];
     windows.push({
       id: windowId++,
