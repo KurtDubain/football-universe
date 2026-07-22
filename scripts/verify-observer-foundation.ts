@@ -21,8 +21,12 @@ type AuditStore = {
   getState: () => {
     isAdvancing: boolean;
     world: {
-      coins: number;
-      bets: unknown[];
+      pendingObservationJudgment?: unknown;
+      observationRecord?: {
+        total: number;
+        correct: number;
+        recent: Array<{ fixtureId: string; actualSelection: string; correct: boolean }>;
+      };
       rngState: number;
       godHandUsed: boolean;
       godHandHistory?: Array<{ teamId: string; type: 'boost' | 'nerf' }>;
@@ -34,7 +38,7 @@ type AuditStore = {
       };
     };
     newGame: (seed: number) => void;
-    placeBet: (fixtureId: string, outcome: 'home', amount: number, odds: number) => void;
+    setObservationJudgment: (fixtureId: string, kind: 'outcome', selection: 'home') => void;
     batchAdvance: (count: number) => Promise<void>;
   };
 };
@@ -86,15 +90,22 @@ async function main(): Promise<void> {
         store.getState().newGame(20260722);
         const state = store.getState();
         const fixtureId = state.world.seasonState.calendar[0].fixtures[0].id;
-        store.getState().placeBet(fixtureId, 'home', 50, 2);
+        store.getState().setObservationJudgment(fixtureId, 'outcome', 'home');
         await store.getState().batchAdvance(2);
         const updated = store.getState().world;
         const result = updated.seasonState.calendar[0].results.find(entry => entry.fixtureId === fixtureId);
         if (!result) throw new Error('First fixture result missing after batch advance');
-        return { fixtureId, result, coins: updated.coins, pendingBets: updated.bets.length };
+        return {
+          fixtureId,
+          result,
+          pending: updated.pendingObservationJudgment,
+          record: updated.observationRecord,
+        };
       });
-      const expectedCoins = resolveOutcome(settlement.result) === 'home' ? 1050 : 950;
-      if (settlement.coins !== expectedCoins || settlement.pendingBets !== 0) {
+      const expectedCorrect = resolveOutcome(settlement.result) === 'home';
+      if (settlement.pending != null
+        || settlement.record?.total !== 1
+        || settlement.record.correct !== Number(expectedCorrect)) {
         throw new Error(`${viewport.name}: invalid batch settlement ${JSON.stringify(settlement)}`);
       }
 
@@ -148,7 +159,10 @@ async function main(): Promise<void> {
       if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors ${errors.join(' | ')}`);
       verification.push({
         viewport: `${viewport.width}x${viewport.height}`,
-        settlement: { actual: resolveOutcome(settlement.result), coins: settlement.coins },
+        settlement: {
+          actual: resolveOutcome(settlement.result),
+          correct: settlement.record?.recent.at(-1)?.correct,
+        },
         interventionCount: intervention.history.length,
       });
       await context.close();

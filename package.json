@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.11.0",
+  "version": "4.12.0",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -23,12 +23,14 @@
     "audit:long-save": "tsx scripts/audit-long-save.ts",
     "audit:observer-seeds": "tsx scripts/audit-observer-seeds.ts",
     "verify:match": "tsx scripts/verify-match-presentation.ts",
+    "verify:match-explanation": "tsx scripts/verify-match-explanation.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",
     "verify:player-team": "tsx scripts/verify-player-team-workflow.ts",
     "verify:club-story": "tsx scripts/verify-club-story-workflow.ts",
     "verify:observer-foundation": "tsx scripts/verify-observer-foundation.ts",
-    "verify:observer-onboarding": "tsx scripts/verify-observer-onboarding.ts"
+    "verify:observer-onboarding": "tsx scripts/verify-observer-onboarding.ts",
+    "verify:observation-judgment": "tsx scripts/verify-observation-judgment.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",

@@ -31,7 +31,8 @@ import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 
-const BettingPanel = lazy(() => import('../components/BettingPanel'));
+const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
+const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
 
 /**
  * Compact money formatter for chip display.
@@ -517,6 +518,14 @@ function MatchdayTab({
         </section>
       )}
 
+      {/* Optional observer judgment stays attached to the focus area. */}
+      <Suspense fallback={<div aria-hidden className="h-11 w-full rounded-lg border border-dashed border-slate-700 bg-slate-800/60" />}>
+        <ObservationPanel
+          world={world}
+          fixtures={focusMatches.length > 0 ? focusMatches.map(entry => entry.fixture) : currentWindow.fixtures.slice(0, 2)}
+        />
+      </Suspense>
+
       {/* Player highlights from the previous batch of results */}
       {playerHighlights.length > 0 && (
         <section className="rounded-lg border border-slate-700 bg-slate-800 p-3">
@@ -593,11 +602,6 @@ function MatchdayTab({
           </div>
         </div>
       ))}
-
-      {/* Betting panel */}
-      <Suspense fallback={<div aria-hidden className="h-11 w-full rounded-lg border border-dashed border-slate-700 bg-slate-800/60" />}>
-        <BettingPanel world={world} fixtures={currentWindow.fixtures} />
-      </Suspense>
     </div>
   );
 }
@@ -740,6 +744,7 @@ function ResultsTab({
   onLiveView: (r: MatchResult) => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
   const favoriteTeamNames = favoriteTeamIds
     .flatMap(teamId => {
       const team = world.teamBases[teamId];
@@ -761,6 +766,13 @@ function ResultsTab({
 
   return (
     <div className="space-y-4">
+      <Suspense fallback={null}>
+        <ObservationSettlementSummary
+          settlements={lastObservationSettlements}
+          record={world.observationRecord}
+          teamBases={world.teamBases}
+        />
+      </Suspense>
       {lastResults.length > 0 ? (
         <ResultAnimation
           results={lastResults}
@@ -898,7 +910,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
         const previousPrediction = world.predictionHistory!.at(-1)!;
         return (
         <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
-          <h4 className="mb-2 text-[11px] font-semibold text-slate-500">上赛季竞猜结果</h4>
+          <h4 className="mb-2 text-[11px] font-semibold text-slate-500">上赛季观察预测</h4>
           <div className="flex gap-3 text-xs">
             <span>冠军预测: {getTeamName(previousPrediction.champion, world.teamBases)} {previousPrediction.championCorrect ? '✅' : '❌'}</span>
             <span>降级预测: {getTeamName(previousPrediction.relegated, world.teamBases)} {previousPrediction.relegatedCorrect ? '✅' : '❌'}</span>
@@ -1237,7 +1249,7 @@ function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string
 
   return (
     <div className="bg-gradient-to-r from-amber-900/20 to-slate-800 rounded-lg border border-amber-700/30 p-3">
-      <h4 className="text-xs font-semibold text-amber-300 mb-2">赛季竞猜 — 第{seasonNumber}赛季</h4>
+      <h4 className="text-xs font-semibold text-amber-300 mb-2">赛季观察预测 — 第{seasonNumber}赛季</h4>
       <p className="mb-2 text-[11px] text-slate-500">预测本赛季的顶级联赛冠军和降级队</p>
       <div className="flex flex-col sm:flex-row gap-2">
         <select value={champion} onChange={e => setChampion(e.target.value)}

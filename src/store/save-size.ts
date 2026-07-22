@@ -98,6 +98,8 @@ export function measureWorldSaveSize(
       currentPrediction: world.prediction,
       history: world.predictionHistory,
       matchForecasts: completedResults.map((result) => result.prediction),
+      pendingObservation: world.pendingObservationJudgment,
+      observationRecord: world.observationRecord,
     }, compress),
     seasonBuffs: metric({ current: world.seasonBuffs, history: world.seasonBuffsHistory }, compress),
     news: metric(world.newsLog, compress),

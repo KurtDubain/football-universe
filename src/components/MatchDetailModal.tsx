@@ -9,6 +9,7 @@ import type { CoachBase } from '../types/coach';
 import type { Player } from '../types/player';
 import { predictMatch, MatchPrediction } from '../engine/match/prediction';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
+import { analyzeDestinyDeviation, extractMatchTurningPoints } from '../engine/match/analysis';
 import {
   getTeamShortName,
   getCoachStyleLabel,
@@ -365,7 +366,44 @@ function PreMatchView({
 
       {/* ──── Verdict + Hot Tip ──── */}
       <div className="px-6 pb-5">
-        <div className="bg-slate-700/60 rounded-xl p-4 space-y-2">
+        <div data-testid="match-factors" className="border-y border-slate-700/60 py-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-semibold text-slate-400">本场真实影响因素</h4>
+            <span className="text-[11px] text-slate-600">来自比赛模型</span>
+          </div>
+          {prediction.factors.length > 0 ? (
+            <div className="divide-y divide-slate-700/40">
+              {prediction.factors.map(factor => {
+                const sideColor = factor.beneficiary === 'home'
+                  ? homeTeam.color
+                  : factor.beneficiary === 'away'
+                    ? awayTeam.color
+                    : '#94a3b8';
+                return (
+                  <div key={factor.source} className="flex gap-3 py-2.5">
+                    <span className="w-1 self-stretch rounded-sm shrink-0" style={{ backgroundColor: sideColor }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={factor.direction === 'negative' ? 'text-sm font-medium text-red-300' : 'text-sm font-medium text-slate-200'}>
+                          {factor.label}
+                        </span>
+                        <span className="flex gap-1 shrink-0" aria-label={`重要度 ${factor.importance}`}>
+                          {[1, 2, 3].map(level => (
+                            <span key={level} className={`w-1.5 h-1.5 rounded-full ${level <= factor.importance ? 'bg-amber-400' : 'bg-slate-700'}`} />
+                          ))}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500 mt-0.5">{factor.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">双方赛前条件接近，没有单项因素形成明显区分。</p>
+          )}
+        </div>
+        <div className="bg-slate-700/60 rounded-lg p-4 space-y-2">
           <div className="text-sm text-slate-200 font-medium">{prediction.verdict}</div>
           {prediction.hotTip && (
             <div className="text-xs text-amber-400 bg-amber-900/30 rounded-lg px-3 py-2">
@@ -404,6 +442,8 @@ function PostMatchView({
   // For penalties, determine winner
   const penaltyHomeWon = result.penalties && (result.penaltyHome ?? 0) > (result.penaltyAway ?? 0);
   const penaltyAwayWon = result.penalties && (result.penaltyAway ?? 0) > (result.penaltyHome ?? 0);
+  const deviation = analyzeDestinyDeviation(result);
+  const turningPoints = extractMatchTurningPoints(result);
 
   const goalEvents = result.events.filter(
     (event) => event.type === 'goal' || event.type === 'penalty_goal' || event.type === 'own_goal',
@@ -498,6 +538,48 @@ function PostMatchView({
           </div>
         );
       })()}
+
+      {/* ──── Result explanation ──── */}
+      <div className="px-6 py-4 border-b border-slate-700/50">
+        <div data-testid="destiny-deviation" className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-xs font-semibold text-slate-500 mb-1">命运偏差</h4>
+            <p className="text-xs leading-5 text-slate-400">{deviation.summary}</p>
+          </div>
+          <span className={`text-xs font-semibold px-2 py-1 rounded shrink-0 ${
+            deviation.tier === 'major_upset'
+              ? 'bg-red-950/60 text-red-300'
+              : deviation.tier === 'upset'
+                ? 'bg-amber-950/60 text-amber-300'
+                : deviation.tier === 'minor'
+                  ? 'bg-blue-950/60 text-blue-300'
+                  : 'bg-slate-700 text-slate-300'
+          }`}>
+            {deviation.label}
+          </span>
+        </div>
+        <div data-testid="turning-points" className="mt-3 pt-3 border-t border-slate-700/40">
+          <h4 className="text-xs font-semibold text-slate-500 mb-2">比赛转折</h4>
+          {turningPoints.length > 0 ? (
+            <div className="space-y-2">
+              {turningPoints.map(point => (
+                <div key={`${point.type}-${point.minute ?? 0}`} className="flex gap-2 text-xs leading-5">
+                  <span className="text-amber-400 font-semibold shrink-0">{point.title}</span>
+                  <span className="text-slate-400">
+                    {point.detail.replaceAll('主队', homeTeam.shortName).replaceAll('客队', awayTeam.shortName)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs leading-5 text-slate-500">
+              {result.detailsArchived
+                ? '详细事件已归档，无法可靠重建比赛转折。'
+                : '没有明确的单一转折，结果主要来自赛前条件与比赛随机波动。'}
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* ──── Goal timeline ──── */}
       {goalEvents.length > 0 && (

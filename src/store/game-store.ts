@@ -20,7 +20,13 @@ import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { enforceStorageLimits } from '../engine/season/storage-limits';
 import { archiveCompletedMatchDetails, boundWorldStorageMetadata, type StorageCleanupResult } from './save-compaction';
-import { settleBets } from '../engine/observation/bet-settlement';
+import {
+  isObservationSelectionValid,
+  settleObservationJudgment,
+  type ObservationJudgmentKind,
+  type ObservationSelection,
+  type ObservationSettlement,
+} from '../engine/observation/judgment';
 import { applyGodHandIntervention } from '../engine/season/god-hand';
 
 interface GameStore {
@@ -28,6 +34,7 @@ interface GameStore {
   initialized: boolean;
   lastResults: MatchResult[];
   lastNews: NewsItem[];
+  lastObservationSettlements: ObservationSettlement[];
   isAdvancing: boolean;
   /** Bumps on every successful advance — Dashboard listens for changes to trigger
    *  auto-live / celebration / tab switch reliably each advance, not just the first. */
@@ -59,7 +66,8 @@ interface GameStore {
   fireCoach: (teamId: string) => void;
   toggleStarFixture: (fixtureId: string) => void;
   clearStarredFixtures: () => void;
-  placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => void;
+  setObservationJudgment: (fixtureId: string, kind: ObservationJudgmentKind, selection: ObservationSelection) => void;
+  cancelObservationJudgment: () => void;
   // ── Phase 2: transfer window actions ──
   acceptIncomingOffer: (offerId: string) => void;
   rejectIncomingOffer: (offerId: string) => void;
@@ -127,14 +135,23 @@ function yieldForAdvanceFeedback(): Promise<void> {
   });
 }
 
-function executeWindowWithBetSettlement(world: GameWorld, favoriteTeamIds: string[]) {
+function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamIds: string[]) {
   const result = executeCurrentWindow(world, { favoriteTeamIds });
-  const settlement = settleBets(result.world.coins ?? 1000, result.world.bets ?? [], result.results);
+  const settlement = settleObservationJudgment(
+    result.world.observationRecord,
+    result.world.pendingObservationJudgment,
+    result.results,
+  );
   const settlementChanged = settlement.settlements.length > 0;
   return {
     ...result,
+    observationSettlements: settlement.settlements,
     world: settlementChanged
-      ? { ...result.world, coins: settlement.coins, bets: settlement.pendingBets }
+      ? {
+          ...result.world,
+          pendingObservationJudgment: settlement.pending,
+          observationRecord: settlement.record,
+        }
       : result.world,
   };
 }
@@ -160,6 +177,7 @@ export const useGameStore = create<GameStore>()(
       initialized: false,
       lastResults: [],
       lastNews: [],
+      lastObservationSettlements: [],
       isAdvancing: false,
       advanceTick: 0,
       favoriteTeamId: null,
@@ -174,7 +192,7 @@ export const useGameStore = create<GameStore>()(
       newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => {
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
         const world = initializeGameWorld(actualSeed, options);
-        set({ world, initialized: true, lastResults: [], lastNews: [] });
+        set({ world, initialized: true, lastResults: [], lastNews: [], lastObservationSettlements: [] });
       },
 
       advanceWindow: async () => {
@@ -183,14 +201,14 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true });
         await yieldForAdvanceFeedback();
         try {
-          const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
+          const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
           const updatedWorld = boundWorldStorageMetadata(result.world);
 
           // Detect new achievements (compare against pre-advance state)
           const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
           const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
 
-          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, isAdvancing: false, advanceTick: get().advanceTick + 1, newAchievements: [...get().newAchievements, ...newAch] });
+          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, lastObservationSettlements: result.observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1, newAchievements: [...get().newAchievements, ...newAch] });
         } catch (e) {
           console.error('Error advancing window:', e);
           set({ isAdvancing: false });
@@ -205,18 +223,20 @@ export const useGameStore = create<GameStore>()(
         try {
           let allResults: MatchResult[] = [];
           let allNews: NewsItem[] = [];
+          let observationSettlements: ObservationSettlement[] = [];
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
-            const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
             world = result.world;
             allResults = result.results; // keep only last window's results
             allNews = [...allNews, ...result.news];
+            observationSettlements = [...observationSettlements, ...result.observationSettlements];
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
           world = boundWorldStorageMetadata(enforceStorageLimits(world));
-          set({ world, lastResults: allResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
+          set({ world, lastResults: allResults, lastNews: allNews, lastObservationSettlements: observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in batch advance:', e);
           set({ world, isAdvancing: false });
@@ -231,6 +251,7 @@ export const useGameStore = create<GameStore>()(
         try {
           let allNews: NewsItem[] = [];
           let lastResults: MatchResult[] = [];
+          let observationSettlements: ObservationSettlement[] = [];
           let safety = 0;
           while (safety < 60) {
             const cw = getCurrentWindow(world);
@@ -238,15 +259,16 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
-            const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];
+            observationSettlements = [...observationSettlements, ...result.observationSettlements];
             safety++;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
           world = boundWorldStorageMetadata(enforceStorageLimits(world));
-          set({ world, lastResults, lastNews: allNews, isAdvancing: false, advanceTick: get().advanceTick + 1 });
+          set({ world, lastResults, lastNews: allNews, lastObservationSettlements: observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1 });
         } catch (e) {
           console.error('Error in advanceUntil:', e);
           set({ world, isAdvancing: false });
@@ -359,19 +381,31 @@ export const useGameStore = create<GameStore>()(
         set({ world: { ...world, teamStates, coachStates, coachCareers, coachChangesThisSeason: coachChanges, newsLog: [...world.newsLog, ...news], rngState: rng.getState() } });
       },
 
-      placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => {
+      setObservationJudgment: (fixtureId, kind, selection) => {
         const { world } = get();
-        if (!world || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(odds) || odds <= 1) return;
-        const bets = [...(world.bets ?? [])];
-        const existing = bets.findIndex(b => b.fixtureId === fixtureId);
-        let coins = world.coins ?? 1000;
-        if (existing >= 0) {
-          coins += bets[existing].amount;
-          bets.splice(existing, 1);
+        if (!world) return;
+        if (!isObservationSelectionValid(kind, selection)) return;
+        const window = getCurrentWindow(world);
+        if (!window?.fixtures.some(fixture => fixture.id === fixtureId)) return;
+        set({
+          world: {
+            ...world,
+            pendingObservationJudgment: {
+              fixtureId,
+              seasonNumber: world.seasonState.seasonNumber,
+              windowIndex: world.seasonState.currentWindowIndex,
+              kind,
+              selection,
+            },
+          },
+        });
+      },
+
+      cancelObservationJudgment: () => {
+        const { world } = get();
+        if (world?.pendingObservationJudgment) {
+          set({ world: { ...world, pendingObservationJudgment: null } });
         }
-        if (coins < amount) return;
-        bets.push({ fixtureId, outcome, amount, odds });
-        set({ world: { ...world, coins: coins - amount, bets } });
       },
 
       toggleStarFixture: (fixtureId: string) => {
@@ -530,7 +564,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       resetGame: () => {
-        set({ world: null, initialized: false, lastResults: [], lastNews: [], favoriteTeamId: null, favoriteTeamIds: [] });
+        set({ world: null, initialized: false, lastResults: [], lastNews: [], lastObservationSettlements: [], favoriteTeamId: null, favoriteTeamIds: [] });
         compressedStorage.removeItem(SAVE_STORAGE_KEY);
       },
 

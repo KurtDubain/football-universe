@@ -95,4 +95,42 @@ describe('game store current-save persistence', () => {
       expect.objectContaining({ teamId, type: 'boost', season: 1 }),
     ]);
   });
+
+  it('preserves a pending observation and its bounded lifetime record', async () => {
+    useGameStore.getState().newGame(20260722);
+    const world = useGameStore.getState().world!;
+    const fixtureId = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures[0].id;
+    useGameStore.getState().setObservationJudgment(fixtureId, 'goals', 'over-2');
+    useGameStore.setState({
+      world: {
+        ...useGameStore.getState().world!,
+        observationRecord: {
+          total: 7,
+          correct: 4,
+          currentStreak: 2,
+          bestStreak: 3,
+          recent: [],
+        },
+      },
+    });
+    __flushCompressedStorageForTests();
+    const exported = exportCurrentSave(SAVE_STORAGE_KEY);
+
+    useGameStore.setState({ world: null, initialized: false });
+    compressedStorage.removeItem(SAVE_STORAGE_KEY);
+    importCurrentSave(SAVE_STORAGE_KEY, exported);
+    await useGameStore.persist.rehydrate();
+
+    expect(useGameStore.getState().world?.pendingObservationJudgment).toMatchObject({
+      fixtureId,
+      kind: 'goals',
+      selection: 'over-2',
+    });
+    expect(useGameStore.getState().world?.observationRecord).toMatchObject({
+      total: 7,
+      correct: 4,
+      currentStreak: 2,
+      bestStreak: 3,
+    });
+  });
 });

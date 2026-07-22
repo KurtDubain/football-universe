@@ -58,6 +58,8 @@ describe('shared match forecast', () => {
     expect(prediction.homeWinPct + prediction.drawPct + prediction.awayWinPct).toBe(100);
     expect(prediction.awayWinPct).toBeGreaterThan(prediction.homeWinPct);
     expect(prediction.verdict).toContain('away');
+    expect(prediction.factors.length).toBeLessThanOrEqual(3);
+    expect(prediction.factors.some(factor => factor.source === 'team_strength')).toBe(true);
   });
 
   it('removes home advantage at a neutral venue', () => {
@@ -131,6 +133,8 @@ describe('shared match forecast', () => {
       homeWinPct: prediction.homeWinPct,
       drawPct: prediction.drawPct,
       awayWinPct: prediction.awayWinPct,
+      factors: prediction.factors,
     });
+    expect(prediction.factors.some(factor => factor.source === 'absences')).toBe(true);
   });
 });

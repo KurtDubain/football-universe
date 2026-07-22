@@ -59,16 +59,7 @@ function parseWorld(save: string): GameWorld {
 
 function advanceLikeStore(source: GameWorld): GameWorld {
   const result = executeCurrentWindow(source, { favoriteTeamIds: [] });
-  let coins = result.world.coins ?? 1000;
-  for (const bet of result.world.bets ?? []) {
-    const matchResult = result.results.find((row) => row.fixtureId === bet.fixtureId);
-    if (!matchResult) continue;
-    const home = matchResult.homeGoals + (matchResult.etHomeGoals ?? 0);
-    const away = matchResult.awayGoals + (matchResult.etAwayGoals ?? 0);
-    const outcome = home > away ? 'home' : away > home ? 'away' : 'draw';
-    if (outcome === bet.outcome) coins += Math.round(bet.amount * bet.odds);
-  }
-  return boundWorldStorageMetadata({ ...result.world, coins, bets: [] });
+  return boundWorldStorageMetadata(result.world);
 }
 
 function assertHistoryCaps(world: GameWorld): string[] {

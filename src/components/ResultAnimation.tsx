@@ -6,6 +6,7 @@ import { isDerby, getDerbyName } from '../config/derbies';
 import { EnergyWave } from './CanvasEffects';
 import { getDramaticRevealDelay, getOrdinaryRevealPlan } from './result-reveal-timing';
 import { StoryStamp, type StoryStampKind } from './FootballIdentity';
+import { isUpsetResult } from '../engine/match/analysis';
 
 interface ResultAnimationProps {
   results: MatchResult[];
@@ -189,13 +190,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
   const homeWon = totalHome > totalAway || (r.penalties && (r.penaltyHome ?? 0) > (r.penaltyAway ?? 0));
   const awayWon = totalAway > totalHome || (r.penalties && (r.penaltyAway ?? 0) > (r.penaltyHome ?? 0));
   const derbyName = isDerby(r.homeTeamId, r.awayTeamId, teamBases) ? getDerbyName(r.homeTeamId, r.awayTeamId, teamBases) : null;
-  const probabilityGap = Math.abs((r.prediction?.homeWinPct ?? 0) - (r.prediction?.awayWinPct ?? 0));
-  const isUpset = r.prediction
-    ? probabilityGap >= 10 && (homeWon
-      ? r.prediction.homeWinPct < r.prediction.awayWinPct
-      : awayWon && r.prediction.awayWinPct < r.prediction.homeWinPct)
-    : Math.abs((ht?.overall ?? 0) - (at?.overall ?? 0)) > 12
-      && ((ht?.overall ?? 0) > (at?.overall ?? 0) ? awayWon : homeWon);
+  const isUpset = isUpsetResult(r);
   const totalGoals = totalHome + totalAway;
   const isHighScoring = totalGoals >= 5;
   const storyMarks = getStoryMarks(r, derbyName, isUpset, isHighScoring, homeWon, awayWon);
@@ -330,8 +325,6 @@ function getStoryMarks(
 
 function getMatchImportance(r: MatchResult, teamBases: Record<string, TeamBase>): number {
   let score = 0;
-  const ht = teamBases[r.homeTeamId];
-  const at = teamBases[r.awayTeamId];
   const totalHome = r.homeGoals + (r.etHomeGoals ?? 0);
   const totalAway = r.awayGoals + (r.etAwayGoals ?? 0);
 
@@ -342,7 +335,7 @@ function getMatchImportance(r: MatchResult, teamBases: Record<string, TeamBase>)
   // Final
   if (r.roundLabel === 'Final' || r.roundLabel === '决赛') score += 3;
   // Upset
-  if (ht && at && Math.abs(ht.overall - at.overall) > 12) score += 1;
+  if (isUpsetResult(r)) score += 1;
   // High scoring
   if (totalHome + totalAway >= 5) score += 1;
   // ET/Penalties

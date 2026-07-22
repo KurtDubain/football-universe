@@ -10,10 +10,11 @@ import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { maybeGenerateEvent, applyEventEffect, SeasonEvent } from '../events';
 import {
-  getAllTeamIds, createNewsId, isUpset,
+  getAllTeamIds, createNewsId,
   countTrailingResult, countTrailingNotResult, isTeamEliminated,
 } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
+import { analyzeDestinyDeviation, isUpsetResult } from '../match/analysis';
 
 // ── Return type ─────────────────────────────────────────────────
 
@@ -200,22 +201,23 @@ export function runPostMatchProcessing(
   for (const result of results) {
     const homeTeam = world.teamBases[result.homeTeamId];
     const awayTeam = world.teamBases[result.awayTeamId];
-    if (homeTeam && awayTeam && isUpset(homeTeam, awayTeam, result)) {
+    if (homeTeam && awayTeam && isUpsetResult(result)) {
       const winnerIsHome = result.homeGoals + (result.etHomeGoals ?? 0) > result.awayGoals + (result.etAwayGoals ?? 0);
       const winner = winnerIsHome ? homeTeam : awayTeam;
       const loser = winnerIsHome ? awayTeam : homeTeam;
       const score = formatWinnerPerspectiveScore(result, winnerIsHome);
+      const deviation = analyzeDestinyDeviation(result);
       const titles = [
         `爆冷！${winner.name} ${score} 击败 ${loser.name}`,
         `冷门！${loser.name}阴沟翻船，不敌${winner.name}`,
         `${winner.name}上演以弱胜强的好戏，${score}掀翻${loser.name}！`,
         `谁能想到？${winner.name}让${loser.name}颜面尽失`,
-        `本轮最大冷门：${winner.name}完胜${loser.name}`,
+        `${deviation.label}：${winner.name}战胜${loser.name}`,
       ];
       const descs = [
-        `实力${winner.overall}的${winner.name}令人信服地击败了实力${loser.overall}的${loser.name}，爆冷指数拉满。`,
-        `${loser.name}被认为是这场比赛的绝对热门，但${winner.name}用实际行动证明了一切皆有可能。`,
-        `${winner.name}毫不畏惧强敌，以${score}的比分书写了属于自己的传奇篇章。`,
+        `${winner.name}把赛前分布中的低概率结果变成现实，${score}留下本轮冷门。`,
+        `赛前预测更看好${loser.name}，但${winner.name}最终赢下比赛；该结果被统一评级为“${deviation.label}”。`,
+        `${winner.name}以${score}取胜。这个标签只描述结果偏离程度，不代表单一因素决定了比赛。`,
       ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `upset-${result.fixtureId}`),
@@ -435,23 +437,11 @@ export function runPostMatchProcessing(
         memType = 'last_minute';
         label = `${winningLateGoals[winningLateGoals.length - 1].minute}'绝杀`;
       }
-      // Upset (only check league + cup KO matches)
+      // Upset uses the same frozen forecast semantics as UI/news/judgments.
       if (!memType) {
-        const homeBase = world.teamBases[result.homeTeamId];
-        const awayBase = world.teamBases[result.awayTeamId];
-        if (homeBase && awayBase) {
-          const ovrDiff = Math.abs(homeBase.overall - awayBase.overall);
-          if (ovrDiff >= 15) {
-            const homeWon = totalH > totalA;
-            const awayWon = totalA > totalH;
-            const weakerTeamWon =
-              (homeWon && homeBase.overall < awayBase.overall) ||
-              (awayWon && awayBase.overall < homeBase.overall);
-            if (weakerTeamWon) {
-              memType = 'upset';
-              label = '世纪冷门';
-            }
-          }
+        if (isUpsetResult(result)) {
+          memType = 'upset';
+          label = analyzeDestinyDeviation(result).tier === 'major_upset' ? '世纪冷门' : '显著冷门';
         }
       }
     }

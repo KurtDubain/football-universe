@@ -13,7 +13,6 @@ import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { generateMatchEvents, applyDenyPipeline } from './events';
-import { computePlayerBoosts } from '../players/player-boosts';
 import { selectMatchday } from '../players/injuries';
 import {
   buildMatchParticipation,
@@ -23,7 +22,7 @@ import {
   selectStartingEleven,
 } from './participation';
 import type { AdjustedStrengths } from './model';
-import { calculateMatchModel, competitionRandomness, expectedGoals, forecastFromModel } from './model';
+import { calculateMatchModel, competitionRandomness, computeMatchdayModelReport, expectedGoals, forecastFromModel } from './model';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -210,12 +209,16 @@ export function simulateMatch(
   const awayStarters = selectStartingEleven(awaySelection?.players ?? [], awaySelection?.unavailablePlayerIds);
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
-  const homeBoosts = computePlayerBoosts(homeStarters, globalWindowIdx);
-  const awayBoosts = computePlayerBoosts(awayStarters, globalWindowIdx);
+  const homeReport = computeMatchdayModelReport(ctx.homeSquad, globalWindowIdx);
+  const awayReport = computeMatchdayModelReport(ctx.awaySquad, globalWindowIdx);
+  const homeBoosts = homeReport.boosts;
+  const awayBoosts = awayReport.boosts;
 
   const model = calculateMatchModel({
     homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
     fixture, homeBoosts, awayBoosts,
+    homeAbsenceLoss: homeReport.absenceLoss,
+    awayAbsenceLoss: awayReport.absenceLoss,
   });
   const homeAdj = model.home;
   const awayAdj = model.away;

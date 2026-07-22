@@ -134,7 +134,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       {/* Prediction result */}
       {prediction && (
         <div className={`rounded-xl border p-3 ${prediction.correctCount && prediction.correctCount > 0 ? 'bg-emerald-900/15 border-emerald-700/30' : 'bg-slate-800 border-slate-700'}`}>
-          <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季竞猜结果</h3>
+          <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季观察预测</h3>
           <div className="flex flex-wrap gap-4 text-xs">
             <div>
               <span className="text-slate-500">冠军预测: </span>

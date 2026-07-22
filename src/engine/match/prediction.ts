@@ -2,7 +2,8 @@ import type { CoachBase } from '../../types/coach';
 import type { MatchFixture } from '../../types/match';
 import type { Player } from '../../types/player';
 import type { TeamBase, TeamState } from '../../types/team';
-import { calculateMatchModel, computeMatchdayPlayerBoosts, forecastFromModel } from './model';
+import type { MatchFactor } from '../../types/match';
+import { calculateMatchModel, computeMatchdayModelReport, forecastFromModel } from './model';
 
 export interface MatchPrediction {
   homeTeamId: string;
@@ -16,6 +17,7 @@ export interface MatchPrediction {
   predictedAwayGoals: number;
   verdict: string;
   hotTip: string | null;
+  factors: MatchFactor[];
 }
 
 export interface MatchPredictionOptions {
@@ -59,6 +61,8 @@ export function predictMatch(
     awayTeamId: awayTeam.id,
     competitionType: 'league' as const,
   };
+  const homeReport = computeMatchdayModelReport(options.homeSquad, globalWindowIdx);
+  const awayReport = computeMatchdayModelReport(options.awaySquad, globalWindowIdx);
   const model = calculateMatchModel({
     homeTeam,
     awayTeam,
@@ -67,8 +71,10 @@ export function predictMatch(
     homeCoach,
     awayCoach,
     fixture,
-    homeBoosts: computeMatchdayPlayerBoosts(options.homeSquad, globalWindowIdx),
-    awayBoosts: computeMatchdayPlayerBoosts(options.awaySquad, globalWindowIdx),
+    homeBoosts: homeReport.boosts,
+    awayBoosts: awayReport.boosts,
+    homeAbsenceLoss: homeReport.absenceLoss,
+    awayAbsenceLoss: awayReport.absenceLoss,
   });
   const forecast = forecastFromModel(model);
   const homeStrength = Math.round((model.home.attack + model.home.midfield + model.home.defense) / 3);
@@ -104,5 +110,6 @@ export function predictMatch(
     predictedAwayGoals: Math.round(forecast.awayExpectedGoals * 10) / 10,
     verdict,
     hotTip,
+    factors: forecast.factors,
   };
 }

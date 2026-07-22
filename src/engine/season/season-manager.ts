@@ -208,8 +208,13 @@ export interface GameWorld {
   godHandUsed: boolean;
   /** Bounded, display-only record of manual universe interventions. */
   godHandHistory?: GodHandIntervention[];
-  coins: number;
-  bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
+  /** Current-window observer judgment; absent when the player chooses not to judge. */
+  pendingObservationJudgment?: import('../observation/judgment').PendingObservationJudgment | null;
+  /** Bounded detailed history plus lifetime counters. */
+  observationRecord?: import('../observation/judgment').ObservationRecord;
+  /** Deprecated save fields ignored by current gameplay. */
+  coins?: number;
+  bets?: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
   matchHistory: MatchHistoryEntry[];
   seasonBuffsHistory: { season: number; buffs: SeasonBuff[] }[];
   playerAwardsHistory: import('../../types/award').PlayerAward[];
@@ -504,8 +509,8 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     predictionHistory: [],
     godHandUsed: false,
     godHandHistory: [],
-    coins: 1000,
-    bets: [],
+    pendingObservationJudgment: null,
+    observationRecord: { total: 0, correct: 0, currentStreak: 0, bestStreak: 0, recent: [] },
     matchHistory: [],
     seasonBuffsHistory: [],
     playerAwardsHistory: [],

@@ -1,5 +1,29 @@
 export type CompetitionType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup' | 'world_cup_group' | 'continental_cup' | 'relegation_playoff';
 
+export type MatchFactorSource =
+  | 'team_strength'
+  | 'available_squad'
+  | 'absences'
+  | 'morale'
+  | 'fatigue'
+  | 'momentum'
+  | 'home_advantage'
+  | 'coach'
+  | 'competition_fit'
+  | 'underdog_response'
+  | 'derby';
+
+/** A public, quantized explanation derived from the authoritative match model. */
+export interface MatchFactor {
+  source: MatchFactorSource;
+  beneficiary: 'home' | 'away' | 'both';
+  direction: 'positive' | 'negative';
+  importance: 1 | 2 | 3;
+  label: string;
+  detail: string;
+  evidenceValue: number;
+}
+
 export interface MatchFixture {
   id: string;
   homeTeamId: string;
@@ -101,6 +125,8 @@ export interface MatchResult {
     awayWinPct: number;
     homeExpectedGoals: number;
     awayExpectedGoals: number;
+    /** Frozen pre-match explanation; never rebuilt from a later world state. */
+    factors?: MatchFactor[];
   };
   /** User explicitly archived replay-only detail to reduce save size. */
   detailsArchived?: boolean;

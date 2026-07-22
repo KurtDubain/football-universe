@@ -253,6 +253,24 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Added focused configuration, importance, favorite-ordering, seed-audit, and `verify:observer-onboarding` coverage. Final verification passed 74 files / 542 tests, ESLint, TypeScript/PWA production build, bundle budget, the standard game client, Dashboard browser regression, and complete recommended/neutral/custom onboarding at `390x844` and `1440x900` with no overflow or runtime errors.
 - The browser verifier exposed two real defects during implementation: a primary team could still be displaced by unrelated marquee matches, and restarting from Settings could reopen Settings after initialization. Both were fixed and the complete flow was rerun successfully before checklist updates.
 
+## 2026-07-22 Observer Gameplay Phase 3
+
+- Replaced the runtime coin/odds betting loop with one optional observation judgment per window. The first version supports match outcome, final total goals (`0-2` / `3+`), and the existing prediction-based upset definition without consuming resources or changing RNG state.
+- Added one immutable settlement path for single, batch, next-cup, and season-end advances. A fixture settles once; unmatched judgments stay pending; final outcomes include extra time and shootouts; a transient action summary survives multi-window skips.
+- Added lifetime total/correct/current-streak/best-streak counters and capped detailed observation history at 50 rows. New worlds no longer initialize coins or bets; those fields remain optional deprecated save properties ignored by current gameplay. Save-size reporting now includes observation state.
+- Moved the compact judgment control directly below focus matches. Results show judgment, actual outcome, hit/miss, and record before the animated sequence; fewer than five judgments display sample accumulation rather than a misleading percentage.
+- Added `verify:observation-judgment` and updated the observer-foundation verifier to use the new model. Visual review caught the first placement below all fixture groups; the panel was moved beside the focus area and both viewports were rerun successfully.
+- Final verification passed 74 files / 541 tests, ESLint, TypeScript/PWA production build, the 700,000-byte initial bundle budget (550,243 bytes), Dashboard/foundation/judgment browser workflows, and the 150-season long-save audit. S150 used 1,686,394 compressed bytes of the 4 MiB budget with no rollover errors; mobile advance p50/p95 was 18.7/23.7ms normally and 29/45.7ms at 4x CPU, with one accepted advance from 20 rapid attempts.
+
+## 2026-07-22 Observer Gameplay Phase 4
+
+- Added a structured public `MatchFactor` snapshot to the authoritative match model. Prediction and simulation now freeze the same top three category-distinct factors from team strength, available lineup, absence loss, morale, fatigue, momentum, venue, coach, competition fit, derby intensity, and underdog response.
+- Added one destiny-deviation metric with normal, minor, upset, and major-upset tiers. Knockout results split the forecast draw branch between the two advancing sides, while regulation draws remain draws.
+- Observation judgments, result animation stamps/importance, match details, upset news, and memorable-match collection now consume the same upset result instead of overall-rating or probability-gap variants.
+- Match reports show up to two factual turning points reconstructed from persisted goals, own goals, red cards, extra time, and shootouts. With no reliable event they explicitly decline to invent a cause; real-time injury remains open because the match event schema has no injury event.
+- Added `verify:match-explanation` for pre/post dialogs at 390x844 and 1440x900. Both viewports showed three model factors, visible deviation/turning sections, zero horizontal overflow, 44px close controls, and no runtime errors; screenshots were inspected.
+- Final verification passed 75 files / 547 tests, ESLint, TypeScript/PWA build, the existing Dashboard/observation/live-match browser suites, and bundle budgets (219,666-byte main; 556,735-byte initial graph). The S150 save was 1,730,880 compressed bytes of 4 MiB. Mobile advance p50/p95 was 11.6/21.7ms normally and 26.7/43.7ms at 4x CPU, with one accepted/persisted action from 20 rapid attempts.
+
 ## 2026-07-22 Contest UI Polish
 
 - Established a contest-facing night-broadcast thesis without changing simulation, persistence, or historical data semantics.
