@@ -5,7 +5,7 @@ import { getTeamName, getCoachName } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import SeasonReview from '../components/SeasonReview';
 import type { Achievement } from '../engine/achievements';
-import type { GameWorld } from '../engine/season/season-manager';
+import type { GameWorld, GodHandIntervention } from '../engine/season/season-manager';
 import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 import { rankClubCoefficients } from '../engine/rankings/club-coefficient';
 
@@ -214,6 +214,32 @@ function HistoryContent({ world }: { world: GameWorld }) {
       {/* ═══ Tab: 赛季历史 ═══ */}
       {tab === 'seasons' && (
         <>
+          {(world.godHandHistory ?? []).length > 0 && (
+            <section className="overflow-hidden rounded-lg border border-purple-800/40 bg-slate-800" data-testid="intervention-history">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 px-4 py-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-100">命运干预档案</h3>
+                  <p className="mt-1 text-[11px] text-slate-500">这些赛季曾由观察者永久改写球队基础能力。</p>
+                </div>
+                <span className="text-[11px] text-purple-300">共 {(world.godHandHistory ?? []).length} 次</span>
+              </div>
+              <div className="divide-y divide-slate-700/60">
+                {[...(world.godHandHistory ?? [])].reverse().slice(0, 8).map(intervention => (
+                  <div key={intervention.id} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[4rem_minmax(8rem,1fr)_minmax(12rem,auto)] sm:items-center">
+                    <span className="text-xs font-semibold text-purple-300">S{intervention.season}</span>
+                    <Link to={`/team/${intervention.teamId}`} className="min-w-0 text-sm font-medium text-slate-200 hover:text-emerald-300">
+                      {getTeamName(intervention.teamId, world.teamBases)}
+                      <span className="ml-2 text-[11px] font-normal text-slate-500">{intervention.type === 'boost' ? '获得祝福' : '遭遇厄运'}</span>
+                    </Link>
+                    <span className="col-span-2 text-[11px] text-slate-500 sm:col-span-1 sm:text-right">
+                      {intervention.effects.map(effect => `${godHandFieldLabel(effect.field)} ${formatDelta(effect.after - effect.before)}`).join(' · ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {(world.achievements ?? []).length > 0 && (
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">成就殿堂</h3>
@@ -612,6 +638,20 @@ function HistoryContent({ world }: { world: GameWorld }) {
       )}
     </PageShell>
   );
+}
+
+function godHandFieldLabel(field: GodHandIntervention['effects'][number]['field']): string {
+  const labels: Record<GodHandIntervention['effects'][number]['field'], string> = {
+    attack: '进攻',
+    midfield: '中场',
+    stability: '稳定',
+    depth: '深度',
+  };
+  return labels[field];
+}
+
+function formatDelta(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function RecordCard({ label, value }: { label: string; value: string }) {

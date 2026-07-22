@@ -226,6 +226,23 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - The optional custom visual asset system remains open in `docs/ui-polish-checklist.md`; the low-priority Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign were removed from the roadmap on 2026-07-20.
 - Fire-sale exchange independence and contracts/wages/loans remain intentionally deferred; neither is required for the current data-consistent gameplay loop.
 
+## 2026-07-22 Observer Gameplay And Contest Roadmap
+
+- Created `docs/observer-gameplay-contest-checklist.md` as the durable roadmap for balancing narrative, lightweight interaction, operational convenience, feedback, historical payoff, and the contest-facing first five minutes.
+- Froze the product role as an omniscient observer and historian rather than a manager: focus, prediction, time control, optional intervention, and historical review are allowed; lineups, tactics, training, and management progression remain out of scope.
+- Kept the current default club and coach names unchanged for the personal classic universe. A separate original contest preset is explicitly deferred until submission preparation and must share the same engine rather than fork runtime logic.
+- Prioritized existing prediction settlement correctness, a minimal observer-challenge loop, the first-five-minute path, model-grounded match explanations, three deterministic storyline lifecycles, and season/history integration before additional art or contest packaging.
+- No runtime behavior, save data, names, or assets changed in this planning pass. Checklist items remain open until implementation plus automated, browser, deterministic, performance, and long-save verification all pass.
+
+## 2026-07-22 Observer Gameplay Phase 1
+
+- Unified match-bet settlement behind one pure execution boundary used by single-window, batch, next-cup, and season-end advance paths. Only completed fixture ids settle; unmatched predictions remain pending, malformed duplicate fixture rows pay once, and final outcomes include extra time plus shootouts.
+- Removed the direct `world.coins` mutation from bet replacement. Focused store tests now cover immutable placement, wins/losses, unmatched fixtures, batch advance, cup jumps, and season-end jumps.
+- Reframed God's Hand as an optional permanent universe intervention. The pure intervention engine records before/after attribute values without consuming RNG, enforces one use per season, caps history at 100 entries, emits a dedicated major news type, survives save export/reload, and remains visible in the History route.
+- Added `verify:observer-foundation`, which validates batch settlement plus the intervention confirmation/history flow at `390x844` and `1440x900`, with no overflow or runtime errors. The standard web-game client was also run and its latest ambient-canvas screenshot inspected.
+- Final verification passed 71 files / 535 tests, ESLint, TypeScript/PWA production build, changelog consistency, bundle budgets (272,945-byte main; 697,645-byte initial graph), Dashboard browser regression, and observer-foundation browser checks. Mobile advance remained responsive at 18/19.5ms normal p50/p95 and 31.7/41.7ms under 4x CPU, with one accepted and persisted advance from 20 rapid attempts.
+- Validation note: the shell's default old Node failed before test startup, so all valid checks used the bundled Node 24 runtime. The first observer browser run also used the wrong accessibility role for the Dashboard's custom tab buttons; after correcting the verifier and adding explicit readiness waits, both viewports passed. Neither failed harness attempt was counted as product evidence.
+
 ## 2026-07-22 Contest UI Polish
 
 - Established a contest-facing night-broadcast thesis without changing simulation, persistence, or historical data semantics.

@@ -47,10 +47,23 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor' | 'intervention';
   importance?: 'major' | 'normal' | 'minor';
   title: string;
   description: string;
+}
+
+export interface GodHandIntervention {
+  id: string;
+  season: number;
+  windowIndex: number;
+  teamId: string;
+  type: 'boost' | 'nerf';
+  effects: Array<{
+    field: 'attack' | 'midfield' | 'stability' | 'depth';
+    before: number;
+    after: number;
+  }>;
 }
 
 /**
@@ -193,6 +206,8 @@ export interface GameWorld {
     correctCount: number;
   }>;
   godHandUsed: boolean;
+  /** Bounded, display-only record of manual universe interventions. */
+  godHandHistory?: GodHandIntervention[];
   coins: number;
   bets: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
   matchHistory: MatchHistoryEntry[];
@@ -488,6 +503,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     seasonBuffs: [],
     predictionHistory: [],
     godHandUsed: false,
+    godHandHistory: [],
     coins: 1000,
     bets: [],
     matchHistory: [],

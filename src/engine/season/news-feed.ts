@@ -16,6 +16,7 @@ const TYPE_PRIORITY: Record<NewsItem['type'], number> = {
   rumor: 48,
   prize_money: 36,
   match_result: 30,
+  intervention: 88,
 };
 
 const IMPORTANCE_ADJUSTMENT: Record<NonNullable<NewsItem['importance']>, number> = {

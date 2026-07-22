@@ -78,7 +78,7 @@ export default function BettingPanel({ world, fixtures }: { world: GameWorld; fi
           );
         })}
       </div>
-      <p className="text-[11px] sm:text-[9px] text-slate-600 mt-2">每注50金币 · 赔率基于赛前胜率 · 推进后自动结算</p>
+      <p className="mt-2 text-[11px] text-slate-600">每注50金币 · 推进后自动结算 · 淘汰赛包含加时与点球胜负</p>
     </div>
   );
 }

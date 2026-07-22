@@ -7,14 +7,14 @@ const typeIcon: Record<string, IconName> = {
   trophy: 'trophy', upset: 'fire', coach_fired: 'clipboard', coach_hired: 'check',
   promotion: 'arrow-up', relegation: 'arrow-down', streak: 'chart', match_result: 'ball',
   retirement: 'medal', injury: 'bandage', fire_sale: 'money', prize_money: 'coin',
-  rumor: 'megaphone',
+  rumor: 'megaphone', intervention: 'sparkle',
 };
 
 const typeAccent: Record<string, string> = {
   trophy: '#fbbf24', upset: '#f97316', coach_fired: '#ef4444', coach_hired: '#3b82f6',
   promotion: '#10b981', relegation: '#f87171', streak: '#0ea5e9', match_result: '#10b981',
   retirement: '#fcd34d', injury: '#fca5a5', fire_sale: '#fb923c', prize_money: '#eab308',
-  rumor: '#c084fc',
+  rumor: '#c084fc', intervention: '#d8b4fe',
 };
 
 const typeBg: Record<string, string> = {
@@ -31,6 +31,7 @@ const typeBg: Record<string, string> = {
   fire_sale: 'border-l-orange-500',
   prize_money: 'border-l-yellow-500',
   rumor: 'border-l-purple-400',
+  intervention: 'border-l-purple-300',
 };
 
 const EMPTY_TEAM_NAMES: string[] = [];

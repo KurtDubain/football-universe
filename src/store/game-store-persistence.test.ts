@@ -77,4 +77,22 @@ describe('game store current-save persistence', () => {
     expect(useGameStore.getState().lastResults).toHaveLength(resultCount);
     expect(useGameStore.getState().lastNews).toEqual(useGameStore.getState().world?.newsLog.slice(-30));
   });
+
+  it('preserves the bounded universe intervention record across export and reload', async () => {
+    useGameStore.getState().newGame(20260722);
+    const teamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
+    useGameStore.getState().useGodHand(teamId, 'boost');
+    __flushCompressedStorageForTests();
+    const exported = exportCurrentSave(SAVE_STORAGE_KEY);
+
+    useGameStore.setState({ world: null, initialized: false });
+    compressedStorage.removeItem(SAVE_STORAGE_KEY);
+    importCurrentSave(SAVE_STORAGE_KEY, exported);
+    await useGameStore.persist.rehydrate();
+
+    expect(useGameStore.getState().world?.godHandUsed).toBe(true);
+    expect(useGameStore.getState().world?.godHandHistory).toEqual([
+      expect.objectContaining({ teamId, type: 'boost', season: 1 }),
+    ]);
+  });
 });

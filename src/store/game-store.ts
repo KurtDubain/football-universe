@@ -20,6 +20,8 @@ import { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
 import { enforceStorageLimits } from '../engine/season/storage-limits';
 import { archiveCompletedMatchDetails, boundWorldStorageMetadata, type StorageCleanupResult } from './save-compaction';
+import { settleBets } from '../engine/observation/bet-settlement';
+import { applyGodHandIntervention } from '../engine/season/god-hand';
 
 interface GameStore {
   world: GameWorld | null;
@@ -114,6 +116,18 @@ function yieldForAdvanceFeedback(): Promise<void> {
   });
 }
 
+function executeWindowWithBetSettlement(world: GameWorld, favoriteTeamIds: string[]) {
+  const result = executeCurrentWindow(world, { favoriteTeamIds });
+  const settlement = settleBets(result.world.coins ?? 1000, result.world.bets ?? [], result.results);
+  const settlementChanged = settlement.settlements.length > 0;
+  return {
+    ...result,
+    world: settlementChanged
+      ? { ...result.world, coins: settlement.coins, bets: settlement.pendingBets }
+      : result.world,
+  };
+}
+
 function hashActionSeed(input: string): number {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -158,24 +172,8 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true });
         await yieldForAdvanceFeedback();
         try {
-          const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
-          // Settle bets
-          let coins = result.world.coins ?? 1000;
-          for (const bet of (result.world.bets ?? [])) {
-            const matchResult = result.results.find(r => r.fixtureId === bet.fixtureId);
-            if (!matchResult) continue;
-            const totalHome = matchResult.homeGoals + (matchResult.etHomeGoals ?? 0);
-            const totalAway = matchResult.awayGoals + (matchResult.etAwayGoals ?? 0);
-            const actual = totalHome > totalAway ? 'home' : totalAway > totalHome ? 'away' : 'draw';
-            if (actual === bet.outcome) {
-              coins += Math.round(bet.amount * bet.odds);
-            }
-          }
-          const updatedWorld = boundWorldStorageMetadata({
-            ...result.world,
-            coins,
-            bets: [] as typeof result.world.bets,
-          });
+          const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
+          const updatedWorld = boundWorldStorageMetadata(result.world);
 
           // Detect new achievements (compare against pre-advance state)
           const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
@@ -199,7 +197,7 @@ export const useGameStore = create<GameStore>()(
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
-            const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
+            const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
             world = result.world;
             allResults = result.results; // keep only last window's results
             allNews = [...allNews, ...result.news];
@@ -229,7 +227,7 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
-            const result = executeCurrentWindow(world, { favoriteTeamIds: get().favoriteTeamIds });
+            const result = executeWindowWithBetSettlement(world, get().favoriteTeamIds);
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];
@@ -284,32 +282,9 @@ export const useGameStore = create<GameStore>()(
 
       useGodHand: (teamId: string, type: 'boost' | 'nerf') => {
         const { world } = get();
-        if (!world || world.godHandUsed) return;
-        const teamBases = { ...world.teamBases };
-        const base = { ...teamBases[teamId] };
-        if (type === 'boost') {
-          base.attack = Math.min(99, base.attack + 5);
-          base.midfield = Math.min(99, base.midfield + 3);
-          base.stability = Math.min(99, base.stability + 4);
-        } else {
-          base.attack = Math.max(30, base.attack - 4);
-          base.stability = Math.max(30, base.stability - 5);
-          base.depth = Math.max(30, base.depth - 4);
-        }
-        teamBases[teamId] = base;
-        const teamName = base.name ?? teamId;
-        const sn = world.seasonState.seasonNumber;
-        const wi = world.seasonState.currentWindowIndex;
-        const newsItem: NewsItem = {
-          id: `godhand-S${sn}-${teamId}`,
-          seasonNumber: sn, windowIndex: wi,
-          type: type === 'boost' ? 'trophy' : 'coach_fired',
-          title: type === 'boost' ? `神秘力量降临 ${teamName}` : `${teamName} 遭遇厄运`,
-          description: type === 'boost'
-            ? `一股神秘力量笼罩了${teamName}，全队状态爆发，攻防大幅提升！`
-            : `${teamName}遭遇不可抗力打击，士气和阵容深度严重受损。`,
-        };
-        set({ world: { ...world, teamBases, godHandUsed: true, newsLog: [...world.newsLog, newsItem] } });
+        if (!world) return;
+        const updatedWorld = applyGodHandIntervention(world, teamId, type);
+        if (updatedWorld !== world) set({ world: updatedWorld });
       },
 
       fireCoach: (teamId: string) => {
@@ -365,15 +340,17 @@ export const useGameStore = create<GameStore>()(
 
       placeBet: (fixtureId: string, outcome: 'home' | 'draw' | 'away', amount: number, odds: number) => {
         const { world } = get();
-        if (!world || (world.coins ?? 0) < amount) return;
+        if (!world || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(odds) || odds <= 1) return;
         const bets = [...(world.bets ?? [])];
         const existing = bets.findIndex(b => b.fixtureId === fixtureId);
+        let coins = world.coins ?? 1000;
         if (existing >= 0) {
-          world.coins = (world.coins ?? 1000) + bets[existing].amount;
+          coins += bets[existing].amount;
           bets.splice(existing, 1);
         }
+        if (coins < amount) return;
         bets.push({ fixtureId, outcome, amount, odds });
-        set({ world: { ...world, coins: (world.coins ?? 1000) - amount, bets } });
+        set({ world: { ...world, coins: coins - amount, bets } });
       },
 
       toggleStarFixture: (fixtureId: string) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
@@ -15,7 +15,6 @@ import { getMatchTags, shouldCelebrate } from '../components/celebration-logic';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
-import BettingPanel from '../components/BettingPanel';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
@@ -31,6 +30,8 @@ import {
 import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
+
+const BettingPanel = lazy(() => import('../components/BettingPanel'));
 
 /**
  * Compact money formatter for chip display.
@@ -590,7 +591,9 @@ function MatchdayTab({
       ))}
 
       {/* Betting panel */}
-      <BettingPanel world={world} fixtures={currentWindow.fixtures} />
+      <Suspense fallback={<div aria-hidden className="h-11 w-full rounded-lg border border-dashed border-slate-700 bg-slate-800/60" />}>
+        <BettingPanel world={world} fixtures={currentWindow.fixtures} />
+      </Suspense>
     </div>
   );
 }
@@ -1218,6 +1221,7 @@ function getNewsBorderColor(type: string): string {
     upset: '#a855f7',
     streak: '#0ea5e9',
     retirement: '#fcd34d',
+    intervention: '#d8b4fe',
   };
   return colors[type] ?? '#64748b';
 }
@@ -1261,16 +1265,25 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
   if (!show) {
     return (
       <button onClick={() => setShow(true)}
-        className="w-full bg-slate-800 hover:bg-slate-700 border border-dashed border-slate-600 rounded-lg p-2 text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">
-        上帝之手 — 本赛季可使用1次
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-purple-800/40 bg-slate-800 p-2 text-xs text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200 cursor-pointer">
+        <Icon name="sparkle" size={14} />
+        命运实验 · 本赛季可选 1 次
       </button>
     );
   }
 
   const teamIds = Object.keys(teamBases);
   return (
-    <div className="bg-slate-800 rounded-lg border border-purple-700/30 p-3">
-      <h4 className="text-xs font-semibold text-purple-300 mb-2">上帝之手</h4>
+    <div className="rounded-lg border border-purple-700/30 bg-slate-800 p-3" data-testid="god-hand-panel">
+      <div className="mb-3">
+        <h4 className="flex items-center gap-1.5 text-xs font-semibold text-purple-300">
+          <Icon name="sparkle" size={14} />
+          命运实验
+        </h4>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          这是可选的永久干预，会改变球队基础能力并记录在宇宙历史；自然比赛仍由当前种子继续演化。
+        </p>
+      </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <select value={teamId} onChange={e => setTeamId(e.target.value)}
           className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 cursor-pointer">
@@ -1284,13 +1297,13 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
           </button>
           <button onClick={() => setType('nerf')}
             className={`px-3 py-1.5 text-xs rounded cursor-pointer ${type === 'nerf' ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
-            诅咒
+            厄运
           </button>
         </div>
         <button onClick={() => { if (teamId) { applyGodHand(teamId, type); setShow(false); } }}
           disabled={!teamId}
           className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
-          施法
+          确认干预
         </button>
         <button onClick={() => setShow(false)}
           className="px-3 py-1.5 bg-slate-700 text-slate-400 text-xs rounded cursor-pointer hover:bg-slate-600">
