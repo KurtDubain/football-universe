@@ -27,6 +27,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
   const { i18n } = useTranslation();
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const setFavoriteTeams = useGameStore((s) => s.setFavoriteTeams);
+  const setPrimaryFavoriteTeam = useGameStore((s) => s.setPrimaryFavoriteTeam);
   const toggleFavoriteTeam = useGameStore((s) => s.toggleFavoriteTeam);
   const resetGame = useGameStore((s) => s.resetGame);
   const trimStorage = useGameStore((s) => s.trimStorage);
@@ -148,8 +149,19 @@ function SettingsContent({ world }: { world: GameWorld }) {
               >
                 {team ? (
                   <div className="flex flex-col items-center gap-1">
+                    <span className={`text-[10px] font-semibold ${slot === 0 ? 'text-blue-300' : 'text-slate-600'}`}>
+                      {slot === 0 ? '主要观察' : '次要关注'}
+                    </span>
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
                     <div className="text-xs text-slate-100 font-medium whitespace-nowrap" title={team.name}>{team.shortName}</div>
+                    {slot > 0 && (
+                      <button
+                        onClick={() => setPrimaryFavoriteTeam(tid)}
+                        className="min-h-8 text-[10px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                      >
+                        设为主要
+                      </button>
+                    )}
                     <button
                       onClick={() => toggleFavoriteTeam(tid)}
                       className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer"
@@ -198,7 +210,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
             清空全部关注
           </button>
         )}
-        <p className="text-[10px] text-slate-500 mt-2">关注球队的比赛会有特殊高亮，仪表盘显示卡片，可手动解雇教练</p>
+        <p className="text-[10px] text-slate-500 mt-2">主要观察球队优先进入本轮焦点；其余球队保留快捷摘要与新闻关注。</p>
       </div>
 
       {/* Game info */}

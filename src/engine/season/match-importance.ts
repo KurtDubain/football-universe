@@ -17,7 +17,8 @@ export interface FixtureImportance {
  * - Both teams in top 4 of L1: +5
  * - Cup final: +8
  * - Cup semi-final: +4
- * - Favorite team involved: +5
+ * - Primary observer team involved: +8
+ * - Secondary favorite team involved: +5
  * - Title race implication (one of top 3 vs another top-6): +3
  * - Relegation battle (both bottom 5 of L1): +2
  * - World Cup match: +3
@@ -26,6 +27,7 @@ export function computeFixtureImportance(
   fixture: MatchFixture,
   world: GameWorld,
   favoriteTeamIds: string[],
+  primaryFavoriteTeamId: string | null = favoriteTeamIds[0] ?? null,
 ): FixtureImportance {
   const reasons: string[] = [];
   let score = 0;
@@ -35,7 +37,11 @@ export function computeFixtureImportance(
     reasons.push('德比战');
   }
 
-  if (favoriteTeamIds.includes(fixture.homeTeamId) || favoriteTeamIds.includes(fixture.awayTeamId)) {
+  if (primaryFavoriteTeamId
+    && (fixture.homeTeamId === primaryFavoriteTeamId || fixture.awayTeamId === primaryFavoriteTeamId)) {
+    score += 8;
+    reasons.push('主要观察球队出战');
+  } else if (favoriteTeamIds.includes(fixture.homeTeamId) || favoriteTeamIds.includes(fixture.awayTeamId)) {
     score += 5;
     reasons.push('关注球队出战');
   }
@@ -88,12 +94,19 @@ export function pickFocusMatches(
   world: GameWorld,
   favoriteTeamIds: string[],
   topN: number = 2,
+  primaryFavoriteTeamId: string | null = favoriteTeamIds[0] ?? null,
 ): { fixture: MatchFixture; importance: FixtureImportance }[] {
   const scored = fixtures.map((f) => ({
     fixture: f,
-    importance: computeFixtureImportance(f, world, favoriteTeamIds),
+    importance: computeFixtureImportance(f, world, favoriteTeamIds, primaryFavoriteTeamId),
   }));
-  scored.sort((a, b) => b.importance.score - a.importance.score);
+  scored.sort((a, b) => {
+    const aPrimary = primaryFavoriteTeamId != null
+      && (a.fixture.homeTeamId === primaryFavoriteTeamId || a.fixture.awayTeamId === primaryFavoriteTeamId);
+    const bPrimary = primaryFavoriteTeamId != null
+      && (b.fixture.homeTeamId === primaryFavoriteTeamId || b.fixture.awayTeamId === primaryFavoriteTeamId);
+    return Number(bPrimary) - Number(aPrimary) || b.importance.score - a.importance.score;
+  });
   // Only return scored > 4 (otherwise nothing exceptional)
   return scored.filter((s) => s.importance.score >= 4).slice(0, topN);
 }

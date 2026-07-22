@@ -58,6 +58,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const lastNews = useGameStore((s) => s.lastNews);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const advanceTick = useGameStore((s) => s.advanceTick);
 
   const [activeTab, setActiveTab] = useState<TabKey>('matchday');
@@ -233,12 +234,14 @@ function DashboardContent({ world }: { world: GameWorld }) {
             const cash = world.teamFinances?.[tid]?.cash ?? 0;
             const cashTone = cash < 0 ? 'text-red-300' : cash < 10 ? 'text-amber-300' : 'text-emerald-300';
 
+            const isPrimary = tid === favoriteTeamId;
             return (
-              <div key={tid} className="bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
+              <div key={tid} className={`rounded-lg border px-3 py-2 ${isPrimary ? 'border-blue-600/50 bg-blue-950/25' : 'border-slate-700/40 bg-slate-800/60'}`}>
                 {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
                 <div className="flex items-center gap-2 sm:gap-3 text-xs">
                   <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
                   <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 truncate min-w-0">{fav.name}</Link>
+                  {isPrimary && <span className="shrink-0 rounded bg-blue-900/60 px-1.5 py-0.5 text-[11px] font-semibold text-blue-300">主要观察</span>}
                   <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
                   <div className="flex gap-0.5 shrink-0 ml-auto">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
@@ -380,6 +383,7 @@ function MatchdayTab({
   onFixtureClick: (f: MatchFixture) => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
 
@@ -425,7 +429,7 @@ function MatchdayTab({
   }
 
   // Compute focus matches (top 1-2)
-  const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2);
+  const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2, favoriteTeamId);
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
 
   // Group fixtures by competition (excluding ones already shown in focus banner)

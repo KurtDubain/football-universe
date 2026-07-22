@@ -50,6 +50,8 @@ interface GameStore {
   setFavoriteTeam: (teamId: string | null) => void;
   /** Sets the entire favorites list (max 3 entries). */
   setFavoriteTeams: (ids: string[]) => void;
+  /** Promotes an existing favorite to the primary observer focus. */
+  setPrimaryFavoriteTeam: (teamId: string) => void;
   /** Toggle a team's membership in the favorites list. */
   toggleFavoriteTeam: (teamId: string) => void;
   setPrediction: (champion: string, relegated: string) => void;
@@ -99,8 +101,17 @@ function mergePersistedGameState(
 ): GameStore {
   const persisted = persistedState as PersistedGameState;
   const merged = { ...current, ...persisted };
+  const favoriteTeamIds = [...new Set(merged.favoriteTeamIds)].slice(0, 3);
+  const primaryId = merged.favoriteTeamId && favoriteTeamIds.includes(merged.favoriteTeamId)
+    ? merged.favoriteTeamId
+    : favoriteTeamIds[0] ?? null;
+  const orderedFavorites = primaryId
+    ? [primaryId, ...favoriteTeamIds.filter(id => id !== primaryId)]
+    : favoriteTeamIds;
   return {
     ...merged,
+    favoriteTeamId: primaryId,
+    favoriteTeamIds: orderedFavorites,
     lastResults: reconstructLastResults(merged.world),
     lastNews: merged.world?.newsLog.slice(-30) ?? [],
   };
@@ -243,19 +254,25 @@ export const useGameStore = create<GameStore>()(
       },
 
       setFavoriteTeam: (teamId: string | null) => {
-        // Keep legacy single field in sync; also reflect in array.
         if (teamId === null) {
           set({ favoriteTeamId: null, favoriteTeamIds: [] });
         } else {
           const cur = get().favoriteTeamIds;
-          const next = cur.includes(teamId) ? cur : [teamId, ...cur].slice(0, 3);
-          set({ favoriteTeamId: teamId, favoriteTeamIds: next });
+          const ordered = [teamId, ...cur.filter(id => id !== teamId)].slice(0, 3);
+          set({ favoriteTeamId: teamId, favoriteTeamIds: ordered });
         }
       },
 
       setFavoriteTeams: (ids: string[]) => {
-        const trimmed = ids.slice(0, 3);
+        const trimmed = [...new Set(ids.filter(Boolean))].slice(0, 3);
         set({ favoriteTeamIds: trimmed, favoriteTeamId: trimmed[0] ?? null });
+      },
+
+      setPrimaryFavoriteTeam: (teamId: string) => {
+        const cur = get().favoriteTeamIds;
+        if (!cur.includes(teamId)) return;
+        const ordered = [teamId, ...cur.filter(id => id !== teamId)];
+        set({ favoriteTeamId: teamId, favoriteTeamIds: ordered });
       },
 
       toggleFavoriteTeam: (teamId: string) => {
@@ -265,13 +282,17 @@ export const useGameStore = create<GameStore>()(
           next = cur.filter((id) => id !== teamId);
         } else {
           if (cur.length >= 3) {
-            // Drop the oldest (last) to make room
-            next = [teamId, ...cur.slice(0, 2)];
+            next = [...cur.slice(0, 2), teamId];
           } else {
-            next = [teamId, ...cur];
+            next = [...cur, teamId];
           }
         }
-        set({ favoriteTeamIds: next, favoriteTeamId: next[0] ?? null });
+        const currentPrimary = get().favoriteTeamId;
+        const primary = currentPrimary && next.includes(currentPrimary)
+          ? currentPrimary
+          : next[0] ?? null;
+        const ordered = primary ? [primary, ...next.filter(id => id !== primary)] : next;
+        set({ favoriteTeamIds: ordered, favoriteTeamId: primary });
       },
 
       setPrediction: (champion: string, relegated: string) => {

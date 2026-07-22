@@ -243,6 +243,16 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Final verification passed 71 files / 535 tests, ESLint, TypeScript/PWA production build, changelog consistency, bundle budgets (272,945-byte main; 697,645-byte initial graph), Dashboard browser regression, and observer-foundation browser checks. Mobile advance remained responsive at 18/19.5ms normal p50/p95 and 31.7/41.7ms under 4x CPU, with one accepted and persisted advance from 20 rapid attempts.
 - Validation note: the shell's default old Node failed before test startup, so all valid checks used the bundled Node 24 runtime. The first observer browser run also used the wrong accessibility role for the Dashboard's custom tab buttons; after correcting the verifier and adding explicit readiness waits, both viewports passed. Neither failed harness attempt was counted as product evidence.
 
+## 2026-07-22 Observer Gameplay Phase 2
+
+- Rebuilt the first-run screen as the actual observer setup rather than a feature-heavy landing page. `推荐体验` uses audited seed `20260718`; `自选宇宙` retains modes, optional primary team, custom seed, and the team editor; `纯观察` starts with no favorites.
+- Added a deterministic audit over 20 candidate seeds and their first six windows. The selected seed led the bounded score with 18 model-defined upsets, 18 close matchups, five naturally focused windows, and 2.35 average goals without changing simulation rules or hard-coding outcomes.
+- Made `favoriteTeamId` the explicit primary observer focus. Adding secondary favorites preserves the primary, settings can promote another favorite, persisted disagreement is normalized, and the primary fixture is guaranteed to lead the Dashboard focus list before unrelated marquee matches.
+- Fixed restart navigation so beginning a universe from a Welcome screen reached through `/settings` or another stale route always returns to the Dashboard.
+- Lazy-loaded Dashboard at the route boundary. The first build correctly failed the existing initial-graph budget at 701,700 bytes; after splitting, the main entry is 219,552 bytes and the initial graph is 548,593 bytes against the unchanged 700,000-byte budget.
+- Added focused configuration, importance, favorite-ordering, seed-audit, and `verify:observer-onboarding` coverage. Final verification passed 74 files / 542 tests, ESLint, TypeScript/PWA production build, bundle budget, the standard game client, Dashboard browser regression, and complete recommended/neutral/custom onboarding at `390x844` and `1440x900` with no overflow or runtime errors.
+- The browser verifier exposed two real defects during implementation: a primary team could still be displaced by unrelated marquee matches, and restarting from Settings could reopen Settings after initialization. Both were fixed and the complete flow was rerun successfully before checklist updates.
+
 ## 2026-07-22 Contest UI Polish
 
 - Established a contest-facing night-broadcast thesis without changing simulation, persistence, or historical data semantics.

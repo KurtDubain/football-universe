@@ -2,10 +2,10 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import Layout from './Layout';
-import Dashboard from '../pages/Dashboard';
 import Welcome from '../pages/Welcome';
 import { LoadingSkeleton } from '../components/ui';
 
+const Dashboard = lazy(() => import('../pages/Dashboard'));
 const Calendar = lazy(() => import('../pages/Calendar'));
 const League = lazy(() => import('../pages/League'));
 const Cup = lazy(() => import('../pages/Cup'));
