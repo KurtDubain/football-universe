@@ -16,6 +16,8 @@ import {
 } from '../utils/format';
 import { leagueConfigs } from '../config/competitions';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
+import TeamBadge from '../components/TeamBadge';
+import { CompetitionMark } from '../components/FootballIdentity';
 
 export default function League() {
   const { level } = useParams<{ level: string }>();
@@ -189,8 +191,10 @@ export default function League() {
   return (
     <PageShell className="tabular-nums">
       <PageHeader
+        icon={<CompetitionMark type={leagueLevel === 1 ? 'league1' : leagueLevel === 2 ? 'league2' : 'league3'} size={52} title={`${getLeagueName(leagueLevel)}徽记`} />}
         title={getLeagueName(leagueLevel)}
         meta={`第 ${world.seasonState.seasonNumber} 赛季`}
+        description={`${totalTeams} 支球队 · 双循环 ${config.rounds} 轮`}
         actions={(
           <SegmentedControl
             value={tab}
@@ -298,25 +302,25 @@ export default function League() {
                       >
                         <td className="text-center px-1.5 sm:px-2 py-2">
                           <div className="flex items-center justify-center gap-0.5">
-                            <span className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-md text-[10px] sm:text-xs font-bold ${getPosBadgeClass(zone)}`}>
+                            <span className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-md text-[11px] sm:text-xs font-bold ${getPosBadgeClass(zone)}`}>
                               {pos}
                             </span>
                             {entry.previousPosition != null && entry.played > 0 && (() => {
                               const diff = entry.previousPosition - pos;
-                              if (diff > 0) return <span className="text-[11px] sm:text-[9px] text-green-400">▲</span>;
-                              if (diff < 0) return <span className="text-[11px] sm:text-[9px] text-red-400">▼</span>;
-                              return <span className="text-[11px] sm:text-[9px] text-slate-600">—</span>;
+                              if (diff > 0) return <span className="text-[11px] text-green-400">▲</span>;
+                              if (diff < 0) return <span className="text-[11px] text-red-400">▼</span>;
+                              return <span className="text-[11px] text-slate-600">—</span>;
                             })()}
                           </div>
                         </td>
                         <td className="px-1.5 sm:px-2 py-2">
                           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0" style={{ backgroundColor: teamBase?.color ?? '#64748b' }} />
-                            <Link to={`/team/${entry.teamId}`} className="text-slate-200 hover:text-blue-400 transition-colors whitespace-nowrap text-xs sm:text-sm" title={getTeamName(entry.teamId, world.teamBases)}>
+                            {teamBase && <TeamBadge teamId={entry.teamId} shortName={teamBase.shortName} color={teamBase.color} size={24} />}
+                            <Link to={`/team/${entry.teamId}`} className="inline-flex min-h-10 items-center text-slate-200 hover:text-blue-400 transition-colors whitespace-nowrap text-xs sm:min-h-0 sm:text-sm" title={getTeamName(entry.teamId, world.teamBases)}>
                               {getTeamShortName(entry.teamId, world.teamBases)}
                             </Link>
                             {teamBase?.region && (
-                              <span className="hidden sm:inline text-[11px] sm:text-[9px] text-slate-600 shrink-0">{teamBase.region.split('+')[1]}</span>
+                              <span className="hidden shrink-0 text-[11px] text-slate-500 sm:inline">{teamBase.region.split('+')[1]}</span>
                             )}
                           </div>
                         </td>
@@ -364,16 +368,16 @@ export default function League() {
                             // Champion probability
                             if (myIdx === 0) {
                               const secondMax = (standings[1]?.points ?? 0) + remaining * 3;
-                              if (entry.points > secondMax) return <span className="text-[11px] sm:text-[9px] text-amber-400 font-bold">冠 ✓</span>;
+                              if (entry.points > secondMax) return <span className="text-[11px] text-amber-400 font-bold">冠 ✓</span>;
                               const gap = entry.points - (standings[1]?.points ?? 0);
                               const pct = Math.min(95, Math.max(10, 50 + gap * 3));
-                              return <span className="text-[11px] sm:text-[9px] text-emerald-400">{pct}%冠</span>;
+                              return <span className="text-[11px] text-emerald-400">{pct}%冠</span>;
                             }
                             // Title contender (can still mathematically catch leader)
                             if (myMaxPts >= leaderPts && myIdx <= 3) {
                               const gap = leaderPts - entry.points;
                               const pct = Math.max(5, Math.min(45, 40 - gap * 3));
-                              return <span className="text-[11px] sm:text-[9px] text-blue-400">{pct}%冠</span>;
+                              return <span className="text-[11px] text-blue-400">{pct}%冠</span>;
                             }
                             // Relegation danger
                             if (myIdx >= relegIdx) {
@@ -381,20 +385,20 @@ export default function League() {
                               const safePts = standings[safePos]?.points ?? 0;
                               const gap = safePts - entry.points;
                               const pct = Math.min(90, Math.max(10, 40 + gap * 5));
-                              return <span className="text-[11px] sm:text-[9px] text-red-400">{pct}%降</span>;
+                              return <span className="text-[11px] text-red-400">{pct}%降</span>;
                             }
                             // Safe but could still drop
                             if (myIdx >= relegIdx - 2) {
                               const bottomPts = standings[relegIdx]?.points ?? 0;
                               const gap = entry.points - bottomPts;
                               if (gap <= remaining * 2) {
-                                return <span className="text-[11px] sm:text-[9px] text-orange-400">有风险</span>;
+                                return <span className="text-[11px] text-orange-400">有风险</span>;
                               }
                             }
                             // Mathematically safe
                             const bottomMaxPts = (standings[standings.length - 1]?.points ?? 0) + remaining * 3;
                             if (entry.points > bottomMaxPts && myIdx < relegIdx - 2) {
-                              return <span className="text-[11px] sm:text-[9px] text-slate-600">安全</span>;
+                              return <span className="text-[11px] text-slate-500">安全</span>;
                             }
                             return null;
                           })()}
@@ -402,7 +406,7 @@ export default function League() {
                         <td className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">
                           <div className="flex gap-0.5 justify-center">
                             {formatForm(entry.form.slice(-5)).map((f, fi) => (
-                              <span key={fi} className={`inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded text-[11px] sm:text-[9px] sm:text-[10px] font-bold text-white ${f.color}`}>
+                              <span key={fi} className={`inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded text-[11px] font-bold text-white ${f.color}`}>
                                 {f.label}
                               </span>
                             ))}
@@ -675,7 +679,7 @@ export default function League() {
                                     }}
                                   />
                                 </div>
-                                <div className="flex justify-between text-[10px] mt-0.5">
+                                <div className="mt-0.5 flex justify-between text-[11px]">
                                   <span className="text-green-400">
                                     {pred.homeWinPct}%
                                   </span>

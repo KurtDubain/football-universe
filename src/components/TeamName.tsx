@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { TeamBase } from '../types/team';
 import { getTierLabel, getTierColor } from '../utils/format';
+import TeamBadge from './TeamBadge';
 
 /**
  * Inline team name display with optional tier badge.
@@ -12,6 +13,7 @@ export default function TeamName({
   showTier = false,
   link = true,
   compact = false,
+  badgeSize,
   className = '',
 }: {
   teamId: string;
@@ -19,6 +21,7 @@ export default function TeamName({
   showTier?: boolean;
   link?: boolean;
   compact?: boolean;
+  badgeSize?: number;
   className?: string;
 }) {
   const team = teamBases[teamId];
@@ -27,9 +30,13 @@ export default function TeamName({
 
   const name = (
     <span className={`inline-flex items-center gap-1 min-w-0 max-w-full ${className}`} title={team.name}>
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+      {badgeSize ? (
+        <TeamBadge teamId={teamId} shortName={team.shortName} color={team.color} size={badgeSize} />
+      ) : (
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+      )}
       {showTier && (
-        <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium shrink-0 leading-tight ${getTierColor(team.tier)}`}>
+        <span className={`px-1 py-0.5 text-[11px] font-medium shrink-0 leading-tight ${getTierColor(team.tier)}`}>
           {getTierLabel(team.tier)}
         </span>
       )}

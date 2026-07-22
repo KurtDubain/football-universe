@@ -16,15 +16,16 @@ Checkboxes stay open until implementation and the listed acceptance checks both 
 - 2026-07-19: Completed Phase 4 Player and Team hierarchy. Player Detail now uses four position-specific headlines, a single no-appearance state, sample-gated rankings, and position context before efficiency. Player and squad rows are full navigation targets; Team Detail now has `概览 / 阵容 / 历史`, while Team Center uses compact grouped directories. Shared scrollable tabs gained edge fades, scroll snap, and active-tab reveal. `verify:player-team` passed at `320x568`, `390x844`, and `1440x900` with complete names, 44px targets, one-round live data, and zero overflow/runtime errors. Final verification passed 63 files / 493 tests, ESLint, TypeScript, production/PWA build, bundle budgets, shared UI, match presentation, and mobile advance performance.
 - 2026-07-20: Removed the deferred Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign from the roadmap. Existing routes remain supported and stay in the regression matrix; this only narrows future polish work to higher-value gameplay and visual-system tasks.
 - 2026-07-20: Completed a four-agent v4.8.1 follow-up audit. Fixed mobile History tab clipping, keyboard access for the global news ticker, and contrast/terminology on new boost, news-tier, and changelog metadata. The refreshed browser harness passed at `320x568`, `390x844`, and `1440x900`; all five History tabs remained reachable and active, ticker controls worked with Enter, and no overflow or runtime errors appeared. Full verification passed 66 files / 514 tests, production/PWA build, and bundle budgets.
+- 2026-07-22: Completed the contest-facing identity pass. Added deterministic club crests, nine competition marks, seven trophy forms, outcome marks, seven match-story stamps, a club banner, responsive Cup round explorer, core 11px minimum HTML labels, keyboard fixture activation, reduced-motion behavior, and hidden-canvas pausing. Final verification passed 68 files / 519 tests, ESLint, TypeScript/PWA build, changelog and bundle budgets, shared UI/Dashboard/player-team/match browser workflows, mobile advance and animation profiles, plus visual inspection at `390x844` and `1440x900`.
 
 ## Product Direction And Guardrails
 
-- [ ] Use deep charcoal for the page background, grass green for primary actions, trophy gold for honors, and red only for danger/failure.
-- [ ] Keep team colors limited to club identity, matchup presentation, and club-specific surfaces; do not reuse them as generic success/warning colors.
-- [ ] Keep tables, rosters, transfer tools, filters, and finance views dense and operational rather than illustrative.
-- [ ] Reserve custom artwork for club identity, competition identity, trophies, classic moments, match atmosphere, and story chapters.
-- [ ] Do not add a large hero image to every page, illustrations behind dense tables, generic player portraits, larger radii, gradient orbs, or more nested cards.
-- [ ] Preserve current simulation, data, persistence, and history semantics during the UI pass.
+- [x] Use deep charcoal for the page background, grass green for primary actions, trophy gold for honors, and red only for danger/failure.
+- [x] Keep team colors limited to club identity, matchup presentation, and club-specific surfaces; do not reuse them as generic success/warning colors.
+- [x] Keep tables, rosters, transfer tools, filters, and finance views dense and operational rather than illustrative.
+- [x] Reserve custom artwork for club identity, competition identity, trophies, classic moments, match atmosphere, and story chapters.
+- [x] Do not add a large hero image to every page, illustrations behind dense tables, generic player portraits, larger radii, gradient orbs, or more nested cards.
+- [x] Preserve current simulation, data, persistence, and history semantics during the UI pass.
 
 ## 1. P0 Mobile Usability And Correctness
 
@@ -43,7 +44,7 @@ Primary file: `src/app/Layout.tsx`.
 - [x] Show team abbreviations when full names do not fit; never truncate a team to an ambiguous single character.
 - [x] Hide region/tier metadata before reducing the space available to team identity.
 - [x] Add a clear round selector or horizontal-scroll affordance when multiple rounds are available.
-- [x] Keep the complete desktop bracket behavior unchanged.
+- [x] Replace the oversized desktop tree with the same round browser, expanding matchups into readable multi-column grids.
 
 Primary file: `src/pages/Cup.tsx`.
 
@@ -154,25 +155,25 @@ Primary files: `src/pages/History.tsx`, `src/pages/Chronicle.tsx`, `src/pages/Le
 
 ### Club Identity
 
-- [ ] Design `5-6` consistent badge frames and `12-16` center symbols instead of 32 unrelated crests.
-- [ ] Define deterministic frame, symbol, primary-color, secondary-color, and accent-color assignments for every club.
-- [ ] Preserve visible club name or abbreviation so color/crest is never the only identifier.
-- [ ] Add a `120-160px` Team Detail club banner using the badge, team colors, and a restrained regional/stadium pattern.
+- [x] Design `5-6` consistent badge frames and `12-16` center symbols instead of 32 unrelated crests.
+- [x] Define deterministic frame, symbol, primary-color, secondary-color, and accent-color assignments for every club.
+- [x] Preserve visible club name or abbreviation so color/crest is never the only identifier.
+- [x] Add a `120-160px` Team Detail club banner using the badge, team colors, and a restrained regional/stadium pattern.
 
 Primary component: `src/components/TeamBadge.tsx`.
 
 ### Competition And Honor Assets
 
-- [ ] Create nine competition badges for the three leagues, League Cup, Super Cup, World Cup, and three continental cups.
-- [ ] Create `5-6` distinct trophy silhouettes and map competitions to trophy forms.
-- [ ] Create champion, promotion, and relegation commemorative marks.
+- [x] Create nine competition badges for the three leagues, League Cup, Super Cup, World Cup, and three continental cups.
+- [x] Create `5-6` distinct trophy silhouettes and map competitions to trophy forms.
+- [x] Create champion, promotion, and relegation commemorative marks.
 - [ ] Apply these assets consistently to Cup, League, History, Chronicle, Trophy Breakdown, and Season Review.
 
 ### Match And Story Assets
 
-- [ ] Create seven event stamps: derby, upset, late winner, comeback, penalty shootout, goalfest, and final.
-- [ ] Keep event names as HTML text; do not bake Chinese text into the images.
-- [ ] Show stamps only for special matches so ordinary result cards remain quiet.
+- [x] Create seven event stamps: derby, upset, late winner, comeback, penalty shootout, goalfest, and final.
+- [x] Keep event names as HTML text; do not bake Chinese text into the images.
+- [x] Show stamps only for special matches so ordinary result cards remain quiet.
 - [ ] Create small chapter marks for dynasty, revival, dark horse, survival, rebuild, and decline stories.
 - [ ] Add one subtle cached grass-grain texture to the match canvas with a low-power fallback.
 - [ ] Add a restrained scoreboard plate using competition and club identity while keeping score/team text in the DOM.
@@ -188,9 +189,9 @@ Primary component: `src/components/Icon.tsx`.
 
 ## 5. P2 Motion, Empty States, And Final Polish
 
-- [ ] Define standard durations and easing for hover, tab changes, route transitions, score changes, and result reveals.
-- [ ] Add complete `prefers-reduced-motion` behavior for decorative motion and match presentation.
-- [ ] Ensure hidden, covered, or paused match views stop nonessential rendering work.
+- [x] Define standard durations and easing for hover, tab changes, route transitions, score changes, and result reveals.
+- [x] Add complete `prefers-reduced-motion` behavior for decorative motion and match presentation.
+- [x] Ensure hidden, covered, or paused match views stop nonessential rendering work.
 - [ ] Create layout-matched skeletons for Teams, Players, History, Cup, and lazy route transitions.
 - [ ] Create no more than `3-4` reusable illustrated empty-state families for trophies, transfers, retired players, and stories.
 - [ ] Reduce rainbow attribute bars to a consistent base color plus meaningful exceptional states.
@@ -198,16 +199,16 @@ Primary component: `src/components/Icon.tsx`.
 
 ## 6. Asset Performance And Accessibility Budget
 
-- [ ] Competition badge runtime assets: transparent `192x192` WebP or SVG, target below `12KB` each.
-- [ ] Club frame/symbol assets: prefer SVG; if raster is required, use transparent `128x128` WebP.
-- [ ] Trophy assets: transparent SVG or `256x256` WebP, designed to display clearly from `24-72px`.
-- [ ] Event stamps: runtime `192x64` WebP, without embedded UI text.
+- [x] Competition badge runtime assets: transparent `192x192` WebP or SVG, target below `12KB` each.
+- [x] Club frame/symbol assets: prefer SVG; if raster is required, use transparent `128x128` WebP.
+- [x] Trophy assets: transparent SVG or `256x256` WebP, designed to display clearly from `24-72px`.
+- [x] Event stamps: runtime `192x64` WebP, without embedded UI text.
 - [ ] Tileable grass/paper textures: `512x512` WebP, target below `50KB` and `35KB` respectively.
 - [ ] Champion scene: `960x320` WebP, target below `80KB`, lazy-loaded outside the initial route.
-- [ ] Keep new first-viewport assets below `150KB` and the initial complete art pack near `400KB`.
+- [x] Keep new first-viewport assets below `150KB` and the initial complete art pack near `400KB`.
 - [ ] Predecode and cache Canvas images; never decode or reconstruct image patterns per frame.
-- [ ] Use empty `alt`/`aria-hidden` for decorative art and retain DOM text for club, competition, score, and status meaning.
-- [ ] Keep a consistent line weight, light direction, edge treatment, and visual density across all custom assets.
+- [x] Use empty `alt`/`aria-hidden` for decorative art and retain DOM text for club, competition, score, and status meaning.
+- [x] Keep a consistent line weight, light direction, edge treatment, and visual density across all custom assets.
 
 ## 7. Verification Matrix
 
@@ -217,7 +218,7 @@ Primary component: `src/components/Icon.tsx`.
 - [x] TypeScript project build passes.
 - [x] Full Vitest suite passes.
 - [x] Production/PWA build passes and existing bundle budgets remain green.
-- [ ] Add focused interaction tests for drawer keyboard behavior, tab overflow, History tab ownership, and result-animation completion.
+- [x] Add focused interaction tests for drawer keyboard behavior, tab overflow, History tab ownership, and result-animation completion.
 
 ### Browser
 
@@ -231,7 +232,7 @@ Primary component: `src/components/Icon.tsx`.
 ### Performance
 
 - [x] Re-run the existing mobile advance and match-animation profiles after UI changes.
-- [ ] Confirm new images do not increase match Canvas frame cost through per-frame decoding or allocation.
+- [x] Confirm new images do not increase match Canvas frame cost through per-frame decoding or allocation.
 - [ ] Confirm route skeletons and banners do not cause significant cumulative layout shift.
 - [x] Confirm the first game screen remains responsive on mobile CPU throttling.
 

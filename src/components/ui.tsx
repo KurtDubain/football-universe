@@ -29,21 +29,25 @@ export function PageShell({ width = 'standard', className, ...props }: PageShell
 
 interface PageHeaderProps {
   title: ReactNode;
+  icon?: ReactNode;
   description?: ReactNode;
   meta?: ReactNode;
   actions?: ReactNode;
   className?: string;
 }
 
-export function PageHeader({ title, description, meta, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, icon, description, meta, actions, className }: PageHeaderProps) {
   return (
     <header data-ui="page-header" className={cx('ui-page-header', className)}>
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-3">
+        {icon && <div className="ui-page-icon" aria-hidden="true">{icon}</div>}
+        <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="ui-page-title">{title}</h1>
           {meta && <div className="ui-page-meta tabular-nums">{meta}</div>}
         </div>
         {description && <div className="ui-page-description">{description}</div>}
+        </div>
       </div>
       {actions && <div className="ui-page-actions">{actions}</div>}
     </header>

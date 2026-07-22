@@ -225,3 +225,14 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - The optional custom visual asset system remains open in `docs/ui-polish-checklist.md`; the low-priority Chronicle/Legends responsibility rewrite, transfer-page wording pass, and Welcome first-run redesign were removed from the roadmap on 2026-07-20.
 - Fire-sale exchange independence and contracts/wages/loans remain intentionally deferred; neither is required for the current data-consistent gameplay loop.
+
+## 2026-07-22 Contest UI Polish
+
+- Established a contest-facing night-broadcast thesis without changing simulation, persistence, or historical data semantics.
+- Replaced the single-template club shield with deterministic club-ID visuals: six frames, four field patterns, and twelve center symbols. Abbreviations remain visible and every crest has an accessible full-name label.
+- Added custom competition marks for all three leagues and six cup identities, seven mapped trophy forms, champion/promotion/relegation marks, and seven match-story stamps for derbies, finals, penalties, upsets, comebacks, late winners, and high-scoring games.
+- Applied the identity system to Dashboard focus fixtures, ordinary fixture/result cards, League standings, Cup brackets, and the Team Detail club banner/trophy cabinet.
+- Replaced the desktop cup tree's season-start blank space with a responsive round explorer. Mobile keeps readable abbreviations; desktop uses full club names and four-column match grids.
+- Removed remaining 8-10px HTML labels from the five core surfaces, added keyboard activation to clickable fixture cards, and added a global reduced-motion fallback.
+- Final verification passed 68 files / 519 tests, ESLint, TypeScript and production/PWA build, changelog consistency, and bundle budgets (274,592-byte main entry; 698,303-byte initial graph). Shared UI, Dashboard, player/team, and match workflows passed at 320x568, 390x844, and 1440x900 with zero overflow/runtime errors; representative screenshots were inspected and the desktop Cup layout was corrected from that evidence.
+- Mobile advance remained responsive at 12.3/20.9ms normal p50/p95 and 30.9/39.1ms under 4x CPU, with one accepted/persisted action from 20 rapid attempts. Match rendering passed normal/4x profiles, hidden and covered views paused, reduced motion downgraded correctly, and the standard game client completed two iterations without an error artifact.

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import {
@@ -14,6 +14,7 @@ import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '..
 import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 import { Icon, type IconName } from '../components/Icon';
+import { OutcomeMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
 import { PageShell, Panel, SegmentedControl } from '../components/ui';
 
 type TeamSection = 'overview' | 'squad' | 'history';
@@ -41,20 +42,23 @@ export default function TeamDetail() {
 
   return (
     <PageShell width="standard" className="tabular-nums">
-      {/* Header */}
-      <Panel className="p-4 sm:p-5">
-        <div className="flex items-center gap-3">
-          <TeamBadge shortName={base.shortName} color={base.color} size={48} />
+      <Panel padded={false} className="club-identity-banner" style={{ '--club-color': base.color } as CSSProperties}>
+        <div className="club-identity-main">
+          <TeamBadge teamId={id} shortName={base.shortName} color={base.color} size={76} />
           <div className="min-w-0">
-            <h1 className="break-words text-xl font-bold text-slate-100 sm:text-2xl">{base.name}</h1>
-            <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
-              <span className="text-xs text-slate-400">{getLeagueName(state.leagueLevel)}</span>
-              <span className="text-xs text-slate-500">OVR {base.overall}</span>
-              <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300" aria-label={`期望等级 ${base.expectation}`}>
-                {'★'.repeat(base.expectation)}
-              </span>
+            <div className="mb-1 text-xs font-semibold text-[var(--text-muted)]">{base.region.replace('+', ' · ')}</div>
+            <h1 className="break-words text-2xl font-bold text-slate-50 sm:text-3xl">{base.name}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+              <span>{getLeagueName(state.leagueLevel)}</span>
+              <span className="text-slate-600">/</span>
+              <span aria-label={`俱乐部期望等级 ${base.expectation}`}>期望 {'★'.repeat(base.expectation)}</span>
             </div>
           </div>
+        </div>
+        <div className="club-identity-stats">
+          <ClubHeadlineStat label="综合" value={base.overall} />
+          <ClubHeadlineStat label="士气" value={state.morale} />
+          <ClubHeadlineStat label="荣誉" value={trophies.length} />
         </div>
       </Panel>
 
@@ -158,7 +162,7 @@ export default function TeamDetail() {
                   <Link to={`/coach/${c.newCoachId}`} className="text-green-400 hover:text-green-300">
                     {getCoachName(c.newCoachId, world.coachBases)}
                   </Link>
-                  <span className="text-slate-600 text-[10px]">{c.reason}</span>
+                  <span className="text-slate-500 text-[11px]">{c.reason}</span>
                 </div>
               ))}
             </div>
@@ -181,7 +185,7 @@ export default function TeamDetail() {
           }
           const typeOrder = ['league1', 'league2', 'league3', 'league_cup', 'super_cup', 'world_cup', 'mainland_cup', 'southern_cup', 'eastern_cup'];
           const typeLabels: Record<string, string> = { league1: '顶级联赛', league2: '甲级联赛', league3: '乙级联赛', league_cup: '联赛杯', super_cup: '超级杯', world_cup: '环球冠军杯', mainland_cup: '大陆杯', southern_cup: '南洲杯', eastern_cup: '东洲杯' };
-          const typeColors: Record<string, string> = { league1: 'text-amber-400', league2: 'text-blue-400', league3: 'text-emerald-400', league_cup: 'text-amber-300', super_cup: 'text-purple-400', world_cup: 'text-sky-400', mainland_cup: 'text-orange-300', southern_cup: 'text-cyan-300', eastern_cup: 'text-pink-300' };
+          const typeColors: Record<string, string> = { league1: 'text-amber-400', league2: 'text-blue-400', league3: 'text-emerald-400', league_cup: 'text-amber-300', super_cup: 'text-amber-200', world_cup: 'text-emerald-300', mainland_cup: 'text-orange-300', southern_cup: 'text-cyan-300', eastern_cup: 'text-rose-300' };
           const sortedTypes = Object.keys(grouped).sort((a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b));
 
           return (
@@ -189,14 +193,15 @@ export default function TeamDetail() {
               {sortedTypes.map(type => {
                 const seasons = grouped[type].sort((a, b) => a - b);
                 return (
-                  <div key={type} className="flex items-center gap-3 bg-slate-700/20 rounded-lg px-3 py-2">
+                  <div key={type} className="flex items-center gap-3 border-t border-slate-700/50 px-1 py-2.5 first:border-t-0">
+                    <TrophyMark type={type as CompetitionIdentityKey} size={32} />
                     <div className="w-20 shrink-0">
                       <div className={`text-xs font-semibold ${typeColors[type] ?? 'text-slate-300'}`}>{typeLabels[type] ?? type}</div>
                       <div className="text-lg font-black text-slate-100">{seasons.length}</div>
                     </div>
                     <div className="flex flex-wrap gap-1 flex-1">
                       {seasons.map(s => (
-                        <span key={s} className="text-[10px] bg-slate-700/60 text-slate-400 px-1.5 py-0.5 rounded">S{s}</span>
+                        <span key={s} className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-300">S{s}</span>
                       ))}
                     </div>
                   </div>
@@ -264,7 +269,7 @@ export default function TeamDetail() {
                     <tr key={rec.seasonNumber} className={`border-t border-slate-700/50 ${isChamp ? 'bg-amber-900/10' : ''}`}>
                       <td className="px-2 py-1.5 text-slate-300">S{rec.seasonNumber}</td>
                       <td className="px-2 py-1.5 text-center">
-                        <span className={`text-[10px] px-1 py-0.5 rounded ${rec.leagueLevel === 1 ? 'bg-amber-900/40 text-amber-400' : rec.leagueLevel === 2 ? 'bg-blue-900/40 text-blue-400' : 'bg-emerald-900/40 text-emerald-400'}`}>
+                        <span className={`px-1 py-0.5 text-[11px] rounded ${rec.leagueLevel === 1 ? 'bg-amber-900/40 text-amber-400' : rec.leagueLevel === 2 ? 'bg-blue-900/40 text-blue-400' : 'bg-emerald-900/40 text-emerald-400'}`}>
                           {rec.leagueLevel === 1 ? '顶' : rec.leagueLevel === 2 ? '甲' : '乙'}
                         </span>
                       </td>
@@ -282,28 +287,28 @@ export default function TeamDetail() {
                       <td className="px-2 py-1.5 text-center text-slate-100 font-bold">{rec.leaguePoints}</td>
                       <td className="hidden sm:table-cell px-2 py-1.5 text-center">
                         {rec.cupResult && (
-                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.cupResult, 'amber')}`}>
+                          <span className={`px-1 text-[11px] rounded ${cupResultStyle(rec.cupResult, 'amber')}`}>
                             {rec.cupResult}
                           </span>
                         )}
                       </td>
                       <td className="hidden sm:table-cell px-2 py-1.5 text-center">
                         {rec.superCupResult && (
-                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.superCupResult, 'purple')}`}>
+                          <span className={`px-1 text-[11px] rounded ${cupResultStyle(rec.superCupResult, 'purple')}`}>
                             {rec.superCupResult}
                           </span>
                         )}
                       </td>
                       <td className="hidden md:table-cell px-2 py-1.5 text-center">
                         {rec.continentalCupResult ? (
-                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.continentalCupResult, ccChampColor)}`}>
+                          <span className={`px-1 text-[11px] rounded ${cupResultStyle(rec.continentalCupResult, ccChampColor)}`}>
                             {rec.continentalCupResult}
                           </span>
                         ) : <span className="text-slate-700">—</span>}
                       </td>
                       <td className="hidden md:table-cell px-2 py-1.5 text-center">
                         {rec.worldCupResult && (
-                          <span className={`text-[9px] px-1 rounded ${cupResultStyle(rec.worldCupResult, 'sky')}`}>
+                          <span className={`px-1 text-[11px] rounded ${cupResultStyle(rec.worldCupResult, 'sky')}`}>
                             {rec.worldCupResult}
                           </span>
                         )}
@@ -317,10 +322,10 @@ export default function TeamDetail() {
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         <div className="flex flex-wrap gap-0.5 justify-center">
-                          {isChamp && <span className="text-[9px] bg-amber-900/50 text-amber-300 px-1 rounded">冠军</span>}
-                          {rec.promoted && <span className="text-[9px] bg-green-900/50 text-green-400 px-1 rounded">升级</span>}
-                          {rec.relegated && <span className="text-[9px] bg-red-900/50 text-red-400 px-1 rounded">降级</span>}
-                          {cupWins.map(c => <span key={c} className="text-[9px] bg-purple-900/50 text-purple-300 px-1 rounded">{c}</span>)}
+                          {isChamp && <span className="inline-flex items-center gap-0.5 rounded bg-amber-900/50 px-1 text-[11px] text-amber-300"><OutcomeMark kind="champion" size={14} />冠军</span>}
+                          {rec.promoted && <span className="inline-flex items-center gap-0.5 rounded bg-green-900/50 px-1 text-[11px] text-green-400"><OutcomeMark kind="promotion" size={14} />升级</span>}
+                          {rec.relegated && <span className="inline-flex items-center gap-0.5 rounded bg-red-900/50 px-1 text-[11px] text-red-400"><OutcomeMark kind="relegation" size={14} />降级</span>}
+                          {cupWins.map(c => <span key={c} className="rounded bg-purple-900/50 px-1 text-[11px] text-purple-300">{c}</span>)}
                         </div>
                       </td>
                     </tr>
@@ -578,6 +583,15 @@ function cupResultStyle(label: string, championColor: 'amber' | 'purple' | 'sky'
 
 // ── Attribute bar ──────────────────────────────────────────
 
+function ClubHeadlineStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="club-headline-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function AttrBar({
   label,
   value,
@@ -703,7 +717,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
           <h3 className="text-sm font-semibold text-slate-200">
             阵容名单 ({squad.length}人)
           </h3>
-          <span className="text-[10px] text-slate-500">本赛季效力本队期间</span>
+          <span className="text-[11px] text-slate-500">本赛季效力本队期间</span>
         </div>
       </div>
 
@@ -902,7 +916,7 @@ function InjuryBoard({ teamId }: { teamId: string }) {
                     className="flex items-center gap-2 text-[11px] bg-red-900/15 hover:bg-red-900/30 border border-red-900/30 rounded px-2 py-1 transition-colors"
                   >
                     <span className="text-slate-300 truncate flex-1">{p.name}</span>
-                    <span className="text-slate-500 text-[10px]">{lastInj?.reason ?? '伤病'}</span>
+                    <span className="text-[11px] text-slate-500">{lastInj?.reason ?? '伤病'}</span>
                     <span className="text-red-400 font-mono shrink-0">{remaining}场</span>
                   </Link>
                 );
@@ -925,7 +939,7 @@ function InjuryBoard({ teamId }: { teamId: string }) {
                     className="flex items-center gap-2 text-[11px] bg-yellow-900/10 hover:bg-yellow-900/20 border border-yellow-900/30 rounded px-2 py-1 transition-colors"
                   >
                     <span className="text-slate-300 truncate flex-1">{p.name}</span>
-                    <span className="text-slate-500 text-[10px]">累计纪律</span>
+                    <span className="text-[11px] text-slate-500">累计纪律</span>
                     <span className="text-yellow-400 font-mono shrink-0">{remaining}场</span>
                   </Link>
                 );
@@ -1025,7 +1039,7 @@ function TeamTrendChart({ records, color }: { records: { seasonNumber: number; l
       </svg>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 mt-1 text-[10px] text-slate-500">
+      <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-slate-500">
         <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded" style={{ backgroundColor: color }} /> 积分</span>
         {hasOvr && <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-amber-500" /> OVR</span>}
         <span className="flex items-center gap-1"><span className="w-4 h-0.5 rounded bg-slate-500 border-t border-dashed border-slate-400" /> 排名</span>
@@ -1048,16 +1062,16 @@ function FireCoachButton({ teamId }: { teamId: string }) {
     return (
       <span className="flex gap-1 ml-auto">
         <button onClick={() => { fireCoach(teamId); setConfirming(false); }}
-          className="px-2 py-0.5 text-[10px] bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer">确认解雇</button>
+          className="min-h-11 px-2 py-1 text-[11px] bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer sm:min-h-8">确认解雇</button>
         <button onClick={() => setConfirming(false)}
-          className="px-2 py-0.5 text-[10px] bg-slate-700 text-slate-300 rounded cursor-pointer">取消</button>
+          className="min-h-11 px-2 py-1 text-[11px] bg-slate-700 text-slate-300 rounded cursor-pointer sm:min-h-8">取消</button>
       </span>
     );
   }
 
   return (
     <button onClick={() => setConfirming(true)}
-      className="ml-auto px-2 py-0.5 text-[10px] bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded cursor-pointer transition-colors">
+      className="ml-auto min-h-11 px-2 py-1 text-[11px] bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded cursor-pointer transition-colors sm:min-h-8">
       解雇教练
     </button>
   );
@@ -1117,7 +1131,7 @@ function FinancePanel({ teamId }: { teamId: string }) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[10px] text-slate-400 border-b border-slate-700">
+              <tr className="border-b border-slate-700 text-[11px] text-slate-400">
                 <th className="px-2 py-1.5 text-left">赛季</th>
                 <th className="px-2 py-1.5 text-right">期初</th>
                 <th className="px-2 py-1.5 text-right">奖金</th>

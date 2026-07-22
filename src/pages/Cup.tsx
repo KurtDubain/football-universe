@@ -7,6 +7,9 @@ import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
 import { isDerby, getDerbyName } from '../config/derbies';
+import TeamBadge from '../components/TeamBadge';
+import { CompetitionMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
+import { EmptyState, PageHeader, PageShell } from '../components/ui';
 
 const roundNameCN: Record<string, string> = {
   R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
@@ -29,9 +32,9 @@ function TeamTag({ teamId, ts, tb }: { teamId: string; ts: Record<string, TeamSt
   const t = lv ? levelTag[lv] : null;
   return (
     <span className="flex gap-0.5 shrink-0">
-      {t && <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium ${t.cls}`}>{t.text}</span>}
-      {tier && <span className={`text-[10px] sm:text-[8px] px-1 py-0 rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
-      {region && <span className="text-[10px] sm:text-[8px] px-1 py-0 rounded bg-slate-700/50 text-slate-500">{region}</span>}
+      {t && <span className={`px-1 py-0.5 text-[11px] rounded font-medium ${t.cls}`}>{t.text}</span>}
+      {tier && <span className={`px-1 py-0.5 text-[11px] rounded font-medium ${getTierColor(tier)}`}>{getTierLabel(tier)}</span>}
+      {region && <span className="rounded bg-slate-700/50 px-1 py-0.5 text-[11px] text-slate-400">{region}</span>}
     </span>
   );
 }
@@ -85,19 +88,19 @@ export default function Cup() {
     : null;
 
   return (
-    <>
+    <PageShell width="wide" className="tabular-nums">
       {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} tb={tb} ts={ts} onClick={f => handleClick(f, '联赛杯')} />}
       {type === 'super_cup' && <SuperCupView cup={world.superCup} tb={tb} ts={ts} onClick={f => handleClick(f, '超级杯')} />}
       {type === 'world_cup' && (world.worldCup
         ? <WorldCupView cup={world.worldCup} tb={tb} ts={ts} onClick={f => handleClick(f, '环球冠军杯')} />
-        : <div className="text-center py-12 text-slate-500">本赛季不是环球冠军杯年</div>
+        : <InactiveCup type="world_cup" title="环球冠军杯" description="每四个赛季举行一次，本赛季处于赛事间歇期。" />
       )}
       {isContinental && (continentalCup
         ? <ContinentalCupView cup={continentalCup} tb={tb} ts={ts} onClick={f => handleClick(f, continentalCup.name)} />
-        : <div className="text-center py-12 text-slate-500">本赛季不是洲际杯年</div>
+        : <InactiveCup type={type as CompetitionIdentityKey} title={type === 'mainland_cup' ? '大陆杯' : type === 'southern_cup' ? '南洲杯' : '东洲杯'} description="洲际杯每四个赛季举行一次，本赛季处于赛事间歇期。" />
       )}
       <MatchDetailModal isOpen={!!selectedFixture} onClose={close} fixture={selectedFixture ?? undefined} result={selectedResult ?? undefined} world={world} />
-    </>
+    </PageShell>
   );
 }
 
@@ -107,11 +110,8 @@ export default function Cup() {
 
 function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="text-xl font-bold text-slate-100">{cup.name}</h2>
-        {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
-      </div>
+    <>
+      <CupHeader type="league_cup" title={cup.name} description="32 队单场淘汰赛" winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       {/* Rules */}
       <RulesCard lines={[
         '参赛: 全部 32 支球队 (顶级16 + 甲级8 + 乙级8)',
@@ -119,7 +119,7 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
         '轮次: 第一轮(32→16) → 第二轮(16→8) → 八强 → 四强 → 决赛',
       ]} />
       <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
-    </div>
+    </>
   );
 }
 
@@ -129,16 +129,10 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
 
 function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   const teamCount = cup.region === '大陆' ? 8 : 4;
-  const headerAccent = cup.region === '大陆' ? 'text-orange-300'
-    : cup.region === '南洲' ? 'text-cyan-300'
-    : 'text-pink-300';
+  const identityType: CompetitionIdentityKey = cup.type;
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h2 className={`text-xl font-bold ${headerAccent}`}>{cup.name}</h2>
-        <span className="text-xs text-slate-500">{cup.region}地区 · {teamCount}队</span>
-        {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
-      </div>
+    <>
+      <CupHeader type={identityType} title={cup.name} description={`${cup.region}地区 · ${teamCount} 队 · 四年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       <RulesCard lines={[
         `参赛: ${cup.region}地区俱乐部积分前 ${teamCount} 名`,
         '赛制: 单场淘汰制，平局进入加时 + 点球',
@@ -148,7 +142,7 @@ function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState
         '每四个赛季举办一次（S2、S6、S10…）',
       ]} />
       <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
-    </div>
+    </>
   );
 }
 
@@ -158,28 +152,25 @@ function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState
 
 function SuperCupView({ cup, tb, ts, onClick }: { cup: SuperCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="text-xl font-bold text-slate-100">超级杯</h2>
-        {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
-      </div>
+    <>
+      <CupHeader type="super_cup" title="超级杯" description="16 队 · 小组赛与两回合淘汰赛" winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       <RulesCard lines={[
         '参赛: 16 支球队 — 顶级联赛前10 + 甲级前4 + 乙级前2',
         '小组赛: 4组×4队，双循环6轮，小组前2名晋级八强',
         '淘汰赛: 八强/四强为主客场两回合制，决赛单场定胜负',
         cup.awayGoalRule ? '规则: 客场进球规则生效' : '规则: 客场进球规则未启用',
       ]} />
-      <h3 className="text-sm font-semibold text-slate-300">小组赛</h3>
+      <h2 className="text-sm font-semibold text-slate-300">小组赛</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {cup.groups.map(g => <GroupTable key={g.groupName} group={g} tb={tb} ts={ts} onClick={onClick} />)}
       </div>
       {cup.knockoutRounds.length > 0 && (
         <>
-          <h3 className="text-sm font-semibold text-slate-300 mt-1">淘汰赛</h3>
+          <h2 className="text-sm font-semibold text-slate-300 mt-1">淘汰赛</h2>
           <BracketView rounds={cup.knockoutRounds} tb={tb} ts={ts} onClick={onClick} />
         </>
       )}
-    </div>
+    </>
   );
 }
 
@@ -189,12 +180,8 @@ function SuperCupView({ cup, tb, ts, onClick }: { cup: SuperCupState; tb: Record
 
 function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="text-xl font-bold text-slate-100">环球冠军杯</h2>
-        <span className="text-xs text-slate-500">{cup.participantIds.length}队</span>
-        {cup.completed && cup.winnerId && <WinnerBadge name={getTeamName(cup.winnerId, tb)} color={tb[cup.winnerId]?.color} />}
-      </div>
+    <>
+      <CupHeader type="world_cup" title="环球冠军杯" description={`${cup.participantIds.length} 队 · 四年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       <RulesCard lines={[
         '参赛: 全部32支球队',
         '抽签: 4档分组 (按实力排位)，每组2顶+1甲+1乙',
@@ -202,17 +189,43 @@ function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record
         '淘汰赛: 16强→八强→四强→决赛，单场定胜负',
         '每4个赛季举办一次',
       ]} />
-      <h3 className="text-sm font-semibold text-slate-300">小组赛</h3>
+      <h2 className="text-sm font-semibold text-slate-300">小组赛</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {cup.groups.map(g => <GroupTable key={g.groupName} group={g} tb={tb} ts={ts} onClick={onClick} />)}
       </div>
       {cup.knockoutRounds.length > 0 && (
         <>
-          <h3 className="text-sm font-semibold text-slate-300 mt-1">淘汰赛</h3>
+          <h2 className="text-sm font-semibold text-slate-300 mt-1">淘汰赛</h2>
           <BracketView rounds={cup.knockoutRounds} tb={tb} ts={ts} onClick={onClick} />
         </>
       )}
-    </div>
+    </>
+  );
+}
+
+function CupHeader({ type, title, description, winnerId, tb }: {
+  type: CompetitionIdentityKey;
+  title: string;
+  description: string;
+  winnerId?: string;
+  tb: Record<string, TeamBase>;
+}) {
+  return (
+    <PageHeader
+      icon={<CompetitionMark type={type} size={54} title={`${title}徽记`} />}
+      title={title}
+      description={description}
+      actions={winnerId ? <WinnerBadge teamId={winnerId} tb={tb} type={type} /> : undefined}
+    />
+  );
+}
+
+function InactiveCup({ type, title, description }: { type: CompetitionIdentityKey; title: string; description: string }) {
+  return (
+    <>
+      <PageHeader icon={<CompetitionMark type={type} size={54} title={`${title}徽记`} />} title={title} description="周期赛事" />
+      <EmptyState icon={<CompetitionMark type={type} size={44} />} title="本赛季未举办" description={description} />
+    </>
   );
 }
 
@@ -222,11 +235,9 @@ function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record
 
 function RulesCard({ lines }: { lines: string[] }) {
   return (
-    <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 px-4 py-3">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">赛事规则</span>
-      </div>
-      <div className="space-y-0.5">
+    <details className="competition-rules">
+      <summary>赛事规则</summary>
+      <div className="space-y-1 px-3 pb-3">
         {lines.map((line, i) => (
           <p key={i} className="text-xs text-slate-400 flex items-start gap-1.5">
             <span className="text-slate-600 shrink-0">·</span>
@@ -234,7 +245,7 @@ function RulesCard({ lines }: { lines: string[] }) {
           </p>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -346,46 +357,14 @@ export function BracketView({ rounds, tb, ts, onClick }: { rounds: CupRound[]; t
 
   const merged = buildMergedRounds(rounds);
 
-  // If we have enough rounds for a symmetric bracket (QF+SF+Final or R16+QF+SF+Final), render it
-  // Otherwise fall back to linear layout
-  const hasFinal = merged.some(r => r.label.includes('决赛'));
-  const roundCount = merged.length;
-
   return (
-    <>
-      <MobileBracket
-        key={merged.map(round => `${round.label}:${round.ties.length}:${round.completed}`).join('|')}
-        merged={merged}
-        tb={tb}
-        ts={ts}
-        onClick={onClick}
-      />
-      <div className="hidden sm:block">
-        {hasFinal && roundCount >= 3 ? (
-          <SymmetricBracket merged={merged} tb={tb} ts={ts} onClick={onClick} />
-        ) : (
-          <div className="overflow-x-auto pb-4">
-            <div className="flex gap-4 min-w-max items-start">
-              {merged.map((mr, ri) => {
-                const n = mr.ties.length;
-                const cellGap = n <= 1 ? 0 : n <= 2 ? 32 : n <= 4 ? 12 : n <= 8 ? 4 : 2;
-                return (
-                  <div key={ri} className="flex flex-col">
-                    <RoundHeader mr={mr} />
-                    <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
-                      {mr.ties.map((tie, ti) => (
-                        <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} />
-                      ))}
-                      <EmptySlot show={mr.ties.length === 0} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+    <MobileBracket
+      key={merged.map(round => `${round.label}:${round.ties.length}:${round.completed}`).join('|')}
+      merged={merged}
+      tb={tb}
+      ts={ts}
+      onClick={onClick}
+    />
   );
 }
 
@@ -400,9 +379,9 @@ export function MobileBracket({ merged, tb, ts, onClick }: {
   const selectedRound = merged.find(round => round.label === selectedLabel) ?? merged[0];
 
   return (
-    <div className="sm:hidden pb-4">
+    <div className="pb-4">
       {merged.length > 1 && (
-        <div role="tablist" aria-label="杯赛轮次" className="flex gap-1 overflow-x-auto pb-2 scroll-smooth">
+        <div role="tablist" aria-label="杯赛轮次" className="ui-cup-round-tabs">
           {merged.map(round => (
             <button
               key={round.label}
@@ -410,9 +389,9 @@ export function MobileBracket({ merged, tb, ts, onClick }: {
               role="tab"
               aria-selected={round.label === selectedRound.label}
               onClick={() => setSelectedLabel(round.label)}
-              className={`min-h-11 px-3 rounded-md border text-xs whitespace-nowrap transition-colors cursor-pointer ${
+              className={`min-h-11 px-3 rounded-md border text-xs whitespace-nowrap transition-colors cursor-pointer sm:min-h-9 ${
                 round.label === selectedRound.label
-                  ? 'border-blue-500 bg-blue-600 text-white'
+                  ? 'border-[var(--action)] bg-[var(--action)] text-white'
                   : 'border-slate-700 bg-slate-800 text-slate-400'
               }`}
             >
@@ -423,9 +402,9 @@ export function MobileBracket({ merged, tb, ts, onClick }: {
         </div>
       )}
 
-      <div role="tabpanel" className="rounded-lg border border-slate-700/70 bg-slate-800/30 p-2">
+      <div role="tabpanel" className="rounded-lg border border-slate-700/70 bg-slate-800/30 p-2 sm:p-3">
         <RoundHeader mr={selectedRound} />
-        <div className={`grid gap-2 ${selectedRound.ties.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className={`grid gap-2 ${selectedRound.ties.length === 1 ? 'grid-cols-1 max-w-xl mx-auto' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
           {selectedRound.ties.map((tie, index) => (
             <TieCell
               key={index}
@@ -449,93 +428,9 @@ export function MobileBracket({ merged, tb, ts, onClick }: {
   );
 }
 
-/**
- * Symmetric bracket — left half flows right, right half flows left, final in center.
- * Layout: [...leftRounds] [Final] [...rightRounds(reversed)]
- */
-function SymmetricBracket({ merged, tb, ts, onClick }: {
-  merged: MergedRound[];
-  tb: Record<string, TeamBase>;
-  ts: Record<string, TeamState>;
-  onClick: (f: CupFixture) => void;
-}) {
-  const finalIdx = merged.findIndex(r => r.label.includes('决赛'));
-  const finalRound = merged[finalIdx];
-  const preRounds = merged.slice(0, finalIdx); // e.g., [R16, QF, SF] or [QF-merged, SF-merged]
-
-  // Split pre-final rounds into upper half and lower half
-  // Upper = first half of each round's ties, Lower = second half
-  const leftRounds = preRounds.map(r => ({
-    ...r,
-    ties: r.ties.slice(0, Math.ceil(r.ties.length / 2)),
-  }));
-  const rightRounds = preRounds.map(r => ({
-    ...r,
-    ties: r.ties.slice(Math.ceil(r.ties.length / 2)),
-  }));
-
-  return (
-    <div className="overflow-x-auto pb-4">
-      <div className="flex items-center min-w-max gap-1">
-        {/* Left half — flows right toward center */}
-        {leftRounds.map((mr, ri) => {
-          const n = mr.ties.length;
-          const cellGap = n <= 1 ? 0 : n <= 2 ? 24 : n <= 4 ? 8 : 2;
-          return (
-            <div key={`L${ri}`} className="flex flex-col">
-              <RoundHeader mr={mr} />
-              <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
-                {mr.ties.map((tie, ti) => (
-                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} compact />
-                ))}
-                <EmptySlot show={mr.ties.length === 0} />
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Connector arrow left */}
-        <div className="text-slate-700 px-0.5 text-xs self-center">›</div>
-
-        {/* FINAL — center, highlighted */}
-        <div className="flex flex-col items-center mx-1">
-          <div className="text-xs font-bold text-amber-400 text-center mb-2 px-3 py-1 bg-amber-900/20 rounded-lg border border-amber-700/30">
-            🏆 决赛
-            {finalRound?.completed && <span className="text-green-400 ml-1">✓</span>}
-          </div>
-          {finalRound?.ties.map((tie, ti) => (
-            <TieCell key={ti} tie={tie} mr={finalRound} tb={tb} ts={ts} onClick={onClick} highlight />
-          ))}
-          <EmptySlot show={!finalRound || finalRound.ties.length === 0} />
-        </div>
-
-        {/* Connector arrow right */}
-        <div className="text-slate-700 px-0.5 text-xs self-center">‹</div>
-
-        {/* Right half — flows left toward center (reversed order) */}
-        {[...rightRounds].reverse().map((mr, ri) => {
-          const n = mr.ties.length;
-          const cellGap = n <= 1 ? 0 : n <= 2 ? 24 : n <= 4 ? 8 : 2;
-          return (
-            <div key={`R${ri}`} className="flex flex-col">
-              <RoundHeader mr={mr} />
-              <div className="flex flex-col justify-around flex-1" style={{ gap: `${cellGap}px` }}>
-                {mr.ties.map((tie, ti) => (
-                  <TieCell key={ti} tie={tie} mr={mr} tb={tb} ts={ts} onClick={onClick} compact />
-                ))}
-                <EmptySlot show={mr.ties.length === 0} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function RoundHeader({ mr }: { mr: MergedRound }) {
   return (
-    <div className="text-[10px] sm:text-xs font-semibold text-slate-400 text-center mb-2 px-2 py-0.5 bg-slate-800 rounded border border-slate-700/50 whitespace-nowrap self-center">
+    <div className="mb-2 self-center whitespace-nowrap rounded border border-slate-700/50 bg-slate-800 px-2 py-1 text-center text-[11px] font-semibold text-slate-300 sm:text-xs">
       {mr.label}
       {mr.twoLegged && <span className="text-slate-600 ml-1">(两回合)</span>}
       {mr.completed && <span className="text-green-400 ml-1">✓</span>}
@@ -543,23 +438,12 @@ function RoundHeader({ mr }: { mr: MergedRound }) {
   );
 }
 
-function EmptySlot({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div className="w-28 sm:w-36 h-[44px] rounded-lg border border-dashed border-slate-700/40 flex items-center justify-center">
-      <span className="text-[10px] text-slate-600">待定</span>
-    </div>
-  );
-}
-
-function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactName }: {
+function TieCell({ tie, mr, tb, ts, onClick, fluid, compactName }: {
   tie: MergedTie;
   mr: MergedRound;
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
   onClick: (f: CupFixture) => void;
-  compact?: boolean;
-  highlight?: boolean;
   fluid?: boolean;
   compactName?: boolean;
 }) {
@@ -571,26 +455,27 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactN
   const derbyName = isDerby(tie.team1Id, tie.team2Id, tb) ? getDerbyName(tie.team1Id, tie.team2Id, tb) : null;
 
   const clickTarget = (tie.leg2?.result ? tie.leg2 : tie.leg1) ?? tie.leg1;
-  const cellW = fluid ? 'w-full min-w-0' : compact ? 'w-28 sm:w-36' : highlight ? 'w-32 sm:w-44' : 'w-30 sm:w-40';
+  const cellW = fluid ? 'w-full min-w-0' : 'w-30 sm:w-40';
 
   return (
     <button
       onClick={() => clickTarget && onClick(clickTarget)}
-      className={`${cellW} bg-slate-800 rounded-lg border hover:border-slate-500 transition-all cursor-pointer text-left ${
-        highlight ? 'border-amber-600/40 shadow-lg shadow-amber-900/10' : derbyName ? 'border-orange-600/40' : 'border-slate-700'
+      type="button"
+      className={`${cellW} min-h-11 bg-slate-800 rounded-lg border hover:border-slate-500 transition-all cursor-pointer text-left ${
+        derbyName ? 'border-orange-600/40' : 'border-slate-700'
       }`}
     >
       {derbyName && (
-        <div className="text-[10px] sm:text-[8px] text-center py-0.5 bg-orange-900/20 text-orange-400 font-medium rounded-t-lg">{derbyName}</div>
+        <div className="rounded-t-lg bg-orange-900/20 py-0.5 text-center text-[11px] font-medium text-orange-300">{derbyName}</div>
       )}
       {/* Team 1 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w1 ? 'bg-green-900/20' : ''} rounded-t-lg`}>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t1?.color ?? '#555' }} />
+        {t1 ? <TeamBadge teamId={tie.team1Id} shortName={t1.shortName} color={t1.color} size={18} /> : <span className="h-2 w-2 shrink-0 rounded-full bg-slate-600" />}
         <span className={compactName ? 'hidden sm:inline-flex' : 'inline-flex'}>
           <TeamTag teamId={tie.team1Id} ts={ts} tb={tb} />
         </span>
-        <span className={`flex-1 truncate ${w1 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {t1 ? (compactName ? getTeamShortName(tie.team1Id, tb) : getTeamName(tie.team1Id, tb)) : '待定'}
+        <span className={`flex-1 truncate ${w1 ? 'text-green-400 font-bold' : 'text-slate-200'}`} title={t1?.name}>
+          {t1 ? (compactName ? <><span className="sm:hidden">{getTeamShortName(tie.team1Id, tb)}</span><span className="cup-team-full-name hidden sm:inline" data-team-name={getTeamName(tie.team1Id, tb)} aria-label={getTeamName(tie.team1Id, tb)} /></> : getTeamName(tie.team1Id, tb)) : '待定'}
         </span>
         {hasResult && (
           <span className={`font-bold tabular-nums ${w1 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg1}</span>
@@ -601,12 +486,12 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactN
 
       {/* Team 2 */}
       <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${w2 ? 'bg-green-900/20' : ''} ${mr.twoLegged ? '' : 'rounded-b-lg'}`}>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t2?.color ?? '#555' }} />
+        {t2 ? <TeamBadge teamId={tie.team2Id} shortName={t2.shortName} color={t2.color} size={18} /> : <span className="h-2 w-2 shrink-0 rounded-full bg-slate-600" />}
         <span className={compactName ? 'hidden sm:inline-flex' : 'inline-flex'}>
           <TeamTag teamId={tie.team2Id} ts={ts} tb={tb} />
         </span>
-        <span className={`flex-1 truncate ${w2 ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-          {t2 ? (compactName ? getTeamShortName(tie.team2Id, tb) : getTeamName(tie.team2Id, tb)) : '待定'}
+        <span className={`flex-1 truncate ${w2 ? 'text-green-400 font-bold' : 'text-slate-200'}`} title={t2?.name}>
+          {t2 ? (compactName ? <><span className="sm:hidden">{getTeamShortName(tie.team2Id, tb)}</span><span className="cup-team-full-name hidden sm:inline" data-team-name={getTeamName(tie.team2Id, tb)} aria-label={getTeamName(tie.team2Id, tb)} /></> : getTeamName(tie.team2Id, tb)) : '待定'}
         </span>
         {hasResult && (
           <span className={`font-bold tabular-nums ${w2 ? 'text-green-400' : 'text-slate-500'}`}>{tie.agg2}</span>
@@ -615,7 +500,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactN
 
       {/* Two-legged detail line */}
       {mr.twoLegged && (
-        <div className="px-2 py-1 border-t border-slate-700/40 text-[11px] sm:text-[9px] text-slate-500 rounded-b-lg bg-slate-700/10">
+        <div className="rounded-b-lg border-t border-slate-700/40 bg-slate-700/10 px-2 py-1 text-[11px] text-slate-500">
           {tie.leg1?.result && tie.leg2?.result ? (
             <span>
               首回合 {tie.leg1.result.home}-{tie.leg1.result.away}
@@ -644,7 +529,7 @@ function TieCell({ tie, mr, tb, ts, onClick, compact, highlight, fluid, compactN
 
       {/* Single-leg ET/Pen indicator */}
       {!mr.twoLegged && tie.leg1?.result && (tie.leg1.result.penalties || tie.leg1.result.extraTime) && (
-        <div className="text-center text-[11px] sm:text-[9px] text-amber-400 pb-1">
+        <div className="pb-1 text-center text-[11px] text-amber-400">
           {tie.leg1.result.penalties ? `点球 ${tie.leg1.result.penHome}-${tie.leg1.result.penAway}` : '加时'}
         </div>
       )}
@@ -660,13 +545,13 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
   const [showFix, setShowFix] = useState(false);
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
       <div className="px-3 py-2 border-b border-slate-700 bg-slate-700/30">
         <h4 className="text-sm font-semibold text-slate-200">{group.groupName} 组</h4>
       </div>
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-[10px] text-slate-500 border-b border-slate-700">
+          <tr className="border-b border-slate-700 text-[11px] text-slate-500">
             <th className="text-center px-1 py-1 w-5">#</th>
             <th className="text-left px-1 py-1">球队</th>
             <th className="hidden sm:table-cell text-center px-1 py-1">赛</th>
@@ -683,7 +568,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
               <td className="text-center px-1 py-1.5 text-slate-500">{i + 1}</td>
               <td className="px-1 py-1.5">
                 <div className="flex items-center gap-1 min-w-0">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[e.teamId]?.color ?? '#666' }} />
+                  {tb[e.teamId] && <TeamBadge teamId={e.teamId} shortName={tb[e.teamId].shortName} color={tb[e.teamId].color} size={18} />}
                   <TeamTag teamId={e.teamId} ts={ts} tb={tb} />
                   <Link to={`/team/${e.teamId}`} className="text-slate-200 hover:text-blue-400 whitespace-nowrap" title={getTeamName(e.teamId, tb)}>{getTeamShortName(e.teamId, tb)}</Link>
                 </div>
@@ -699,12 +584,12 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
         </tbody>
       </table>
       {/* Qualification line */}
-      <div className="px-3 py-1 border-t border-slate-700/50 text-[11px] sm:text-[9px] text-slate-600">
+      <div className="border-t border-slate-700/50 px-3 py-1.5 text-[11px] text-slate-500">
         前2名晋级 (绿色高亮)
       </div>
       {group.fixtures.length > 0 && (
         <div className="border-t border-slate-700">
-          <button onClick={() => setShowFix(!showFix)} className="w-full px-3 py-1.5 text-[10px] text-slate-500 hover:text-slate-300 hover:bg-slate-700/30 cursor-pointer transition-colors">
+          <button type="button" onClick={() => setShowFix(!showFix)} className="min-h-11 w-full px-3 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-700/30 cursor-pointer transition-colors">
             {showFix ? '收起赛程 ▲' : `查看赛程 (${group.fixtures.length}场) ▼`}
           </button>
           {showFix && (
@@ -738,14 +623,13 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
 }
 
 // ══════════════════════════════════════════════════════════════
-function WinnerBadge({ name, color }: { name: string; color?: string }) {
+function WinnerBadge({ teamId, tb, type }: { teamId: string; tb: Record<string, TeamBase>; type: CompetitionIdentityKey }) {
+  const team = tb[teamId];
   return (
-    <span className="text-sm px-3 py-1 rounded-full border font-semibold" style={{
-      backgroundColor: (color ?? '#f59e0b') + '20',
-      borderColor: (color ?? '#f59e0b') + '60',
-      color: color ?? '#fbbf24',
-    }}>
-      冠军: {name}
-    </span>
+    <Link to={`/team/${teamId}`} className="competition-champion" title={`冠军：${getTeamName(teamId, tb)}`}>
+      <TrophyMark type={type} size={28} />
+      {team && <TeamBadge teamId={teamId} shortName={team.shortName} color={team.color} size={28} />}
+      <span><small>卫冕冠军</small><strong>{getTeamName(teamId, tb)}</strong></span>
+    </Link>
   );
 }

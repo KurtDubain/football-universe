@@ -15,6 +15,7 @@ export function ParticleBackground() {
 
     let animId: number;
     let w = 0, h = 0;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const particles: { x: number; y: number; vx: number; vy: number; r: number; alpha: number; color: string; type: 'orb' | 'icon' }[] = [];
     const colors = ['#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4'];
@@ -47,6 +48,7 @@ export function ParticleBackground() {
     }
 
     function draw() {
+      if (document.hidden) return;
       ctx!.clearRect(0, 0, w, h);
       for (const p of particles) {
         p.x += p.vx;
@@ -69,16 +71,26 @@ export function ParticleBackground() {
         }
       }
       ctx!.globalAlpha = 1;
-      animId = requestAnimationFrame(draw);
+      if (!reducedMotion) animId = requestAnimationFrame(draw);
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        cancelAnimationFrame(animId);
+      } else if (!reducedMotion) {
+        draw();
+      }
     }
 
     init();
     draw();
     window.addEventListener('resize', init);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', init);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -94,6 +106,7 @@ export function EnergyWave({ color = '#3b82f6', active = true }: { color?: strin
 
   useEffect(() => {
     if (!active) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -112,6 +125,7 @@ export function EnergyWave({ color = '#3b82f6', active = true }: { color?: strin
 
     let frame = 0;
     function draw() {
+      if (document.hidden) return;
       ctx!.clearRect(0, 0, w, h);
       frame++;
       if (frame % 30 === 0) spawnRing();

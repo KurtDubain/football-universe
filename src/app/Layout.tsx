@@ -5,7 +5,6 @@ import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/fo
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
 import AchievementToast from '../components/AchievementToast';
-import { AmbientGlow } from '../components/CanvasEffects';
 import { APP_VERSION } from '../version';
 import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
@@ -129,7 +128,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="flex items-center justify-between">
           <span className="text-xs text-slate-400">第 {seasonNumber} 赛季</span>
           {isWorldCupYear && (
-            <span className="text-[10px] bg-sky-900/50 text-sky-400 px-1.5 py-0.5 rounded">WC</span>
+            <span className="rounded bg-sky-900/50 px-1.5 py-0.5 text-[11px] text-sky-400">WC</span>
           )}
         </div>
         <div className="mt-1.5 w-full h-1 bg-slate-700 rounded-full overflow-hidden">
@@ -138,7 +137,7 @@ export default function Layout({ children }: LayoutProps) {
             style={{ width: `${calendarLen > 0 ? (completedWindows / calendarLen) * 100 : 0}%` }}
           />
         </div>
-        <span className="text-[10px] text-slate-600 mt-0.5 block">{completedWindows}/{calendarLen}</span>
+        <span className="mt-0.5 block text-[11px] text-slate-600">{completedWindows}/{calendarLen}</span>
       </div>
 
       {/* Favorite teams (up to 3) */}
@@ -157,7 +156,7 @@ export default function Layout({ children }: LayoutProps) {
                   </NavLink>
                 </div>
                 {ts && (
-                  <div className="flex gap-2 mt-0.5 text-[10px] text-slate-500">
+                  <div className="mt-0.5 flex gap-2 text-[11px] text-slate-500">
                     <span>士气 {ts.morale}</span>
                     <span>势头 {ts.momentum > 0 ? '+' : ''}{ts.momentum}</span>
                   </div>
@@ -171,7 +170,7 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="flex-1 py-2 overflow-y-auto">
         {navSections.map((section) => (
           <div key={section.title} className="mb-1">
-            <div className="px-4 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+            <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500">
               {section.title}
             </div>
             {section.items.map((item) => (
@@ -221,7 +220,7 @@ export default function Layout({ children }: LayoutProps) {
           if (visible.length === 0) return null;
           return (
             <div className="mb-1">
-              <div className="px-4 py-1.5 text-[10px] font-semibold text-orange-500 uppercase tracking-wider">洲际杯</div>
+              <div className="px-4 py-1.5 text-[11px] font-semibold text-orange-500">洲际杯</div>
               {visible.map(item => (
                 <NavLink
                   key={item.to}
@@ -243,7 +242,7 @@ export default function Layout({ children }: LayoutProps) {
         })()}
 
         <div className="mb-1">
-          <div className="px-4 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">记录</div>
+          <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500">记录</div>
           <NavLink
             to="/history"
             onClick={() => setMobileNavOpen(false)}
@@ -334,7 +333,7 @@ export default function Layout({ children }: LayoutProps) {
         >
           重置游戏
         </button>
-        <p className="text-[11px] sm:text-[9px] text-slate-600 text-center">v{APP_VERSION} · by KurtDubain</p>
+        <p className="text-center text-[11px] text-slate-600">v{APP_VERSION} · by KurtDubain</p>
       </div>
     </>
   );
@@ -343,13 +342,12 @@ export default function Layout({ children }: LayoutProps) {
     <div className="h-[100dvh] bg-[var(--surface-page)] flex overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-52 bg-[var(--surface-panel)] border-r border-[var(--border-subtle)] flex-col shrink-0 relative">
-        <AmbientGlow height={600} />
         <div className="p-3 border-b border-slate-700/60">
           <div className="flex items-center gap-2">
             <Logo size={30} />
             <div>
               <h1 className="text-sm font-bold text-slate-100 leading-none">足球联赛宇宙</h1>
-              <p className="text-[10px] text-slate-500 mt-0.5">电子斗蛐蛐模拟器</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">电子斗蛐蛐模拟器</p>
             </div>
           </div>
         </div>
@@ -393,7 +391,7 @@ export default function Layout({ children }: LayoutProps) {
             </button>
             {currentWindow && (
               <>
-                <span className={`hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}>
+                <span className={`hidden sm:inline-block px-2 py-0.5 rounded text-[11px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}>
                   {getWindowTypeLabel(currentWindow.type)}
                 </span>
                 <span className="text-sm text-slate-300 font-medium truncate">

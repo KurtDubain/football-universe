@@ -5,6 +5,7 @@ import TeamName from './TeamName';
 import { isDerby, getDerbyName } from '../config/derbies';
 import { EnergyWave } from './CanvasEffects';
 import { getDramaticRevealDelay, getOrdinaryRevealPlan } from './result-reveal-timing';
+import { StoryStamp, type StoryStampKind } from './FootballIdentity';
 
 interface ResultAnimationProps {
   results: MatchResult[];
@@ -33,6 +34,9 @@ export default function ResultAnimation(props: ResultAnimationProps) {
 
 function ResultAnimationBatch({ results, teamBases, priorityTeamIds = EMPTY_TEAM_IDS, onComplete, onResultClick, onLiveView }: ResultAnimationProps) {
   const [revealedCount, setRevealedCount] = useState(0);
+  const [reducedMotion] = useState(() => typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const completionCalledRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
 
@@ -66,7 +70,12 @@ function ResultAnimationBatch({ results, teamBases, priorityTeamIds = EMPTY_TEAM
 
   useEffect(() => {
     if (done) {
-      const timer = window.setTimeout(completeOnce, hasDramaticResult ? 600 : 200);
+      const timer = window.setTimeout(completeOnce, reducedMotion ? 0 : hasDramaticResult ? 600 : 200);
+      return () => clearTimeout(timer);
+    }
+
+    if (reducedMotion) {
+      const timer = window.setTimeout(() => setRevealedCount(sequence.length), 0);
       return () => clearTimeout(timer);
     }
 
@@ -83,7 +92,7 @@ function ResultAnimationBatch({ results, teamBases, priorityTeamIds = EMPTY_TEAM
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [completeOnce, done, hasDramaticResult, ordinaryCount, ordinaryPlan, revealedCount, sequence, teamBases]);
+  }, [completeOnce, done, hasDramaticResult, ordinaryCount, ordinaryPlan, reducedMotion, revealedCount, sequence, teamBases]);
 
   const handleSkip = useCallback(() => {
     setRevealedCount(sequence.length);
@@ -189,11 +198,12 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
       && ((ht?.overall ?? 0) > (at?.overall ?? 0) ? awayWon : homeWon);
   const totalGoals = totalHome + totalAway;
   const isHighScoring = totalGoals >= 5;
+  const storyMarks = getStoryMarks(r, derbyName, isUpset, isHighScoring, homeWon, awayWon);
 
   // Determine card style based on importance
   const isKeyMatch = importance >= 3;
   const baseClass = isKeyMatch
-    ? 'bg-gradient-to-r from-slate-800 via-slate-800 to-slate-800 border-amber-600/30'
+    ? 'bg-slate-800 border-amber-600/40'
     : 'bg-slate-800 border-slate-700';
 
   return (
@@ -211,13 +221,11 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
         aria-label={`查看 ${ht?.name ?? r.homeTeamId} 对 ${at?.name ?? r.awayTeamId} 战报`}
       >
         {/* Tags row — compact */}
-        {(derbyName || isUpset || isHighScoring || r.competitionType !== 'league') && (
+        {(storyMarks.length > 0 || r.competitionType !== 'league') && (
           <div className="flex gap-1 mb-1 flex-wrap">
-            {derbyName && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-orange-600 text-white">{derbyName}</span>}
-            {isUpset && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-purple-600 text-white">爆冷</span>}
-            {isHighScoring && <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold bg-red-600 text-white">进球大战</span>}
+            {storyMarks.map(mark => <StoryStamp key={mark.kind} kind={mark.kind} label={mark.label} />)}
             {r.competitionType !== 'league' && (
-              <span className="text-[10px] sm:text-[8px] px-1 py-0.5 rounded bg-slate-700 text-slate-300">{r.competitionName}</span>
+              <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300">{r.competitionName}</span>
             )}
           </div>
         )}
@@ -225,7 +233,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
         {/* Score line */}
         <div className="flex items-center">
           <div className="flex-1 min-w-0">
-            <TeamName teamId={r.homeTeamId} teamBases={teamBases} showTier link={false} compact
+            <TeamName teamId={r.homeTeamId} teamBases={teamBases} badgeSize={20} link={false} compact
               className={`text-xs ${homeWon ? 'text-green-400 font-bold' : 'text-slate-200'}`} />
           </div>
 
@@ -233,26 +241,26 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
             <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${homeWon ? 'text-green-400' : 'text-slate-300'}`}>
               {totalHome}
             </span>
-            <span className="text-slate-600 text-[10px]">:</span>
+            <span className="text-slate-500 text-xs">:</span>
             <span className={`text-base font-black tabular-nums ${isNew ? 'animate-score-pop' : ''} ${awayWon ? 'text-green-400' : 'text-slate-300'}`}>
               {totalAway}
             </span>
             {r.extraTime && (
-              <span className="text-[10px] sm:text-[8px] text-amber-400 ml-0.5">
+              <span className="ml-0.5 text-[11px] text-amber-400">
                 {r.penalties ? `P` : '加时'}
               </span>
             )}
           </div>
 
           <div className="flex-1 min-w-0 text-right">
-            <TeamName teamId={r.awayTeamId} teamBases={teamBases} showTier link={false} compact
+            <TeamName teamId={r.awayTeamId} teamBases={teamBases} badgeSize={20} link={false} compact
               className={`text-xs ${awayWon ? 'text-green-400 font-bold' : 'text-slate-200'} justify-end`} />
           </div>
         </div>
 
         {/* Key goal events — only for key matches, max 3 */}
         {isKeyMatch && r.events.length > 0 && (
-          <div className="mt-1 flex gap-1.5 text-[11px] sm:text-[9px] text-slate-500 overflow-hidden">
+          <div className="mt-1 flex gap-1.5 overflow-hidden text-[11px] text-slate-500">
             {r.events
               .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
               .slice(0, 3)
@@ -271,7 +279,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
           <button
             type="button"
             onClick={onLiveView}
-            className="min-h-11 sm:min-h-0 text-[11px] sm:text-[9px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"
+            className="min-h-11 text-[11px] text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1 sm:min-h-8"
           >
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-breathe" />
             观看直播回放
@@ -280,6 +288,44 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
       )}
     </div>
   );
+}
+
+function getStoryMarks(
+  result: MatchResult,
+  derbyName: string | null,
+  isUpset: boolean,
+  isHighScoring: boolean,
+  homeWon: boolean,
+  awayWon: boolean,
+): Array<{ kind: StoryStampKind; label?: string }> {
+  const marks: Array<{ kind: StoryStampKind; label?: string }> = [];
+  const isFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
+  if (isFinal) marks.push({ kind: 'final' });
+  if (derbyName) marks.push({ kind: 'derby', label: derbyName });
+  if (result.penalties) marks.push({ kind: 'penalties' });
+
+  const winnerId = homeWon ? result.homeTeamId : awayWon ? result.awayTeamId : null;
+  if (winnerId) {
+    let home = 0;
+    let away = 0;
+    let trailed = false;
+    let lateWinner = false;
+    const scoringEvents = result.events
+      .filter(event => event.type === 'goal' || event.type === 'own_goal')
+      .sort((a, b) => a.minute - b.minute);
+    for (const event of scoringEvents) {
+      if (winnerId === result.homeTeamId ? home < away : away < home) trailed = true;
+      if (event.teamId === result.homeTeamId) home += 1;
+      if (event.teamId === result.awayTeamId) away += 1;
+      const winnerTookLead = winnerId === result.homeTeamId ? home > away : away > home;
+      if (event.teamId === winnerId && event.minute >= (result.extraTime ? 115 : 85) && winnerTookLead) lateWinner = true;
+    }
+    if (lateWinner) marks.push({ kind: 'late-winner' });
+    else if (trailed) marks.push({ kind: 'comeback' });
+  }
+  if (isUpset) marks.push({ kind: 'upset' });
+  if (isHighScoring) marks.push({ kind: 'goalfest' });
+  return marks.slice(0, 3);
 }
 
 function getMatchImportance(r: MatchResult, teamBases: Record<string, TeamBase>): number {

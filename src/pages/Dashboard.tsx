@@ -30,6 +30,7 @@ import {
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
+import TeamBadge from '../components/TeamBadge';
 
 /**
  * Compact money formatter for chip display.
@@ -235,12 +236,12 @@ function DashboardContent({ world }: { world: GameWorld }) {
               <div key={tid} className="bg-slate-800/60 rounded-lg border border-slate-700/40 px-3 py-2">
                 {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
                 <div className="flex items-center gap-2 sm:gap-3 text-xs">
-                  <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: fav.color }}>{fav.shortName?.charAt(0)}</span>
+                  <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
                   <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 truncate min-w-0">{fav.name}</Link>
                   <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
                   <div className="flex gap-0.5 shrink-0 ml-auto">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
-                      <span key={i} className={`w-4 h-4 rounded text-[11px] sm:text-[9px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
+                      <span key={i} className={`w-4 h-4 rounded text-[11px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
                     ))}
                   </div>
                 </div>
@@ -259,7 +260,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
                       <span className="text-slate-400">
                         下场 vs <span className="text-slate-200">{getTeamName(opponentId, world.teamBases)}</span>
                         {nextFixture?.isNeutralVenue ? (
-                          <span className="text-amber-400 text-[10px] ml-1 inline-flex items-center gap-0.5"><Icon name="stadium" size={10} /> 中立</span>
+                          <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] text-amber-400"><Icon name="stadium" size={11} /> 中立</span>
                         ) : (
                           <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
                         )}
@@ -287,7 +288,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
           >
             {tab.label}
             {tab.key === 'results' && lastResults.length > 0 && (
-              <span className="ml-1 text-[10px] text-slate-500">({lastResults.length})</span>
+              <span className="ml-1 text-[11px] text-slate-500">({lastResults.length})</span>
             )}
             {activeTab === tab.key && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full" />
@@ -457,7 +458,7 @@ function MatchdayTab({
     <div className="space-y-5">
       {/* Focus matches banner */}
       {focusMatches.length > 0 && (
-        <div data-testid="focus-matches" className="bg-gradient-to-r from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-700/30 p-3">
+        <section data-testid="focus-matches" className="matchday-focus">
           <h3 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
             <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
           </h3>
@@ -470,16 +471,24 @@ function MatchdayTab({
               return (
                 <div
                   key={fixture.id}
-                  className="bg-slate-900/40 rounded-lg border border-amber-800/30 p-2 hover:border-amber-600/60 transition-colors cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  className="matchday-focus-fixture"
                   onClick={() => onFixtureClick(fixture)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onFixtureClick(fixture);
+                    }
+                  }}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1 flex-1 min-w-0 text-xs">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ht.color }} />
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 text-xs">
+                      <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
                       <span className="font-semibold text-slate-100 truncate">{ht.shortName}</span>
                       <span className="text-slate-500 mx-0.5">vs</span>
                       <span className="font-semibold text-slate-100 truncate">{at.shortName}</span>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: at.color }} />
+                      <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
@@ -492,20 +501,20 @@ function MatchdayTab({
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {importance.reasons.slice(0, 3).map((r, i) => (
-                      <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/30 text-amber-300">{r}</span>
+                      <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
                     ))}
-                    <span className="text-[9px] text-slate-600 ml-auto">{fixture.competitionName} · {fixture.roundLabel}</span>
+                    <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Player highlights from the previous batch of results */}
       {playerHighlights.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-slate-800 rounded-xl border border-purple-700/30 p-3">
+        <section className="rounded-lg border border-slate-700 bg-slate-800 p-3">
           <h3 className="text-xs font-bold text-purple-300 mb-2 flex items-center gap-1.5">
             <Icon name="star-glow" size={16} accent="#fbbf24" /><span>本轮焦点球员</span>
           </h3>
@@ -520,7 +529,7 @@ function MatchdayTab({
                   className="block bg-slate-900/40 rounded-lg border border-purple-800/30 p-2 hover:border-purple-500/60 transition-colors"
                 >
                   <div className={`text-[11px] font-semibold mb-1 flex items-center gap-1 ${h.color}`}>
-                    <span>{h.emoji}</span>
+                    <Icon name="star-glow" size={14} accent="#d7ad55" />
                     <span>{h.label}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -532,17 +541,17 @@ function MatchdayTab({
                       {h.playerName}
                     </span>
                     {h.position && (
-                      <span className="text-[9px] text-slate-500 shrink-0">({h.position})</span>
+                      <span className="shrink-0 text-[11px] text-slate-500">({h.position})</span>
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">
+                  <p className="truncate text-[11px] text-slate-400">
                     {h.detail} · vs {opponentName}
                   </p>
                 </Link>
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Context tips banner */}
@@ -564,7 +573,7 @@ function MatchdayTab({
           <div className="flex items-center gap-2 mb-2">
             <span className={`w-1 h-5 rounded-full ${groupColors[groupName] ? groupColors[groupName].replace('border-', 'bg-') : 'bg-purple-500'}`} />
             <h3 className="text-sm font-semibold text-slate-200">{groupName}</h3>
-            <span className="text-[10px] text-slate-500">{fixtures.length}场</span>
+            <span className="text-[11px] text-slate-500">{fixtures.length}场</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5 stagger-children">
             {fixtures.map((fixture) => (
@@ -854,7 +863,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
       {/* Season buffs */}
       {(world.seasonBuffs ?? []).length > 0 && (
         <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
-          <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">赛季剧情</h4>
+          <h4 className="mb-2 text-[11px] font-semibold text-slate-500">赛季剧情</h4>
           <div className="flex flex-wrap gap-2">
             {(world.seasonBuffs ?? []).map(buff => {
               const isPositive = buff.effects.some(e => e.delta > 0);
@@ -882,7 +891,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
         const previousPrediction = world.predictionHistory!.at(-1)!;
         return (
         <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-3">
-          <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">上赛季竞猜结果</h4>
+          <h4 className="mb-2 text-[11px] font-semibold text-slate-500">上赛季竞猜结果</h4>
           <div className="flex gap-3 text-xs">
             <span>冠军预测: {getTeamName(previousPrediction.champion, world.teamBases)} {previousPrediction.championCorrect ? '✅' : '❌'}</span>
             <span>降级预测: {getTeamName(previousPrediction.relegated, world.teamBases)} {previousPrediction.relegatedCorrect ? '✅' : '❌'}</span>
@@ -954,11 +963,11 @@ function OverviewTab({ world }: { world: GameWorld }) {
           <div key={level} className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
             <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
               <Link to={`/league/${level}`} className="text-sm font-semibold text-slate-200 hover:text-blue-400 transition-colors">{name}</Link>
-              <Link to={`/league/${level}`} className="text-[10px] text-slate-500 hover:text-blue-400">全部 &rarr;</Link>
+              <Link to={`/league/${level}`} className="text-[11px] text-slate-500 hover:text-blue-400">全部 &rarr;</Link>
             </div>
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] text-slate-500">
+                <tr className="text-[11px] text-slate-500">
                   <th className="text-left px-2 py-1 w-5">#</th>
                   <th className="text-left px-1 py-1">球队</th>
                   <th className="text-center px-1 py-1 w-7">分</th>
@@ -981,7 +990,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
                       <td className="text-center px-1 py-1.5">
                         <div className="flex gap-0.5 justify-center">
                           {formatForm(entry.form.slice(-3)).map((f, fi) => (
-                            <span key={fi} className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[11px] sm:text-[9px] font-bold text-white ${f.color}`}>{f.label}</span>
+                            <span key={fi} className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[11px] font-bold text-white ${f.color}`}>{f.label}</span>
                           ))}
                         </div>
                       </td>
@@ -1054,9 +1063,9 @@ function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; fav
 function StatMini({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 p-2.5">
-      <div className="text-[10px] text-slate-500">{label}</div>
+      <div className="text-[11px] text-slate-500">{label}</div>
       <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate">{value}</div>
-      <div className="text-[10px] text-slate-500 truncate">{sub}</div>
+      <div className="truncate text-[11px] text-slate-500">{sub}</div>
     </div>
   );
 }
@@ -1108,6 +1117,14 @@ function FixtureCard({
   return (
     <div
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       className={`bg-slate-800 rounded-lg border p-2 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group hover-lift relative ${
         hasGlow ? 'border-amber-600/50 animate-glow-pulse' : 'border-slate-700'
       }`}
@@ -1127,7 +1144,7 @@ function FixtureCard({
       {tags.length > 0 && (
         <div className="flex gap-1 mb-1 pr-10">
           {tags.map((t, i) => (
-            <span key={i} className={`text-[10px] sm:text-[8px] px-1 py-0.5 rounded font-semibold ${t.color}`}>{t.label}</span>
+            <span key={i} className={`px-1 py-0.5 text-[11px] rounded font-semibold ${t.color}`}>{t.label}</span>
           ))}
         </div>
       )}
@@ -1136,16 +1153,16 @@ function FixtureCard({
         {/* Home */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} showTier link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
-            <span className="text-[11px] sm:text-[9px] text-slate-500">{homeTeam.overall}</span>
+            <TeamName teamId={fixture.homeTeamId} teamBases={world.teamBases} badgeSize={20} link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
+            <span className="text-[11px] text-slate-500">{homeTeam.overall}</span>
           </div>
         </div>
-        <span className="text-[10px] font-bold text-slate-600 px-1.5 shrink-0">VS</span>
+        <span className="shrink-0 px-1.5 text-[11px] font-bold text-slate-500">VS</span>
         {/* Away */}
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center gap-1 justify-end">
-            <span className="text-[11px] sm:text-[9px] text-slate-500">{awayTeam.overall}</span>
-            <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} showTier link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
+            <span className="text-[11px] text-slate-500">{awayTeam.overall}</span>
+            <TeamName teamId={fixture.awayTeamId} teamBases={world.teamBases} badgeSize={20} link={false} compact className="text-xs font-semibold text-slate-100 group-hover:text-blue-400" />
           </div>
         </div>
       </div>
@@ -1164,7 +1181,7 @@ function FixtureCard({
           ? Object.values(world.squads).flatMap((squad) => squad).find(p => p.uuid === awayScorer.playerId)
           : null;
         return (
-          <div className="flex items-center justify-between text-[9px] text-slate-500 mb-1 gap-1">
+          <div className="mb-1 flex items-center justify-between gap-1 text-[11px] text-slate-500">
             <span className="truncate flex-1 min-w-0">
               {homePlayer && homeScorer ? `射手 ${homePlayer.name} ${homeScorer.goals}球` : ''}
             </span>
@@ -1176,12 +1193,12 @@ function FixtureCard({
       })()}
 
       {/* Mini probability bar */}
-      <div className="flex h-0.5 rounded-full overflow-hidden bg-slate-700">
+      <div className="flex h-1 overflow-hidden rounded-full bg-slate-700">
         <div className="bg-green-500" style={{ width: `${pred.homeWinPct}%` }} />
         <div className="bg-slate-400" style={{ width: `${pred.drawPct}%` }} />
         <div className="bg-red-500" style={{ width: `${pred.awayWinPct}%` }} />
       </div>
-      <div className="flex justify-between text-[11px] sm:text-[9px] mt-0.5 text-slate-500">
+      <div className="mt-1 flex justify-between text-[11px] text-slate-500">
         <span className="text-green-400">{pred.homeWinPct}%</span>
         <span className="truncate px-1">{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
@@ -1213,7 +1230,7 @@ function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string
   return (
     <div className="bg-gradient-to-r from-amber-900/20 to-slate-800 rounded-lg border border-amber-700/30 p-3">
       <h4 className="text-xs font-semibold text-amber-300 mb-2">赛季竞猜 — 第{seasonNumber}赛季</h4>
-      <p className="text-[10px] text-slate-500 mb-2">预测本赛季的顶级联赛冠军和降级队</p>
+      <p className="mb-2 text-[11px] text-slate-500">预测本赛季的顶级联赛冠军和降级队</p>
       <div className="flex flex-col sm:flex-row gap-2">
         <select value={champion} onChange={e => setChampion(e.target.value)}
           className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 cursor-pointer">
@@ -1313,7 +1330,7 @@ function TransferWindowEntry({ world }: { world: GameWorld }) {
                   <span className="text-slate-300">{pendingTargets} 项目标</span></>
               : '所有决策已完成,点击「完成」收尾'}
           </div>
-          <div className="text-[10px] text-slate-500 mt-1">不处理也没关系 —— 下次「推进」时会按默认策略自动结算。</div>
+          <div className="mt-1 text-[11px] text-slate-500">不处理也没关系，下次推进时会按默认策略自动结算。</div>
         </div>
         <div className="flex gap-2 ml-auto shrink-0">
           <button
