@@ -281,3 +281,17 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Removed remaining 8-10px HTML labels from the five core surfaces, added keyboard activation to clickable fixture cards, and added a global reduced-motion fallback.
 - Final verification passed 68 files / 519 tests, ESLint, TypeScript and production/PWA build, changelog consistency, and bundle budgets (274,592-byte main entry; 698,303-byte initial graph). Shared UI, Dashboard, player/team, and match workflows passed at 320x568, 390x844, and 1440x900 with zero overflow/runtime errors; representative screenshots were inspected and the desktop Cup layout was corrected from that evidence.
 - Mobile advance remained responsive at 12.3/20.9ms normal p50/p95 and 30.9/39.1ms under 4x CPU, with one accepted/persisted action from 20 rapid attempts. Match rendering passed normal/4x profiles, hidden and covered views paused, reduced motion downgraded correctly, and the standard game client completed two iterations without an error artifact.
+
+## 2026-07-23 Observer Gameplay Phase 5A
+
+- Replaced the split mobile floating control with one `56x56px` advance action. It can be dragged, snaps to the nearest edge, remembers its position, supports keyboard nudging and Home reset, and defaults away from the bottom navigation/content area.
+- A cross-page floating advance now waits for the simulation and then returns to the Dashboard results tab, so advancing from Teams, Players, or other secondary routes always produces visible result feedback.
+- Reworked Dashboard story cards into deterministic, evidence-grounded live signals for dark horses, giant crises, and promoted-side survival. At most one primary-focus signal and one separate world signal are shown with a phase, factual evidence, and next observation point.
+- Removed unsupported narrative claims about fans, management, dressing rooms, and dismissal rumors. No save-schema or simulation/RNG behavior changed; persistent lifecycle, cooling, endings, season review, and history integration remain the next story phase.
+- Added focused component/engine tests plus `verify:floating-advance` and `verify:storyline-signals`. Floating interaction passed at 320x568, 390x844, 430x932, and 1440x900 with no overflow, no drag-triggered advance, restored position, and exactly one advance per tap.
+- Full evidence: 76 files / 552 tests, ESLint, TypeScript/PWA build, bundle budget, Dashboard and observation regressions, story-signal browser checks, and the standard game client. Mobile advance p50/p95 remained 12.2/23.2ms normally and 27.1/59.5ms at 4x CPU; 20 rapid attempts accepted and restored exactly one advance.
+
+### Remaining Story Work
+
+- Persist a bounded storyline lifecycle with cooling/hysteresis and explicit endings before marking the complete story-director model done.
+- Feed only story upgrades and endings into news, season review, and a compact history timeline.

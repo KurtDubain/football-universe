@@ -404,6 +404,11 @@ body {
 }
 
 @media (max-width: 639px) {
+  .floating-advance-docked {
+    top: clamp(128px, 64dvh, calc(100dvh - 88px - env(safe-area-inset-bottom)));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: auto;
+  }
   .ui-page-header { align-items: stretch; flex-direction: column; }
   .ui-page-actions { width: 100%; }
   .ui-page-actions > .ui-segmented { display: flex; width: 100%; }

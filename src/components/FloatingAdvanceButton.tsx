@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import { Icon } from './Icon';
 import {
   clampFloatingPosition,
@@ -8,6 +16,8 @@ import {
 } from './floating-position';
 
 const KEYBOARD_STEP = 12;
+const DRAG_THRESHOLD = 6;
+const POSITION_STORAGE_KEY = 'floating-advance-position-v2';
 
 function getViewportBounds(): FloatingViewportBounds {
   const viewport = window.visualViewport;
@@ -21,7 +31,29 @@ function getViewportBounds(): FloatingViewportBounds {
 
 function getElementSize(element: HTMLElement | null): { width: number; height: number } {
   const rect = element?.getBoundingClientRect();
-  return { width: rect?.width ?? 112, height: rect?.height ?? 48 };
+  return { width: rect?.width ?? 56, height: rect?.height ?? 56 };
+}
+
+function readSavedPosition(): FloatingPosition | null {
+  try {
+    const raw = localStorage.getItem(POSITION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<FloatingPosition>;
+    return Number.isFinite(parsed.x) && Number.isFinite(parsed.y)
+      ? { x: Number(parsed.x), y: Number(parsed.y) }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistPosition(position: FloatingPosition | null): void {
+  try {
+    if (position) localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
+    else localStorage.removeItem(POSITION_STORAGE_KEY);
+  } catch {
+    // Position memory is optional and must never block the advance action.
+  }
 }
 
 interface FloatingAdvanceButtonProps {
@@ -39,10 +71,18 @@ export default function FloatingAdvanceButton({
   disabled,
   onAdvance,
 }: FloatingAdvanceButtonProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef({ pointerId: -1, startX: 0, startY: 0, originX: 0, originY: 0 });
-  const latestPositionRef = useRef<FloatingPosition | null>(null);
-  const [position, setPosition] = useState<FloatingPosition | null>(null);
+  const containerRef = useRef<HTMLButtonElement>(null);
+  const dragRef = useRef({
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+    moved: false,
+  });
+  const suppressClickRef = useRef(false);
+  const [position, setPosition] = useState<FloatingPosition | null>(readSavedPosition);
+  const latestPositionRef = useRef<FloatingPosition | null>(position);
   const [dragging, setDragging] = useState(false);
 
   const updatePosition = useCallback((next: FloatingPosition | null) => {
@@ -55,9 +95,21 @@ export default function FloatingAdvanceButton({
   ), []);
 
   useEffect(() => {
+    const current = latestPositionRef.current;
+    if (current) {
+      const clamped = clampCurrentPosition(current);
+      updatePosition(clamped);
+      persistPosition(clamped);
+    }
+  }, [clampCurrentPosition, updatePosition]);
+
+  useEffect(() => {
     const keepVisible = () => {
       const current = latestPositionRef.current;
-      if (current) updatePosition(clampCurrentPosition(current));
+      if (!current) return;
+      const clamped = clampCurrentPosition(current);
+      updatePosition(clamped);
+      persistPosition(clamped);
     };
     const viewport = window.visualViewport;
     window.addEventListener('resize', keepVisible);
@@ -73,7 +125,6 @@ export default function FloatingAdvanceButton({
   const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -81,18 +132,26 @@ export default function FloatingAdvanceButton({
       startY: event.clientY,
       originX: rect.left,
       originY: rect.top,
+      moved: false,
     };
-    setDragging(true);
   }, []);
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
-    if (!dragging || drag.pointerId !== event.pointerId) return;
+    if (drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      suppressClickRef.current = true;
+      setDragging(true);
+    }
     updatePosition(clampCurrentPosition({
-      x: drag.originX + event.clientX - drag.startX,
-      y: drag.originY + event.clientY - drag.startY,
+      x: drag.originX + deltaX,
+      y: drag.originY + deltaY,
     }));
-  }, [clampCurrentPosition, dragging, updatePosition]);
+  }, [clampCurrentPosition, updatePosition]);
 
   const finishDrag = useCallback((event: PointerEvent<HTMLButtonElement>) => {
     if (dragRef.current.pointerId !== event.pointerId) return;
@@ -100,25 +159,37 @@ export default function FloatingAdvanceButton({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     const current = latestPositionRef.current;
-    if (current) {
+    if (dragRef.current.moved && current) {
       const viewport = getViewportBounds();
       const size = getElementSize(containerRef.current);
       const midpoint = viewport.left + viewport.width / 2;
-      updatePosition(clampCurrentPosition({
+      const snapped = clampCurrentPosition({
         x: current.x + size.width / 2 < midpoint
           ? viewport.left + FLOATING_EDGE_MARGIN
           : viewport.left + viewport.width - size.width - FLOATING_EDGE_MARGIN,
         y: current.y,
-      }));
+      });
+      updatePosition(snapped);
+      persistPosition(snapped);
     }
     dragRef.current.pointerId = -1;
     setDragging(false);
   }, [clampCurrentPosition, updatePosition]);
 
+  const handleClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (suppressClickRef.current) {
+      event.preventDefault();
+      suppressClickRef.current = false;
+      return;
+    }
+    onAdvance();
+  }, [onAdvance]);
+
   const handleMoveKey = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Home') {
       event.preventDefault();
       updatePosition(null);
+      persistPosition(null);
       return;
     }
     const direction = {
@@ -131,41 +202,35 @@ export default function FloatingAdvanceButton({
     event.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    updatePosition(clampCurrentPosition({ x: rect.left + direction[0], y: rect.top + direction[1] }));
+    const next = clampCurrentPosition({ x: rect.left + direction[0], y: rect.top + direction[1] });
+    updatePosition(next);
+    persistPosition(next);
   }, [clampCurrentPosition, updatePosition]);
 
   return (
-    <div
+    <button
       ref={containerRef}
+      type="button"
       data-testid="floating-advance"
-      className={`fixed z-[100] flex h-12 overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface-floating)] shadow-xl ${position ? '' : 'floating-advance-docked'} ${dragging ? 'ring-2 ring-[var(--focus-ring)]' : ''}`}
+      data-dragging={dragging ? 'true' : 'false'}
+      aria-label={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置` : '赛季已完成'}
+      aria-busy={isAdvancing}
+      title={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位` : '赛季已完成'}
+      disabled={disabled}
+      className={`fixed z-[100] flex h-14 w-14 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-12 sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
       style={position ? { left: position.x, top: position.y } : undefined}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
+      onKeyDown={handleMoveKey}
     >
-      <button
-        type="button"
-        aria-label="移动悬浮推进按钮"
-        title="拖动调整位置；方向键微调，Home 复位"
-        className="flex h-12 w-11 touch-none items-center justify-center border-r border-[var(--border-strong)] text-lg text-[var(--text-muted)] cursor-grab active:cursor-grabbing hover:bg-[var(--surface-raised)] hover:text-[var(--text-secondary)]"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
-        onKeyDown={handleMoveKey}
-      >
-        <span aria-hidden="true">⠿</span>
-      </button>
-      <button
-        type="button"
-        aria-label={stageLabel ? `推进到下一阶段：${stageLabel}` : '赛季已完成'}
-        title={stageLabel ? `推进到下一阶段：${stageLabel}` : '赛季已完成'}
-        disabled={disabled}
-        onClick={onAdvance}
-        className="flex h-12 min-w-17 items-center justify-center gap-1.5 bg-[var(--action)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
-      >
-        <Icon name="play" size={15} />
-        <span>{isAdvancing ? '推进中' : '推进'}</span>
-        <span className={`h-1.5 w-1.5 rounded-full ${accentClass}`} aria-hidden="true" />
-      </button>
-    </div>
+      <Icon name="play" size={18} />
+      <span className="sr-only sm:not-sr-only sm:text-sm sm:font-semibold">
+        {isAdvancing ? '推进中' : '推进'}
+      </span>
+      <span className={`absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-[var(--action)] sm:static sm:h-1.5 sm:w-1.5 sm:ring-0 ${accentClass}`} aria-hidden="true" />
+    </button>
   );
 }

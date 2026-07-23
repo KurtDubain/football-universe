@@ -1,5 +1,5 @@
 import { type ReactNode, useState, useEffect, useMemo } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
@@ -79,6 +79,7 @@ export default function Layout({ children }: LayoutProps) {
     [favoriteTeamIds, world?.teamBases],
   );
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -117,6 +118,12 @@ export default function Layout({ children }: LayoutProps) {
   }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
+  const handleFloatingAdvance = async () => {
+    await advanceWindow();
+    if (location.pathname !== '/') {
+      navigate('/', { state: { showLatestResults: true } });
+    }
+  };
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;
   const seasonNumber = world?.seasonState.seasonNumber ?? 1;
   const calendarLen = world?.seasonState.calendar.length ?? 0;
@@ -463,7 +470,7 @@ export default function Layout({ children }: LayoutProps) {
           accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
           isAdvancing={isAdvancing}
           disabled={isAdvancing || !currentWindow}
-          onAdvance={advanceWindow}
+          onAdvance={handleFloatingAdvance}
         />
       )}
 

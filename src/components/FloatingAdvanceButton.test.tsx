@@ -11,6 +11,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  localStorage.clear();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -22,7 +23,7 @@ afterEach(() => {
 });
 
 describe('FloatingAdvanceButton', () => {
-  it('separates moving from the one-click advance action', () => {
+  it('uses one clear tap target for the advance action', () => {
     const onAdvance = vi.fn();
     act(() => root.render(
       <FloatingAdvanceButton
@@ -34,14 +35,12 @@ describe('FloatingAdvanceButton', () => {
       />,
     ));
 
-    const move = container.querySelector<HTMLButtonElement>('[aria-label="移动悬浮推进按钮"]')!;
-    const advance = container.querySelector<HTMLButtonElement>('[aria-label="推进到下一阶段：联赛"]')!;
-
-    act(() => move.click());
-    expect(onAdvance).not.toHaveBeenCalled();
+    const advance = container.querySelector<HTMLButtonElement>('[data-testid="floating-advance"]')!;
+    expect(advance.getBoundingClientRect).toBeDefined();
     act(() => advance.click());
     expect(onAdvance).toHaveBeenCalledOnce();
-    expect(move.title).toContain('Home 复位');
+    expect(advance.title).toContain('拖动可调整位置');
+    expect(advance.title).toContain('Home 复位');
   });
 
   it('supports keyboard movement and Home reset', () => {
@@ -54,26 +53,27 @@ describe('FloatingAdvanceButton', () => {
       />,
     ));
 
-    const floating = container.querySelector<HTMLElement>('[data-testid="floating-advance"]')!;
+    const floating = container.querySelector<HTMLButtonElement>('[data-testid="floating-advance"]')!;
     floating.getBoundingClientRect = () => ({
       x: 100,
       y: 100,
       left: 100,
       top: 100,
-      right: 212,
-      bottom: 148,
-      width: 112,
-      height: 48,
+      right: 156,
+      bottom: 156,
+      width: 56,
+      height: 56,
       toJSON: () => ({}),
     });
-    const move = container.querySelector<HTMLButtonElement>('[aria-label="移动悬浮推进按钮"]')!;
 
-    act(() => move.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })));
+    act(() => floating.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })));
     expect(floating.style.left).toBe('88px');
     expect(floating.style.top).toBe('100px');
+    expect(JSON.parse(localStorage.getItem('floating-advance-position-v2') ?? '{}')).toEqual({ x: 88, y: 100 });
 
-    act(() => move.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })));
+    act(() => floating.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })));
     expect(floating.style.left).toBe('');
     expect(floating.className).toContain('floating-advance-docked');
+    expect(localStorage.getItem('floating-advance-position-v2')).toBeNull();
   });
 });

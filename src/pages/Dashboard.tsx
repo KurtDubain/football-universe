@@ -1,9 +1,9 @@
 import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld, NewsItem } from '../engine/season/season-manager';
 import type { TeamBase } from '../types/team';
@@ -55,6 +55,7 @@ export default function Dashboard() {
 
 function DashboardContent({ world }: { world: GameWorld }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const lastResults = useGameStore((s) => s.lastResults);
   const lastNews = useGameStore((s) => s.lastNews);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
@@ -62,7 +63,9 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const advanceTick = useGameStore((s) => s.advanceTick);
 
-  const [activeTab, setActiveTab] = useState<TabKey>('matchday');
+  const [activeTab, setActiveTab] = useState<TabKey>(() => (
+    (location.state as { showLatestResults?: boolean } | null)?.showLatestResults ? 'results' : 'matchday'
+  ));
   const prevAdvanceTick = useRef(advanceTick);
 
   // Modal state
@@ -526,6 +529,8 @@ function MatchdayTab({
         />
       </Suspense>
 
+      <FavoriteStoryPanels world={world} favoriteTeamIds={favoriteTeamIds} />
+
       {/* Player highlights from the previous batch of results */}
       {playerHighlights.length > 0 && (
         <section className="rounded-lg border border-slate-700 bg-slate-800 p-3">
@@ -826,7 +831,6 @@ function ResultsTab({
 // ══════════════════════════════════════════════════════════════════════
 
 function OverviewTab({ world }: { world: GameWorld }) {
-  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const leagues = [
     { standings: world.league1Standings, name: '顶级联赛', level: 1 },
     { standings: world.league2Standings, name: '甲级联赛', level: 2 },
@@ -867,8 +871,6 @@ function OverviewTab({ world }: { world: GameWorld }) {
         <StatMini label="超级杯" value={scStatus} sub={world.superCup.winnerId ? `冠军: ${getTeamName(world.superCup.winnerId, world.teamBases)}` : '进行中'} />
         <StatMini label="射手王" value={topScorerText} sub={coachChanges > 0 ? `${coachChanges}次换帅` : '暂无换帅'} />
       </div>
-
-      <FavoriteStoryPanels world={world} favoriteTeamIds={favoriteTeamIds} />
 
       {/* World cup if applicable */}
       {wcStatus && (
@@ -1026,8 +1028,6 @@ function OverviewTab({ world }: { world: GameWorld }) {
 }
 
 function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; favoriteTeamIds: string[] }) {
-  if (favoriteTeamIds.length === 0) return null;
-
   const cards = generateStorylineCards(world, favoriteTeamIds);
   const favoriteSet = new Set(favoriteTeamIds);
   const rumors = (world.transferRumors ?? [])
@@ -1038,19 +1038,51 @@ function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; fav
   if (cards.length === 0 && rumors.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      {cards.map((card, index) => (
-        <div
-          key={`${card.teamId}-${card.type}-${index}`}
-          className="rounded-lg border border-purple-700/30 bg-purple-900/10 px-3 py-2"
-        >
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-base" aria-hidden="true">{card.emoji}</span>
-            <span className="text-xs font-semibold text-purple-300">{card.title}</span>
+    <div className="space-y-2" data-testid="storyline-signals">
+      {cards.length > 0 && (
+        <section className="border-y border-slate-700/60 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+              <Icon name="eye" size={15} />
+              正在发生
+            </h3>
+            <span className="text-[11px] text-slate-600">来自积分榜与历史记录</span>
           </div>
-          <p className="text-xs text-slate-400 ml-7">{card.body}</p>
-        </div>
-      ))}
+          <div className="divide-y divide-slate-700/40">
+            {cards.map(card => {
+              const icon: IconName = card.type === 'dark_horse' ? 'trend-up'
+                : card.type === 'giant_crisis' ? 'warning'
+                : 'shield';
+              const tone = card.type === 'dark_horse' ? 'text-emerald-300'
+                : card.type === 'giant_crisis' ? 'text-red-300'
+                : 'text-amber-300';
+              return (
+                <div key={`${card.scope}-${card.teamId}-${card.type}`} className="py-2.5">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-0.5 shrink-0 ${tone}`}><Icon name={icon} size={16} /></span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Link to={`/team/${card.teamId}`} className={`text-sm font-semibold hover:text-blue-300 ${tone}`}>
+                          {card.title}
+                        </Link>
+                        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-400">
+                          {card.scope === 'focus' ? '主要观察' : '世界故事'}
+                        </span>
+                        <span className="text-[11px] text-slate-500">{card.phase}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-400">{card.body}</p>
+                      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                        {card.evidence.map(item => <span key={item}>{item}</span>)}
+                        <span className="text-slate-300">下一观察：{card.nextWatch}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {rumors.map((rumor) => {
         const intensityColor = rumor.intensity === 'high' ? 'border-rose-700/50 bg-rose-900/15'
