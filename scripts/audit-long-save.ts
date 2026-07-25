@@ -21,6 +21,11 @@ import {
   MAX_STORYLINE_HISTORY,
   MAX_STORYLINES_PER_SEASON,
 } from '../src/engine/season/storylines';
+import {
+  appendObserverSeasonTrajectory,
+  buildObserverSeasonTrajectory,
+  OBSERVER_SEASON_TRAJECTORY_LIMIT,
+} from '../src/engine/observation/season-trajectory';
 
 const baseUrl = (process.env.LONG_SAVE_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const reportPath = process.env.LONG_SAVE_REPORT ?? '/tmp/football-long-save-audit.json';
@@ -63,9 +68,27 @@ function parseWorld(save: string): GameWorld {
   return JSON.parse(save).state.world as GameWorld;
 }
 
+const favoriteTeamId = Object.keys(initializeGameWorld(seed).teamBases)[0];
+
 function advanceLikeStore(source: GameWorld): GameWorld {
-  const result = executeCurrentWindow(source, { favoriteTeamIds: [] });
-  return boundWorldStorageMetadata(result.world);
+  const window = getCurrentWindow(source);
+  const trajectory = window?.type === 'season_end'
+    ? buildObserverSeasonTrajectory(source, favoriteTeamId)
+    : null;
+  const result = executeCurrentWindow(source, { favoriteTeamIds: [favoriteTeamId] });
+  return boundWorldStorageMetadata(appendObserverSeasonTrajectory(result.world, trajectory));
+}
+
+function createObservedSaveEnvelope(source: GameWorld) {
+  const envelope = createPersistedSaveEnvelope(source);
+  return {
+    ...envelope,
+    state: {
+      ...envelope.state,
+      favoriteTeamId,
+      favoriteTeamIds: [favoriteTeamId],
+    },
+  };
 }
 
 function assertHistoryCaps(world: GameWorld): string[] {
@@ -89,6 +112,9 @@ function assertHistoryCaps(world: GameWorld): string[] {
   }
   if ((world.storylineCooldowns?.length ?? 0) > MAX_STORYLINE_COOLDOWNS) {
     failures.push(`storyline cooldowns ${world.storylineCooldowns?.length}`);
+  }
+  if ((world.observerSeasonTrajectories?.length ?? 0) > OBSERVER_SEASON_TRAJECTORY_LIMIT) {
+    failures.push(`observer trajectories ${world.observerSeasonTrajectories?.length}`);
   }
   const storylineSeasonCounts = [...(world.activeStorylines ?? []), ...(world.storylineHistory ?? [])]
     .reduce<Record<number, number>>((counts, storyline) => ({
@@ -174,7 +200,7 @@ while (world.seasonState.seasonNumber <= LONG_SAVE_TARGET_SEASON && advances < 1
   if (window.type === 'season_end' && checkpointSeasons.includes(season)) {
     checkpoints.push({
       season,
-      save: JSON.stringify(createPersistedSaveEnvelope(world)),
+      save: JSON.stringify(createObservedSaveEnvelope(world)),
       report: measureWorldSaveSize(world, 'season-end', compressToUTF16),
     });
   }
@@ -246,6 +272,7 @@ const passed = rolloverErrors === 0
 const output = {
   passed,
   seed,
+  favoriteTeamId,
   advances,
   completedSeasons: world.seasonState.seasonNumber - 1,
   rolloverErrors,

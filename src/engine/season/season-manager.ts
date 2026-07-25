@@ -219,6 +219,8 @@ export interface GameWorld {
   pendingObservationJudgment?: import('../observation/judgment').PendingObservationJudgment | null;
   /** Bounded detailed history plus lifetime counters. */
   observationRecord?: import('../observation/judgment').ObservationRecord;
+  /** Frozen primary-team paths for completed seasons; display-only and bounded. */
+  observerSeasonTrajectories?: import('../observation/season-trajectory').ObserverSeasonTrajectory[];
   /** Deprecated save fields ignored by current gameplay. */
   coins?: number;
   bets?: { fixtureId: string; outcome: 'home' | 'draw' | 'away'; amount: number; odds: number }[];
@@ -520,7 +522,18 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     storylineHistory: [],
     storylineCooldowns: [],
     pendingObservationJudgment: null,
-    observationRecord: { total: 0, correct: 0, currentStreak: 0, bestStreak: 0, recent: [] },
+    observationRecord: {
+      total: 0,
+      correct: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      recent: [],
+      seasonTotal: 0,
+      seasonCorrect: 0,
+      seasonCurrentStreak: 0,
+      seasonBestStreak: 0,
+    },
+    observerSeasonTrajectories: [],
     matchHistory: [],
     seasonBuffsHistory: [],
     playerAwardsHistory: [],

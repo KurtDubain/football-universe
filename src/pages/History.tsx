@@ -261,6 +261,12 @@ function HistoryContent({ world }: { world: GameWorld }) {
             <div className="space-y-3">
               {[...honors].reverse().map((record) => {
                 const isExpanded = expandedSeason === record.seasonNumber;
+                const observerTrajectory = (world.observerSeasonTrajectories ?? [])
+                  .find(entry => entry.seasonNumber === record.seasonNumber);
+                const observerRecord = observerTrajectory
+                  ? world.teamSeasonRecords[observerTrajectory.teamId]
+                    ?.find(entry => entry.seasonNumber === record.seasonNumber)
+                  : undefined;
                 const storyCount = (world.storylineHistory ?? [])
                   .filter(storyline => storyline.seasonNumber === record.seasonNumber)
                   .length;
@@ -269,9 +275,18 @@ function HistoryContent({ world }: { world: GameWorld }) {
                     <button onClick={() => setExpandedSeason(isExpanded ? null : record.seasonNumber)}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors cursor-pointer text-left"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="text-sm font-bold text-slate-100">第{record.seasonNumber}赛季</span>
                         <span className="text-xs text-amber-400">冠军: {getTeamName(record.league1Champion, world.teamBases)}</span>
+                        {observerTrajectory && observerRecord && (
+                          <span
+                            className="text-[11px] text-emerald-300"
+                            title={`主要观察：${getTeamName(observerTrajectory.teamId, world.teamBases)}`}
+                          >
+                            观察：{world.teamBases[observerTrajectory.teamId]?.shortName ?? getTeamName(observerTrajectory.teamId, world.teamBases)}
+                            {' '}第{observerRecord.leaguePosition}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {storyCount > 0 && (

@@ -2,9 +2,17 @@ import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
 import { getTeamName, getTeamShortName } from '../utils/format';
-import { getSeasonTopAssistRows, getSeasonTopScorerRows } from '../engine/players/player-stat-selectors';
+import {
+  getSeasonPlayerStatRows,
+  getSeasonTopAssistRows,
+  getSeasonTopScorerRows,
+} from '../engine/players/player-stat-selectors';
 import { AWARD_META } from '../engine/awards/season-awards';
 import type { StorylineType } from '../engine/season/storylines';
+import type {
+  ObserverSeasonCheckpoint,
+  ObserverSeasonTrajectory,
+} from '../engine/observation/season-trajectory';
 import { Icon, type IconName } from './Icon';
 
 interface Props {
@@ -57,6 +65,26 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   // Prediction
   const prediction = world.predictionHistory?.find((entry) => entry.season === seasonNumber);
+  const primaryTrajectory = (world.observerSeasonTrajectories ?? [])
+    .find(entry => entry.seasonNumber === seasonNumber);
+  const primaryRecord = primaryTrajectory
+    ? seasonRecords.find(record => record.teamId === primaryTrajectory.teamId)
+    : undefined;
+  const primaryContributor = primaryTrajectory
+    ? getSeasonPlayerStatRows(world, seasonNumber)
+      .filter(row => row.teamId === primaryTrajectory.teamId)
+      .sort((a, b) => {
+        const impact = (row: typeof a) => (
+          row.goals * 4
+          + row.assists * 3
+          + row.cleanSheets * 1.2
+          + row.keyBlocks * 1.5
+          + row.saves * 0.15
+          + row.appearances * 0.1
+        );
+        return impact(b) - impact(a) || b.appearances - a.appearances;
+      })[0]
+    : undefined;
   const seasonStorylines = (world.storylineHistory ?? [])
     .filter(storyline => storyline.seasonNumber === seasonNumber)
     .sort((a, b) => a.startedWindow - b.startedWindow || a.teamId.localeCompare(b.teamId));
@@ -137,6 +165,15 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           );
         })()}
       </div>
+
+      {primaryTrajectory && primaryRecord && (
+        <PrimaryTeamTrajectory
+          trajectory={primaryTrajectory}
+          record={primaryRecord}
+          world={world}
+          contributor={primaryContributor}
+        />
+      )}
 
       {/* Champions grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -589,6 +626,152 @@ function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; 
         </div>
       )}
     </div>
+  );
+}
+
+const CHECKPOINT_LABELS: Record<ObserverSeasonCheckpoint['phase'], string> = {
+  opening: '赛季初段',
+  midseason: '半程',
+  run_in: '冲刺期',
+  final: '收官',
+};
+
+function PrimaryTeamTrajectory({
+  trajectory,
+  record,
+  world,
+  contributor,
+}: {
+  trajectory: ObserverSeasonTrajectory;
+  record: RecordWithTeam;
+  world: GameWorld;
+  contributor?: ReturnType<typeof getSeasonPlayerStatRows>[number];
+}) {
+  const team = world.teamBases[trajectory.teamId];
+  const firstPosition = trajectory.checkpoints[0]?.position ?? record.leaguePosition;
+  const rankChange = firstPosition - record.leaguePosition;
+  const outcome = record.relegated
+    ? { label: '遗憾降级', tone: 'text-red-300' }
+    : record.promoted
+      ? { label: '成功升级', tone: 'text-emerald-300' }
+      : record.leaguePosition === 1
+        ? { label: '联赛夺冠', tone: 'text-amber-300' }
+        : rankChange >= 3
+          ? { label: `上升${rankChange}位`, tone: 'text-emerald-300' }
+          : rankChange <= -3
+            ? { label: `回落${Math.abs(rankChange)}位`, tone: 'text-red-300' }
+            : { label: '稳定收官', tone: 'text-slate-300' };
+  const cupPaths = [
+    ['联赛杯', record.cupResult],
+    ['超级杯', record.superCupResult],
+    ['洲际杯', record.continentalCupResult],
+    ['环球冠军杯', record.worldCupResult],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1] && entry[1] !== '未参加'));
+  const contributorDetail = contributor
+    ? contributor.identity.position === 'GK'
+      ? `${contributor.appearances}场 · ${contributor.saves}次扑救 · ${contributor.cleanSheets}场零封`
+      : contributor.identity.position === 'DF'
+        ? `${contributor.appearances}场 · ${contributor.keyBlocks}次关键封堵 · ${contributor.cleanSheets}场零封`
+        : `${contributor.appearances}场 · ${contributor.goals}球 · ${contributor.assists}助攻`
+    : '';
+
+  return (
+    <section
+      data-testid="primary-team-season-trajectory"
+      className="border-y border-emerald-800/40 bg-emerald-950/10 py-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 px-1 sm:px-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-400">
+            <Icon name="eye" size={15} />
+            主要观察球队
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            <span
+              className="h-3 w-3 shrink-0 rounded-sm"
+              style={{ backgroundColor: team?.color ?? '#64748b' }}
+            />
+            <Link
+              to={`/team/${trajectory.teamId}`}
+              className="break-words text-base font-bold text-slate-100 hover:text-emerald-300"
+              title={getTeamName(trajectory.teamId, world.teamBases)}
+            >
+              {getTeamName(trajectory.teamId, world.teamBases)}
+            </Link>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {trajectory.leagueLevel === 1 ? '顶级联赛' : trajectory.leagueLevel === 2 ? '甲级联赛' : '乙级联赛'}
+            {' · '}
+            {record.leagueWon}胜 {record.leagueDrawn}平 {record.leagueLost}负
+            {' · '}
+            {record.leagueGF}:{record.leagueGA}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className={`text-sm font-bold ${outcome.tone}`}>{outcome.label}</div>
+          <div className="mt-0.5 text-[11px] text-slate-500">
+            第{record.leaguePosition}名 · {record.leaguePoints}分
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 px-1 sm:grid-cols-4 sm:px-2">
+        {trajectory.checkpoints.map((checkpoint) => (
+          <div key={checkpoint.phase} className="relative border-l-2 border-slate-700 pl-2.5">
+            <div className="text-[10px] text-slate-500">{CHECKPOINT_LABELS[checkpoint.phase]}</div>
+            <div className="mt-0.5 text-sm font-black text-slate-100">第{checkpoint.position}名</div>
+            <div className="text-[11px] text-slate-500">
+              {checkpoint.played}场 {checkpoint.points}分 · 净胜球
+              {checkpoint.goalDifference > 0 ? '+' : ''}{checkpoint.goalDifference}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-x-5 gap-y-2 border-t border-slate-700/50 px-1 pt-3 text-xs sm:grid-cols-3 sm:px-2">
+        <div>
+          <div className="text-[10px] text-slate-500">杯赛足迹</div>
+          <div className="mt-0.5 leading-5 text-slate-300">
+            {cupPaths.length > 0
+              ? cupPaths.map(([label, value]) => `${label}${value}`).join(' · ')
+              : '本季无杯赛征程'}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-slate-500">赛季关键人物</div>
+          {contributor ? (
+            <>
+              <Link to={`/player/${contributor.playerId}`} className="mt-0.5 block font-semibold text-slate-200 hover:text-emerald-300">
+                {contributor.identity.playerName}
+              </Link>
+              <div className="text-[11px] text-slate-500">{contributorDetail}</div>
+            </>
+          ) : (
+            <div className="mt-0.5 text-slate-500">暂无可核对球员记录</div>
+          )}
+        </div>
+        <div>
+          <div className="text-[10px] text-slate-500">观察档案</div>
+          {trajectory.judgment ? (
+            <>
+              <div className="mt-0.5 font-semibold text-slate-200">
+                命中 {trajectory.judgment.correct}/{trajectory.judgment.total}
+                {' · '}
+                {Math.round(trajectory.judgment.correct / trajectory.judgment.total * 100)}%
+              </div>
+              <div className="text-[11px] text-slate-500">最佳连续命中 {trajectory.judgment.bestStreak} 次</div>
+            </>
+          ) : (
+            <div className="mt-0.5 text-slate-500">本季未留下赛前判断</div>
+          )}
+          {world.coachBases[record.coachId] && (
+            <Link to={`/coach/${record.coachId}`} className="mt-1 inline-block text-[11px] text-slate-400 hover:text-emerald-300">
+              主教练：{world.coachBases[record.coachId].name}
+            </Link>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

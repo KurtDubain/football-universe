@@ -34,6 +34,10 @@ import {
   type AdvanceWindowOutcome,
   type AdvanceWorldResponse,
 } from '../engine/observation/world-response';
+import {
+  appendObserverSeasonTrajectory,
+  buildObserverSeasonTrajectory,
+} from '../engine/observation/season-trajectory';
 
 interface GameStore {
   world: GameWorld | null;
@@ -153,6 +157,9 @@ function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamId
   if (!currentWindow) throw new Error('当前没有可推进的比赛窗口');
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
+  const seasonTrajectory = currentWindow.type === 'season_end' && favoriteTeamIds[0]
+    ? buildObserverSeasonTrajectory(world, favoriteTeamIds[0])
+    : null;
   const result = executeCurrentWindow(world, { favoriteTeamIds });
   const settlement = settleObservationJudgment(
     result.world.observationRecord,
@@ -169,17 +176,18 @@ function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamId
     news: result.news,
     observationSettlements,
   };
+  const settledWorld = settlementChanged
+    ? {
+        ...result.world,
+        pendingObservationJudgment: settlement.pending,
+        observationRecord: settlement.record,
+      }
+    : result.world;
   return {
     ...result,
     observationSettlements,
     outcome,
-    world: settlementChanged
-      ? {
-          ...result.world,
-          pendingObservationJudgment: settlement.pending,
-          observationRecord: settlement.record,
-        }
-      : result.world,
+    world: appendObserverSeasonTrajectory(settledWorld, seasonTrajectory),
   };
 }
 

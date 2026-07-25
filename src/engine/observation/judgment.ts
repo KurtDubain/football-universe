@@ -25,6 +25,12 @@ export interface ObservationRecord {
   currentStreak: number;
   bestStreak: number;
   recent: ObservationSettlement[];
+  /** Exact counters for the current judgment season; lifetime totals remain above. */
+  seasonNumber?: number;
+  seasonTotal?: number;
+  seasonCorrect?: number;
+  seasonCurrentStreak?: number;
+  seasonBestStreak?: number;
 }
 
 export interface ObservationSettlementResult {
@@ -45,7 +51,17 @@ export function isObservationSelectionValid(
 }
 
 export function createEmptyObservationRecord(): ObservationRecord {
-  return { total: 0, correct: 0, currentStreak: 0, bestStreak: 0, recent: [] };
+  return {
+    total: 0,
+    correct: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    recent: [],
+    seasonTotal: 0,
+    seasonCorrect: 0,
+    seasonCurrentStreak: 0,
+    seasonBestStreak: 0,
+  };
 }
 
 export { resolveMatchOutcome } from '../match/analysis';
@@ -90,6 +106,10 @@ export function settleObservationJudgment(
     correct,
   };
   const currentStreak = correct ? currentRecord.currentStreak + 1 : 0;
+  const sameSeason = currentRecord.seasonNumber === pending.seasonNumber;
+  const seasonCurrentStreak = correct
+    ? (sameSeason ? currentRecord.seasonCurrentStreak ?? 0 : 0) + 1
+    : 0;
   const recent = [...currentRecord.recent, settlement].slice(-OBSERVATION_HISTORY_LIMIT);
 
   return {
@@ -100,6 +120,14 @@ export function settleObservationJudgment(
       currentStreak,
       bestStreak: Math.max(currentRecord.bestStreak, currentStreak),
       recent,
+      seasonNumber: pending.seasonNumber,
+      seasonTotal: (sameSeason ? currentRecord.seasonTotal ?? 0 : 0) + 1,
+      seasonCorrect: (sameSeason ? currentRecord.seasonCorrect ?? 0 : 0) + Number(correct),
+      seasonCurrentStreak,
+      seasonBestStreak: Math.max(
+        sameSeason ? currentRecord.seasonBestStreak ?? 0 : 0,
+        seasonCurrentStreak,
+      ),
     },
     settlements: [settlement],
   };

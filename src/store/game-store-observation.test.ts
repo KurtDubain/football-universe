@@ -97,4 +97,27 @@ describe('game store observation settlement paths', () => {
       selection: 'over-2',
     });
   });
+
+  it('archives the primary team path at season end and keeps it frozen after focus changes', async () => {
+    const firstTeamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
+    const secondTeamId = Object.keys(useGameStore.getState().world!.teamBases)[1];
+    useGameStore.getState().setFavoriteTeams([firstTeamId, secondTeamId]);
+
+    await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
+    expect(useGameStore.getState().getCurrentWindow()?.type).toBe('season_end');
+    await completeAdvance(useGameStore.getState().advanceWindow());
+
+    const archived = useGameStore.getState().world?.observerSeasonTrajectories?.[0];
+    expect(archived).toMatchObject({
+      seasonNumber: 1,
+      teamId: firstTeamId,
+      checkpoints: expect.arrayContaining([
+        expect.objectContaining({ phase: 'opening' }),
+        expect.objectContaining({ phase: 'final' }),
+      ]),
+    });
+
+    useGameStore.getState().setPrimaryFavoriteTeam(secondTeamId);
+    expect(useGameStore.getState().world?.observerSeasonTrajectories?.[0]).toEqual(archived);
+  });
 });

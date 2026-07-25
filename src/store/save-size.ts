@@ -26,6 +26,7 @@ export interface SaveSizeReport {
     coaches: number;
     activeStorylines: number;
     completedStorylines: number;
+    observerSeasonTrajectories: number;
   };
 }
 
@@ -102,6 +103,7 @@ export function measureWorldSaveSize(
       matchForecasts: completedResults.map((result) => result.prediction),
       pendingObservation: world.pendingObservationJudgment,
       observationRecord: world.observationRecord,
+      observerSeasonTrajectories: world.observerSeasonTrajectories,
     }, compress),
     seasonBuffs: metric({ current: world.seasonBuffs, history: world.seasonBuffsHistory }, compress),
     storylines: metric({
@@ -128,6 +130,7 @@ export function measureWorldSaveSize(
       coaches: Object.keys(world.coachBases).length,
       activeStorylines: world.activeStorylines?.length ?? 0,
       completedStorylines: world.storylineHistory?.length ?? 0,
+      observerSeasonTrajectories: world.observerSeasonTrajectories?.length ?? 0,
     },
   };
 }

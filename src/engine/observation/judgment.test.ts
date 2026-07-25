@@ -75,4 +75,23 @@ describe('observation judgment settlement', () => {
     expect(record.currentStreak).toBe(1);
     expect(record.bestStreak).toBe(1);
   });
+
+  it('keeps exact per-season counters while lifetime totals continue', () => {
+    const first = settleObservationJudgment(undefined, pending({ seasonNumber: 3 }), [result()]);
+    const second = settleObservationJudgment(
+      first.record,
+      pending({ fixtureId: 'fixture-2', seasonNumber: 4, selection: 'away' }),
+      [result({ fixtureId: 'fixture-2' })],
+    );
+
+    expect(second.record).toMatchObject({
+      total: 2,
+      correct: 1,
+      seasonNumber: 4,
+      seasonTotal: 1,
+      seasonCorrect: 0,
+      seasonCurrentStreak: 0,
+      seasonBestStreak: 0,
+    });
+  });
 });

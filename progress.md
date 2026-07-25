@@ -326,5 +326,22 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 ### Phase 6 Handoff
 
-- Complete the broader primary-team season trajectory in Season Review before marking the whole history-sedimentation phase complete.
+- The broader primary-team season trajectory was completed in Phase 6B.
 - A later time-control pass still owns "next key node" skip guards, live `精华 / 1x / 3x`, and background/reduced-motion behavior.
+
+## 2026-07-25 Observer Gameplay Phase 6B
+
+- Added a bounded `ObserverSeasonTrajectory` for the primary observer team. At season end it replays completed authoritative league results through the shared standings sorter and freezes only four irreconstructible checkpoints: opening, midseason, run-in, and final.
+- Final league/cup records, key player contribution, coach identity, trophies, and story endings remain derived from existing canonical history. The trajectory stores no duplicate match, player, or prose history and is capped at 40 seasons.
+- Observation judgments now keep exact current-season totals, hits, and best streak alongside unchanged lifetime counters and the existing 50-row detailed history cap.
+- Season Review shows the observed club's full name, four-stage path, final record, cup path, key contributor, judgment summary, and direct team/player/coach links. The History season directory freezes that season's observed club, so later favorite changes do not rewrite old focus records.
+- Shared cup-round formatting now maps two-leg internal codes such as `QF-L2` and `SF-L1` to player-facing `八强` and `四强`.
+- Focused tests cover replay ordering, cup exclusion, missing teams, same-season replacement, 40-season caps, cross-season judgment resets, all advance paths, season rollover, focus switching, and persistence.
+- Visual verification passed at `1280x900` and `390x844`: no horizontal overflow, no console errors/warnings, readable four-stage layout, exact judgment summary, and valid team/player/coach links. The standard game client was also run and its screenshot inspected.
+- Final verification passed 80 files / 597 tests, ESLint, TypeScript/PWA build, changelog, and the 572,316-byte initial graph budget. The 10-season audit completed 509 advances with no data/runtime issues across 25 mobile/desktop route checks.
+- Mobile advance p50/p95 was 11.7/22.8ms normally and 30.9/42.7ms at 4x CPU. A favorite-team S150 audit completed 7,684 advances with zero rollover issues; trajectories stayed capped at 40, the compressed save was 1,731,946 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 7 Handoff
+
+- Implement guarded “next key node” time control before adding more historical surface area.
+- Observation themes, related-match/trophy detail jumps, and richer dark-horse/key-cup evidence remain deliberately open in the durable checklist.
