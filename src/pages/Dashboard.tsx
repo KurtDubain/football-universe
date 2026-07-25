@@ -17,6 +17,7 @@ import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
+import { getFixtureStorylineLabel } from '../engine/season/storylines';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
 import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -477,6 +478,11 @@ function MatchdayTab({
               const at = world.teamBases[fixture.awayTeamId];
               if (!ht || !at) return null;
               const isStarred = starredFixtureIds.includes(fixture.id);
+              const storylineLabel = getFixtureStorylineLabel(
+                world,
+                fixture.homeTeamId,
+                fixture.awayTeamId,
+              );
               return (
                 <div
                   key={fixture.id}
@@ -509,7 +515,12 @@ function MatchdayTab({
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {importance.reasons.slice(0, 3).map((r, i) => (
+                    {storylineLabel && (
+                      <span className="rounded bg-emerald-900/35 px-1.5 py-0.5 text-[11px] text-emerald-200">
+                        {storylineLabel}
+                      </span>
+                    )}
+                    {importance.reasons.slice(0, storylineLabel ? 2 : 3).map((r, i) => (
                       <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
                     ))}
                     <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
@@ -1270,6 +1281,7 @@ function getNewsBorderColor(type: string): string {
     streak: '#0ea5e9',
     retirement: '#fcd34d',
     intervention: '#d8b4fe',
+    storyline: '#34d399',
   };
   return colors[type] ?? '#64748b';
 }

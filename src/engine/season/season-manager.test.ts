@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { initializeGameWorld, initializeNewSeason, executeCurrentWindow, getCurrentWindow } from './season-manager';
+import {
+  initializeGameWorld,
+  initializeNewSeason,
+  executeCurrentWindow,
+  getCurrentWindow,
+  type NewsItem,
+} from './season-manager';
 import { defaultTeams } from '../../config/teams';
 import { playerTeamStatKey } from '../players/stats';
 import { validateWorldData } from '../validation/world-data';
 import type { StandingEntry } from '../../types/league';
 import type { TeamBase } from '../../types/team';
 import type { PlayerRetirement } from '../../types/player';
+import type { Storyline } from './storylines';
 
 function makeCustomTeams(): TeamBase[] {
   return defaultTeams.map((team, idx) => ({
@@ -259,6 +266,53 @@ describe('executeCurrentWindow', () => {
 
     // We should have moved at least once (probably 5 times).
     expect(world.seasonState.currentWindowIndex).not.toBe(startIdx);
+  });
+
+  it('updates deterministic storylines through the real window execution path', () => {
+    let world = initializeGameWorld(20260718);
+    const storylineNews: NewsItem[] = [];
+    for (let index = 0; index < 12; index++) {
+      const result = executeCurrentWindow(world);
+      world = result.world;
+      storylineNews.push(...result.news.filter(item => item.type === 'storyline'));
+    }
+
+    expect((world.activeStorylines?.length ?? 0) + (world.storylineHistory?.length ?? 0)).toBeGreaterThan(0);
+    expect(storylineNews.some(item => item.title.includes('故事出现'))).toBe(true);
+  });
+
+  it('finalizes active stories before season rollover resets the league tables', () => {
+    let world = initializeGameWorld(20260718);
+    while (getCurrentWindow(world)?.type !== 'season_end') {
+      world = executeCurrentWindow(world).world;
+    }
+    const teamId = world.league1Standings[0].teamId;
+    const forcedStory: Storyline = {
+      id: 'forced-season-ending-story',
+      type: 'dark_horse',
+      teamId,
+      seasonNumber: world.seasonState.seasonNumber,
+      startedWindow: 4,
+      startedElapsedWindow: 4,
+      phase: '高潮',
+      evidence: ['赛季末构造证据'],
+      lastUpdatedWindow: world.seasonState.currentWindowIndex - 1,
+      lastUpdatedElapsedWindow: world.totalElapsedWindows,
+      quietWindows: 0,
+    };
+    const historyBefore = world.storylineHistory?.length ?? 0;
+    world = { ...world, activeStorylines: [forcedStory] };
+
+    const rollover = executeCurrentWindow(world);
+
+    expect(rollover.world.activeStorylines).toHaveLength(0);
+    expect(rollover.world.storylineHistory).toHaveLength(historyBefore + 1);
+    expect(rollover.world.storylineHistory?.at(-1)).toMatchObject({
+      id: forcedStory.id,
+      phase: '落幕',
+      outcome: expect.stringMatching(/success|failure/),
+    });
+    expect(rollover.news.some(item => item.type === 'storyline' && item.title.includes('故事落幕'))).toBe(true);
   });
 
   it('archives completed-season player identity before annual aging and revaluation', () => {

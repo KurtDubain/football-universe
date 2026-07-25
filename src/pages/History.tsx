@@ -261,6 +261,9 @@ function HistoryContent({ world }: { world: GameWorld }) {
             <div className="space-y-3">
               {[...honors].reverse().map((record) => {
                 const isExpanded = expandedSeason === record.seasonNumber;
+                const storyCount = (world.storylineHistory ?? [])
+                  .filter(storyline => storyline.seasonNumber === record.seasonNumber)
+                  .length;
                 return (
                   <div key={record.seasonNumber} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                     <button onClick={() => setExpandedSeason(isExpanded ? null : record.seasonNumber)}
@@ -271,6 +274,11 @@ function HistoryContent({ world }: { world: GameWorld }) {
                         <span className="text-xs text-amber-400">冠军: {getTeamName(record.league1Champion, world.teamBases)}</span>
                       </div>
                       <div className="flex items-center gap-2">
+                        {storyCount > 0 && (
+                          <span className="rounded bg-emerald-950/70 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                            {storyCount}条故事
+                          </span>
+                        )}
                         {record.worldCupWinner && <span className="text-[10px] bg-sky-900/50 text-sky-400 px-1.5 py-0.5 rounded">环球冠军杯</span>}
                         <span className="text-slate-500 text-xs">{isExpanded ? '▲' : '▼'}</span>
                       </div>

@@ -4,6 +4,8 @@ import type { SeasonRecord, TeamBase } from '../types/team';
 import { getTeamName, getTeamShortName } from '../utils/format';
 import { getSeasonTopAssistRows, getSeasonTopScorerRows } from '../engine/players/player-stat-selectors';
 import { AWARD_META } from '../engine/awards/season-awards';
+import type { StorylineType } from '../engine/season/storylines';
+import { Icon, type IconName } from './Icon';
 
 interface Props {
   world: GameWorld;
@@ -11,6 +13,18 @@ interface Props {
 }
 
 type RecordWithTeam = SeasonRecord & { teamId: string };
+
+const STORYLINE_META: Record<StorylineType, { label: string; icon: IconName; color: string }> = {
+  dark_horse: { label: '黑马崛起', icon: 'trend-up', color: 'text-emerald-300' },
+  giant_crisis: { label: '豪门危机', icon: 'warning', color: 'text-red-300' },
+  promoted_survival: { label: '升班马求生', icon: 'shield', color: 'text-amber-300' },
+};
+
+function storylineOutcomeLabel(type: StorylineType, succeeded: boolean): string {
+  if (type === 'dark_horse') return succeeded ? '兑现' : '回落';
+  if (type === 'giant_crisis') return succeeded ? '化解' : '延续';
+  return succeeded ? '保级' : '降级';
+}
 
 export default function SeasonReview({ world, seasonNumber }: Props) {
   const honor = world.honorHistory.find(h => h.seasonNumber === seasonNumber);
@@ -43,6 +57,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   // Prediction
   const prediction = world.predictionHistory?.find((entry) => entry.season === seasonNumber);
+  const seasonStorylines = (world.storylineHistory ?? [])
+    .filter(storyline => storyline.seasonNumber === seasonNumber)
+    .sort((a, b) => a.startedWindow - b.startedWindow || a.teamId.localeCompare(b.teamId));
 
   return (
     <div className="space-y-4">
@@ -148,6 +165,45 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {seasonStorylines.length > 0 && (
+        <section data-testid="season-storylines" className="border-y border-slate-700/60 py-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-200">
+              <Icon name="chart" size={16} />
+              赛季故事结局
+            </h3>
+            <span className="text-[11px] text-slate-500">{seasonStorylines.length}条已落幕</span>
+          </div>
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            {seasonStorylines.map(storyline => {
+              const meta = STORYLINE_META[storyline.type];
+              return (
+                <div key={storyline.id} className="border-b border-slate-700/40 py-2.5 last:border-b-0">
+                  <div className="flex items-center gap-2">
+                    <Icon name={meta.icon} size={15} className={meta.color} />
+                    <Link to={`/team/${storyline.teamId}`} className="min-w-0 truncate text-sm font-semibold text-slate-100 hover:text-blue-300">
+                      {getTeamName(storyline.teamId, tb)}
+                    </Link>
+                    <span className={`shrink-0 text-[11px] ${meta.color}`}>{meta.label}</span>
+                    <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
+                      storyline.outcome === 'success'
+                        ? 'bg-emerald-950/70 text-emerald-300'
+                        : 'bg-red-950/60 text-red-300'
+                    }`}>
+                      {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{storyline.conclusion}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-600">
+                    S{storyline.seasonNumber} W{storyline.startedWindow + 1} 出现 · {storyline.evidence.join(' · ')}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* L1 final standings */}

@@ -11,6 +11,12 @@ import type { GameWorld, MatchHistoryEntry } from './season-manager';
 import type { TransferRecord } from '../../types/transfer';
 import type { PlayerAward } from '../../types/award';
 import type { SeasonRecord } from '../../types/team';
+import {
+  MAX_ACTIVE_STORYLINES,
+  MAX_STORYLINE_COOLDOWNS,
+  MAX_STORYLINE_HISTORY,
+  type Storyline,
+} from './storylines';
 
 /** Build a minimum-viable world stub with whatever fields a test needs to override. */
 function buildWorld(overrides: Partial<GameWorld>): GameWorld {
@@ -115,6 +121,25 @@ function makeRecord(seasonNumber: number): SeasonRecord {
   };
 }
 
+function makeStory(index: number): Storyline {
+  return {
+    id: `story-${index}`,
+    type: 'dark_horse',
+    teamId: `team-${index}`,
+    seasonNumber: index,
+    startedWindow: 4,
+    startedElapsedWindow: index,
+    phase: '落幕',
+    evidence: [`evidence-${index}`],
+    lastUpdatedWindow: 20,
+    lastUpdatedElapsedWindow: index,
+    quietWindows: 0,
+    endedWindow: 20,
+    outcome: 'success',
+    conclusion: `conclusion-${index}`,
+  };
+}
+
 describe('enforceStorageLimits', () => {
   it('matchHistory keeps only entries from the last MATCH_HISTORY_SEASONS seasons', () => {
     const currentSeason = 100;
@@ -207,6 +232,28 @@ describe('enforceStorageLimits', () => {
     expect(out.playerStatsHistory.retiredLongAgo).toBeUndefined();
     expect(out.playerStatsHistory.recentPlayer).toHaveLength(PLAYER_STATS_HISTORY_SEASONS);
     expect(out.playerStatsHistory.recentPlayer[0].season).toBe(6);
+  });
+
+  it('caps active, completed, and cooling storyline metadata', () => {
+    const activeStorylines = Array.from({ length: 20 }, (_, index) => makeStory(index));
+    const storylineHistory = Array.from({ length: 90 }, (_, index) => makeStory(index));
+    const storylineCooldowns = Array.from({ length: 100 }, (_, index) => ({
+      key: `team-${index}:dark_horse`,
+      untilElapsedWindow: index,
+    }));
+    const out = enforceStorageLimits(buildWorld({
+      activeStorylines,
+      storylineHistory,
+      storylineCooldowns,
+    }));
+
+    expect(out.activeStorylines).toHaveLength(MAX_ACTIVE_STORYLINES);
+    expect(out.activeStorylines?.at(-1)?.id).toBe('story-19');
+    expect(out.storylineHistory).toHaveLength(MAX_STORYLINE_HISTORY);
+    expect(out.storylineHistory?.at(-1)?.id).toBe('story-89');
+    expect(out.storylineCooldowns).toHaveLength(MAX_STORYLINE_COOLDOWNS);
+    expect(out.storylineCooldowns?.at(-1)?.key).toBe('team-99:dark_horse');
+    expect(activeStorylines).toHaveLength(20);
   });
 
   it('does not crash on empty/undefined arrays', () => {

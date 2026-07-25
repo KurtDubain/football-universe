@@ -15,6 +15,12 @@ import {
   TEAM_SEASON_RECORDS_PER_TEAM,
   TRANSFER_HISTORY_SEASONS,
 } from '../src/engine/season/storage-limits';
+import {
+  MAX_ACTIVE_STORYLINES,
+  MAX_STORYLINE_COOLDOWNS,
+  MAX_STORYLINE_HISTORY,
+  MAX_STORYLINES_PER_SEASON,
+} from '../src/engine/season/storylines';
 
 const baseUrl = (process.env.LONG_SAVE_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const reportPath = process.env.LONG_SAVE_REPORT ?? '/tmp/football-long-save-audit.json';
@@ -75,6 +81,24 @@ function assertHistoryCaps(world: GameWorld): string[] {
   if (awardSeasons > PLAYER_AWARDS_SEASONS) failures.push(`award seasons ${awardSeasons}`);
   if (maxPlayerSeasons > PLAYER_STATS_HISTORY_SEASONS) failures.push(`player history seasons ${maxPlayerSeasons}`);
   if (maxTeamRecords > TEAM_SEASON_RECORDS_PER_TEAM) failures.push(`team records ${maxTeamRecords}`);
+  if ((world.activeStorylines?.length ?? 0) > MAX_ACTIVE_STORYLINES) {
+    failures.push(`active storylines ${world.activeStorylines?.length}`);
+  }
+  if ((world.storylineHistory?.length ?? 0) > MAX_STORYLINE_HISTORY) {
+    failures.push(`storyline history ${world.storylineHistory?.length}`);
+  }
+  if ((world.storylineCooldowns?.length ?? 0) > MAX_STORYLINE_COOLDOWNS) {
+    failures.push(`storyline cooldowns ${world.storylineCooldowns?.length}`);
+  }
+  const storylineSeasonCounts = [...(world.activeStorylines ?? []), ...(world.storylineHistory ?? [])]
+    .reduce<Record<number, number>>((counts, storyline) => ({
+      ...counts,
+      [storyline.seasonNumber]: (counts[storyline.seasonNumber] ?? 0) + 1,
+    }), {});
+  const maxSeasonStorylines = Math.max(0, ...Object.values(storylineSeasonCounts));
+  if (maxSeasonStorylines > MAX_STORYLINES_PER_SEASON) {
+    failures.push(`storylines per season ${maxSeasonStorylines}`);
+  }
   return failures;
 }
 

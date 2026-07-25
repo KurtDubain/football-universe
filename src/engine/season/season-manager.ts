@@ -40,6 +40,7 @@ import { buildTeamCoachMap } from '../coaches/coach-lookup';
 import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
 import { initTeamFinances } from '../economy/finance';
 import { rankClubCoefficients } from '../rankings/club-coefficient';
+import { advanceStorylines } from './storylines';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
-  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor' | 'intervention';
+  type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor' | 'intervention' | 'storyline';
   importance?: 'major' | 'normal' | 'minor';
   title: string;
   description: string;
@@ -208,6 +209,12 @@ export interface GameWorld {
   godHandUsed: boolean;
   /** Bounded, display-only record of manual universe interventions. */
   godHandHistory?: GodHandIntervention[];
+  /** Bounded deterministic story state. Display-only; never read by simulation. */
+  activeStorylines?: import('./storylines').Storyline[];
+  /** Completed story endings retained for season review and history. */
+  storylineHistory?: import('./storylines').Storyline[];
+  /** Short cross-window cooldowns prevent a story from immediately restarting. */
+  storylineCooldowns?: import('./storylines').StorylineCooldown[];
   /** Current-window observer judgment; absent when the player chooses not to judge. */
   pendingObservationJudgment?: import('../observation/judgment').PendingObservationJudgment | null;
   /** Bounded detailed history plus lifetime counters. */
@@ -509,6 +516,9 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     predictionHistory: [],
     godHandUsed: false,
     godHandHistory: [],
+    activeStorylines: [],
+    storylineHistory: [],
+    storylineCooldowns: [],
     pendingObservationJudgment: null,
     observationRecord: { total: 0, correct: 0, currentStreak: 0, bestStreak: 0, recent: [] },
     matchHistory: [],
@@ -987,6 +997,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
       playerStatsHistory: snapshotPlayerStatsHistory(world, world.seasonState.seasonNumber),
     };
     const newsCountBeforeSeasonEnd = world.newsLog.length;
+    world = advanceStorylines(world, { finalizeSeason: true }).world;
     let updatedWorld = handleSeasonEnd({
       ...world,
       seasonState: { ...world.seasonState },
@@ -1153,6 +1164,13 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     }
   }
 
+  let storylineNews: NewsItem[] = [];
+  if (!updatedWorld.seasonState.worldCupPhase) {
+    const storylineResult = advanceStorylines(updatedWorld);
+    updatedWorld = storylineResult.world;
+    storylineNews = storylineResult.news;
+  }
+
   // WC phase just ended — finalize WC results and start next season.
   // v23 — non-blocking: transferWindow no longer gates initializeNewSeason.
   let completionNews: NewsItem[] = [];
@@ -1184,7 +1202,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   return {
     world: updatedWorld,
     results: windowResult.results,
-    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news, ...completionNews],
+    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news, ...storylineNews, ...completionNews],
   };
 }
 

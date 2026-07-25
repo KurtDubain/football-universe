@@ -24,6 +24,8 @@ export interface SaveSizeReport {
     transferHistorySeasons: number;
     honorSeasons: number;
     coaches: number;
+    activeStorylines: number;
+    completedStorylines: number;
   };
 }
 
@@ -102,6 +104,11 @@ export function measureWorldSaveSize(
       observationRecord: world.observationRecord,
     }, compress),
     seasonBuffs: metric({ current: world.seasonBuffs, history: world.seasonBuffsHistory }, compress),
+    storylines: metric({
+      active: world.activeStorylines,
+      history: world.storylineHistory,
+      cooldowns: world.storylineCooldowns,
+    }, compress),
     news: metric(world.newsLog, compress),
   };
 
@@ -119,6 +126,8 @@ export function measureWorldSaveSize(
       transferHistorySeasons: new Set((world.transferHistory ?? []).map((entry) => entry.season)).size,
       honorSeasons: world.honorHistory.length,
       coaches: Object.keys(world.coachBases).length,
+      activeStorylines: world.activeStorylines?.length ?? 0,
+      completedStorylines: world.storylineHistory?.length ?? 0,
     },
   };
 }

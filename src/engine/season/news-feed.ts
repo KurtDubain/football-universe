@@ -8,6 +8,7 @@ const TYPE_PRIORITY: Record<NewsItem['type'], number> = {
   relegation: 92,
   coach_fired: 84,
   coach_hired: 80,
+  storyline: 74,
   upset: 76,
   retirement: 68,
   injury: 66,

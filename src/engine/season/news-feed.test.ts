@@ -47,4 +47,17 @@ describe('news feed curation', () => {
     const qualification = { ...news('draw', 'match_result', '大陆杯资格揭晓', '楚门(#3)入围'), importance: 'major' as const };
     expect(getNewsTier(qualification, ['楚门世界', '楚门'])).toBe('headline');
   });
+
+  it('promotes story climaxes without letting routine story starts bury trophies', () => {
+    const start = { ...news('story-start', 'storyline', '故事出现：北城黑马'), importance: 'normal' as const };
+    const climax = { ...news('story-climax', 'storyline', '故事升级：北城进入高潮'), importance: 'major' as const };
+    const trophy = { ...news('trophy', 'trophy', '联赛冠军诞生'), importance: 'major' as const };
+
+    expect(curateNewsFeed([start, climax, trophy]).map(item => item.id)).toEqual([
+      'trophy',
+      'story-climax',
+      'story-start',
+    ]);
+    expect(getNewsTier(climax)).toBe('headline');
+  });
 });

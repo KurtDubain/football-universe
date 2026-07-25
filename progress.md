@@ -291,7 +291,24 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Added focused component/engine tests plus `verify:floating-advance` and `verify:storyline-signals`. Floating interaction passed at 320x568, 390x844, 430x932, and 1440x900 with no overflow, no drag-triggered advance, restored position, and exactly one advance per tap.
 - Full evidence: 76 files / 552 tests, ESLint, TypeScript/PWA build, bundle budget, Dashboard and observation regressions, story-signal browser checks, and the standard game client. Mobile advance p50/p95 remained 12.2/23.2ms normally and 27.1/59.5ms at 4x CPU; 20 rapid attempts accepted and restored exactly one advance.
 
-### Remaining Story Work
+### Phase 5A Handoff (completed in Phase 5B)
 
-- Persist a bounded storyline lifecycle with cooling/hysteresis and explicit endings before marking the complete story-director model done.
+- Persist a bounded storyline lifecycle with cooling/hysteresis and explicit endings.
 - Feed only story upgrades and endings into news, season review, and a compact history timeline.
+
+## 2026-07-25 Observer Gameplay Phase 5B
+
+- Added a deterministic, display-only `Storyline` lifecycle with `出现 / 发展 / 高潮 / 落幕`, two quiet-window hysteresis, six effective-window cooldowns, and factual success/failure conclusions for dark horses, giant crises, and promoted-side survival.
+- Story detection runs once at the authoritative engine boundary after standings and coach pressure settle. Season-end finalization runs before promotion/relegation resets the tables. It consumes no RNG and cannot affect simulation, transfers, finances, or observation judgments.
+- Bounded the director to eight active stories, eight starts per season, 60 completed stories, and 64 cooldown keys. Existing current saves initialize lazily; no compatibility migration or duplicated prose payload was added.
+- Story news is emitted only for starts, phase upgrades, climaxes, and endings. Dashboard still selects at most one primary-focus and one world story, while focus fixtures show a team-qualified relation such as `泰山危机转折战`.
+- Season Review and the History season directory now expose compact story endings with factual evidence and outcome-specific labels:兑现/回落、化解/延续、保级/降级.
+- Added six constructed trigger/boundary scenarios per story type plus lifecycle, hysteresis, cooldown, ending, determinism, RNG, engine integration, news priority, and storage-cap coverage.
+- Verification passed 77 files / 587 tests, ESLint, TypeScript/PWA build, bundle budget (566,179-byte initial graph), the standard game client, Dashboard/observation/story browser workflows, and mobile screenshot review.
+- A 10-season/509-advance current-schema audit passed with zero errors or warnings across all audited routes. Mobile advance p50/p95 was 12.5/24.2ms normally and 30.3/52.3ms at 4x CPU.
+- The 150-season audit completed 7,684 advances with zero rollover errors, warnings, or cap failures. S150 compressed storage was 1,739,090 bytes of 4 MiB; bounded storyline metadata used 6,772 bytes. S1/S50/S100/S150 browser reload and next-advance digests all matched.
+
+### Remaining Story Enhancements
+
+- Add key-win evidence to dark-horse detection and decisive cup-exit evidence to giant-crisis detection before marking those richer trigger definitions complete.
+- The broader observer roadmap still needs a unified post-advance world response and a complete primary-team season trajectory; the story ending section alone does not satisfy those larger items.

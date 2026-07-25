@@ -33,6 +33,8 @@ async function main(): Promise<void> {
           newGame: (seed: number) => void;
           setFavoriteTeams: (ids: string[]) => void;
           batchAdvance: (count: number) => Promise<void>;
+          advanceUntil: (type: 'cup' | 'season_end') => Promise<void>;
+          advanceWindow: () => Promise<void>;
         };
         const store = (window as typeof window & {
           __gameStore?: { getState: () => AuditState };
@@ -59,18 +61,71 @@ async function main(): Promise<void> {
       for (const invented of ['管理层', '球迷', '更衣室', '下课传闻']) {
         if (text.includes(invented)) throw new Error(`${viewport.name}: storyline includes unsupported copy "${invented}"`);
       }
+      const relationCount = await page.getByText(/黑马试金石|危机转折战|保级关键战/).count();
+      if (relationCount < 1) throw new Error(`${viewport.name}: active storyline is not connected to a focus fixture`);
       if (overflow > 1) throw new Error(`${viewport.name}: page overflows by ${overflow}px`);
       if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors: ${errors.join(' | ')}`);
 
       await signals.scrollIntoViewIfNeeded();
       const screenshot = `/tmp/football-storyline-signals-${viewport.name}.png`;
       await page.screenshot({ path: screenshot, animations: 'disabled' });
+
+      await page.evaluate(async () => {
+        const store = (window as typeof window & {
+          __gameStore?: {
+            getState: () => {
+              advanceUntil: (type: 'cup' | 'season_end') => Promise<void>;
+              advanceWindow: () => Promise<void>;
+              closeTransferWindow: (autoResolveRest: boolean) => void;
+            };
+          };
+        }).__gameStore;
+        if (!store) throw new Error('Audit store unavailable');
+        await store.getState().advanceUntil('season_end');
+        await store.getState().advanceWindow();
+        store.getState().closeTransferWindow(true);
+        window.history.pushState({}, '', '/?audit=1');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.getByTestId('dashboard').waitFor({ state: 'visible', timeout: 20_000 });
+      const reviewTab = page.getByRole('button', { name: /S1回顾/ });
+      await reviewTab.waitFor({ state: 'visible', timeout: 20_000 });
+      await page.evaluate(() => {
+        const button = [...document.querySelectorAll('button')]
+          .find(candidate => candidate.textContent?.includes('S1回顾'));
+        if (!(button instanceof HTMLButtonElement)) throw new Error('Season review tab unavailable');
+        button.click();
+      });
+      const seasonStories = page.getByTestId('season-storylines');
+      await seasonStories.waitFor({ state: 'visible', timeout: 10_000 });
+      const seasonStoryCount = await seasonStories.locator('div.grid > div').count();
+      const seasonText = (await seasonStories.textContent()) ?? '';
+      if (
+        seasonStoryCount < 1
+        || seasonStoryCount > 8
+        || !seasonText.includes('赛季故事结局')
+        || !/兑现|回落|化解|延续|保级|降级/.test(seasonText)
+      ) {
+        throw new Error(`${viewport.name}: season story endings are incomplete`);
+      }
+      const reviewOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (reviewOverflow > 1) throw new Error(`${viewport.name}: season review overflows by ${reviewOverflow}px`);
+      const reviewScreenshot = `/tmp/football-storyline-review-${viewport.name}.png`;
+      await seasonStories.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: reviewScreenshot, animations: 'disabled' });
+      if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors: ${errors.join(' | ')}`);
+
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
         storyCount,
         text: text.replace(/\s+/g, ' ').trim(),
+        relationCount,
+        seasonStoryCount,
+        seasonText: seasonText.replace(/\s+/g, ' ').trim(),
         overflow,
+        reviewOverflow,
         screenshot,
+        reviewScreenshot,
       });
       await context.close();
     }

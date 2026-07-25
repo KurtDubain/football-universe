@@ -18,6 +18,11 @@ import type { GameWorld, MatchHistoryEntry } from './season-manager';
 import type { TransferRecord } from '../../types/transfer';
 import type { PlayerAward } from '../../types/award';
 import type { SeasonRecord } from '../../types/team';
+import {
+  MAX_ACTIVE_STORYLINES,
+  MAX_STORYLINE_COOLDOWNS,
+  MAX_STORYLINE_HISTORY,
+} from './storylines';
 
 /** Keep matchHistory entries from the last N seasons (inclusive of current). */
 export const MATCH_HISTORY_SEASONS = 3;
@@ -65,6 +70,11 @@ function trimSeasonRecords(
   if (!records || records.length === 0) return records ?? [];
   if (records.length <= cap) return records;
   return records.slice(-cap);
+}
+
+function trimList<T>(entries: T[] | undefined, cap: number): T[] {
+  if (!entries || entries.length === 0) return entries ?? [];
+  return entries.length <= cap ? entries : entries.slice(-cap);
 }
 
 /**
@@ -118,6 +128,13 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     else playerHistoryChanged = true;
   }
 
+  const activeStorylines = trimList(world.activeStorylines, MAX_ACTIVE_STORYLINES);
+  const storylineHistory = trimList(world.storylineHistory, MAX_STORYLINE_HISTORY);
+  const storylineCooldowns = trimList(world.storylineCooldowns, MAX_STORYLINE_COOLDOWNS);
+  const storylinesUnchanged = (world.activeStorylines === undefined || world.activeStorylines === activeStorylines)
+    && (world.storylineHistory === undefined || world.storylineHistory === storylineHistory)
+    && (world.storylineCooldowns === undefined || world.storylineCooldowns === storylineCooldowns);
+
   // Avoid spinning a fresh world if nothing actually changed. We treat the
   // input as "unchanged" only when the original array reference is identical
   // to what trim returned AND it was already an array (undefined → [] is a
@@ -125,7 +142,14 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
   const matchUnchanged = world.matchHistory !== undefined && world.matchHistory === matchHistory;
   const transferUnchanged = world.transferHistory !== undefined && world.transferHistory === transferHistory;
   const awardsUnchanged = world.playerAwardsHistory !== undefined && world.playerAwardsHistory === playerAwardsHistory;
-  if (matchUnchanged && transferUnchanged && awardsUnchanged && !teamRecordsChanged && !playerHistoryChanged) {
+  if (
+    matchUnchanged
+    && transferUnchanged
+    && awardsUnchanged
+    && !teamRecordsChanged
+    && !playerHistoryChanged
+    && storylinesUnchanged
+  ) {
     return world;
   }
 
@@ -136,5 +160,8 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     playerAwardsHistory,
     teamSeasonRecords,
     playerStatsHistory,
+    activeStorylines,
+    storylineHistory,
+    storylineCooldowns,
   };
 }
