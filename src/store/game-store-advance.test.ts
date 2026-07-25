@@ -20,7 +20,10 @@ describe('game store advance scheduling', () => {
       initialized: false,
       lastResults: [],
       lastNews: [],
+      lastObservationSettlements: [],
+      lastWorldResponse: null,
       isAdvancing: false,
+      advanceError: null,
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
@@ -55,5 +58,29 @@ describe('game store advance scheduling', () => {
     expect(useGameStore.getState().isAdvancing).toBe(false);
     expect(useGameStore.getState().advanceTick).toBe(1);
     expect(useGameStore.getState().world!.seasonState.currentWindowIndex).toBe(before + 1);
+    expect(useGameStore.getState().lastWorldResponse).toMatchObject({
+      mode: 'single',
+      advancedWindows: 1,
+    });
+    expect(useGameStore.getState().advanceError).toBeNull();
+  });
+
+  it('restores interaction and publishes a readable error when engine work fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const validWorld = useGameStore.getState().world!;
+    const brokenWorld = { ...validWorld, seasonState: undefined } as unknown as typeof validWorld;
+    useGameStore.setState({ world: brokenWorld });
+
+    const advance = useGameStore.getState().advanceWindow();
+    frames.shift()!(performance.now());
+    frames.shift()!(performance.now());
+    const completed = await advance;
+
+    expect(completed).toBe(false);
+    expect(useGameStore.getState().isAdvancing).toBe(false);
+    expect(useGameStore.getState().advanceError).toContain('本次推进没有完成');
+    useGameStore.getState().dismissAdvanceError();
+    expect(useGameStore.getState().advanceError).toBeNull();
+    consoleError.mockRestore();
   });
 });

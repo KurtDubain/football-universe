@@ -68,6 +68,8 @@ export default function Layout({ children }: LayoutProps) {
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const batchAdvance = useGameStore((s) => s.batchAdvance);
   const advanceUntil = useGameStore((s) => s.advanceUntil);
+  const advanceError = useGameStore((s) => s.advanceError);
+  const dismissAdvanceError = useGameStore((s) => s.dismissAdvanceError);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const resetGame = useGameStore((s) => s.resetGame);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
@@ -118,12 +120,26 @@ export default function Layout({ children }: LayoutProps) {
   }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
-  const handleFloatingAdvance = async () => {
-    await advanceWindow();
+  const showLatestResponse = () => {
     if (location.pathname !== '/') {
       navigate('/', { state: { showLatestResults: true } });
     }
   };
+  const handleWindowAdvance = async () => {
+    const advanced = await advanceWindow();
+    if (advanced) showLatestResponse();
+  };
+  const handleBatchAdvance = async (count: number) => {
+    setShowFastMenu(false);
+    const advanced = await batchAdvance(count);
+    if (advanced) showLatestResponse();
+  };
+  const handleTargetAdvance = async (type: 'cup' | 'season_end') => {
+    setShowFastMenu(false);
+    const advanced = await advanceUntil(type);
+    if (advanced) showLatestResponse();
+  };
+  const handleFloatingAdvance = handleWindowAdvance;
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;
   const seasonNumber = world?.seasonState.seasonNumber ?? 1;
   const calendarLen = world?.seasonState.calendar.length ?? 0;
@@ -413,7 +429,7 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="flex items-center gap-1 shrink-0 relative z-[65]">
             <button
-              onClick={advanceWindow}
+              onClick={handleWindowAdvance}
               disabled={isAdvancing || !currentWindow}
               className="h-11 sm:h-auto px-3 sm:px-4 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed text-white text-sm font-medium rounded-l-md transition-colors cursor-pointer"
             >
@@ -431,11 +447,11 @@ export default function Layout({ children }: LayoutProps) {
             )}
             {showFastMenu && currentWindow && (
               <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[60] py-1 min-w-[120px] max-w-[calc(100vw-24px)]">
-                <button onClick={() => { batchAdvance(5); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 5 步</button>
-                <button onClick={() => { batchAdvance(10); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 10 步</button>
+                <button onClick={() => handleBatchAdvance(5)} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 5 步</button>
+                <button onClick={() => handleBatchAdvance(10)} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 10 步</button>
                 <div className="border-t border-slate-700 my-0.5" />
-                <button onClick={() => { advanceUntil('cup'); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进到杯赛</button>
-                <button onClick={() => { advanceUntil('season_end'); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-amber-400 hover:bg-slate-700 text-left cursor-pointer">快进到赛季末</button>
+                <button onClick={() => handleTargetAdvance('cup')} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进到杯赛</button>
+                <button onClick={() => handleTargetAdvance('season_end')} className="w-full min-h-11 px-3 py-2 text-xs text-amber-400 hover:bg-slate-700 text-left cursor-pointer">快进到赛季末</button>
                 <div className="border-t border-slate-700 my-0.5" />
                 <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-400 hover:bg-slate-700 text-left cursor-pointer">{showFloatingBtn ? '隐藏悬浮按钮' : '显示悬浮按钮'}</button>
               </div>
@@ -480,6 +496,19 @@ export default function Layout({ children }: LayoutProps) {
         <div role="alert" className="fixed left-3 right-3 bottom-3 sm:left-auto sm:w-96 z-[120] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
           <span className="text-xs flex-1">存档写入失败，当前进度仍保留在本页内存中。请先释放浏览器存储空间，再继续操作。</span>
           <button aria-label="关闭存档错误提示" onClick={() => setSaveError(false)} className="w-8 h-8 shrink-0 text-red-300 hover:text-white">×</button>
+        </div>
+      )}
+      {advanceError && (
+        <div role="alert" className="fixed left-3 right-3 bottom-3 sm:left-auto sm:w-96 z-[121] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
+          <span className="text-xs flex-1">{advanceError}</span>
+          <button
+            type="button"
+            aria-label="关闭推进错误提示"
+            onClick={dismissAdvanceError}
+            className="w-8 h-8 shrink-0 text-red-300 hover:text-white"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

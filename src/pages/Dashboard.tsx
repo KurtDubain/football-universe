@@ -34,6 +34,7 @@ import TeamBadge from '../components/TeamBadge';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
+const WorldResponseSummary = lazy(() => import('../components/WorldResponseSummary'));
 
 /**
  * Compact money formatter for chip display.
@@ -63,6 +64,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const advanceTick = useGameStore((s) => s.advanceTick);
+  const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
 
   const [activeTab, setActiveTab] = useState<TabKey>(() => (
     (location.state as { showLatestResults?: boolean } | null)?.showLatestResults ? 'results' : 'matchday'
@@ -114,11 +116,15 @@ function DashboardContent({ world }: { world: GameWorld }) {
 
   // v20 — auto-redirect to /market when transfer window opens
   useEffect(() => {
-    if (world?.transferWindow?.status === 'open' && window.location.pathname !== '/market') {
+    if (
+      world?.transferWindow?.status === 'open'
+      && window.location.pathname !== '/market'
+      && !lastWorldResponse
+    ) {
       navigate('/market');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world?.transferWindow?.status]);
+  }, [world?.transferWindow?.status, lastWorldResponse?.id]);
 
   const currentWindow = getCurrentWindow();
 
@@ -319,6 +325,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
 
         {activeTab === 'results' && (
           <ResultsTab
+            key={`results-${advanceTick}`}
             world={world}
             lastResults={lastResults}
             lastNews={lastNews}
@@ -761,6 +768,8 @@ function ResultsTab({
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
+  const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const favoriteTeamNames = favoriteTeamIds
     .flatMap(teamId => {
       const team = world.teamBases[teamId];
@@ -772,7 +781,7 @@ function ResultsTab({
     { favoriteTeamNames, limit: 8 },
   );
 
-  if (lastResults.length === 0 && curatedNews.length === 0) {
+  if (!lastWorldResponse && lastResults.length === 0 && curatedNews.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-sm text-slate-500">暂无比赛结果，请先推进模拟</p>
@@ -782,55 +791,85 @@ function ResultsTab({
 
   return (
     <div className="space-y-4">
-      <Suspense fallback={null}>
-        <ObservationSettlementSummary
-          settlements={lastObservationSettlements}
-          record={world.observationRecord}
-          teamBases={world.teamBases}
-        />
-      </Suspense>
-      {lastResults.length > 0 ? (
-        <ResultAnimation
-          results={lastResults}
-          teamBases={world.teamBases}
-          priorityTeamIds={favoriteTeamIds}
-          onComplete={() => undefined}
-          onResultClick={onResultClick}
-          onLiveView={onLiveView}
-        />
+      {lastWorldResponse ? (
+        <Suspense fallback={<div className="h-32 border-y border-slate-700/60" aria-hidden />}>
+          <WorldResponseSummary
+            response={lastWorldResponse}
+            world={world}
+            onResultClick={onResultClick}
+          />
+        </Suspense>
       ) : (
-        <p className="text-xs text-slate-400">本次推进完成了赛季结算，重点动态如下。</p>
+        <Suspense fallback={null}>
+          <ObservationSettlementSummary
+            settlements={lastObservationSettlements}
+            record={world.observationRecord}
+            teamBases={world.teamBases}
+          />
+        </Suspense>
       )}
 
-      {/* News feed */}
-      {(lastNews.length > 0 || world.newsLog.length > 0) && (
-        <div>
-          <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
-            <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" />
-            新闻动态
-          </h3>
-          <div className="space-y-1.5">
-            {curatedNews.map(
-              (news) => (
-                <div
-                  key={news.id}
-                  className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700"
-                  style={{
-                    borderLeftWidth: '3px',
-                    borderLeftColor: getNewsBorderColor(news.type),
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1 text-sm text-slate-200">{news.title}</p>
-                    <span className="shrink-0 text-[11px] text-slate-400">
-                      {getNewsTier(news, favoriteTeamNames) === 'headline' ? '头条' : getNewsTier(news, favoriteTeamNames) === 'notable' ? '重点' : '简讯'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{news.description}</p>
-                </div>
-              )
-            )}
-          </div>
+      {lastWorldResponse && (
+        <button
+          type="button"
+          data-testid="toggle-full-report"
+          onClick={() => setDetailsOpen(value => !value)}
+          className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-blue-200"
+        >
+          <Icon name={detailsOpen ? 'arrow-up' : 'arrow-down'} size={15} />
+          {detailsOpen
+            ? '收起完整战报'
+            : lastWorldResponse.advancedWindows > 1
+              ? '查看最近一轮完整战报'
+              : '查看完整战报与新闻'}
+        </button>
+      )}
+
+      {(!lastWorldResponse || detailsOpen) && (
+        <div data-testid="full-report" className="space-y-4">
+          {lastResults.length > 0 ? (
+            <ResultAnimation
+              results={lastResults}
+              teamBases={world.teamBases}
+              priorityTeamIds={favoriteTeamIds}
+              onComplete={() => undefined}
+              onResultClick={onResultClick}
+              onLiveView={onLiveView}
+            />
+          ) : (
+            <p className="text-xs text-slate-400">本次推进完成了赛季结算，重点动态如下。</p>
+          )}
+
+          {(lastNews.length > 0 || world.newsLog.length > 0) && (
+            <div>
+              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" />
+                新闻动态
+              </h3>
+              <div className="space-y-1.5">
+                {curatedNews.map(
+                  (news) => (
+                    <div
+                      key={news.id}
+                      className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700"
+                      style={{
+                        borderLeftWidth: '3px',
+                        borderLeftColor: getNewsBorderColor(news.type),
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <p className="min-w-0 flex-1 text-sm text-slate-200">{news.title}</p>
+                        <span className="shrink-0 text-[11px] text-slate-400">
+                          {getNewsTier(news, favoriteTeamNames) === 'headline' ? '头条' : getNewsTier(news, favoriteTeamNames) === 'notable' ? '重点' : '简讯'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{news.description}</p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -69,6 +69,7 @@ describe('game store current-save persistence', () => {
     const exported = JSON.parse(exportCurrentSave(SAVE_STORAGE_KEY));
     expect(exported.state.lastResults).toEqual([]);
     expect(exported.state.lastNews).toEqual([]);
+    expect(exported.state.lastWorldResponse).toBeUndefined();
 
     useGameStore.setState({ world: null, initialized: false, lastResults: [], lastNews: [] });
     replaceCompressedStorageItem(SAVE_STORAGE_KEY, JSON.stringify(exported));
@@ -76,6 +77,7 @@ describe('game store current-save persistence', () => {
 
     expect(useGameStore.getState().lastResults).toHaveLength(resultCount);
     expect(useGameStore.getState().lastNews).toEqual(useGameStore.getState().world?.newsLog.slice(-30));
+    expect(useGameStore.getState().lastWorldResponse).toBeNull();
   });
 
   it('preserves the bounded universe intervention record across export and reload', async () => {

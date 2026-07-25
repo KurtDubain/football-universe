@@ -22,7 +22,9 @@ describe('game store observation settlement paths', () => {
       lastResults: [],
       lastNews: [],
       lastObservationSettlements: [],
+      lastWorldResponse: null,
       isAdvancing: false,
+      advanceError: null,
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
@@ -38,7 +40,7 @@ describe('game store observation settlement paths', () => {
     __resetCompressedStorageForTests();
   });
 
-  async function completeAdvance(promise: Promise<void>) {
+  async function completeAdvance(promise: Promise<unknown>) {
     frames.shift()!(performance.now());
     frames.shift()!(performance.now());
     await promise;
@@ -66,15 +68,19 @@ describe('game store observation settlement paths', () => {
   });
 
   it.each([
-    ['batch advance', () => useGameStore.getState().batchAdvance(2)],
-    ['next cup', () => useGameStore.getState().advanceUntil('cup')],
-    ['season end', () => useGameStore.getState().advanceUntil('season_end')],
-  ])('preserves compact settlement feedback through %s', async (_label, advance) => {
+    ['batch advance', 'batch', () => useGameStore.getState().batchAdvance(2)],
+    ['next cup', 'cup', () => useGameStore.getState().advanceUntil('cup')],
+    ['season end', 'season_end', () => useGameStore.getState().advanceUntil('season_end')],
+  ] as const)('preserves compact settlement feedback through %s', async (_label, mode, advance) => {
     judgeFirstFixture();
     await completeAdvance(advance());
 
     expect(useGameStore.getState().world?.observationRecord?.total).toBe(1);
     expect(useGameStore.getState().lastObservationSettlements).toHaveLength(1);
+    expect(useGameStore.getState().lastWorldResponse).toMatchObject({
+      mode,
+      observationSettlements: [expect.objectContaining({ fixtureId: expect.any(String) })],
+    });
   });
 
   it('allows only current-window fixtures and replaces the one pending judgment', () => {

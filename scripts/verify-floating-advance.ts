@@ -80,6 +80,7 @@ async function main(): Promise<void> {
 
       await page.getByTestId('floating-advance').click();
       await page.waitForURL(url => url.pathname === '/');
+      await page.getByTestId('toggle-full-report').click();
       await page.getByTestId('result-sequence').waitFor({ state: 'visible', timeout: 10_000 });
       const afterTap = await page.evaluate(() => {
         const store = (window as typeof window & {

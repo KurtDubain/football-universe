@@ -28,6 +28,12 @@ import {
   type ObservationSettlement,
 } from '../engine/observation/judgment';
 import { applyGodHandIntervention } from '../engine/season/god-hand';
+import {
+  buildAdvanceWorldResponse,
+  readableAdvanceError,
+  type AdvanceWindowOutcome,
+  type AdvanceWorldResponse,
+} from '../engine/observation/world-response';
 
 interface GameStore {
   world: GameWorld | null;
@@ -35,7 +41,9 @@ interface GameStore {
   lastResults: MatchResult[];
   lastNews: NewsItem[];
   lastObservationSettlements: ObservationSettlement[];
+  lastWorldResponse: AdvanceWorldResponse | null;
   isAdvancing: boolean;
+  advanceError: string | null;
   /** Bumps on every successful advance — Dashboard listens for changes to trigger
    *  auto-live / celebration / tab switch reliably each advance, not just the first. */
   advanceTick: number;
@@ -50,9 +58,10 @@ interface GameStore {
   dismissAchievement: () => void;
 
   newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => void;
-  advanceWindow: () => Promise<void>;
-  batchAdvance: (count: number) => Promise<void>;
-  advanceUntil: (type: 'cup' | 'season_end') => Promise<void>;
+  advanceWindow: () => Promise<boolean>;
+  batchAdvance: (count: number) => Promise<boolean>;
+  advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
+  dismissAdvanceError: () => void;
   /** Sets the legacy primary favorite. */
   setFavoriteTeam: (teamId: string | null) => void;
   /** Sets the entire favorites list (max 3 entries). */
@@ -122,6 +131,10 @@ function mergePersistedGameState(
     favoriteTeamIds: orderedFavorites,
     lastResults: reconstructLastResults(merged.world),
     lastNews: merged.world?.newsLog.slice(-30) ?? [],
+    lastObservationSettlements: [],
+    lastWorldResponse: null,
+    isAdvancing: false,
+    advanceError: null,
   };
 }
 
@@ -136,6 +149,10 @@ function yieldForAdvanceFeedback(): Promise<void> {
 }
 
 function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamIds: string[]) {
+  const currentWindow = getCurrentWindow(world);
+  if (!currentWindow) throw new Error('当前没有可推进的比赛窗口');
+  const seasonNumber = world.seasonState.seasonNumber;
+  const windowIndex = world.seasonState.currentWindowIndex;
   const result = executeCurrentWindow(world, { favoriteTeamIds });
   const settlement = settleObservationJudgment(
     result.world.observationRecord,
@@ -143,9 +160,19 @@ function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamId
     result.results,
   );
   const settlementChanged = settlement.settlements.length > 0;
+  const observationSettlements = settlement.settlements;
+  const outcome: AdvanceWindowOutcome = {
+    seasonNumber,
+    windowIndex,
+    windowLabel: currentWindow.label,
+    results: result.results,
+    news: result.news,
+    observationSettlements,
+  };
   return {
     ...result,
-    observationSettlements: settlement.settlements,
+    observationSettlements,
+    outcome,
     world: settlementChanged
       ? {
           ...result.world,
@@ -178,7 +205,9 @@ export const useGameStore = create<GameStore>()(
       lastResults: [],
       lastNews: [],
       lastObservationSettlements: [],
+      lastWorldResponse: null,
       isAdvancing: false,
+      advanceError: null,
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
@@ -192,66 +221,119 @@ export const useGameStore = create<GameStore>()(
       newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => {
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
         const world = initializeGameWorld(actualSeed, options);
-        set({ world, initialized: true, lastResults: [], lastNews: [], lastObservationSettlements: [] });
+        set({
+          world,
+          initialized: true,
+          lastResults: [],
+          lastNews: [],
+          lastObservationSettlements: [],
+          lastWorldResponse: null,
+          advanceError: null,
+        });
       },
 
       advanceWindow: async () => {
         const { world, isAdvancing } = get();
-        if (!world || isAdvancing) return;
-        set({ isAdvancing: true });
+        if (!world || isAdvancing) return false;
+        set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
-          const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
+          const favoriteTeamIds = get().favoriteTeamIds;
+          const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
           const updatedWorld = boundWorldStorageMetadata(result.world);
+          const worldResponse = buildAdvanceWorldResponse(
+            'single',
+            [result.outcome],
+            updatedWorld,
+            favoriteTeamIds,
+            get().favoriteTeamId,
+          );
 
           // Detect new achievements (compare against pre-advance state)
           const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
           const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
 
-          set({ world: updatedWorld, lastResults: result.results, lastNews: result.news, lastObservationSettlements: result.observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1, newAchievements: [...get().newAchievements, ...newAch] });
+          set({
+            world: updatedWorld,
+            lastResults: result.results,
+            lastNews: result.news,
+            lastObservationSettlements: result.observationSettlements,
+            lastWorldResponse: worldResponse,
+            isAdvancing: false,
+            advanceTick: get().advanceTick + 1,
+            newAchievements: [...get().newAchievements, ...newAch],
+          });
+          return true;
         } catch (e) {
           console.error('Error advancing window:', e);
-          set({ isAdvancing: false });
+          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          return false;
         }
       },
 
       batchAdvance: async (count: number) => {
         let { world } = get();
-        if (!world || get().isAdvancing) return;
-        set({ isAdvancing: true });
+        if (!world || get().isAdvancing) return false;
+        set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const favoriteTeamIds = get().favoriteTeamIds;
           let allResults: MatchResult[] = [];
           let allNews: NewsItem[] = [];
           let observationSettlements: ObservationSettlement[] = [];
+          const outcomes: AdvanceWindowOutcome[] = [];
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
-            const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
             world = result.world;
             allResults = result.results; // keep only last window's results
             allNews = [...allNews, ...result.news];
             observationSettlements = [...observationSettlements, ...result.observationSettlements];
+            outcomes.push(result.outcome);
+          }
+          if (outcomes.length === 0) {
+            set({ isAdvancing: false });
+            return false;
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
           world = boundWorldStorageMetadata(enforceStorageLimits(world));
-          set({ world, lastResults: allResults, lastNews: allNews, lastObservationSettlements: observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1 });
+          const worldResponse = buildAdvanceWorldResponse(
+            'batch',
+            outcomes,
+            world,
+            favoriteTeamIds,
+            get().favoriteTeamId,
+          );
+          set({
+            world,
+            lastResults: allResults,
+            lastNews: allNews,
+            lastObservationSettlements: observationSettlements,
+            lastWorldResponse: worldResponse,
+            isAdvancing: false,
+            advanceTick: get().advanceTick + 1,
+          });
+          return true;
         } catch (e) {
           console.error('Error in batch advance:', e);
-          set({ world, isAdvancing: false });
+          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          return false;
         }
       },
 
       advanceUntil: async (type: 'cup' | 'season_end') => {
         let { world } = get();
-        if (!world || get().isAdvancing) return;
-        set({ isAdvancing: true });
+        if (!world || get().isAdvancing) return false;
+        set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const favoriteTeamIds = get().favoriteTeamIds;
           let allNews: NewsItem[] = [];
           let lastResults: MatchResult[] = [];
           let observationSettlements: ObservationSettlement[] = [];
+          const outcomes: AdvanceWindowOutcome[] = [];
           let safety = 0;
           while (safety < 60) {
             const cw = getCurrentWindow(world);
@@ -259,21 +341,45 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
-            const result = executeWindowWithObservationSettlement(world, get().favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];
             observationSettlements = [...observationSettlements, ...result.observationSettlements];
+            outcomes.push(result.outcome);
             safety++;
+          }
+          if (outcomes.length === 0) {
+            set({ isAdvancing: false });
+            return false;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
           world = boundWorldStorageMetadata(enforceStorageLimits(world));
-          set({ world, lastResults, lastNews: allNews, lastObservationSettlements: observationSettlements, isAdvancing: false, advanceTick: get().advanceTick + 1 });
+          const worldResponse = buildAdvanceWorldResponse(
+            type === 'cup' ? 'cup' : 'season_end',
+            outcomes,
+            world,
+            favoriteTeamIds,
+            get().favoriteTeamId,
+          );
+          set({
+            world,
+            lastResults,
+            lastNews: allNews,
+            lastObservationSettlements: observationSettlements,
+            lastWorldResponse: worldResponse,
+            isAdvancing: false,
+            advanceTick: get().advanceTick + 1,
+          });
+          return true;
         } catch (e) {
           console.error('Error in advanceUntil:', e);
-          set({ world, isAdvancing: false });
+          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          return false;
         }
       },
+
+      dismissAdvanceError: () => set({ advanceError: null }),
 
       setFavoriteTeam: (teamId: string | null) => {
         if (teamId === null) {
@@ -564,7 +670,17 @@ export const useGameStore = create<GameStore>()(
       },
 
       resetGame: () => {
-        set({ world: null, initialized: false, lastResults: [], lastNews: [], lastObservationSettlements: [], favoriteTeamId: null, favoriteTeamIds: [] });
+        set({
+          world: null,
+          initialized: false,
+          lastResults: [],
+          lastNews: [],
+          lastObservationSettlements: [],
+          lastWorldResponse: null,
+          advanceError: null,
+          favoriteTeamId: null,
+          favoriteTeamIds: [],
+        });
         compressedStorage.removeItem(SAVE_STORAGE_KEY);
       },
 

@@ -68,6 +68,7 @@ async function main(): Promise<void> {
         animations: 'disabled',
       });
       await primaryAdvance.click();
+      await page.getByTestId('toggle-full-report').click();
       const favoriteHeading = page.getByText('我的球队本轮赛果');
       await favoriteHeading.waitFor({ state: 'visible', timeout: 10_000 });
       const favoriteHeadingBox = await favoriteHeading.boundingBox();

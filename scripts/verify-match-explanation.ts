@@ -51,6 +51,7 @@ async function main(): Promise<void> {
       await preDialog.getByRole('button', { name: '关闭比赛详情' }).click();
 
       await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('toggle-full-report').click();
       const skip = page.getByTestId('skip-result-animation');
       await skip.waitFor({ state: 'visible', timeout: 10_000 });
       await skip.click();

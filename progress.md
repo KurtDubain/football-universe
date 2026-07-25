@@ -311,4 +311,20 @@ Original prompt: 可以，那你来优化一下动画模块吧
 ### Remaining Story Enhancements
 
 - Add key-win evidence to dark-horse detection and decisive cup-exit evidence to giant-crisis detection before marking those richer trigger definitions complete.
-- The broader observer roadmap still needs a unified post-advance world response and a complete primary-team season trajectory; the story ending section alone does not satisfy those larger items.
+- The unified post-advance world response was completed in Phase 6A. A complete primary-team season trajectory remains broader than the existing story-ending section.
+
+## 2026-07-25 Observer Gameplay Phase 6A
+
+- Added a transient, deterministic `AdvanceWorldResponse` shared by single, batch, cup-target, and season-end advances. It records only the current operation's bounded presentation summary and is excluded from save persistence.
+- Featured-result ranking prioritizes the primary observer team, other favorites, finals, upsets, and recency. At most three matches, two story updates, two other key-news candidates, and one observation settlement survive into the response.
+- The compact response shows a real turning point for the primary result, falling back to the shared destiny-deviation explanation when no discrete event exists.
+- Results now open on the compact response. The latest full result animation and curated news mount only after an explicit expand action; starred matches and finals retain the existing automatic live presentation.
+- Successful header or floating advances from another route return to the response. All advance actions now report success, restore interaction on failure, expose a dismissible UI error, and avoid committing a locally partial batch.
+- The response measured 329px high at 390x844 with zero horizontal overflow. Single and five-window batch flows, expansion, cross-route advance, bounded content, and error dismissal passed on mobile and desktop.
+- Verification passed 78 files / 591 tests, ESLint, TypeScript/PWA build, the 570,358-byte initial graph budget, Dashboard/floating advance/match explanation/observation/world-response browser workflows, and the standard game client.
+- The 10-season current-schema audit completed 509 advances with zero errors or warnings across audited routes. Normal advance p50/p95 was 12.7/18.6ms; 4x CPU was 31.6/48.8ms; 20 rapid attempts still executed and restored exactly one advance.
+
+### Phase 6 Handoff
+
+- Complete the broader primary-team season trajectory in Season Review before marking the whole history-sedimentation phase complete.
+- A later time-control pass still owns "next key node" skip guards, live `精华 / 1x / 3x`, and background/reduced-motion behavior.

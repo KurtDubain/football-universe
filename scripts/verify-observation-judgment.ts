@@ -70,6 +70,7 @@ async function main(): Promise<void> {
       const summary = page.getByTestId('observation-settlement');
       await summary.waitFor({ timeout: 15_000 });
       await summary.getByText(/样本积累中/).waitFor();
+      await page.getByTestId('toggle-full-report').click();
       const hierarchy = await page.evaluate(() => {
         const settlement = document.querySelector('[data-testid="observation-settlement"]');
         const sequence = document.querySelector('[data-testid="result-sequence"]');
