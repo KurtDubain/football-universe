@@ -38,6 +38,10 @@ import {
   appendObserverSeasonTrajectory,
   buildObserverSeasonTrajectory,
 } from '../engine/observation/season-trajectory';
+import {
+  getCurrentKeyNodeGuard,
+  planNextKeyNode,
+} from '../engine/observation/key-node';
 
 interface GameStore {
   world: GameWorld | null;
@@ -65,6 +69,7 @@ interface GameStore {
   advanceWindow: () => Promise<boolean>;
   batchAdvance: (count: number) => Promise<boolean>;
   advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
+  advanceToNextKeyNode: () => Promise<boolean>;
   dismissAdvanceError: () => void;
   /** Sets the legacy primary favorite. */
   setFavoriteTeam: (teamId: string | null) => void;
@@ -382,6 +387,79 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error in advanceUntil:', e);
+          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          return false;
+        }
+      },
+
+      advanceToNextKeyNode: async () => {
+        let { world } = get();
+        if (!world || get().isAdvancing) return false;
+        const favoriteTeamIds = get().favoriteTeamIds;
+        const starredFixtureIds = get().starredFixtureIds;
+        const initialPlan = planNextKeyNode(world, favoriteTeamIds, starredFixtureIds);
+        if (!initialPlan || initialPlan.blocked || initialPlan.skipWindows <= 0) return false;
+
+        set({ isAdvancing: true, advanceError: null });
+        await yieldForAdvanceFeedback();
+        try {
+          let allNews: NewsItem[] = [];
+          let lastResults: MatchResult[] = [];
+          let observationSettlements: ObservationSettlement[] = [];
+          const outcomes: AdvanceWindowOutcome[] = [];
+          let safety = 0;
+
+          while (safety < 60) {
+            const currentWindow = getCurrentWindow(world);
+            if (!currentWindow) break;
+            if (
+              world.seasonState.seasonNumber === initialPlan.seasonNumber
+              && world.seasonState.currentWindowIndex === initialPlan.windowIndex
+            ) break;
+            if (outcomes.length > 0) {
+              const emergentGuard = getCurrentKeyNodeGuard(world, favoriteTeamIds, starredFixtureIds);
+              if (emergentGuard) break;
+            }
+
+            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
+            world = result.world;
+            lastResults = result.results;
+            allNews = [...allNews, ...result.news];
+            observationSettlements = [...observationSettlements, ...result.observationSettlements];
+            outcomes.push(result.outcome);
+            safety++;
+
+            const reachedStoryClimax = result.news.some(
+              item => item.type === 'storyline' && item.importance === 'major',
+            );
+            if (result.observationSettlements.length > 0 || reachedStoryClimax) break;
+          }
+
+          if (outcomes.length === 0) {
+            set({ isAdvancing: false });
+            return false;
+          }
+          if (allNews.length > 30) allNews = allNews.slice(-30);
+          world = boundWorldStorageMetadata(enforceStorageLimits(world));
+          const worldResponse = buildAdvanceWorldResponse(
+            'key_node',
+            outcomes,
+            world,
+            favoriteTeamIds,
+            get().favoriteTeamId,
+          );
+          set({
+            world,
+            lastResults,
+            lastNews: allNews,
+            lastObservationSettlements: observationSettlements,
+            lastWorldResponse: worldResponse,
+            isAdvancing: false,
+            advanceTick: get().advanceTick + 1,
+          });
+          return true;
+        } catch (e) {
+          console.error('Error advancing to key node:', e);
           set({ isAdvancing: false, advanceError: readableAdvanceError() });
           return false;
         }

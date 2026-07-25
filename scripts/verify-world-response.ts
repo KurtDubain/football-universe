@@ -88,8 +88,11 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: full report did not collapse`);
       }
 
+      await page.evaluate(() => {
+        (window as AuditWindow).__gameStore!.getState().setFavoriteTeams([]);
+      });
       await page.getByRole('button', { name: '打开快进菜单' }).click();
-      await page.getByRole('button', { name: '快进 5 步', exact: true }).click();
+      await page.getByRole('button', { name: '推进 5 轮', exact: true }).click();
       await page.waitForFunction((previousId) => {
         const responseState = (window as AuditWindow).__gameStore?.getState().lastWorldResponse;
         return responseState?.id !== previousId && responseState?.mode === 'batch';
@@ -113,6 +116,10 @@ async function main(): Promise<void> {
         fullPage: false,
       });
 
+      await page.evaluate(() => {
+        const store = (window as AuditWindow).__gameStore!;
+        store.getState().setFavoriteTeams(Object.keys(store.getState().world.teamBases).slice(0, 2));
+      });
       const seasonAdvanced = await page.evaluate(() => (
         window as AuditWindow
       ).__gameStore!.getState().advanceUntil('season_end'));

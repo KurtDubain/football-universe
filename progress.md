@@ -341,7 +341,22 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Final verification passed 80 files / 597 tests, ESLint, TypeScript/PWA build, changelog, and the 572,316-byte initial graph budget. The 10-season audit completed 509 advances with no data/runtime issues across 25 mobile/desktop route checks.
 - Mobile advance p50/p95 was 11.7/22.8ms normally and 30.9/42.7ms at 4x CPU. A favorite-team S150 audit completed 7,684 advances with zero rollover issues; trajectories stayed capped at 40, the compressed save was 1,731,946 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
 
-### Phase 7 Handoff
+### Phase 7 Handoff (completed below)
 
-- Implement guarded “next key node” time control before adding more historical surface area.
+- Guarded “next key node” time control was completed in Phase 7.
 - Observation themes, related-match/trophy detail jumps, and richer dark-horse/key-cup evidence remain deliberately open in the durable checklist.
+
+## 2026-07-26 Observer Gameplay Phase 7
+
+- Unified the header fast-forward menu around a pure next-key-node planner. It previews the destination, reason, and number of windows to settle, then stops before the target window rather than simulating it.
+- Key nodes include future starred fixtures, storyline climaxes, favorite-team derbies/title/relegation/knockout matches, cup stages, relegation playoffs, and season end. Cup group stages remain ordinary windows so the control does not stop too often.
+- Unresolved observation judgments, starred current fixtures, and current key matches disable both the key-node jump and fixed 5/10-window controls. Fixed counts remain available as an explicitly continuous alternative outside guarded windows; there is no extra confirmation dialog.
+- The key-node advance reuses the authoritative observation-settlement boundary and atomic world-response commit. It stops early after a judgment settlement or major storyline update and adds no persisted metadata.
+- Verification passed 81 files / 605 tests, ESLint, TypeScript/PWA build, bundle and changelog budgets, the standard game client, world-response regression, and dedicated `390x844`/`1440x900` key-node flows with zero overflow/runtime errors. Both viewports advanced four windows to an uncompleted League Cup R32 node.
+- Mobile advance performance remained healthy at 15.4/26.6ms p50/p95 normally and 26.7/56.4ms under 4x CPU. Twenty rapid attempts still executed and restored one advance.
+- The 150-season audit completed 7,684 advances with zero rollover errors, warnings, or cap failures. S150 compressed storage was 1,731,946 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 8 Handoff
+
+- Live `精华 / 1x / 3x` playback speed and background/reduced-motion verification remain open in Section 9.1.
+- Observation themes, related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical summaries remain open in the durable checklist.

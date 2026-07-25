@@ -3,7 +3,7 @@ import type { GameWorld, NewsItem } from '../season/season-manager';
 import { analyzeDestinyDeviation } from '../match/analysis';
 import type { ObservationSettlement } from './judgment';
 
-export type AdvanceMode = 'single' | 'batch' | 'cup' | 'season_end';
+export type AdvanceMode = 'single' | 'batch' | 'cup' | 'season_end' | 'key_node';
 
 export interface AdvanceWindowOutcome {
   seasonNumber: number;
@@ -164,6 +164,7 @@ export function buildAdvanceWorldResponse(
 }
 
 export function advanceModeLabel(mode: AdvanceMode, advancedWindows: number): string {
+  if (mode === 'key_node') return `前往关键节点 · ${advancedWindows}轮`;
   if (mode === 'cup') return `前往杯赛 · ${advancedWindows}轮`;
   if (mode === 'season_end') return `前往赛季末 · ${advancedWindows}轮`;
   if (mode === 'batch') return `快速推进 ${advancedWindows}轮`;

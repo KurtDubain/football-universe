@@ -10,6 +10,7 @@ import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 import MobileDrawer from '../components/MobileDrawer';
 import FloatingAdvanceButton from '../components/FloatingAdvanceButton';
+import { planNextKeyNode } from '../engine/observation/key-node';
 
 interface LayoutProps {
   children: ReactNode;
@@ -67,12 +68,13 @@ export default function Layout({ children }: LayoutProps) {
   const isAdvancing = useGameStore((s) => s.isAdvancing);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const batchAdvance = useGameStore((s) => s.batchAdvance);
-  const advanceUntil = useGameStore((s) => s.advanceUntil);
+  const advanceToNextKeyNode = useGameStore((s) => s.advanceToNextKeyNode);
   const advanceError = useGameStore((s) => s.advanceError);
   const dismissAdvanceError = useGameStore((s) => s.dismissAdvanceError);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
   const resetGame = useGameStore((s) => s.resetGame);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const favoriteTeamNames = useMemo(
     () => favoriteTeamIds.flatMap(id => {
       const team = world?.teamBases[id];
@@ -120,6 +122,10 @@ export default function Layout({ children }: LayoutProps) {
   }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
+  const nextKeyNode = useMemo(
+    () => world ? planNextKeyNode(world, favoriteTeamIds, starredFixtureIds) : null,
+    [favoriteTeamIds, starredFixtureIds, world],
+  );
   const showLatestResponse = () => {
     if (location.pathname !== '/') {
       navigate('/', { state: { showLatestResults: true } });
@@ -134,9 +140,9 @@ export default function Layout({ children }: LayoutProps) {
     const advanced = await batchAdvance(count);
     if (advanced) showLatestResponse();
   };
-  const handleTargetAdvance = async (type: 'cup' | 'season_end') => {
+  const handleKeyNodeAdvance = async () => {
     setShowFastMenu(false);
-    const advanced = await advanceUntil(type);
+    const advanced = await advanceToNextKeyNode();
     if (advanced) showLatestResponse();
   };
   const handleFloatingAdvance = handleWindowAdvance;
@@ -446,12 +452,59 @@ export default function Layout({ children }: LayoutProps) {
               </button>
             )}
             {showFastMenu && currentWindow && (
-              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[60] py-1 min-w-[120px] max-w-[calc(100vw-24px)]">
-                <button onClick={() => handleBatchAdvance(5)} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 5 步</button>
-                <button onClick={() => handleBatchAdvance(10)} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进 10 步</button>
-                <div className="border-t border-slate-700 my-0.5" />
-                <button onClick={() => handleTargetAdvance('cup')} className="w-full min-h-11 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 text-left cursor-pointer">快进到杯赛</button>
-                <button onClick={() => handleTargetAdvance('season_end')} className="w-full min-h-11 px-3 py-2 text-xs text-amber-400 hover:bg-slate-700 text-left cursor-pointer">快进到赛季末</button>
+              <div
+                data-testid="advance-menu"
+                className="absolute right-0 top-full z-[60] mt-1 w-[min(19rem,calc(100vw-24px))] overflow-hidden rounded-lg border border-slate-700 bg-slate-800 shadow-xl"
+              >
+                <div className="border-b border-slate-700/70 p-2">
+                  <button
+                    type="button"
+                    data-testid="advance-next-key-node"
+                    onClick={handleKeyNodeAdvance}
+                    disabled={!nextKeyNode || nextKeyNode.blocked || isAdvancing}
+                    className="min-h-11 w-full rounded-md bg-emerald-700 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                  >
+                    {nextKeyNode?.blocked ? '当前就是关键节点' : '前往下一关键节点'}
+                  </button>
+                  {nextKeyNode ? (
+                    <div className="px-1 pb-1 pt-2 text-[11px] leading-4">
+                      <div className={nextKeyNode.blocked ? 'text-amber-300' : 'text-emerald-300'}>
+                        {nextKeyNode.reasonLabel} · {nextKeyNode.windowLabel}
+                      </div>
+                      <div className="mt-0.5 text-slate-500">
+                        {nextKeyNode.blocked
+                          ? nextKeyNode.detail
+                          : `将结算 ${nextKeyNode.skipWindows} 个窗口，并在该节点前停下。`}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-1 pb-1 pt-2 text-[11px] text-slate-500">当前赛历没有可前往的后续节点。</div>
+                  )}
+                </div>
+                <div className="px-3 pb-1 pt-2 text-[11px] font-semibold text-slate-500">固定步数</div>
+                <div className="grid grid-cols-2 px-2 pb-1">
+                  <button
+                    onClick={() => handleBatchAdvance(5)}
+                    disabled={isAdvancing || nextKeyNode?.blocked}
+                    className="min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    推进 5 轮
+                  </button>
+                  <button
+                    onClick={() => handleBatchAdvance(10)}
+                    disabled={isAdvancing || nextKeyNode?.blocked}
+                    className="min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    推进 10 轮
+                  </button>
+                </div>
+                <p className={`px-3 pb-2 text-[11px] leading-4 ${
+                  nextKeyNode?.blocked ? 'text-amber-300/80' : 'text-slate-600'
+                }`}>
+                  {nextKeyNode?.blocked
+                    ? '当前关键内容处理完成后，固定步数推进会重新开放。'
+                    : '固定步数会连续结算，不会在中途关键节点前自动停下。'}
+                </p>
                 <div className="border-t border-slate-700 my-0.5" />
                 <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-400 hover:bg-slate-700 text-left cursor-pointer">{showFloatingBtn ? '隐藏悬浮按钮' : '显示悬浮按钮'}</button>
               </div>

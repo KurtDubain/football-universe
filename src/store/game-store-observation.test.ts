@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveObservationSelection } from '../engine/observation/judgment';
+import { planNextKeyNode } from '../engine/observation/key-node';
 import { __resetCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import { useGameStore } from './game-store';
 import { SAVE_STORAGE_KEY } from './save-schema';
@@ -119,5 +120,33 @@ describe('game store observation settlement paths', () => {
 
     useGameStore.getState().setPrimaryFavoriteTeam(secondTeamId);
     expect(useGameStore.getState().world?.observerSeasonTrajectories?.[0]).toEqual(archived);
+  });
+
+  it('advances to the planned key node without simulating that node', async () => {
+    useGameStore.getState().setFavoriteTeams([]);
+    const world = useGameStore.getState().world!;
+    const plan = planNextKeyNode(world, []);
+    expect(plan).toMatchObject({ reason: 'cup', blocked: false });
+
+    await completeAdvance(useGameStore.getState().advanceToNextKeyNode());
+
+    const state = useGameStore.getState();
+    expect(state.world?.seasonState.currentWindowIndex).toBe(plan?.windowIndex);
+    expect(state.getCurrentWindow()?.label).toBe(plan?.windowLabel);
+    expect(state.lastWorldResponse).toMatchObject({
+      mode: 'key_node',
+      advancedWindows: plan?.skipWindows,
+    });
+  });
+
+  it('does not key-node skip an unresolved current judgment', async () => {
+    judgeFirstFixture();
+    const before = useGameStore.getState().world?.seasonState.currentWindowIndex;
+    const advanced = await useGameStore.getState().advanceToNextKeyNode();
+
+    expect(advanced).toBe(false);
+    expect(frames).toHaveLength(0);
+    expect(useGameStore.getState().world?.seasonState.currentWindowIndex).toBe(before);
+    expect(useGameStore.getState().world?.pendingObservationJudgment).not.toBeNull();
   });
 });

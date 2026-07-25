@@ -153,6 +153,7 @@ describe('advance world response', () => {
       .toEqual(buildAdvanceWorldResponse('single', outcomes, world, [], null));
     expect(buildAdvanceWorldResponse('single', [], world, [], null)).toBeNull();
     expect(advanceModeLabel('season_end', 12)).toBe('前往赛季末 · 12轮');
+    expect(advanceModeLabel('key_node', 3)).toBe('前往关键节点 · 3轮');
     expect(readableAdvanceError()).toContain('本次操作未提交');
   });
 });
