@@ -16,6 +16,12 @@ interface VerificationResult {
     completedFramesAdded: number;
     completedPauseReason: string;
   };
+  playback: {
+    defaultMode: string;
+    normalMinuteDelta: number;
+    fastMinuteDelta: number;
+    controlsOverflow: number;
+  };
   screenshot: string;
 }
 
@@ -24,7 +30,7 @@ function captureError(message: ConsoleMessage, errors: string[]): void {
 }
 
 async function verifyViewport(
-  name: 'desktop' | 'mobile' | 'mobile-reduced',
+  name: 'desktop' | 'mobile-320' | 'mobile' | 'mobile-reduced',
   viewport: { width: number; height: number },
   deviceScaleFactor: number,
   reducedMotion: 'reduce' | 'no-preference' = 'no-preference',
@@ -75,9 +81,13 @@ async function verifyViewport(
     await canvas.waitFor({ state: 'visible' });
     await page.waitForTimeout(300);
 
+    const defaultMode = await dialog.getByRole('button', { name: '精华', exact: true }).getAttribute('aria-pressed');
+    if (defaultMode !== 'true') throw new Error(`${name}: highlights is not the default playback mode`);
+
     const before = await page.evaluate(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
       return render ? JSON.parse(render()) as {
+        playbackMode: string;
         ball: { x: number; y: number };
         rendering: { renderedFrames: number; quality: string; particleCap: number; pauseReason: string };
       } : null;
@@ -86,6 +96,7 @@ async function verifyViewport(
     const after = await page.evaluate(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
       return render ? JSON.parse(render()) as {
+        playbackMode: string;
         ball: { x: number; y: number };
         rendering: { renderedFrames: number; quality: string; particleCap: number; pauseReason: string };
       } : null;
@@ -124,6 +135,9 @@ async function verifyViewport(
       const rect = button.getBoundingClientRect();
       return rect.width < 44 || rect.height < 44 ? [(button.textContent ?? button.getAttribute('aria-label') ?? '').trim()] : [];
     }));
+    const controlsOverflow = await dialog.getByTestId('live-controls').evaluate(element =>
+      element.scrollWidth - element.clientWidth
+    );
     const screenshot = `/tmp/football-match-live-${name}.png`;
     await page.evaluate(async () => {
       await document.fonts.ready;
@@ -132,17 +146,39 @@ async function verifyViewport(
     await page.screenshot({ path: screenshot, fullPage: false, animations: 'disabled' });
 
     if (metrics.opaqueSamples < 20) throw new Error(`${name}: pitch canvas is blank`);
-    const expectedDpr = reducedMotion === 'reduce' ? 1.5 : name === 'desktop' ? 2 : 2;
+    const expectedDpr = reducedMotion === 'reduce' ? 1.5 : 2;
     if (Math.abs(metrics.effectiveDpr - expectedDpr) > 0.15) {
       throw new Error(`${name}: expected capped DPR ${expectedDpr}, found ${metrics.effectiveDpr.toFixed(2)}`);
     }
     if (layers.overlayZ <= layers.stickyZ) throw new Error(`${name}: live overlay is below sticky controls`);
-    if (name === 'mobile' && undersizedButtons.length > 0) throw new Error(`${name}: undersized live buttons: ${undersizedButtons.join(', ')}`);
+    if (name.startsWith('mobile') && undersizedButtons.length > 0) throw new Error(`${name}: undersized live buttons: ${undersizedButtons.join(', ')}`);
+    if (controlsOverflow > 1) throw new Error(`${name}: live controls overflow by ${controlsOverflow}px`);
     if (!before || !after || (before.ball.x === after.ball.x && before.ball.y === after.ball.y)) throw new Error(`${name}: deterministic time step did not move the ball`);
+    if (before?.playbackMode !== 'highlights') throw new Error(`${name}: text state omitted the default playback mode`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors: ${errors.join(' | ')}`);
 
+    const readMinute = async () => Number.parseInt(
+      await page.locator('[data-testid="live-minute"]').textContent() ?? '0',
+      10,
+    );
+    await dialog.getByRole('button', { name: '1x', exact: true }).click();
+    const normalStart = await readMinute();
+    await page.waitForTimeout(620);
+    const normalMinuteDelta = await readMinute() - normalStart;
+    await dialog.getByRole('button', { name: '3x', exact: true }).click();
+    const fastStart = await readMinute();
+    await page.waitForTimeout(620);
+    const fastMinuteDelta = await readMinute() - fastStart;
+    await dialog.getByRole('button', { name: '精华', exact: true }).click();
+    if (normalMinuteDelta < 1 || normalMinuteDelta > 3) {
+      throw new Error(`${name}: 1x advanced ${normalMinuteDelta} minutes in 620ms`);
+    }
+    if (fastMinuteDelta < 4 || fastMinuteDelta <= normalMinuteDelta) {
+      throw new Error(`${name}: 3x advanced ${fastMinuteDelta} minutes after 1x advanced ${normalMinuteDelta}`);
+    }
+
     await dialog.getByRole('button', { name: '暂停' }).click();
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(reducedMotion === 'reduce' ? 320 : 150);
     const pausedStart = await page.evaluate(() => JSON.parse(
       (window as typeof window & { render_game_to_text: () => string }).render_game_to_text(),
     ).rendering.renderedFrames as number);
@@ -184,6 +220,12 @@ async function verifyViewport(
         completedFramesAdded,
         completedPauseReason: completedEnd.pauseReason,
       },
+      playback: {
+        defaultMode: 'highlights',
+        normalMinuteDelta,
+        fastMinuteDelta,
+        controlsOverflow,
+      },
       screenshot,
     };
   } finally {
@@ -193,6 +235,7 @@ async function verifyViewport(
 
 const results = [
   await verifyViewport('desktop', { width: 1440, height: 900 }, 2),
+  await verifyViewport('mobile-320', { width: 320, height: 568 }, 3),
   await verifyViewport('mobile', { width: 390, height: 844 }, 3),
   await verifyViewport('mobile-reduced', { width: 390, height: 844 }, 3, 'reduce'),
 ];

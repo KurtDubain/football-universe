@@ -5,6 +5,13 @@ import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
 import { Icon, IconName } from './Icon';
+import {
+  nextPlaybackStep,
+  playbackBreakDelay,
+  playbackTickDelay,
+  PLAYBACK_MODE_OPTIONS,
+  type PlaybackMode,
+} from './match-live/playback-mode';
 
 interface Props {
   result: MatchResult;
@@ -31,7 +38,7 @@ type PlaybackPhase = 'playing' | 'paused' | 'halftime' | 'extra_time_break' | 's
 
 interface PlaybackState {
   minute: number;
-  speed: number;
+  mode: PlaybackMode;
   phase: PlaybackPhase;
   consumedEventCount: number;
   homeScore: number;
@@ -50,7 +57,7 @@ interface PlaybackState {
 type PlaybackAction =
   | { type: 'tick'; events: MatchEvent[]; maxMinute: number; homeTeamId: string }
   | { type: 'skip'; events: MatchEvent[]; maxMinute: number; homeTeamId: string }
-  | { type: 'setSpeed'; speed: number }
+  | { type: 'setMode'; mode: PlaybackMode }
   | { type: 'togglePause' }
   | { type: 'resumeBreak' }
   | { type: 'clearEventFlash'; version: number }
@@ -58,7 +65,7 @@ type PlaybackAction =
 
 const initialPlaybackState: PlaybackState = {
   minute: 0,
-  speed: 1,
+  mode: 'highlights',
   phase: 'playing',
   consumedEventCount: 0,
   homeScore: 0,
@@ -127,7 +134,14 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
   switch (action.type) {
     case 'tick': {
       if (state.phase !== 'playing') return state;
-      const nextMinute = Math.min(action.maxMinute, state.minute + 1);
+      const requestedMinute = Math.min(
+        action.maxMinute,
+        state.minute + nextPlaybackStep(state.minute, action.maxMinute, action.events, state.mode),
+      );
+      let nextMinute = requestedMinute;
+      if (state.minute < 45 && requestedMinute >= 45 && !state.hasHadHalftime) nextMinute = 45;
+      else if (state.minute < 90 && requestedMinute >= 90 && action.maxMinute > 90 && !state.hasHadExtraTimeBreak) nextMinute = 90;
+      else if (state.minute < 120 && requestedMinute >= 120 && action.maxMinute > 120 && !state.hasHadShootoutBreak) nextMinute = 120;
       const next = revealThroughMinute(state, nextMinute, action.events, action.homeTeamId);
       if (nextMinute === 45 && !state.hasHadHalftime) {
         return { ...next, phase: 'halftime', hasHadHalftime: true };
@@ -153,8 +167,8 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
         goalFlash: null,
       };
     }
-    case 'setSpeed':
-      return { ...state, speed: action.speed };
+    case 'setMode':
+      return { ...state, mode: action.mode };
     case 'togglePause':
       if (state.phase === 'playing') return { ...state, phase: 'paused' };
       if (state.phase === 'paused') return { ...state, phase: 'playing' };
@@ -185,6 +199,9 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
   const [muted, setMuted] = useState(true);
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  );
   const logRef = useRef<HTMLDivElement>(null);
 
   const ht = teamBases[result.homeTeamId];
@@ -228,22 +245,46 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Tick — slowed down for broadcast-style pacing
-  // At 1x: 280ms per game minute → ~25s for 90 mins (was 10.8s, too fast)
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!query) return;
+    const handleChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
+    query.addEventListener?.('change', handleChange);
+    return () => query.removeEventListener?.('change', handleChange);
+  }, []);
+
   useEffect(() => {
     if (playback.phase !== 'playing' || !pageVisible) return;
-    const interval = Math.max(60, 280 / playback.speed);
-    const timer = window.setInterval(() => {
+    const delay = playbackTickDelay(
+      playback.mode,
+      playback.minute,
+      playback.flashEvent,
+      reducedMotion,
+    );
+    const timer = window.setTimeout(() => {
       dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
-    }, interval);
-    return () => clearInterval(timer);
-  }, [playback.phase, playback.speed, allEvents, timelineMax, result.homeTeamId, pageVisible]);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    allEvents,
+    pageVisible,
+    playback.flashEvent,
+    playback.minute,
+    playback.mode,
+    playback.phase,
+    reducedMotion,
+    result.homeTeamId,
+    timelineMax,
+  ]);
 
   useEffect(() => {
     if (!isBreak || !pageVisible) return;
-    const timer = window.setTimeout(() => dispatch({ type: 'resumeBreak' }), 2000);
+    const timer = window.setTimeout(
+      () => dispatch({ type: 'resumeBreak' }),
+      playbackBreakDelay(playback.mode, reducedMotion),
+    );
     return () => clearTimeout(timer);
-  }, [isBreak, pageVisible]);
+  }, [isBreak, pageVisible, playback.mode, reducedMotion]);
 
   useEffect(() => {
     if (muted || !playback.flashEvent) return;
@@ -264,24 +305,33 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   useEffect(() => {
     if (!playback.flashEvent) return;
     const version = playback.flashVersion;
-    const timer = window.setTimeout(() => dispatch({ type: 'clearEventFlash', version }), 3000);
+    const timer = window.setTimeout(
+      () => dispatch({ type: 'clearEventFlash', version }),
+      reducedMotion ? 400 : 3000,
+    );
     return () => clearTimeout(timer);
-  }, [playback.flashEvent, playback.flashVersion]);
+  }, [playback.flashEvent, playback.flashVersion, reducedMotion]);
 
   useEffect(() => {
     if (!playback.goalFlash) return;
     const version = playback.goalFlashVersion;
-    const timer = window.setTimeout(() => dispatch({ type: 'clearGoalFlash', version }), 2500);
+    const timer = window.setTimeout(
+      () => dispatch({ type: 'clearGoalFlash', version }),
+      reducedMotion ? 350 : 2500,
+    );
     return () => clearTimeout(timer);
-  }, [playback.goalFlash, playback.goalFlashVersion]);
+  }, [playback.goalFlash, playback.goalFlashVersion, reducedMotion]);
 
   useEffect(() => {
     if (playback.consumedEventCount === 0) return;
     const timer = window.setTimeout(() => {
-      logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight, behavior: 'smooth' });
+      logRef.current?.scrollTo?.({
+        top: logRef.current.scrollHeight,
+        behavior: reducedMotion ? 'auto' : 'smooth',
+      });
     }, 100);
     return () => clearTimeout(timer);
-  }, [playback.consumedEventCount]);
+  }, [playback.consumedEventCount, reducedMotion]);
 
   const skip = useCallback(() => {
     dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
@@ -405,6 +455,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             finished={finished}
             halftime={isBreak}
             active={playback.phase === 'playing' && pageVisible}
+            playbackMode={playback.mode}
           />
         </div>
 
@@ -453,13 +504,33 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         </div>
 
         {/* Controls */}
-        <div className="px-4 py-2.5 border-t border-slate-800/60 flex items-center justify-between">
-          <div className="flex gap-1">
-            {[1, 2, 4].map(s => (
-              <button key={s} onClick={() => dispatch({ type: 'setSpeed', speed: s })}
-                className={`min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md cursor-pointer transition-colors ${playback.speed === s ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >{s}x</button>
-            ))}
+        <div
+          data-testid="live-controls"
+          className="grid grid-cols-1 gap-2 border-t border-slate-800/60 px-4 py-2.5 min-[360px]:grid-cols-[minmax(0,1fr)_auto]"
+        >
+          <div className="flex min-w-0 gap-1">
+            <div
+              role="group"
+              aria-label="播放模式"
+              className="flex overflow-hidden rounded-md border border-slate-700 bg-slate-800"
+            >
+              {PLAYBACK_MODE_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={playback.mode === option.value}
+                  data-testid={`playback-mode-${option.value}`}
+                  onClick={() => dispatch({ type: 'setMode', mode: option.value })}
+                  className={`min-h-11 min-w-11 cursor-pointer px-2 py-1 text-[10px] transition-colors sm:min-h-0 ${
+                    playback.mode === option.value
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <button onClick={() => dispatch({ type: 'togglePause' })} disabled={isBreak}
               className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60"
             >{isBreak ? '休息' : paused ? '继续' : '暂停'}</button>
@@ -467,7 +538,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
               className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer"
             >{muted ? '静音' : '声音'}</button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex justify-end gap-2">
             {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
             <button onClick={onClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
               {finished ? '关闭' : '退出'}

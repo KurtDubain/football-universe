@@ -59,6 +59,13 @@ async function readRendering(page: Page): Promise<RenderingMetrics> {
 async function openFirstLiveMatch(page: Page): Promise<{ fixtureId: string; expectedHome: number; expectedAway: number }> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
+  await page.evaluate(() => {
+    const state = (window as AuditWindow).__gameStore?.getState() as {
+      newGame: (seed: number) => void;
+    };
+    state.newGame(20260716);
+  });
+  await page.getByRole('button', { name: '比赛日' }).waitFor({ state: 'visible' });
   const expected = await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     const state = store?.getState() as {
@@ -72,7 +79,6 @@ async function openFirstLiveMatch(page: Page): Promise<{ fixtureId: string; expe
         homeTeamId: string;
       }>;
     };
-    state.newGame(20260716);
     let current = state.getCurrentWindow();
     for (let step = 0; step < 5 && !current?.fixtures.length; step++) {
       await state.advanceWindow();
@@ -115,7 +121,7 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
     await page.evaluate(() => { (window as AuditWindow).__animationLongTasks = []; });
     const dialog = page.getByRole('dialog', { name: '比赛直播回放' });
-    await dialog.getByRole('button', { name: '4x' }).click();
+    await dialog.getByRole('button', { name: '3x' }).click();
     await page.waitForTimeout(1800);
     const rendering = await readRendering(page);
 
@@ -168,6 +174,11 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     await dialog.waitFor({ state: 'hidden' });
     const closedUnmountedCanvas = await page.evaluate(() => !(window as AuditWindow).render_game_to_text);
 
+    const fullReportToggle = page.getByTestId('toggle-full-report');
+    if (await fullReportToggle.count()) {
+      await fullReportToggle.click();
+      await page.getByTestId('full-report').waitFor({ state: 'visible' });
+    }
     let rapidReopenCount = 0;
     for (let attempt = 0; attempt < 2; attempt++) {
       const replay = page.getByRole('button', { name: '观看直播回放', exact: true }).first();

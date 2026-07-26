@@ -356,7 +356,23 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Mobile advance performance remained healthy at 15.4/26.6ms p50/p95 normally and 26.7/56.4ms under 4x CPU. Twenty rapid attempts still executed and restored one advance.
 - The 150-season audit completed 7,684 advances with zero rollover errors, warnings, or cap failures. S150 compressed storage was 1,731,946 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
 
-### Phase 8 Handoff
+### Phase 8 Handoff (completed below)
 
-- Live `精华 / 1x / 3x` playback speed and background/reduced-motion verification remain open in Section 9.1.
+- Live `精华 / 1x / 3x` playback speed and background/reduced-motion verification were completed in Phase 8.
 - Observation themes, related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical summaries remain open in the durable checklist.
+
+## 2026-07-26 Observer Gameplay Phase 8
+
+- Replaced the old `1x / 2x / 4x` live controls with `精华 / 1x / 3x`. Highlights is the default because it preserves important moments while fitting the observer game's first-five-minute and mobile pacing goals.
+- Highlights uses one pure deterministic scheduler over the existing event cursor. Quiet periods advance in bounded five-minute steps; goals, own goals, red cards, penalties, goalkeeper saves, and defensive blocks are approached minute by minute and receive a short real-time hold.
+- Halftime, extra-time, and shootout boundaries are clamped before event reveal, so no playback mode can cross a structural break. Modes never alter match events, final scores, RNG, simulation, or persisted state.
+- The controls use one segmented mode group. At 320px the command group wraps to a second row; 390px and desktop remain compact. All mobile controls measure at least 44px and the control surface has zero horizontal overflow.
+- Hidden pages freeze both the match clock and Canvas scheduler. Covered, manually paused, break, and completed states stop rendering. Reduced motion keeps the essential tactical view at 4fps/60 particles while shortening flashes, auto-scroll motion, and break/highlight holds; global nonessential CSS animation remains disabled.
+- `render_game_to_text` now includes the active playback mode alongside minute, event, ball, lineup, and rendering state.
+- Verification passed 82 files / 610 tests, ESLint, TypeScript/PWA build, bundle budget, the standard game client, and desktop/mobile/reduced-motion browser matrices. In 620ms, 1x advanced two minutes and 3x advanced six; 320px/390px controls had zero overflow.
+- Normal/4x CPU animation audits passed with average Canvas draw times around 0.22/0.77ms, one or fewer consecutive slow frames, correct hidden/covered pauses, exact final scores, clean rapid reopen, and clean next-match reset.
+
+### Phase 9 Handoff
+
+- Observation themes and a repeatable 15-minute review route are the strongest remaining gameplay-feedback tasks.
+- Related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical summaries remain open in the durable checklist.

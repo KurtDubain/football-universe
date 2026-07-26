@@ -21,6 +21,7 @@ import {
   shouldDegradeRenderBudget,
   type RenderBudget,
 } from './pitch-canvas/render-budget';
+import type { PlaybackMode } from './match-live/playback-mode';
 
 interface Props {
   minute: number;
@@ -35,11 +36,13 @@ interface Props {
   finished: boolean;
   halftime: boolean;
   active: boolean;
+  playbackMode: PlaybackMode;
 }
 
 interface PitchDebugState {
   coordinateSystem: string;
   minute: number;
+  playbackMode: PlaybackMode;
   phase: 'passing' | 'holding' | 'shooting';
   attackingSide: 'home' | 'away';
   event: { type: MatchEvent['type']; outcome: ShotOutcome } | null;
@@ -73,7 +76,7 @@ const FIXED_FRAME_MS = 1000 / 60;
 function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
-    homeMatchday, awayMatchday, halftime, finished, active,
+    homeMatchday, awayMatchday, halftime, finished, active, playbackMode,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -125,6 +128,7 @@ function PitchCanvas(props: Props) {
   const debugStateRef = useRef<PitchDebugState>({
     coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
     minute,
+    playbackMode,
     phase: 'passing',
     attackingSide: 'home',
     event: null,
@@ -164,17 +168,17 @@ function PitchCanvas(props: Props) {
   // Avoids restarting the rAF chain on every minute / flashEvent change.
   const liveRef = useRef({
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
-    eventScene, homeRoster, awayRoster,
+    eventScene, homeRoster, awayRoster, playbackMode,
   });
   useEffect(() => {
     liveRef.current = {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
-      eventScene, homeRoster, awayRoster,
+      eventScene, homeRoster, awayRoster, playbackMode,
     };
     wakeRenderLoopRef.current();
   }, [
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active,
-    targetShift, eventScene, homeRoster, awayRoster,
+    targetShift, eventScene, homeRoster, awayRoster, playbackMode,
   ]);
 
   useEffect(() => {
@@ -381,7 +385,7 @@ function PitchCanvas(props: Props) {
       const live = liveRef.current;
       const {
         minute, maxMinute, homeColor, awayColor, halftime, targetShift,
-        eventScene, homeRoster, awayRoster,
+        eventScene, homeRoster, awayRoster, playbackMode: livePlaybackMode,
       } = live;
 
       if (eventScene && activeSceneKeyRef.current !== eventScene.key) {
@@ -588,6 +592,7 @@ function PitchCanvas(props: Props) {
       debugStateRef.current = {
         coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
         minute,
+        playbackMode: livePlaybackMode,
         phase: phaseStateRef.current,
         attackingSide: isAttHome ? 'home' : 'away',
         event: eventScene ? { type: eventScene.event.type, outcome: eventScene.outcome } : null,
