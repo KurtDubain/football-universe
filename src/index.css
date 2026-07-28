@@ -263,6 +263,14 @@ body {
 .matchday-focus-fixture:hover,
 .matchday-focus-fixture:focus-visible { border-color: color-mix(in srgb, var(--competition-gold) 62%, var(--border-strong)); background: var(--surface-raised); }
 
+.observation-runway {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--action) 42%, var(--border-strong));
+  border-top: 2px solid color-mix(in srgb, var(--action) 72%, var(--border-strong));
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface-panel) 94%, var(--action) 6%);
+}
+
 @keyframes identity-enter {
   from { opacity: 0; transform: translateY(4px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -404,6 +412,17 @@ body {
 }
 
 @media (max-width: 639px) {
+  .matchday-focus-fixture[data-secondary='true'] {
+    min-height: 2.75rem;
+    padding-block: 0;
+  }
+  .matchday-focus-fixture[data-secondary='true'] .focus-fixture-main {
+    width: 100%;
+    margin-bottom: 0;
+  }
+  .matchday-focus-fixture[data-secondary='true'] .focus-fixture-details {
+    display: none;
+  }
   .floating-advance-docked {
     top: clamp(128px, 64dvh, calc(100dvh - 88px - env(safe-area-inset-bottom)));
     right: max(12px, env(safe-area-inset-right));

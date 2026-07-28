@@ -407,3 +407,21 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Unify the Dashboard's competing focus surfaces so the primary team, current observation theme, key fixture, optional judgment, and next action read as one compact observation sequence.
 - Keep related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical world summaries as separate bounded follow-ups in the durable checklist.
+
+## 2026-07-28 Observer Gameplay Phase 11
+
+- Reframed the Dashboard matchday opening as one `本轮观察` tool surface. The primary club, season theme, focus fixtures, optional judgment, and advance action now form one continuous hierarchy without changing prediction, simulation, RNG, or persistence.
+- Dashboard owns the only `开始模拟` action on the home route. The global header keeps its fast-forward menu there, while other routes retain their existing header advance and optional floating advance behavior.
+- The collapsed judgment and advance action share one 44px action row. Expanding the judgment preserves exactly one advance action; settling a choice returns to the compact row.
+- Mobile keeps the primary focus fixture at full detail and compresses only the second focus fixture to a 44px actionable row. Desktop keeps both fixtures fully expanded.
+- The primary focus fixture now exposes one canonical key player without adding a second statistic source: the current team scorer when available, otherwise the highest-rated current squad player. It replaces one generic reason chip, so information density stays bounded.
+- The first performance run exposed that moving the home action out of the header left the Results tab without visible first-frame feedback or a direct continuation. Results now owns the same single action after a response; Matchday and Results never show their actions at the same time.
+- The dedicated three-favorite production workflow passes at `390x844` and `1440x900`: all focus controls share one container, the mobile advance action ends at 840px inside the first viewport, secondary focus remains clickable, one judgment and one window settle, Results exposes one 44px continuation, horizontal overflow is zero, and runtime errors are zero.
+- Final verification passed 85 test files / 632 tests, ESLint, TypeScript/PWA production build, bundle/changelog budgets, the mandatory standard web-game client, and production Dashboard, theme, judgment, key-node, world-response, and report workflows.
+- The initial dependency graph remains within budget at 587,328 bytes. Mobile advance p50/p95 was 18.6/27.1ms normally and 36.9/67.1ms under 4x CPU; every sample rendered busy feedback first, and 20 rapid attempts accepted and restored exactly one advance.
+- The 10-season current-schema audit completed 509 advances with zero data/runtime issues across 25 mobile/desktop route checks. The S150 audit completed 7,684 advances with zero rollover errors/warnings or cap failures; actual storage was 1,732,478 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 12 Handoff
+
+- Add explicit boundary tests for focus-match priority and suppress remaining duplicate fixture mentions across the focus tool, secondary notices, and ordinary news surfaces.
+- Refine the single state-aware action vocabulary for starred live viewing, ordinary reveal, and post-result continuation without adding more buttons or changing simulation behavior.

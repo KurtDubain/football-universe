@@ -20,20 +20,24 @@ export default function ObservationThemePanel({
   primaryTeamId,
   preference,
   onPreferenceChange,
+  embedded = false,
 }: {
   world: GameWorld;
   primaryTeamId: string | null;
   preference: ObservationThemePreference;
   onPreferenceChange: (preference: ObservationThemePreference) => void;
+  embedded?: boolean;
 }) {
   const theme = buildObservationTheme(world, primaryTeamId, preference);
 
   return (
     <section
       data-testid="observation-theme"
-      className="overflow-hidden rounded-lg border border-emerald-800/50 bg-slate-900/55"
+      className={embedded
+        ? 'bg-slate-900/30'
+        : 'overflow-hidden rounded-lg border border-emerald-800/50 bg-slate-900/55'}
     >
-      <div className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-700/60 px-3 py-2">
+      <div className={`flex min-h-11 items-center justify-between gap-3 px-3 py-2 ${embedded ? '' : 'border-b border-slate-700/60'}`}>
         <h3 className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-emerald-300">
           <Icon name={theme ? THEME_ICONS[theme.type] : 'eye'} size={15} />
           <span>本赛季观察主题</span>
@@ -57,7 +61,7 @@ export default function ObservationThemePanel({
       </div>
 
       {theme ? (
-        <div className="px-3 py-3">
+        <div className={`px-3 ${embedded ? 'pb-3 pt-1' : 'py-3'}`}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {theme.playerId ? (
               <Link to={`/player/${theme.playerId}`} className="text-sm font-semibold text-slate-100 hover:text-emerald-300">

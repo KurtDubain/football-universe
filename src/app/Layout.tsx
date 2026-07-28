@@ -434,19 +434,23 @@ export default function Layout({ children }: LayoutProps) {
           </div>
 
           <div className="flex items-center gap-1 shrink-0 relative z-[65]">
-            <button
-              onClick={handleWindowAdvance}
-              disabled={isAdvancing || !currentWindow}
-              className="h-11 sm:h-auto px-3 sm:px-4 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed text-white text-sm font-medium rounded-l-md transition-colors cursor-pointer"
-            >
-              {isAdvancing ? '...' : currentWindow ? (location.pathname === '/' ? '开始模拟' : '推进') : '完成'}
-            </button>
+            {location.pathname !== '/' && (
+              <button
+                onClick={handleWindowAdvance}
+                disabled={isAdvancing || !currentWindow}
+                className="h-11 rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
+              >
+                {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
+              </button>
+            )}
             {currentWindow && (
               <button
                 onClick={() => setShowFastMenu(!showFastMenu)}
                 disabled={isAdvancing}
                 aria-label="打开快进菜单"
-                className="w-11 h-11 sm:w-auto sm:h-auto sm:px-1.5 sm:py-1.5 bg-[var(--action)] hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] text-white text-sm rounded-r-md transition-colors cursor-pointer border-l border-white/20"
+                className={`h-11 w-11 bg-[var(--action)] text-sm text-white transition-colors hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1.5 ${
+                  location.pathname === '/' ? 'rounded-md' : 'rounded-r-md border-l border-white/20'
+                }`}
               >
                 ▾
               </button>

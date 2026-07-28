@@ -27,6 +27,7 @@ import {
   formatForm,
   getCoachName,
   getTierLabel,
+  getWindowTypeLabel,
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
@@ -408,6 +409,8 @@ function MatchdayTab({
   const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
   const observationThemePreference = useGameStore((s) => s.observationThemePreference);
   const setObservationThemePreference = useGameStore((s) => s.setObservationThemePreference);
+  const advanceWindow = useGameStore((s) => s.advanceWindow);
+  const isAdvancing = useGameStore((s) => s.isAdvancing);
 
   // Player highlights from the last batch of results — capped at 3.
   // Position is refined from `world.squads` when possible (the helper only
@@ -480,89 +483,153 @@ function MatchdayTab({
 
   // Generate context tips for the whole window
   const windowTips = generateWindowTips(world, currentWindow.fixtures, focusFixtureIds);
+  const primaryTeam = favoriteTeamId ? world.teamBases[favoriteTeamId] : null;
 
   return (
     <div className="space-y-5">
-      <ObservationThemePanel
-        world={world}
-        primaryTeamId={favoriteTeamId}
-        preference={observationThemePreference}
-        onPreferenceChange={setObservationThemePreference}
-      />
+      <section data-testid="observation-runway" className="observation-runway">
+        <div className="flex min-h-11 items-center gap-2 border-b border-slate-700/60 px-3 py-2">
+          <Icon name="eye" size={16} className="shrink-0 text-emerald-400" />
+          <span className="shrink-0 text-xs font-bold text-slate-100">本轮观察</span>
+          {primaryTeam && (
+            <>
+              <span className="text-slate-700">|</span>
+              <TeamBadge
+                teamId={primaryTeam.id}
+                shortName={primaryTeam.shortName}
+                color={primaryTeam.color}
+                size={22}
+              />
+              <Link
+                to={`/team/${primaryTeam.id}`}
+                className="min-w-0 truncate text-xs font-semibold text-blue-300 hover:text-blue-200"
+                title={primaryTeam.name}
+              >
+                {primaryTeam.shortName}
+              </Link>
+            </>
+          )}
+          <span className="ml-auto min-w-0 truncate text-right text-[11px] text-slate-500">
+            {currentWindow.label}
+          </span>
+        </div>
 
-      {/* Focus matches banner */}
-      {focusMatches.length > 0 && (
-        <section data-testid="focus-matches" className="matchday-focus">
-          <h3 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
-            <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {focusMatches.map(({ fixture, importance }) => {
-              const ht = world.teamBases[fixture.homeTeamId];
-              const at = world.teamBases[fixture.awayTeamId];
-              if (!ht || !at) return null;
-              const isStarred = starredFixtureIds.includes(fixture.id);
-              const storylineLabel = getFixtureStorylineLabel(
-                world,
-                fixture.homeTeamId,
-                fixture.awayTeamId,
-              );
-              return (
-                <div
-                  key={fixture.id}
-                  role="button"
-                  tabIndex={0}
-                  className="matchday-focus-fixture"
-                  onClick={() => onFixtureClick(fixture)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onFixtureClick(fixture);
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0 text-xs">
-                      <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
-                      <span className="font-semibold text-slate-100 truncate">{ht.shortName}</span>
-                      <span className="text-slate-500 mx-0.5">vs</span>
-                      <span className="font-semibold text-slate-100 truncate">{at.shortName}</span>
-                      <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-                      aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
-                      className={`w-11 h-11 -my-3 inline-flex items-center justify-center text-base shrink-0 transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
-                      title={isStarred ? '已加星 (推进时自动直播)' : '加星 — 推进时自动直播'}
-                    >
-                      {isStarred ? '★' : '☆'}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {storylineLabel && (
-                      <span className="rounded bg-emerald-900/35 px-1.5 py-0.5 text-[11px] text-emerald-200">
-                        {storylineLabel}
-                      </span>
-                    )}
-                    {importance.reasons.slice(0, storylineLabel ? 2 : 3).map((r, i) => (
-                      <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
-                    ))}
-                    <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Optional observer judgment stays attached to the focus area. */}
-      <Suspense fallback={<div aria-hidden className="h-11 w-full rounded-lg border border-dashed border-slate-700 bg-slate-800/60" />}>
-        <ObservationPanel
+        <ObservationThemePanel
           world={world}
-          fixtures={focusMatches.length > 0 ? focusMatches.map(entry => entry.fixture) : currentWindow.fixtures.slice(0, 2)}
+          primaryTeamId={favoriteTeamId}
+          preference={observationThemePreference}
+          onPreferenceChange={setObservationThemePreference}
+          embedded
         />
-      </Suspense>
+
+        {/* Focus matches stay inside the same observation flow. */}
+        {focusMatches.length > 0 && (
+          <section data-testid="focus-matches" className="border-t border-amber-700/35 px-3 py-2.5">
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-amber-400">
+              <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
+            </h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {focusMatches.map(({ fixture, importance }, focusIndex) => {
+                const ht = world.teamBases[fixture.homeTeamId];
+                const at = world.teamBases[fixture.awayTeamId];
+                if (!ht || !at) return null;
+                const isStarred = starredFixtureIds.includes(fixture.id);
+                const storylineLabel = getFixtureStorylineLabel(
+                  world,
+                  fixture.homeTeamId,
+                  fixture.awayTeamId,
+                );
+                const observedTeamId = favoriteTeamId
+                  && (fixture.homeTeamId === favoriteTeamId || fixture.awayTeamId === favoriteTeamId)
+                  ? favoriteTeamId
+                  : null;
+                const observedScorer = observedTeamId ? teamTopScorers[observedTeamId] : undefined;
+                const observedSquad = observedTeamId ? world.squads[observedTeamId] ?? [] : [];
+                const keyPlayer = observedScorer
+                  ? observedSquad.find(player => player.uuid === observedScorer.playerId)
+                  : observedSquad.reduce<(typeof observedSquad)[number] | null>(
+                      (best, player) => !best || player.rating > best.rating ? player : best,
+                      null,
+                    );
+                const keyPlayerLabel = keyPlayer
+                  ? observedScorer && observedScorer.goals > 0
+                    ? `${keyPlayer.name} ${observedScorer.goals}球`
+                    : `${keyPlayer.name} 评分${keyPlayer.rating}`
+                  : null;
+                const reasonLimit = Math.max(
+                  0,
+                  (storylineLabel ? 2 : 3) - (keyPlayerLabel ? 1 : 0),
+                );
+                return (
+                  <div
+                    key={fixture.id}
+                    role="button"
+                    tabIndex={0}
+                    data-secondary={focusIndex > 0 ? 'true' : 'false'}
+                    className="matchday-focus-fixture"
+                    onClick={() => onFixtureClick(fixture)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onFixtureClick(fixture);
+                      }
+                    }}
+                  >
+                    <div className="focus-fixture-main mb-1 flex items-center justify-between">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+                        <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
+                        <span className="truncate font-semibold text-slate-100">{ht.shortName}</span>
+                        <span className="mx-0.5 text-slate-500">vs</span>
+                        <span className="truncate font-semibold text-slate-100">{at.shortName}</span>
+                        <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+                        aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
+                        className={`-my-3 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center text-base transition-colors ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
+                        title={isStarred ? '已加星 (推进时自动直播)' : '加星 — 推进时自动直播'}
+                      >
+                        {isStarred ? '★' : '☆'}
+                      </button>
+                    </div>
+                    <div className="focus-fixture-details flex flex-wrap gap-1">
+                      {storylineLabel && (
+                        <span className="rounded bg-emerald-900/35 px-1.5 py-0.5 text-[11px] text-emerald-200">
+                          {storylineLabel}
+                        </span>
+                      )}
+                      {keyPlayerLabel && (
+                        <span className="rounded bg-sky-900/35 px-1.5 py-0.5 text-[11px] text-sky-200">
+                          关键球员 {keyPlayerLabel}
+                        </span>
+                      )}
+                      {importance.reasons.slice(0, reasonLimit).map((r, i) => (
+                        <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
+                      ))}
+                      <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <div className="border-t border-slate-700/60 px-3 py-2.5">
+          <Suspense fallback={<div aria-hidden className="h-11 w-full rounded border border-slate-700 bg-slate-900/50" />}>
+            <ObservationPanel
+              world={world}
+              fixtures={focusMatches.length > 0 ? focusMatches.map(entry => entry.fixture) : currentWindow.fixtures.slice(0, 2)}
+              embedded
+              advanceAction={{
+                isAdvancing,
+                stageLabel: getWindowTypeLabel(currentWindow.type),
+                onAdvance: () => void advanceWindow(),
+              }}
+            />
+          </Suspense>
+        </div>
+      </section>
 
       <FavoriteStoryPanels world={world} favoriteTeamIds={favoriteTeamIds} />
 
@@ -786,6 +853,9 @@ function ResultsTab({
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
+  const advanceWindow = useGameStore((s) => s.advanceWindow);
+  const isAdvancing = useGameStore((s) => s.isAdvancing);
+  const currentWindow = useGameStore((s) => s.getCurrentWindow)();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const favoriteTeamNames = favoriteTeamIds
     .flatMap(teamId => {
@@ -824,6 +894,30 @@ function ResultsTab({
             teamBases={world.teamBases}
           />
         </Suspense>
+      )}
+
+      {currentWindow && (
+        <div
+          data-testid="results-next-action"
+          className="flex min-h-11 items-center gap-3 border-y border-slate-700/60 bg-slate-900/30 px-3 py-2"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold text-slate-400">下一窗口</div>
+            <div className="truncate text-xs text-slate-500">{currentWindow.label}</div>
+          </div>
+          <button
+            type="button"
+            data-testid="dashboard-advance"
+            aria-label="开始模拟"
+            aria-busy={isAdvancing}
+            disabled={isAdvancing}
+            onClick={() => void advanceWindow()}
+            className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+          >
+            <Icon name="play" size={16} />
+            <span className="text-xs font-semibold">{isAdvancing ? '模拟中...' : '继续下一轮'}</span>
+          </button>
+        </div>
       )}
 
       {lastWorldResponse && (

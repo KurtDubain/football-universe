@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.20.0",
+  "version": "4.21.0",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -36,7 +36,8 @@
     "verify:world-response": "tsx scripts/verify-world-response.ts",
     "verify:key-node": "tsx scripts/verify-key-node-time-control.ts",
     "verify:observation-route": "tsx scripts/verify-observation-theme-route.ts",
-    "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts"
+    "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts",
+    "verify:dashboard-focus": "tsx scripts/verify-dashboard-observation-focus.ts"
   },
   "dependencies": {
     "i18next": "^26.1.0",
