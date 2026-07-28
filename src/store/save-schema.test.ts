@@ -71,6 +71,10 @@ describe('current schema hydration boundary', () => {
       ...makeSave(),
       state: { ...makeSave().state, world: { seasonState: { seasonNumber: 1, calendar: [] } } },
     })],
+    ['invalid observation theme', JSON.stringify({
+      ...makeSave(),
+      state: { ...makeSave().state, observationThemePreference: 'score_boost' },
+    })],
   ])('quarantines %s, clears the active key, and exposes a recovery notice', (_label, payload) => {
     localStorage.setItem(SAVE_STORAGE_KEY, payload);
 

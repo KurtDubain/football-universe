@@ -376,3 +376,19 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Observation themes and a repeatable 15-minute review route are the strongest remaining gameplay-feedback tasks.
 - Related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical summaries remain open in the durable checklist.
+
+## 2026-07-28 Observer Gameplay Phase 9
+
+- Added a display-only season observation theme derived from canonical standings, expectations, promotion history, squad ratings, current player stats, fixtures, and active story evidence. The five lenses are `豪门守成 / 黑马挑战 / 升级或保级 / 球员成长 / 纯观察`; automatic selection, manual selection, and disabled state never enter simulation or consume RNG.
+- Recommended onboarding lenses now continue into a matching Dashboard theme. The compact panel exposes the real season phase, played/total league matches, up to three facts, and one next observation hook; theme preference persists while each new game starts from a coherent lens.
+- Changed the young-player selector to prioritize prospects likely to play, after the first fixed-seed test found that maximum-potential-only selection could leave the theme static on a reserve.
+- Added a repeatable browser review route covering a pre-match focus inspection, one optional judgment and settlement, two ordinary advances, a staged storyline update by window 6, visible team progress, and a continuing story hook. At both `390x844` and `1440x900`, changing or disabling the theme left window index, points, and RNG unchanged with zero overflow/runtime errors.
+- Visual review caught and fixed the favorite summary's old mobile `大...` ambiguity; mobile now displays the stable club short name while desktop keeps the full name.
+- Final verification passed 83 test files / 621 tests, ESLint, TypeScript/PWA production build, bundle/changelog budgets, the mandatory standard web-game client, and production-preview observation-route/onboarding/Dashboard/world-response/key-node workflows.
+- The initial dependency graph remains within budget at 580,064 bytes. Mobile advance p50/p95 was 12.8/20.5ms normally and 28.3/49.3ms under 4x CPU; 20 rapid attempts accepted and restored exactly one advance.
+- The 10-season current-schema audit completed 509 advances with zero data/runtime issues across 25 mobile/desktop route checks. The S150 audit completed 7,684 advances with zero rollover errors/warnings or cap failures; actual storage was 1,731,952 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 10 Handoff
+
+- Freeze the completed theme result into the existing bounded primary-observer season trajectory and show it in Season Review without copying standings or player statistics.
+- The broader Dashboard focus unification, related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and historical world summaries remain open in the durable checklist.

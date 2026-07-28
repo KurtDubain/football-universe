@@ -42,6 +42,7 @@ import {
   getCurrentKeyNodeGuard,
   planNextKeyNode,
 } from '../engine/observation/key-node';
+import type { ObservationThemePreference } from '../engine/observation/observation-theme';
 
 interface GameStore {
   world: GameWorld | null;
@@ -59,6 +60,8 @@ interface GameStore {
   favoriteTeamId: string | null;
   /** Multi-favorite list (up to 3 teams). */
   favoriteTeamIds: string[];
+  /** Display-only lens for the current observer route. Never read by simulation. */
+  observationThemePreference: ObservationThemePreference;
   /** Transient set of fixtures the user starred for auto-live (cleared on advance). */
   starredFixtureIds: string[];
   newAchievements: Achievement[];
@@ -79,6 +82,7 @@ interface GameStore {
   setPrimaryFavoriteTeam: (teamId: string) => void;
   /** Toggle a team's membership in the favorites list. */
   toggleFavoriteTeam: (teamId: string) => void;
+  setObservationThemePreference: (preference: ObservationThemePreference) => void;
   setPrediction: (champion: string, relegated: string) => void;
   useGodHand: (teamId: string, type: 'boost' | 'nerf') => void;
   fireCoach: (teamId: string) => void;
@@ -107,6 +111,7 @@ type PersistedGameState = Pick<GameStore,
   | 'lastNews'
   | 'favoriteTeamId'
   | 'favoriteTeamIds'
+  | 'observationThemePreference'
 >;
 
 const EMPTY_PERSISTED_RESULTS: MatchResult[] = [];
@@ -138,6 +143,7 @@ function mergePersistedGameState(
     ...merged,
     favoriteTeamId: primaryId,
     favoriteTeamIds: orderedFavorites,
+    observationThemePreference: merged.observationThemePreference ?? 'auto',
     lastResults: reconstructLastResults(merged.world),
     lastNews: merged.world?.newsLog.slice(-30) ?? [],
     lastObservationSettlements: [],
@@ -224,6 +230,7 @@ export const useGameStore = create<GameStore>()(
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      observationThemePreference: 'auto',
       starredFixtureIds: [],
       newAchievements: [],
 
@@ -242,6 +249,7 @@ export const useGameStore = create<GameStore>()(
           lastObservationSettlements: [],
           lastWorldResponse: null,
           advanceError: null,
+          observationThemePreference: 'auto',
         });
       },
 
@@ -509,6 +517,10 @@ export const useGameStore = create<GameStore>()(
         set({ favoriteTeamIds: ordered, favoriteTeamId: primary });
       },
 
+      setObservationThemePreference: (preference) => {
+        set({ observationThemePreference: preference });
+      },
+
       setPrediction: (champion: string, relegated: string) => {
         const { world } = get();
         if (!world || world.prediction) return;
@@ -766,6 +778,7 @@ export const useGameStore = create<GameStore>()(
           advanceError: null,
           favoriteTeamId: null,
           favoriteTeamIds: [],
+          observationThemePreference: 'auto',
         });
         compressedStorage.removeItem(SAVE_STORAGE_KEY);
       },
@@ -812,6 +825,7 @@ export const useGameStore = create<GameStore>()(
         lastNews: EMPTY_PERSISTED_NEWS,
         favoriteTeamId: state.favoriteTeamId,
         favoriteTeamIds: state.favoriteTeamIds,
+        observationThemePreference: state.observationThemePreference,
       }),
       merge: mergePersistedGameState,
     }

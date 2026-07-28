@@ -14,6 +14,7 @@ describe('observer focus ordering', () => {
       initialized: false,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      observationThemePreference: 'auto',
     });
   });
 
@@ -42,5 +43,25 @@ describe('observer focus ordering', () => {
 
     expect(useGameStore.getState().favoriteTeamIds).toEqual(['beta', 'alpha']);
     expect(useGameStore.getState().favoriteTeamId).toBe('beta');
+  });
+
+  it('keeps the observation lens display-only and independently selectable', () => {
+    useGameStore.getState().setFavoriteTeams(['alpha']);
+    useGameStore.getState().setObservationThemePreference('player_growth');
+
+    expect(useGameStore.getState().favoriteTeamIds).toEqual(['alpha']);
+    expect(useGameStore.getState().observationThemePreference).toBe('player_growth');
+    useGameStore.getState().setObservationThemePreference('disabled');
+    expect(useGameStore.getState().observationThemePreference).toBe('disabled');
+  });
+
+  it('continues the selected observation lens into the next season', async () => {
+    useGameStore.getState().newGame(20260718);
+    useGameStore.getState().setObservationThemePreference('player_growth');
+
+    expect(await useGameStore.getState().advanceUntil('season_end')).toBe(true);
+    expect(await useGameStore.getState().advanceWindow()).toBe(true);
+    expect(useGameStore.getState().world?.seasonState.seasonNumber).toBe(2);
+    expect(useGameStore.getState().observationThemePreference).toBe('player_growth');
   });
 });

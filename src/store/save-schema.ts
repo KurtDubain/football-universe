@@ -5,6 +5,15 @@ import { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION } from './save-constants';
 export { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-constants';
 
 type JsonRecord = Record<string, unknown>;
+const OBSERVATION_THEME_PREFERENCES = new Set([
+  'auto',
+  'disabled',
+  'giant_defense',
+  'dark_horse_challenge',
+  'promotion_survival',
+  'player_growth',
+  'pure_observation',
+]);
 
 export interface CurrentSaveEnvelope {
   version: typeof SAVE_SCHEMA_VERSION;
@@ -59,6 +68,15 @@ export function parseCurrentSave(text: string): CurrentSaveEnvelope {
   requireArray(state, 'favoriteTeamIds');
   if (state.favoriteTeamId !== null && typeof state.favoriteTeamId !== 'string') {
     throw new Error('存档字段 favoriteTeamId 无效');
+  }
+  if (
+    state.observationThemePreference !== undefined
+    && (
+      typeof state.observationThemePreference !== 'string'
+      || !OBSERVATION_THEME_PREFERENCES.has(state.observationThemePreference)
+    )
+  ) {
+    throw new Error('存档字段 observationThemePreference 无效');
   }
 
   const world = requireRecord(state, 'world');

@@ -31,6 +31,7 @@ import {
 import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
+import ObservationThemePanel from '../components/ObservationThemePanel';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -251,7 +252,14 @@ function DashboardContent({ world }: { world: GameWorld }) {
                 {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
                 <div className="flex items-center gap-2 sm:gap-3 text-xs">
                   <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
-                  <Link to={`/team/${tid}`} className="font-semibold text-slate-200 hover:text-blue-400 truncate min-w-0">{fav.name}</Link>
+                  <Link
+                    to={`/team/${tid}`}
+                    className="min-w-0 font-semibold text-slate-200 hover:text-blue-400"
+                    title={fav.name}
+                  >
+                    <span className="sm:hidden">{fav.shortName}</span>
+                    <span className="hidden sm:inline">{fav.name}</span>
+                  </Link>
                   {isPrimary && <span className="shrink-0 rounded bg-blue-900/60 px-1.5 py-0.5 text-[11px] font-semibold text-blue-300">主要观察</span>}
                   <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
                   <div className="flex gap-0.5 shrink-0 ml-auto">
@@ -398,6 +406,8 @@ function MatchdayTab({
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
+  const observationThemePreference = useGameStore((s) => s.observationThemePreference);
+  const setObservationThemePreference = useGameStore((s) => s.setObservationThemePreference);
 
   // Player highlights from the last batch of results — capped at 3.
   // Position is refined from `world.squads` when possible (the helper only
@@ -473,6 +483,13 @@ function MatchdayTab({
 
   return (
     <div className="space-y-5">
+      <ObservationThemePanel
+        world={world}
+        primaryTeamId={favoriteTeamId}
+        preference={observationThemePreference}
+        onPreferenceChange={setObservationThemePreference}
+      />
+
       {/* Focus matches banner */}
       {focusMatches.length > 0 && (
         <section data-testid="focus-matches" className="matchday-focus">
