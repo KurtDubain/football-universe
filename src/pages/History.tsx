@@ -8,6 +8,7 @@ import type { Achievement } from '../engine/achievements';
 import type { GameWorld, GodHandIntervention } from '../engine/season/season-manager';
 import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 import { rankClubCoefficients } from '../engine/rankings/club-coefficient';
+import { getObservationThemeLabel } from '../engine/observation/observation-theme';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -287,10 +288,15 @@ function HistoryContent({ world }: { world: GameWorld }) {
                             {' '}第{observerRecord.leaguePosition}
                           </span>
                         )}
+                        {observerTrajectory?.theme && (
+                          <span className="shrink-0 whitespace-nowrap rounded bg-emerald-950/70 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                            主题：{getObservationThemeLabel(observerTrajectory.theme.type)}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         {storyCount > 0 && (
-                          <span className="rounded bg-emerald-950/70 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                          <span className="shrink-0 whitespace-nowrap rounded bg-emerald-950/70 px-1.5 py-0.5 text-[10px] text-emerald-300">
                             {storyCount}条故事
                           </span>
                         )}

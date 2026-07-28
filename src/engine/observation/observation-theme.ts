@@ -52,6 +52,10 @@ const THEME_LABELS: Record<ObservationThemeType, string> = {
   pure_observation: '纯观察',
 };
 
+export function getObservationThemeLabel(type: ObservationThemeType): string {
+  return THEME_LABELS[type];
+}
+
 interface TeamSituation {
   teamId: string;
   standings: StandingEntry[];

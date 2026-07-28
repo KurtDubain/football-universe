@@ -42,7 +42,10 @@ import {
   getCurrentKeyNodeGuard,
   planNextKeyNode,
 } from '../engine/observation/key-node';
-import type { ObservationThemePreference } from '../engine/observation/observation-theme';
+import {
+  buildObservationTheme,
+  type ObservationThemePreference,
+} from '../engine/observation/observation-theme';
 
 interface GameStore {
   world: GameWorld | null;
@@ -163,13 +166,21 @@ function yieldForAdvanceFeedback(): Promise<void> {
   });
 }
 
-function executeWindowWithObservationSettlement(world: GameWorld, favoriteTeamIds: string[]) {
+function executeWindowWithObservationSettlement(
+  world: GameWorld,
+  favoriteTeamIds: string[],
+  observationThemePreference: ObservationThemePreference,
+) {
   const currentWindow = getCurrentWindow(world);
   if (!currentWindow) throw new Error('当前没有可推进的比赛窗口');
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
-  const seasonTrajectory = currentWindow.type === 'season_end' && favoriteTeamIds[0]
-    ? buildObserverSeasonTrajectory(world, favoriteTeamIds[0])
+  const primaryTeamId = favoriteTeamIds[0];
+  const observationTheme = currentWindow.type === 'season_end' && primaryTeamId
+    ? buildObservationTheme(world, primaryTeamId, observationThemePreference)
+    : null;
+  const seasonTrajectory = currentWindow.type === 'season_end' && primaryTeamId
+    ? buildObserverSeasonTrajectory(world, primaryTeamId, observationTheme)
     : null;
   const result = executeCurrentWindow(world, { favoriteTeamIds });
   const settlement = settleObservationJudgment(
@@ -260,7 +271,11 @@ export const useGameStore = create<GameStore>()(
         await yieldForAdvanceFeedback();
         try {
           const favoriteTeamIds = get().favoriteTeamIds;
-          const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
+          const result = executeWindowWithObservationSettlement(
+            world,
+            favoriteTeamIds,
+            get().observationThemePreference,
+          );
           const updatedWorld = boundWorldStorageMetadata(result.world);
           const worldResponse = buildAdvanceWorldResponse(
             'single',
@@ -299,6 +314,7 @@ export const useGameStore = create<GameStore>()(
         await yieldForAdvanceFeedback();
         try {
           const favoriteTeamIds = get().favoriteTeamIds;
+          const observationThemePreference = get().observationThemePreference;
           let allResults: MatchResult[] = [];
           let allNews: NewsItem[] = [];
           let observationSettlements: ObservationSettlement[] = [];
@@ -306,7 +322,11 @@ export const useGameStore = create<GameStore>()(
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
-            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(
+              world,
+              favoriteTeamIds,
+              observationThemePreference,
+            );
             world = result.world;
             allResults = result.results; // keep only last window's results
             allNews = [...allNews, ...result.news];
@@ -351,6 +371,7 @@ export const useGameStore = create<GameStore>()(
         await yieldForAdvanceFeedback();
         try {
           const favoriteTeamIds = get().favoriteTeamIds;
+          const observationThemePreference = get().observationThemePreference;
           let allNews: NewsItem[] = [];
           let lastResults: MatchResult[] = [];
           let observationSettlements: ObservationSettlement[] = [];
@@ -362,7 +383,11 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
-            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(
+              world,
+              favoriteTeamIds,
+              observationThemePreference,
+            );
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];
@@ -404,6 +429,7 @@ export const useGameStore = create<GameStore>()(
         let { world } = get();
         if (!world || get().isAdvancing) return false;
         const favoriteTeamIds = get().favoriteTeamIds;
+        const observationThemePreference = get().observationThemePreference;
         const starredFixtureIds = get().starredFixtureIds;
         const initialPlan = planNextKeyNode(world, favoriteTeamIds, starredFixtureIds);
         if (!initialPlan || initialPlan.blocked || initialPlan.skipWindows <= 0) return false;
@@ -429,7 +455,11 @@ export const useGameStore = create<GameStore>()(
               if (emergentGuard) break;
             }
 
-            const result = executeWindowWithObservationSettlement(world, favoriteTeamIds);
+            const result = executeWindowWithObservationSettlement(
+              world,
+              favoriteTeamIds,
+              observationThemePreference,
+            );
             world = result.world;
             lastResults = result.results;
             allNews = [...allNews, ...result.news];

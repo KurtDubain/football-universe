@@ -29,6 +29,7 @@ describe('game store observation settlement paths', () => {
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      observationThemePreference: 'auto',
       starredFixtureIds: [],
       newAchievements: [],
     });
@@ -106,6 +107,7 @@ describe('game store observation settlement paths', () => {
 
     await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
     expect(useGameStore.getState().getCurrentWindow()?.type).toBe('season_end');
+    useGameStore.getState().setObservationThemePreference('player_growth');
     await completeAdvance(useGameStore.getState().advanceWindow());
 
     const archived = useGameStore.getState().world?.observerSeasonTrajectories?.[0];
@@ -116,10 +118,25 @@ describe('game store observation settlement paths', () => {
         expect.objectContaining({ phase: 'opening' }),
         expect.objectContaining({ phase: 'final' }),
       ]),
+      theme: {
+        type: 'player_growth',
+        playerId: expect.any(String),
+      },
     });
 
     useGameStore.getState().setPrimaryFavoriteTeam(secondTeamId);
     expect(useGameStore.getState().world?.observerSeasonTrajectories?.[0]).toEqual(archived);
+  });
+
+  it('does not archive a theme result when themes are disabled at season end', async () => {
+    const firstTeamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
+    useGameStore.getState().setFavoriteTeams([firstTeamId]);
+
+    await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
+    useGameStore.getState().setObservationThemePreference('disabled');
+    await completeAdvance(useGameStore.getState().advanceWindow());
+
+    expect(useGameStore.getState().world?.observerSeasonTrajectories?.[0]?.theme).toBeUndefined();
   });
 
   it('advances to the planned key node without simulating that node', async () => {

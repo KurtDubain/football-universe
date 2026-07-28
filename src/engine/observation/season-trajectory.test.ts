@@ -80,7 +80,7 @@ describe('observer season trajectory', () => {
         seasonCurrentStreak: 2,
         seasonBestStreak: 2,
       },
-    }, 'alpha');
+    }, 'alpha', { type: 'player_growth', playerId: 'player-alpha' });
 
     expect(trajectory).not.toBeNull();
     expect(trajectory?.checkpoints.map(entry => entry.played)).toEqual([1, 2, 3, 4]);
@@ -96,6 +96,10 @@ describe('observer season trajectory', () => {
       goalDifference: 3,
     });
     expect(trajectory?.judgment).toEqual({ total: 4, correct: 3, bestStreak: 2 });
+    expect(trajectory?.theme).toEqual({
+      type: 'player_growth',
+      playerId: 'player-alpha',
+    });
   });
 
   it('ignores cup results and teams without a recorded starting league', () => {
@@ -122,6 +126,23 @@ describe('observer season trajectory', () => {
       goalDifference: 1,
     });
     expect(buildObserverSeasonTrajectory(world, 'missing')).toBeNull();
+  });
+
+  it('omits the theme reference when observation themes are disabled', () => {
+    const world = {
+      seasonState: {
+        seasonNumber: 2,
+        currentWindowIndex: 1,
+        completed: false,
+        isWorldCupYear: false,
+        worldCupPhase: false,
+        calendar: [window(0, [result('league', 'alpha', 'beta', 1, 0)])],
+      },
+      seasonStartLevels: { alpha: 1 as const, beta: 1 as const },
+      observationRecord: undefined,
+    };
+
+    expect(buildObserverSeasonTrajectory(world, 'alpha', null)?.theme).toBeUndefined();
   });
 
   it('replaces the same season and caps archived focus seasons', () => {

@@ -1,5 +1,6 @@
 import type { GameWorld } from '../season/season-manager';
 import { createInitialStandings, updateStandings } from '../standings/standings';
+import type { ObservationTheme, ObservationThemeType } from './observation-theme';
 
 export type ObserverSeasonPhase = 'opening' | 'midseason' | 'run_in' | 'final';
 
@@ -21,6 +22,11 @@ export interface ObserverSeasonTrajectory {
     correct: number;
     bestStreak: number;
   };
+  /** Minimal final theme reference; all result evidence stays derived from canonical history. */
+  theme?: {
+    type: ObservationThemeType;
+    playerId?: string;
+  };
 }
 
 export const OBSERVER_SEASON_TRAJECTORY_LIMIT = 40;
@@ -40,6 +46,7 @@ const PHASE_TARGETS: Array<{ phase: ObserverSeasonPhase; ratio: number }> = [
 export function buildObserverSeasonTrajectory(
   world: Pick<GameWorld, 'seasonState' | 'seasonStartLevels' | 'observationRecord'>,
   teamId: string,
+  observationTheme?: Pick<ObservationTheme, 'type' | 'playerId'> | null,
 ): ObserverSeasonTrajectory | null {
   const leagueLevel = world.seasonStartLevels?.[teamId];
   if (!leagueLevel) return null;
@@ -102,6 +109,12 @@ export function buildObserverSeasonTrajectory(
     leagueLevel,
     checkpoints,
     judgment,
+    theme: observationTheme
+      ? {
+          type: observationTheme.type,
+          ...(observationTheme.playerId ? { playerId: observationTheme.playerId } : {}),
+        }
+      : undefined,
   };
 }
 

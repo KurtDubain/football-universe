@@ -13,6 +13,7 @@ import type {
   ObserverSeasonCheckpoint,
   ObserverSeasonTrajectory,
 } from '../engine/observation/season-trajectory';
+import { describeObservationThemeResult } from '../engine/observation/observation-theme-result';
 import { Icon, type IconName } from './Icon';
 
 interface Props {
@@ -674,6 +675,12 @@ function PrimaryTeamTrajectory({
         ? `${contributor.appearances}场 · ${contributor.keyBlocks}次关键封堵 · ${contributor.cleanSheets}场零封`
         : `${contributor.appearances}场 · ${contributor.goals}球 · ${contributor.assists}助攻`
     : '';
+  const themeResult = describeObservationThemeResult(world, trajectory, record);
+  const themeTone = themeResult?.tone === 'positive'
+    ? 'text-emerald-300'
+    : themeResult?.tone === 'caution'
+      ? 'text-amber-300'
+      : 'text-slate-300';
 
   return (
     <section
@@ -714,6 +721,34 @@ function PrimaryTeamTrajectory({
           </div>
         </div>
       </div>
+
+      {themeResult && (
+        <div
+          data-testid="observer-theme-result"
+          className="mx-1 mt-3 border-y border-emerald-800/30 py-3 sm:mx-2"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Icon name="target" size={15} className="text-emerald-400" />
+            <span className="text-[11px] font-semibold text-emerald-400">本季观察主题</span>
+            <span className="text-[11px] text-slate-500">{themeResult.label}</span>
+            <span className={`ml-auto text-xs font-bold ${themeTone}`}>{themeResult.verdict}</span>
+          </div>
+          {themeResult.playerId ? (
+            <Link
+              to={`/player/${themeResult.playerId}`}
+              className="mt-1 block text-sm font-semibold text-slate-100 hover:text-emerald-300"
+            >
+              {themeResult.title}
+            </Link>
+          ) : (
+            <div className="mt-1 text-sm font-semibold text-slate-100">{themeResult.title}</div>
+          )}
+          <p className="mt-0.5 text-xs leading-5 text-slate-400">{themeResult.summary}</p>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+            {themeResult.evidence.map(item => <span key={item}>{item}</span>)}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 px-1 sm:grid-cols-4 sm:px-2">
         {trajectory.checkpoints.map((checkpoint) => (

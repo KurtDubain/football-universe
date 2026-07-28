@@ -392,3 +392,18 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Freeze the completed theme result into the existing bounded primary-observer season trajectory and show it in Season Review without copying standings or player statistics.
 - The broader Dashboard focus unification, related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and historical world summaries remain open in the durable checklist.
+
+## 2026-07-28 Observer Gameplay Phase 10
+
+- Extended each bounded primary-observer trajectory with only the final theme type and an optional tracked player id. No standings, points, player totals, progress values, verdicts, or prose are duplicated.
+- The store resolves the currently selected theme only when the authoritative `season_end` window is executed. A last-moment theme switch is archived; a disabled theme writes no theme reference.
+- Added a pure completed-theme reader for giant defense, dark-horse challenge, promotion/survival, player growth, and neutral observation. Team verdicts use frozen `teamSeasonRecords`; player verdicts use the shared season stat selector and retain position-specific contribution semantics.
+- Season Review now places the theme conclusion inside the existing primary-team observation archive, while the History season directory exposes a compact theme badge. Both continue to show the originally archived team after the live primary focus changes.
+- Final verification passed 84 test files / 630 tests, ESLint, TypeScript/PWA production build, bundle/changelog budgets, the mandatory standard web-game client, and production-preview observation archive, Season Review, History, storyline, and 15-minute route workflows at mobile and desktop sizes. Dedicated archive checks survived reload and a later primary-team change with zero overflow or runtime errors.
+- The initial dependency graph remains within budget at 587,337 bytes. Mobile advance p50/p95 was 15.1/22.8ms normally and 27.1/53ms under 4x CPU; 20 rapid attempts accepted and restored exactly one advance.
+- The 10-season current-schema audit completed 509 advances with zero data/runtime issues across 25 mobile/desktop route checks. The S150 audit completed 7,684 advances with zero rollover errors/warnings or cap failures; actual storage was 1,732,478 bytes, the observer trajectory remained capped at 40 seasons, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 11 Handoff
+
+- Unify the Dashboard's competing focus surfaces so the primary team, current observation theme, key fixture, optional judgment, and next action read as one compact observation sequence.
+- Keep related-match/trophy detail jumps, richer dark-horse/key-cup evidence, and broader historical world summaries as separate bounded follow-ups in the durable checklist.

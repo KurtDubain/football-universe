@@ -26,6 +26,7 @@ import {
   buildObserverSeasonTrajectory,
   OBSERVER_SEASON_TRAJECTORY_LIMIT,
 } from '../src/engine/observation/season-trajectory';
+import { buildObservationTheme } from '../src/engine/observation/observation-theme';
 
 const baseUrl = (process.env.LONG_SAVE_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const reportPath = process.env.LONG_SAVE_REPORT ?? '/tmp/football-long-save-audit.json';
@@ -72,8 +73,11 @@ const favoriteTeamId = Object.keys(initializeGameWorld(seed).teamBases)[0];
 
 function advanceLikeStore(source: GameWorld): GameWorld {
   const window = getCurrentWindow(source);
+  const observationTheme = window?.type === 'season_end'
+    ? buildObservationTheme(source, favoriteTeamId, 'auto')
+    : null;
   const trajectory = window?.type === 'season_end'
-    ? buildObserverSeasonTrajectory(source, favoriteTeamId)
+    ? buildObserverSeasonTrajectory(source, favoriteTeamId, observationTheme)
     : null;
   const result = executeCurrentWindow(source, { favoriteTeamIds: [favoriteTeamId] });
   return boundWorldStorageMetadata(appendObserverSeasonTrajectory(result.world, trajectory));
@@ -87,6 +91,7 @@ function createObservedSaveEnvelope(source: GameWorld) {
       ...envelope.state,
       favoriteTeamId,
       favoriteTeamIds: [favoriteTeamId],
+      observationThemePreference: 'auto',
     },
   };
 }
