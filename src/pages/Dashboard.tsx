@@ -33,6 +33,7 @@ import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
+import { describeDashboardAction } from '../engine/observation/dashboard-action';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -456,6 +457,12 @@ function MatchdayTab({
   // Compute focus matches (top 1-2)
   const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2, favoriteTeamId);
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
+  const actionPresentation = describeDashboardAction({
+    phase: 'matchday',
+    hasPendingJudgment: Boolean(world.pendingObservationJudgment),
+    hasStarredFocus: focusMatches.some(entry => starredFixtureIds.includes(entry.fixture.id)),
+    isAdvancing,
+  });
 
   // Group fixtures by competition (excluding ones already shown in focus banner)
   const groupMap = new Map<string, MatchFixture[]>();
@@ -563,6 +570,7 @@ function MatchdayTab({
                 return (
                   <div
                     key={fixture.id}
+                    data-fixture-id={fixture.id}
                     role="button"
                     tabIndex={0}
                     data-secondary={focusIndex > 0 ? 'true' : 'false'}
@@ -623,6 +631,8 @@ function MatchdayTab({
               embedded
               advanceAction={{
                 isAdvancing,
+                label: actionPresentation.label,
+                ariaLabel: actionPresentation.ariaLabel,
                 stageLabel: getWindowTypeLabel(currentWindow.type),
                 onAdvance: () => void advanceWindow(),
               }}
@@ -679,7 +689,11 @@ function MatchdayTab({
       {windowTips.length > 0 && (
         <div data-testid="secondary-match-notices" className="space-y-1.5">
           {windowTips.map((tip, i) => (
-            <div key={i} className={`px-3 py-2 rounded-lg text-xs border ${tip.style}`}>
+            <div
+              key={i}
+              data-fixture-id={tip.fixtureId}
+              className={`px-3 py-2 rounded-lg text-xs border ${tip.style}`}
+            >
               <span className="font-medium">{tip.tag}</span>
               <span className="mx-1.5 text-slate-600">|</span>
               <span>{tip.text}</span>
@@ -718,7 +732,7 @@ function generateWindowTips(
   world: GameWorld,
   fixtures: MatchFixture[],
   excludedFixtureIds: ReadonlySet<string> = new Set(),
-): { tag: string; text: string; style: string }[] {
+): { fixtureId: string; tag: string; text: string; style: string }[] {
   const tips: { fixtureId: string; priority: number; tag: string; text: string; style: string }[] = [];
   const seen = new Set<string>();
 
@@ -863,10 +877,18 @@ function ResultsTab({
       return team ? [team.name, team.shortName] : [];
     })
     .filter(Boolean);
+  const displayedFixtureIds = useMemo(
+    () => new Set([
+      ...lastResults.map(result => result.fixtureId),
+      ...(lastWorldResponse?.featuredResults.map(item => item.result.fixtureId) ?? []),
+    ]),
+    [lastResults, lastWorldResponse],
+  );
   const curatedNews = curateNewsFeed(
     lastNews.length > 0 ? lastNews : world.newsLog,
-    { favoriteTeamNames, limit: 8 },
+    { favoriteTeamNames, excludedFixtureIds: displayedFixtureIds, limit: 8 },
   );
+  const resultsAction = describeDashboardAction({ phase: 'results', isAdvancing });
 
   if (!lastWorldResponse && lastResults.length === 0 && curatedNews.length === 0) {
     return (
@@ -908,14 +930,14 @@ function ResultsTab({
           <button
             type="button"
             data-testid="dashboard-advance"
-            aria-label="开始模拟"
+            aria-label={resultsAction.ariaLabel}
             aria-busy={isAdvancing}
             disabled={isAdvancing}
             onClick={() => void advanceWindow()}
             className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
           >
             <Icon name="play" size={16} />
-            <span className="text-xs font-semibold">{isAdvancing ? '模拟中...' : '继续下一轮'}</span>
+            <span className="text-xs font-semibold">{resultsAction.label}</span>
           </button>
         </div>
       )}
@@ -962,6 +984,7 @@ function ResultsTab({
                   (news) => (
                     <div
                       key={news.id}
+                      data-fixture-id={news.fixtureId}
                       className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700"
                       style={{
                         borderLeftWidth: '3px',

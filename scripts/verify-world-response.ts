@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       });
       await page.getByTestId('dashboard').waitFor();
 
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       const response = page.getByTestId('world-response');
       await response.waitFor({ timeout: 15_000 });
       await page.getByText('本次世界回应', { exact: true }).waitFor();

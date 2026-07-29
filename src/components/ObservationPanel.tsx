@@ -28,6 +28,8 @@ export default function ObservationPanel({
   embedded?: boolean;
   advanceAction?: {
     isAdvancing: boolean;
+    label: string;
+    ariaLabel: string;
     stageLabel: string;
     onAdvance: () => void;
   };
@@ -77,14 +79,14 @@ export default function ObservationPanel({
     <button
       type="button"
       data-testid="dashboard-advance"
-      aria-label="开始模拟"
+      aria-label={advanceAction.ariaLabel}
       aria-busy={advanceAction.isAdvancing}
       disabled={advanceAction.isAdvancing}
       onClick={advanceAction.onAdvance}
       className="flex min-h-11 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
     >
       <Icon name="play" size={16} />
-      <span className="text-xs font-semibold">{advanceAction.isAdvancing ? '模拟中...' : '开始模拟'}</span>
+      <span className="text-xs font-semibold">{advanceAction.label}</span>
       <span className="hidden text-[11px] text-white/65 sm:inline">结算{advanceAction.stageLabel}</span>
     </button>
   ) : null;

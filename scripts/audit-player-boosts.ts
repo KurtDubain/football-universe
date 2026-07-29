@@ -23,7 +23,7 @@ async function main() {
 
   // Advance 3 full seasons
   for (let i = 0; i < 200; i++) {
-    const btn = await page.$('button:has-text("推进"), button:has-text("开始模拟")');
+    const btn = await page.$('[data-testid="dashboard-advance"], button:has-text("推进")');
     if (!btn) break;
     const t = await btn.textContent();
     if (!t || t.includes('赛季已结束') || t.includes('模拟中')) break;

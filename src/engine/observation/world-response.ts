@@ -60,7 +60,7 @@ function uniqueNews(items: NewsItem[]): NewsItem[] {
 
 function isDecisiveRound(result: MatchResult): boolean {
   const round = result.roundLabel.toLowerCase();
-  return round.includes('final') || round.includes('决赛');
+  return round.trim() === 'final' || result.roundLabel.trim() === '决赛';
 }
 
 function candidateScore(

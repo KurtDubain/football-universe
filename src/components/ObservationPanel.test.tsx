@@ -37,6 +37,8 @@ describe('ObservationPanel dashboard action flow', () => {
         embedded
         advanceAction={{
           isAdvancing: false,
+          label: '揭晓本轮',
+          ariaLabel: '揭晓本轮比赛结果',
           stageLabel: '顶级联赛',
           onAdvance,
         }}
@@ -45,7 +47,7 @@ describe('ObservationPanel dashboard action flow', () => {
 
     const advance = container.querySelector<HTMLButtonElement>('[data-testid="dashboard-advance"]');
     expect(advance).not.toBeNull();
-    expect(container.querySelectorAll('[aria-label="开始模拟"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-label="揭晓本轮比赛结果"]')).toHaveLength(1);
     expect(container.textContent).toContain('本轮判断 · 可选');
 
     act(() => advance?.click());
@@ -61,6 +63,8 @@ describe('ObservationPanel dashboard action flow', () => {
         embedded
         advanceAction={{
           isAdvancing: false,
+          label: '揭晓本轮',
+          ariaLabel: '揭晓本轮比赛结果',
           stageLabel: '顶级联赛',
           onAdvance: () => undefined,
         }}
@@ -72,7 +76,7 @@ describe('ObservationPanel dashboard action flow', () => {
     act(() => judgment?.click());
 
     expect(container.querySelector('[data-testid="observation-panel"]')).not.toBeNull();
-    expect(container.querySelectorAll('[aria-label="开始模拟"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-label="揭晓本轮比赛结果"]')).toHaveLength(1);
     expect(container.textContent).toContain('不消耗资源，也不会影响赛果');
   });
 });

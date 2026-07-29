@@ -37,13 +37,21 @@ const typeBg: Record<string, string> = {
 
 const EMPTY_TEAM_NAMES: string[] = [];
 
-export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES }: { news: NewsItem[]; favoriteTeamNames?: string[] }) {
+export default function NewsTicker({
+  news,
+  favoriteTeamNames = EMPTY_TEAM_NAMES,
+  excludedFixtureIds,
+}: {
+  news: NewsItem[];
+  favoriteTeamNames?: string[];
+  excludedFixtureIds?: ReadonlySet<string>;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const sorted = useMemo(
-    () => curateNewsFeed(news, { favoriteTeamNames, limit: 8 }),
-    [favoriteTeamNames, news],
+    () => curateNewsFeed(news, { favoriteTeamNames, excludedFixtureIds, limit: 8 }),
+    [excludedFixtureIds, favoriteTeamNames, news],
   );
 
   useEffect(() => {
@@ -68,6 +76,7 @@ export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES 
       {/* Main ticker bar */}
       <button
         type="button"
+        data-fixture-id={item.fixtureId}
         aria-expanded={expanded}
         aria-controls="global-news-list"
         className="w-full h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
@@ -94,6 +103,7 @@ export default function NewsTicker({ news, favoriteTeamNames = EMPTY_TEAM_NAMES 
             <button
               type="button"
               key={n.id}
+              data-fixture-id={n.fixtureId}
               className={`w-full text-left flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}
               onClick={() => { setSelectedId(n.id); setExpanded(false); }}
             >

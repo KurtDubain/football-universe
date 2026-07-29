@@ -129,6 +129,7 @@ export default function WorldResponseSummary({
                 key={`${match.seasonNumber}-${match.result.fixtureId}`}
                 type="button"
                 data-testid="world-response-match"
+                data-fixture-id={match.result.fixtureId}
                 onClick={() => onResultClick(match.result)}
                 className="flex min-h-11 w-full items-center gap-2 border-t border-slate-700/45 py-2 text-left first:border-t-0 hover:bg-slate-800/45"
               >

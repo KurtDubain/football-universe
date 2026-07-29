@@ -66,7 +66,7 @@ async function main(): Promise<void> {
         fullPage: true,
       });
 
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       const summary = page.getByTestId('observation-settlement');
       await summary.waitFor({ timeout: 15_000 });
       await summary.getByText(/样本积累中/).waitFor();

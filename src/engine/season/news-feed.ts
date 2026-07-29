@@ -51,9 +51,14 @@ export function getNewsTier(item: NewsItem, favoriteTeamNames: string[] = []): N
 
 export function curateNewsFeed(
   news: NewsItem[],
-  options: { favoriteTeamNames?: string[]; limit?: number } = {},
+  options: {
+    favoriteTeamNames?: string[];
+    excludedFixtureIds?: ReadonlySet<string>;
+    limit?: number;
+  } = {},
 ): NewsItem[] {
   const favoriteTeamNames = options.favoriteTeamNames ?? [];
+  const excludedFixtureIds = options.excludedFixtureIds;
   const limit = options.limit ?? 8;
   const seen = new Set<string>();
 
@@ -61,6 +66,7 @@ export function curateNewsFeed(
     .map((item, index) => ({ item, index }))
     .reverse()
     .filter(({ item }) => {
+      if (item.fixtureId && excludedFixtureIds?.has(item.fixtureId)) return false;
       const key = normalizedTitle(item);
       if (seen.has(key)) return false;
       seen.add(key);

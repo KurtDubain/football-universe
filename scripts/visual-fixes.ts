@@ -23,7 +23,7 @@ async function main() {
 
   // Advance ~70 windows so coaches actually retire (forced by age over time)
   for (let i = 0; i < 70; i++) {
-    const btn = await page.$('button:has-text("推进"), button:has-text("开始模拟")');
+    const btn = await page.$('[data-testid="dashboard-advance"], button:has-text("推进")');
     if (!btn) break;
     const t = await btn.textContent();
     if (!t || t.includes('赛季已结束') || t.includes('模拟中')) break;
@@ -71,7 +71,7 @@ async function main() {
 
   // Test handleAdvanceClick wraps — confirm clicking advance doesn't error
   for (let i = 0; i < 3; i++) {
-    const btn = await page.$('button:has-text("开始模拟"), button:has-text("推进")');
+    const btn = await page.$('[data-testid="dashboard-advance"], button:has-text("推进")');
     if (btn) {
       await btn.click({ timeout: 2000 }).catch(() => {});
       await page.waitForTimeout(300);

@@ -60,4 +60,15 @@ describe('news feed curation', () => {
     ]);
     expect(getNewsTier(climax)).toBe('headline');
   });
+
+  it('excludes news tied to a featured fixture without hiding other stories', () => {
+    const repeated = { ...news('upset', 'upset', '焦点赛爆冷'), fixtureId: 'fixture-focus' };
+    const otherMatch = { ...news('late', 'match_result', '另一场绝杀'), fixtureId: 'fixture-other' };
+    const storyline = news('story', 'storyline', '争冠故事升级');
+
+    expect(curateNewsFeed(
+      [repeated, otherMatch, storyline],
+      { excludedFixtureIds: new Set(['fixture-focus']) },
+    ).map(item => item.id)).toEqual(['story', 'late']);
+  });
 });

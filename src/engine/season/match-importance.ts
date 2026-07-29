@@ -8,6 +8,59 @@ export interface FixtureImportance {
   reasons: string[];
 }
 
+interface FocusPriority {
+  primary: number;
+  knockout: number;
+  tableStakes: number;
+  derby: number;
+  marquee: number;
+}
+
+function getKnockoutRoundRank(roundLabel: string): number {
+  const lower = roundLabel.toLowerCase();
+  const upper = roundLabel.trim().toUpperCase();
+  if (lower.includes('quarter') || roundLabel.includes('1/4') || upper === 'QF') return 2;
+  if (lower.includes('semi') || roundLabel.includes('半决') || upper === 'SF') return 3;
+  if (
+    lower.includes('round of 16')
+    || lower.includes('round-of-16')
+    || roundLabel.includes('1/8')
+    || roundLabel.includes('淘汰')
+    || upper === 'R16'
+  ) return 1;
+  if (lower.trim() === 'final' || roundLabel.trim() === '决赛') return 4;
+  return 0;
+}
+
+function getFocusPriority(
+  fixture: MatchFixture,
+  world: GameWorld,
+  primaryFavoriteTeamId: string | null,
+): FocusPriority {
+  const knockout = getKnockoutRoundRank(fixture.roundLabel);
+  const top4Ids = new Set(world.league1Standings.slice(0, 4).map(entry => entry.teamId));
+  const bottom5Ids = new Set(world.league1Standings.slice(-5).map(entry => entry.teamId));
+  const home = world.teamBases[fixture.homeTeamId];
+  const away = world.teamBases[fixture.awayTeamId];
+  const marquee = home && away
+    && (home.tier === 'elite' || home.tier === 'strong')
+    && (away.tier === 'elite' || away.tier === 'strong')
+    ? 1
+    : 0;
+
+  return {
+    primary: Number(primaryFavoriteTeamId != null
+      && (fixture.homeTeamId === primaryFavoriteTeamId || fixture.awayTeamId === primaryFavoriteTeamId)),
+    knockout,
+    tableStakes: Number(
+      (top4Ids.has(fixture.homeTeamId) && top4Ids.has(fixture.awayTeamId))
+      || (bottom5Ids.has(fixture.homeTeamId) && bottom5Ids.has(fixture.awayTeamId)),
+    ),
+    derby: Number(isDerby(fixture.homeTeamId, fixture.awayTeamId, world.teamBases)),
+    marquee,
+  };
+}
+
 /**
  * Compute an "importance score" for a fixture so we can highlight 1-2 must-watch
  * matches per advance window.
@@ -65,17 +118,34 @@ export function computeFixtureImportance(
     reasons.push('保级大战');
   }
 
+  const home = world.teamBases[fixture.homeTeamId];
+  const away = world.teamBases[fixture.awayTeamId];
+  if (
+    home
+    && away
+    && (home.tier === 'elite' || home.tier === 'strong')
+    && (away.tier === 'elite' || away.tier === 'strong')
+    && !reasons.includes('争冠焦点')
+    && !reasons.includes('上游对话')
+  ) {
+    score += 1;
+    reasons.push('强强对话');
+  }
+
   // Cup importance
-  const lower = fixture.roundLabel.toLowerCase();
-  if (lower.includes('final') || fixture.roundLabel.includes('决赛')) {
+  const knockoutRoundRank = getKnockoutRoundRank(fixture.roundLabel);
+  if (knockoutRoundRank === 4) {
     score += 8;
     reasons.push('杯赛决赛');
-  } else if (lower.includes('semi') || fixture.roundLabel.includes('半决')) {
+  } else if (knockoutRoundRank === 3) {
     score += 4;
     reasons.push('半决赛');
-  } else if (lower.includes('quarter') || fixture.roundLabel.includes('1/4')) {
+  } else if (knockoutRoundRank === 2) {
     score += 2;
     reasons.push('1/4决赛');
+  } else if (knockoutRoundRank === 1) {
+    score += 4;
+    reasons.push('淘汰赛');
   }
 
   if (fixture.competitionType === 'world_cup' || fixture.competitionType === 'world_cup_group') {
@@ -101,11 +171,15 @@ export function pickFocusMatches(
     importance: computeFixtureImportance(f, world, favoriteTeamIds, primaryFavoriteTeamId),
   }));
   scored.sort((a, b) => {
-    const aPrimary = primaryFavoriteTeamId != null
-      && (a.fixture.homeTeamId === primaryFavoriteTeamId || a.fixture.awayTeamId === primaryFavoriteTeamId);
-    const bPrimary = primaryFavoriteTeamId != null
-      && (b.fixture.homeTeamId === primaryFavoriteTeamId || b.fixture.awayTeamId === primaryFavoriteTeamId);
-    return Number(bPrimary) - Number(aPrimary) || b.importance.score - a.importance.score;
+    const aPriority = getFocusPriority(a.fixture, world, primaryFavoriteTeamId);
+    const bPriority = getFocusPriority(b.fixture, world, primaryFavoriteTeamId);
+    return bPriority.primary - aPriority.primary
+      || bPriority.knockout - aPriority.knockout
+      || bPriority.tableStakes - aPriority.tableStakes
+      || bPriority.derby - aPriority.derby
+      || bPriority.marquee - aPriority.marquee
+      || b.importance.score - a.importance.score
+      || a.fixture.id.localeCompare(b.fixture.id);
   });
   // Only return scored > 4 (otherwise nothing exceptional)
   return scored.filter((s) => s.importance.score >= 4).slice(0, topN);

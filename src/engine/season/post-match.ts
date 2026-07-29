@@ -221,6 +221,7 @@ export function runPostMatchProcessing(
       ];
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `upset-${result.fixtureId}`),
+        fixtureId: result.fixtureId,
         seasonNumber, windowIndex, type: 'upset',
         title: rng.pick(titles),
         description: rng.pick(descs),
@@ -322,6 +323,7 @@ export function runPostMatchProcessing(
         const teamName = world.teamBases[teamId]?.name ?? teamId;
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `hattrick-${playerId}`),
+          fixtureId: result.fixtureId,
           seasonNumber, windowIndex, type: 'match_result',
           title: `帽子戏法! ${teamName} ${playerName}独进${count}球`,
           description: `${teamName}的${playerName}上演帽子戏法，独中${count}元${num ? `（${num}号）` : ''}。`,
@@ -349,6 +351,7 @@ export function runPostMatchProcessing(
         const timing = scorer.minute > 90 ? '补时' : '终场前';
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `latedrama-${result.fixtureId}`),
+          fixtureId: result.fixtureId,
           seasonNumber, windowIndex, type: 'match_result',
           title: `${drama}! ${teamName} ${scorerLabel}${timing}建功`,
           description: `${teamName}在第${scorer.minute}分钟打入关键进球，上演${drama}好戏！`,

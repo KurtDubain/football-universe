@@ -17,7 +17,7 @@ async function main() {
   await page.goto(URL, { waitUntil: 'networkidle' });
   await page.waitForTimeout(2000);
   for (let i = 0; i < 50; i++) {
-    const btn = await page.$('button:has-text("推进"), button:has-text("开始模拟")');
+    const btn = await page.$('[data-testid="dashboard-advance"], button:has-text("推进")');
     if (!btn) break;
     const txt = await btn.textContent();
     if (!txt || txt.includes('赛季已结束') || txt.includes('模拟中')) break;

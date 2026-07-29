@@ -47,7 +47,7 @@ async function main(): Promise<void> {
 
       await page.getByTestId('dashboard').waitFor({ state: 'visible' });
       await page.getByTestId('focus-matches').waitFor({ state: 'visible' });
-      const primaryAdvance = page.getByRole('button', { name: '开始模拟', exact: true });
+      const primaryAdvance = page.getByTestId('dashboard-advance');
       const primaryCount = await primaryAdvance.count();
       const hierarchy = await page.evaluate(() => {
         const favorite = document.querySelector('[data-testid="favorite-team-summaries"]');

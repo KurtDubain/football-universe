@@ -17,7 +17,17 @@ export function ParticleBackground() {
     let w = 0, h = 0;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const particles: { x: number; y: number; vx: number; vy: number; r: number; alpha: number; color: string; type: 'orb' | 'icon' }[] = [];
+    const particles: {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      r: number;
+      alpha: number;
+      color: string;
+      type: 'orb' | 'icon';
+      glyph: string;
+    }[] = [];
     const colors = ['#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4'];
     const icons = ['⚽', '🏆', '⭐', '🥅'];
 
@@ -43,6 +53,7 @@ export function ParticleBackground() {
           alpha: isIcon ? 0.12 : 0.06 + Math.random() * 0.08,
           color: colors[Math.floor(Math.random() * colors.length)],
           type: isIcon ? 'icon' : 'orb',
+          glyph: isIcon ? icons[Math.floor(Math.random() * icons.length)] : '',
         });
       }
     }
@@ -61,7 +72,7 @@ export function ParticleBackground() {
         if (p.type === 'icon') {
           ctx!.globalAlpha = p.alpha;
           ctx!.font = `${p.r * 2}px serif`;
-          ctx!.fillText(icons[Math.floor(p.x * 13 % icons.length)], p.x, p.y);
+          ctx!.fillText(p.glyph, p.x, p.y);
         } else {
           ctx!.globalAlpha = p.alpha;
           ctx!.beginPath();

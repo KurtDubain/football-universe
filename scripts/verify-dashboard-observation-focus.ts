@@ -59,9 +59,10 @@ async function main(): Promise<void> {
       await runway.waitFor({ state: 'visible' });
       const focus = runway.getByTestId('focus-matches');
       const judgment = runway.getByRole('button', { name: /做出本轮观察判断/ });
-      const advance = runway.getByRole('button', { name: '开始模拟', exact: true });
+      const advance = runway.getByTestId('dashboard-advance');
       const secondaryFocus = focus.locator('[data-secondary="true"]');
       await focus.getByText(/关键球员/).first().waitFor();
+      await advance.getByText('揭晓本轮', { exact: true }).waitFor();
       const collapsedLayout = await page.evaluate(() => {
         const runwayElement = document.querySelector<HTMLElement>('[data-testid="observation-runway"]');
         const themeElement = runwayElement?.querySelector<HTMLElement>('[data-testid="observation-theme"]');
@@ -74,8 +75,15 @@ async function main(): Promise<void> {
         const judgmentRect = judgmentElement?.getBoundingClientRect();
         const advanceRect = advanceElement?.getBoundingClientRect();
         const secondaryRect = secondaryElement?.getBoundingClientRect();
+        const focusIds = [...document.querySelectorAll<HTMLElement>('[data-testid="focus-matches"] [data-fixture-id]')]
+          .map(element => element.dataset.fixtureId)
+          .filter(Boolean);
+        const noticeIds = [...document.querySelectorAll<HTMLElement>('[data-testid="secondary-match-notices"] [data-fixture-id]')]
+          .map(element => element.dataset.fixtureId)
+          .filter(Boolean);
         return {
-          primaryActions: document.querySelectorAll('[aria-label="开始模拟"]').length,
+          primaryActions: document.querySelectorAll('[data-testid="dashboard-advance"]').length,
+          duplicateNoticeIds: focusIds.filter(id => noticeIds.includes(id)),
           runwayContainsAll: Boolean(
             runwayElement
             && themeElement
@@ -96,6 +104,9 @@ async function main(): Promise<void> {
       });
       if (!collapsedLayout.runwayContainsAll || collapsedLayout.primaryActions !== 1) {
         throw new Error(`${viewport.name}: observation controls are not unified ${JSON.stringify(collapsedLayout)}`);
+      }
+      if (collapsedLayout.duplicateNoticeIds.length > 0) {
+        throw new Error(`${viewport.name}: focus fixture repeated in secondary notices ${JSON.stringify(collapsedLayout)}`);
       }
       if (
         collapsedLayout.themeTop >= collapsedLayout.focusTop
@@ -129,10 +140,16 @@ async function main(): Promise<void> {
       await page.getByRole('dialog').waitFor();
       await page.getByRole('button', { name: '关闭比赛详情' }).click();
 
+      const star = focus.locator('button[aria-label="关注比赛并在推进时自动直播"]').first();
+      await star.click();
+      await runway.getByRole('button', { name: '观看已关注的焦点比赛' }).waitFor();
+      await focus.locator('button[aria-label="取消关注比赛"]').click();
+      await runway.getByRole('button', { name: '揭晓本轮比赛结果' }).waitFor();
+
       await judgment.click();
       const expandedPanel = runway.getByTestId('observation-panel');
       await expandedPanel.waitFor();
-      if (await page.getByRole('button', { name: '开始模拟', exact: true }).count() !== 1) {
+      if (await page.getByTestId('dashboard-advance').count() !== 1) {
         throw new Error(`${viewport.name}: expanding judgment duplicated the advance action`);
       }
       await expandedPanel.scrollIntoViewIfNeeded();
@@ -142,17 +159,36 @@ async function main(): Promise<void> {
       });
       await runway.getByRole('button', { name: /主胜/ }).click();
       await runway.getByRole('button', { name: /本轮已判断：主胜/ }).waitFor();
+      await runway.getByRole('button', { name: '揭晓本轮观察判断' }).waitFor();
+      await star.click();
+      await runway.getByRole('button', { name: '观看焦点比赛并揭晓判断' }).waitFor();
 
       await advance.click();
+      const liveDialog = page.getByRole('dialog', { name: '比赛直播回放' });
+      await liveDialog.waitFor({ timeout: 15_000 });
+      await liveDialog.getByRole('button', { name: '退出', exact: true }).click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       await page.getByTestId('observation-settlement').waitFor({ timeout: 15_000 });
       const resultsNextAction = page.getByTestId('results-next-action');
       await resultsNextAction.waitFor();
       if (
-        await page.getByRole('button', { name: '开始模拟', exact: true }).count() !== 1
-        || (await resultsNextAction.getByRole('button', { name: '开始模拟', exact: true }).boundingBox())?.height !== 44
+        await page.getByTestId('dashboard-advance').count() !== 1
+        || (await resultsNextAction.getByRole('button', { name: '继续观察下一轮' }).boundingBox())?.height !== 44
       ) {
         throw new Error(`${viewport.name}: results did not preserve one 44px continuation action`);
+      }
+      const duplicateResultNews = await page.evaluate(() => {
+        const featuredIds = [...document.querySelectorAll<HTMLElement>('[data-testid="world-response-match"]')]
+          .map(element => element.dataset.fixtureId)
+          .filter(Boolean);
+        const ordinaryIds = [...document.querySelectorAll<HTMLElement>('[data-fixture-id]')]
+          .filter(element => !element.closest('[data-testid="world-response"]'))
+          .map(element => element.dataset.fixtureId)
+          .filter(Boolean);
+        return featuredIds.filter(id => ordinaryIds.includes(id));
+      });
+      if (duplicateResultNews.length > 0) {
+        throw new Error(`${viewport.name}: featured result repeated in ordinary news ${duplicateResultNews.join(',')}`);
       }
       await page.screenshot({
         path: `/tmp/football-dashboard-focus-${viewport.name}-results.png`,

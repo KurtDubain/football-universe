@@ -48,6 +48,7 @@ export interface NewsItem {
   id: string;
   seasonNumber: number;
   windowIndex: number;
+  fixtureId?: string;
   type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor' | 'intervention' | 'storyline';
   importance?: 'major' | 'normal' | 'minor';
   title: string;

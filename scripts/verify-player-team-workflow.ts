@@ -89,7 +89,7 @@ async function main(): Promise<void> {
       }
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       await page.waitForFunction(() => {
         type AuditState = { isAdvancing: boolean; lastResults: unknown[] };
         const store = (window as typeof window & { __gameStore?: { getState: () => AuditState } }).__gameStore;

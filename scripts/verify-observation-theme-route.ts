@@ -95,7 +95,7 @@ async function main(): Promise<void> {
 
       await page.getByRole('button', { name: /做出本轮观察判断/ }).click();
       await page.getByRole('button', { name: /主胜/ }).click();
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       await page.getByTestId('observation-settlement').waitFor({ timeout: 15_000 });
       await page.screenshot({
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
       });
 
       await page.getByRole('button', { name: '比赛日' }).click();
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       const afterTwo = await page.evaluate(readRouteSnapshot);
       if (afterTwo.windowIndex < initial.windowIndex + 2 || afterTwo.primaryPlayed < 2) {

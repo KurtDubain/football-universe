@@ -90,7 +90,7 @@ async function inspectRoute(
       .filter(Boolean)
       .slice(0, 10);
 
-    const primaryPattern = /^(开始新游戏|推进|开始模拟)/;
+    const primaryPattern = /^(开始新游戏|推进|揭晓|观看|继续观察)/;
     const undersized = isMobile
       ? [...document.querySelectorAll<HTMLElement>('button,[role="button"]')]
         .filter(element => primaryPattern.test((element.textContent ?? '').trim()))

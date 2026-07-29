@@ -70,7 +70,7 @@ async function main() {
 
   // Now advance ~10 full seasons (60 windows × 10 = 600)
   for (let i = 0; i < 700; i++) {
-    const btn = await page.$('button:has-text("推进"), button:has-text("开始模拟")');
+    const btn = await page.$('[data-testid="dashboard-advance"], button:has-text("推进")');
     if (!btn) break;
     const t = await btn.textContent();
     if (!t || t.includes('赛季已结束') || t.includes('模拟中')) break;

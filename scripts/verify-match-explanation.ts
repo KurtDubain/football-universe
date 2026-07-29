@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       if (preOverflow > 1) throw new Error(`${viewport.name}: pre-match dialog overflows by ${preOverflow}px`);
       await preDialog.getByRole('button', { name: '关闭比赛详情' }).click();
 
-      await page.getByRole('button', { name: '开始模拟', exact: true }).click();
+      await page.getByTestId('dashboard-advance').click();
       await page.getByTestId('toggle-full-report').click();
       const skip = page.getByTestId('skip-result-animation');
       await skip.waitFor({ state: 'visible', timeout: 10_000 });

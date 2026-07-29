@@ -425,3 +425,21 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Add explicit boundary tests for focus-match priority and suppress remaining duplicate fixture mentions across the focus tool, secondary notices, and ordinary news surfaces.
 - Refine the single state-aware action vocabulary for starred live viewing, ordinary reveal, and post-result continuation without adding more buttons or changing simulation behavior.
+
+## 2026-07-29 Observer Gameplay Phase 12
+
+- Made focus selection explicitly lexicographic and deterministic: primary observer club, knockout stage, title/relegation stakes, derby, marquee matchup, existing importance, then fixture id. Boundary tests prove the hierarchy even when a lower-priority derby has a higher raw score and when fixture input order is reversed.
+- Replaced substring-based cup-stage detection with explicit `Final / SF / QF / R16` and Chinese/long-form parsing. `Semi-final`, `Quarter-final`, and `半决赛` no longer inherit the final bonus; ordinary world responses likewise reserve decisive-final weighting for an actual final.
+- Added an optional fixture reference only to match-derived upset, hat-trick, and late-drama news. The Dashboard full report excludes news for every result it already renders, while the global ticker excludes the currently featured world-response fixtures. Existing bounded news history remains unchanged.
+- Kept focus cards, secondary notices, world-response rows, and ordinary news traceable by fixture id. The dedicated browser route verifies no focus/notice or featured/news intersection instead of relying on text coincidence.
+- Replaced the fixed Dashboard action label with one pure state vocabulary: `揭晓本轮`, `揭晓判断`, `观看焦点`, `观看并揭晓`, `继续观察`, plus one shared busy state. The same single button still calls the existing advance action and consumes no additional RNG.
+- The production browser flow passed at `390x844` and `1440x900`: all four pre-match action states appeared, a starred focus opened the real live replay, exit reached the settled world response, one judgment settled, the continuation remained 44px, the mobile action ended at 840px, and duplicate ids, overflow, and runtime errors were all zero.
+- Final mandatory canvas inspection exposed an existing welcome-background edge case: a drifting icon could use a negative modulo index and draw the literal word `undefined`. Each icon particle now keeps one glyph assigned at creation, eliminating the invalid draw and visual flicker.
+- Final verification passed 86 test files / 639 tests, ESLint, TypeScript/PWA production build, bundle/changelog budgets, the mandatory standard web-game client with visual inspection, and the Dashboard, judgment, world-response, observation-theme, and ten-season production workflows.
+- The initial dependency graph remains within budget at 588,767 bytes. Production mobile advance p50/p95 was 16.7/20.9ms normally and 32.3/51.1ms under 4x CPU; every sample rendered busy feedback first, and 20 rapid attempts accepted and restored exactly one advance.
+- The 10-season current-schema audit completed 509 advances with zero data/runtime issues across 25 mobile/desktop route checks. The S150 audit completed 7,684 advances with zero rollover errors/warnings or cap failures; actual storage was 1,732,722 bytes, and S1/S50/S100/S150 reload plus next-advance digests matched.
+
+### Phase 13 Handoff
+
+- Audit the already-recorded observation streak, season accuracy, and total-count feedback against checklist 4.3; fill only any missing presentation or season-archive link without introducing rewards or a second progression system.
+- Keep related-match/trophy detail jumps and broader historical world summaries as separate bounded follow-ups after the observation feedback audit.

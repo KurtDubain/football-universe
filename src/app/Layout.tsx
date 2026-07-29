@@ -65,6 +65,7 @@ const continentalCupNavItems: { to: string; label: string; key: 'mainland_cup' |
 
 export default function Layout({ children }: LayoutProps) {
   const world = useGameStore((s) => s.world);
+  const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const batchAdvance = useGameStore((s) => s.batchAdvance);
@@ -81,6 +82,10 @@ export default function Layout({ children }: LayoutProps) {
       return team ? [team.name, team.shortName] : [];
     }).filter(Boolean),
     [favoriteTeamIds, world?.teamBases],
+  );
+  const featuredFixtureIds = useMemo(
+    () => new Set(lastWorldResponse?.featuredResults.map(item => item.result.fixtureId) ?? []),
+    [lastWorldResponse],
   );
   const location = useLocation();
   const navigate = useNavigate();
@@ -520,6 +525,7 @@ export default function Layout({ children }: LayoutProps) {
         <NewsTicker
           news={world?.newsLog ?? []}
           favoriteTeamNames={favoriteTeamNames}
+          excludedFixtureIds={featuredFixtureIds}
         />
 
         {saveNearCapacity && (
