@@ -109,6 +109,7 @@ function determineWinnerTwoLegged(
   secondLegFixture: CupFixture,
   secondLegResult: MatchResult,
   awayGoalRule: boolean,
+  rng: SeededRNG,
 ): string {
   const firstLeg = firstLegFixture.result!;
   const secondLeg = secondLegFixture.result!;
@@ -146,8 +147,24 @@ function determineWinnerTwoLegged(
       : team1;
   }
 
-  // Fallback (should not occur if match engine resolves ties)
-  return secondLegFixture.homeTeamId;
+  // A tie can be level on aggregate even when the second-leg score itself is
+  // not level, so the match simulator cannot always know to create a shootout.
+  // Resolve that cup-level edge here with the same seeded RNG and persist it
+  // on both representations of the second leg.
+  const nominalHomeWins = rng.next() < 0.5;
+  const losingScore = rng.nextInt(3, 5);
+  const penaltyHome = nominalHomeWins ? losingScore + 1 : losingScore;
+  const penaltyAway = nominalHomeWins ? losingScore : losingScore + 1;
+  secondLegResult.penalties = true;
+  secondLegResult.penaltyHome = penaltyHome;
+  secondLegResult.penaltyAway = penaltyAway;
+  secondLegFixture.result = {
+    ...secondLegFixture.result!,
+    penalties: true,
+    penHome: penaltyHome,
+    penAway: penaltyAway,
+  };
+  return nominalHomeWins ? team2 : team1;
 }
 
 /**
@@ -167,7 +184,7 @@ function determineSingleMatchWinner(result: MatchResult): string {
       : result.awayTeamId;
   }
 
-  return result.homeTeamId;
+  throw new Error(`Unresolved knockout result: ${result.fixtureId}`);
 }
 
 /**
@@ -396,12 +413,13 @@ export function advanceSuperCupKnockout(
   if (currentRoundIdx === -1) return state;
 
   const currentRound = state.knockoutRounds[currentRoundIdx];
+  const missing = currentRound.fixtures.find(fixture => !resultMap.has(fixture.id));
+  if (missing) throw new Error(`Missing result for fixture ${missing.id}`);
   const season = extractSeason(state);
 
   // Record results on all fixtures in this round
   for (const fixture of currentRound.fixtures) {
-    const result = resultMap.get(fixture.id);
-    if (!result) continue;
+    const result = resultMap.get(fixture.id)!;
     recordKnockoutResult(fixture, result);
   }
 
@@ -429,6 +447,7 @@ export function advanceSuperCupKnockout(
         secondLegFixture,
         secondLegResult,
         state.awayGoalRule,
+        rng,
       );
 
       firstLegFixture.winnerId = winnerId;
@@ -471,6 +490,7 @@ export function advanceSuperCupKnockout(
         roundName: 'Final',
         homeTeamId: winners[0],
         awayTeamId: winners[1],
+        isNeutralVenue: true,
       };
 
       state.knockoutRounds.push({
@@ -487,17 +507,15 @@ export function advanceSuperCupKnockout(
   // ---- Final: single-match knockout ----
   if (roundName === 'Final') {
     const finalFixture = currentRound.fixtures[0];
-    const result = resultMap.get(finalFixture.id);
-    if (result) {
-      const winnerId = determineSingleMatchWinner(result);
-      finalFixture.winnerId = winnerId;
+    const result = resultMap.get(finalFixture.id)!;
+    const winnerId = determineSingleMatchWinner(result);
+    finalFixture.winnerId = winnerId;
 
-      return {
-        ...state,
-        completed: true,
-        winnerId,
-      };
-    }
+    return {
+      ...state,
+      completed: true,
+      winnerId,
+    };
   }
 
   return { ...state };

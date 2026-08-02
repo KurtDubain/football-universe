@@ -10,6 +10,7 @@ import { isDerby, getDerbyName } from '../config/derbies';
 import TeamBadge from '../components/TeamBadge';
 import { CompetitionMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
 import { EmptyState, PageHeader, PageShell } from '../components/ui';
+import { applyVenuePolicy } from '../engine/competitions/venue-policy';
 
 const roundNameCN: Record<string, string> = {
   R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
@@ -56,11 +57,11 @@ export default function Cup() {
       : type === 'super_cup' ? 'super_cup'
       : isContinental ? 'continental_cup'
       : 'league_cup';
-    const mf: MatchFixture = {
+    const mf: MatchFixture = applyVenuePolicy({
       id: fix.id, homeTeamId: fix.homeTeamId, awayTeamId: fix.awayTeamId,
       competitionType: ct,
       competitionName: compName, roundLabel: fix.roundName,
-    };
+    });
     setSelectedFixture(mf);
     if (fix.result) {
       for (const win of world.seasonState.calendar) {
@@ -74,6 +75,7 @@ export default function Cup() {
         penaltyHome: fix.result.penHome, penaltyAway: fix.result.penAway,
         events: [], stats: { possession:[50,50], shots:[0,0], shotsOnTarget:[0,0], corners:[0,0], fouls:[0,0], yellowCards:[0,0], redCards:[0,0] },
         competitionType: mf.competitionType, competitionName: compName, roundLabel: fix.roundName,
+        isNeutralVenue: mf.isNeutralVenue,
       });
     } else { setSelectedResult(null); }
   };
@@ -97,7 +99,7 @@ export default function Cup() {
       )}
       {isContinental && (continentalCup
         ? <ContinentalCupView cup={continentalCup} tb={tb} ts={ts} onClick={f => handleClick(f, continentalCup.name)} />
-        : <InactiveCup type={type as CompetitionIdentityKey} title={type === 'mainland_cup' ? '大陆杯' : type === 'southern_cup' ? '南洲杯' : '东洲杯'} description="洲际杯每四个赛季举行一次，本赛季处于赛事间歇期。" />
+        : <InactiveCup type={type as CompetitionIdentityKey} title={type === 'mainland_cup' ? '大陆杯' : type === 'southern_cup' ? '南洲杯' : '东洲杯'} description="洲际杯从第5赛季起每六个赛季举行一次，本赛季处于赛事间歇期。" />
       )}
       <MatchDetailModal isOpen={!!selectedFixture} onClose={close} fixture={selectedFixture ?? undefined} result={selectedResult ?? undefined} world={world} />
     </PageShell>
@@ -115,7 +117,7 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
       {/* Rules */}
       <RulesCard lines={[
         '参赛: 全部 32 支球队 (顶级16 + 甲级8 + 乙级8)',
-        '赛制: 单场淘汰制，平局进入加时 + 点球',
+        '赛制: 中立场单回合淘汰，平局进入加时 + 点球',
         '轮次: 第一轮(32→16) → 第二轮(16→8) → 八强 → 四强 → 决赛',
       ]} />
       <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
@@ -132,16 +134,26 @@ function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState
   const identityType: CompetitionIdentityKey = cup.type;
   return (
     <>
-      <CupHeader type={identityType} title={cup.name} description={`${cup.region}地区 · ${teamCount} 队 · 四年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
+      <CupHeader type={identityType} title={cup.name} description={`${cup.region}地区 · ${teamCount} 队 · 六年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       <RulesCard lines={[
-        `参赛: ${cup.region}地区俱乐部积分前 ${teamCount} 名`,
-        '赛制: 单场淘汰制，平局进入加时 + 点球',
+        `参赛: ${cup.region}地区近五季俱乐部积分前 ${teamCount} 名`,
+        '小组赛: 4队单循环3轮，全部为中立场',
         cup.region === '大陆'
-          ? '轮次: 八强 → 四强 → 决赛'
-          : '轮次: 四强 → 决赛',
-        '每四个赛季举办一次（S2、S6、S10…）',
+          ? '晋级: 2组前2进入单回合四强与决赛'
+          : '晋级: 小组前2进入单回合决赛',
+        '淘汰赛: 中立场，平局进入加时 + 点球',
+        '第5赛季起每六个赛季举办一次（S5、S11、S17…）',
       ]} />
-      <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
+      <h2 className="text-sm font-semibold text-slate-300">小组赛</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {cup.groups.map(g => <GroupTable key={g.groupName} group={g} tb={tb} ts={ts} onClick={onClick} />)}
+      </div>
+      {cup.rounds.length > 0 && (
+        <>
+          <h2 className="text-sm font-semibold text-slate-300 mt-1">淘汰赛</h2>
+          <BracketView rounds={cup.rounds} tb={tb} ts={ts} onClick={onClick} />
+        </>
+      )}
     </>
   );
 }
@@ -185,8 +197,8 @@ function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record
       <RulesCard lines={[
         '参赛: 全部32支球队',
         '抽签: 4档分组 (按实力排位)，每组2顶+1甲+1乙',
-        '小组赛: 8组×4队，双循环6轮，每组前2名晋级16强',
-        '淘汰赛: 16强→八强→四强→决赛，单场定胜负',
+        '小组赛: 8组×4队，中立场单循环3轮，每组前2名晋级16强',
+        '淘汰赛: 16强→八强→四强→决赛，中立场单回合',
         '每4个赛季举办一次',
       ]} />
       <h2 className="text-sm font-semibold text-slate-300">小组赛</h2>

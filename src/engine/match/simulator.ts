@@ -170,11 +170,11 @@ function updateFormArray(
 export function pickMotm(
   events: MatchEvent[],
   winnerTeamId: string | null,
-): string | undefined {
-  const score = new Map<string, number>(); // playerName → score
+): MatchResult['motm'] {
+  const candidates = new Map<string, { playerName: string; teamId: string; score: number }>();
   for (const e of events) {
     if (e.minute > 120) continue; // skip shootout
-    if (!e.playerName) continue;
+    if (!e.playerId || !e.playerName) continue;
     let delta = 0;
     if (e.type === 'goal') delta = 3;
     else if (e.type === 'assist') delta = 2;
@@ -184,17 +184,26 @@ export function pickMotm(
     else continue;
     // Bonus if on winning side
     if (winnerTeamId && e.teamId === winnerTeamId) delta *= 1.2;
-    score.set(e.playerName, (score.get(e.playerName) ?? 0) + delta);
+    const current = candidates.get(e.playerId);
+    candidates.set(e.playerId, {
+      playerName: current?.playerName ?? e.playerName,
+      teamId: current?.teamId ?? e.teamId,
+      score: (current?.score ?? 0) + delta,
+    });
   }
-  let bestName: string | undefined;
+  let best: MatchResult['motm'];
   let bestScore = 0;
-  for (const [name, s] of score) {
-    if (s > bestScore) {
-      bestScore = s;
-      bestName = name;
+  for (const [playerId, candidate] of candidates) {
+    if (candidate.score > bestScore) {
+      bestScore = candidate.score;
+      best = {
+        playerId,
+        playerName: candidate.playerName,
+        teamId: candidate.teamId,
+      };
     }
   }
-  return bestScore >= 3 ? bestName : undefined; // need at least 1 goal-equivalent
+  return bestScore >= 3 ? best : undefined; // need at least 1 goal-equivalent
 }
 
 export function simulateMatch(

@@ -11,6 +11,16 @@ import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget
 import MobileDrawer from '../components/MobileDrawer';
 import FloatingAdvanceButton from '../components/FloatingAdvanceButton';
 import { planNextKeyNode } from '../engine/observation/key-node';
+import { Icon } from '../components/Icon';
+import {
+  setFeedbackPreferences,
+  useFeedbackPreferences,
+} from '../feedback/preferences';
+import {
+  playGameFeedback,
+  suspendGameAudio,
+  unlockGameAudio,
+} from '../feedback/game-feedback';
 
 interface LayoutProps {
   children: ReactNode;
@@ -63,6 +73,15 @@ const continentalCupNavItems: { to: string; label: string; key: 'mainland_cup' |
   { to: '/cup/eastern_cup',  label: '东洲杯', key: 'eastern_cup' },
 ];
 
+function getMobileReturnTarget(pathname: string): { to: string; label: string } | null {
+  if (pathname === '/') return null;
+  if (pathname.startsWith('/team/')) return { to: '/teams', label: '球队中心' };
+  if (pathname.startsWith('/player/')) return { to: '/players', label: '球员中心' };
+  if (pathname.startsWith('/coach/')) return { to: '/coaches', label: '教练中心' };
+  if (pathname === '/team-editor') return { to: '/settings', label: '设置' };
+  return { to: '/', label: '主页' };
+}
+
 export default function Layout({ children }: LayoutProps) {
   const world = useGameStore((s) => s.world);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
@@ -76,6 +95,7 @@ export default function Layout({ children }: LayoutProps) {
   const resetGame = useGameStore((s) => s.resetGame);
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
+  const feedbackPreferences = useFeedbackPreferences();
   const favoriteTeamNames = useMemo(
     () => favoriteTeamIds.flatMap(id => {
       const team = world?.teamBases[id];
@@ -89,6 +109,7 @@ export default function Layout({ children }: LayoutProps) {
   );
   const location = useLocation();
   const navigate = useNavigate();
+  const mobileReturnTarget = getMobileReturnTarget(location.pathname);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -100,7 +121,7 @@ export default function Layout({ children }: LayoutProps) {
     }
   });
   const [showFloatingBtn, setShowFloatingBtn] = useState(() => {
-    try { return localStorage.getItem('floating-btn') === '1'; } catch { return false; }
+    try { return localStorage.getItem('floating-btn') !== '0'; } catch { return true; }
   });
 
   useEffect(() => {
@@ -151,6 +172,16 @@ export default function Layout({ children }: LayoutProps) {
     if (advanced) showLatestResponse();
   };
   const handleFloatingAdvance = handleWindowAdvance;
+  const toggleGlobalSound = () => {
+    const soundEnabled = !feedbackPreferences.soundEnabled;
+    setFeedbackPreferences({ soundEnabled });
+    if (soundEnabled) {
+      unlockGameAudio();
+      playGameFeedback('start');
+    } else {
+      suspendGameAudio();
+    }
+  };
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;
   const seasonNumber = world?.seasonState.seasonNumber ?? 1;
   const calendarLen = world?.seasonState.calendar.length ?? 0;
@@ -182,12 +213,17 @@ export default function Layout({ children }: LayoutProps) {
             const ts = world.teamStates[tid];
             if (!team) return null;
             return (
-              <div key={tid}>
+              <NavLink
+                key={tid}
+                to={`/team/${tid}`}
+                onClick={() => setMobileNavOpen(false)}
+                className="mobile-nav-item block rounded-md px-1.5 py-1 transition-colors hover:bg-slate-700/40 focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+              >
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color ?? '#666' }} />
-                  <NavLink to={`/team/${tid}`} className="text-xs text-slate-200 hover:text-blue-400 truncate font-medium">
+                  <span className="truncate text-xs font-medium text-slate-200">
                     {getTeamName(tid, world.teamBases)}
-                  </NavLink>
+                  </span>
                 </div>
                 {ts && (
                   <div className="mt-0.5 flex gap-2 text-[11px] text-slate-500">
@@ -195,7 +231,7 @@ export default function Layout({ children }: LayoutProps) {
                     <span>势头 {ts.momentum > 0 ? '+' : ''}{ts.momentum}</span>
                   </div>
                 )}
-              </div>
+              </NavLink>
             );
           })}
         </div>
@@ -214,7 +250,7 @@ export default function Layout({ children }: LayoutProps) {
                 end={'end' in item ? item.end : false}
                 onClick={() => setMobileNavOpen(false)}
                 className={({ isActive }) =>
-                  `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                  `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                     isActive
                       ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                       : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -233,7 +269,7 @@ export default function Layout({ children }: LayoutProps) {
               to="/cup/world_cup"
               onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
-                `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                   isActive
                     ? 'bg-sky-600/90 text-white font-medium shadow-sm'
                     : 'text-sky-400 hover:bg-sky-900/30 hover:text-sky-300'
@@ -261,7 +297,7 @@ export default function Layout({ children }: LayoutProps) {
                   to={item.to}
                   onClick={() => setMobileNavOpen(false)}
                   className={({ isActive }) =>
-                    `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                    `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                       isActive
                         ? 'bg-orange-600/90 text-white font-medium shadow-sm'
                         : 'text-orange-300 hover:bg-orange-900/30 hover:text-orange-200'
@@ -281,7 +317,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/history"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -294,7 +330,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/legends"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -307,7 +343,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/chronicle"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -320,7 +356,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/transfers"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -333,7 +369,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/memorable"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -346,7 +382,7 @@ export default function Layout({ children }: LayoutProps) {
             to="/search"
             onClick={() => setMobileNavOpen(false)}
             className={({ isActive }) =>
-              `block mx-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
                 isActive
                   ? 'bg-blue-600/90 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
@@ -363,7 +399,7 @@ export default function Layout({ children }: LayoutProps) {
           onClick={() => {
             if (window.confirm('确定要重置当前游戏吗？此操作会清除当前存档。')) resetGame();
           }}
-          className="w-full px-3 py-2 text-xs text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
+          className="mobile-nav-item w-full px-3 py-2 text-xs text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
         >
           重置游戏
         </button>
@@ -413,7 +449,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-12 bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
+        <header className="app-shell-header h-12 bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile hamburger */}
             <button
@@ -423,22 +459,48 @@ export default function Layout({ children }: LayoutProps) {
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd"/></svg>
             </button>
+            {mobileReturnTarget && (
+              <button
+                type="button"
+                data-testid="mobile-route-back"
+                onClick={() => navigate(mobileReturnTarget.to)}
+                aria-label={`返回${mobileReturnTarget.label}`}
+                title={`返回${mobileReturnTarget.label}`}
+                className="md:hidden flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+              >
+                <span aria-hidden="true">←</span>
+              </button>
+            )}
             {currentWindow && (
               <>
                 <span className={`hidden sm:inline-block px-2 py-0.5 rounded text-[11px] font-medium text-white shrink-0 ${getWindowTypeColor(currentWindow.type)}`}>
                   {getWindowTypeLabel(currentWindow.type)}
                 </span>
-                <span className="text-sm text-slate-300 font-medium truncate">
+                <span
+                  title={currentWindow.label}
+                  className={`text-sm text-slate-300 font-medium truncate ${mobileReturnTarget ? 'hidden sm:inline' : ''}`}
+                >
                   {currentWindow.label}
                 </span>
               </>
             )}
             {!currentWindow && (
-              <span className="text-sm text-slate-500">赛季已结束</span>
+              <span className={`text-sm text-slate-500 ${mobileReturnTarget ? 'hidden sm:inline' : ''}`}>赛季已结束</span>
             )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0 relative z-[65]">
+            <button
+              type="button"
+              data-testid="global-sound-toggle"
+              aria-label={feedbackPreferences.soundEnabled ? '关闭全局声音' : '开启全局声音'}
+              aria-pressed={feedbackPreferences.soundEnabled}
+              title={feedbackPreferences.soundEnabled ? '关闭全局声音' : '开启全局声音'}
+              onClick={toggleGlobalSound}
+              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 sm:h-8 sm:w-8"
+            >
+              <Icon name={feedbackPreferences.soundEnabled ? 'volume' : 'volume-off'} size={17} />
+            </button>
             {location.pathname !== '/' && (
               <button
                 onClick={handleWindowAdvance}
@@ -537,13 +599,13 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className={`flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'pb-20 sm:pb-20' : ''}`} key={location.pathname}>
+        <main className={`app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'pb-20 sm:pb-20' : ''}`} key={location.pathname}>
           {children}
         </main>
       </div>
 
       {/* Floating advance button */}
-      {showFloatingBtn && location.pathname !== '/' && (
+      {showFloatingBtn && (
         <FloatingAdvanceButton
           stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
           accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}

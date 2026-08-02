@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import MatchLive from '../components/MatchLive';
 import type { MatchResult } from '../types/match';
 import type { MemorableType } from '../types/memorable';
+import { SegmentedControl } from '../components/ui';
 
 const TYPE_META: Record<MemorableType, { emoji: string; label: string; color: string }> = {
   blowout: { emoji: '💥', label: '大屠杀', color: 'text-red-400 bg-red-900/30 border-red-700/40' },
@@ -15,8 +17,13 @@ const TYPE_META: Record<MemorableType, { emoji: string; label: string; color: st
 
 export default function MemorableMatches() {
   const world = useGameStore((s) => s.world);
+  const [searchParams] = useSearchParams();
+  const requestedFixture = searchParams.get('fixture');
   const [filter, setFilter] = useState<MemorableType | 'all'>('all');
-  const [replay, setReplay] = useState<MatchResult | null>(null);
+  const [replay, setReplay] = useState<MatchResult | null>(() => {
+    if (!requestedFixture || !world) return null;
+    return world.memorableMatches?.find(entry => entry.result.fixtureId === requestedFixture)?.result ?? null;
+  });
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
@@ -48,20 +55,22 @@ export default function MemorableMatches() {
       </div>
 
       {/* Filter pills */}
-      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60 overflow-x-auto">
-        {filterOptions.map((opt) => (
-          <button
-            key={opt.key}
-            onClick={() => setFilter(opt.key)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-              filter === opt.key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {opt.emoji && <span className="mr-1">{opt.emoji}</span>}
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={filter}
+        onChange={setFilter}
+        ariaLabel="经典战役筛选"
+        scrollable
+        className="w-full"
+        options={filterOptions.map((option) => ({
+          value: option.key,
+          label: (
+            <>
+              {option.emoji && <span className="mr-1" aria-hidden="true">{option.emoji}</span>}
+              {option.label}
+            </>
+          ),
+        }))}
+      />
 
       {bySeasons.length === 0 ? (
         <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-8 text-center">
@@ -87,27 +96,38 @@ export default function MemorableMatches() {
                   const totalH = m.result.homeGoals + (m.result.etHomeGoals ?? 0);
                   const totalA = m.result.awayGoals + (m.result.etAwayGoals ?? 0);
                   return (
-                    <div key={i} className="px-3 py-2 hover:bg-slate-700/20 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border shrink-0 ${meta.color}`}>
-                          {meta.emoji} {m.label}
-                        </span>
-                        <div className="flex items-center gap-1.5 flex-1 min-w-0 text-xs">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ht?.color ?? '#666' }} />
-                          <span className="font-medium text-slate-200 truncate">{ht?.shortName ?? m.result.homeTeamId}</span>
-                          <span className="font-bold text-slate-100">{totalH}-{totalA}</span>
-                          <span className="font-medium text-slate-200 truncate">{at?.shortName ?? m.result.awayTeamId}</span>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: at?.color ?? '#666' }} />
-                          {m.result.penalties && (
-                            <span className="text-[10px] text-amber-400">
-                              (点球 {m.result.penaltyHome ?? 0}-{m.result.penaltyAway ?? 0})
+                    <div key={m.result.fixtureId || i} className="px-3 py-2.5 hover:bg-slate-700/20 transition-colors">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                        <div className="min-w-0">
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium border ${meta.color}`}>
+                            {meta.emoji} {m.label}
+                          </span>
+                          <div className="mt-1.5 grid grid-cols-[minmax(3rem,1fr)_auto_minmax(3rem,1fr)] items-center gap-2 text-xs">
+                            <span className="flex min-w-0 items-center gap-1.5" title={ht?.name ?? m.result.homeTeamId}>
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: ht?.color ?? '#666' }} />
+                              <span className="truncate font-medium text-slate-200">{ht?.shortName ?? m.result.homeTeamId}</span>
                             </span>
-                          )}
-                          <span className="text-[10px] text-slate-600 truncate">{m.result.competitionName} · {m.result.roundLabel}</span>
+                            <span className="text-center text-sm font-bold text-slate-100 tabular-nums">{totalH}-{totalA}</span>
+                            <span className="flex min-w-0 items-center justify-end gap-1.5 text-right" title={at?.name ?? m.result.awayTeamId}>
+                              <span className="truncate font-medium text-slate-200">{at?.shortName ?? m.result.awayTeamId}</span>
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: at?.color ?? '#666' }} />
+                            </span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px]">
+                            {m.result.penalties && (
+                              <span className="shrink-0 text-amber-400">
+                                点球 {m.result.penaltyHome ?? 0}-{m.result.penaltyAway ?? 0}
+                              </span>
+                            )}
+                            <span className="truncate text-slate-600" title={`${m.result.competitionName} · ${m.result.roundLabel}`}>
+                              {m.result.competitionName} · {m.result.roundLabel}
+                            </span>
+                          </div>
                         </div>
                         <button
                           onClick={() => setReplay(m.result)}
-                          className="text-[10px] text-emerald-400 hover:text-emerald-300 px-2 py-1 rounded bg-emerald-900/20 hover:bg-emerald-900/40 cursor-pointer shrink-0 transition-colors"
+                          aria-label={`回放 ${ht?.name ?? m.result.homeTeamId} 对 ${at?.name ?? m.result.awayTeamId}`}
+                          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded bg-emerald-900/20 px-2 py-1 text-[10px] text-emerald-400 transition-colors hover:bg-emerald-900/40 hover:text-emerald-300 cursor-pointer"
                         >
                           ▶ 回放
                         </button>

@@ -407,47 +407,23 @@ describe('attributeCupPrizes — tiered prize attribution', () => {
     return { homeTeamId: home, awayTeamId: away, winnerId: winner };
   }
 
-  it('handles a 3-round (8-team) cup — 南洲杯 style', () => {
-    // 8 teams: A...H. R8: A>B, C>D, E>F, G>H. SF: A>C, E>G. Final: A>E
-    const rounds = [
-      { fixtures: [fix('A','B','A'), fix('C','D','C'), fix('E','F','E'), fix('G','H','G')] },
-      { fixtures: [fix('A','C','A'), fix('E','G','E')] },
-      { fixtures: [fix('A','E','A')] },
-    ];
+  it('pays only the finalists in a Southern/Eastern cup', () => {
+    const rounds = [{ fixtures: [fix('A', 'B', 'A')] }];
     const out = attributeCupPrizes(rounds, SMALL_CONTINENTAL_CUP_TIERS);
-    expect(out.A).toBe(CUP_PRIZE.small_continental_cup_winner);  // 40
-    expect(out.E).toBe(CUP_PRIZE.small_continental_cup_runner_up);  // 20
-    expect(out.C).toBe(CUP_PRIZE.small_continental_cup_sf);  // 8 (lost SF)
-    expect(out.G).toBe(CUP_PRIZE.small_continental_cup_sf);  // 8
-    // R8 first-round losers (B, D, F, H) get nothing
-    expect(out.B).toBeUndefined();
-    expect(out.D).toBeUndefined();
-    expect(out.F).toBeUndefined();
-    expect(out.H).toBeUndefined();
+    expect(out.A).toBe(CUP_PRIZE.small_continental_cup_winner);
+    expect(out.B).toBe(CUP_PRIZE.small_continental_cup_runner_up);
   });
 
-  it('handles a 4-round (16-team) cup — 大陆杯 style', () => {
-    // 16 teams. Build out final 4 rounds quickly. Just verify SF/QF prizes.
-    // R16, R8, SF, Final
+  it('pays Mainland semifinalists and finalists without group-stage inflation', () => {
     const rounds = [
-      { fixtures: [
-        fix('A','B','A'), fix('C','D','C'), fix('E','F','E'), fix('G','H','G'),
-        fix('I','J','I'), fix('K','L','K'), fix('M','N','M'), fix('O','P','O'),
-      ] },
-      { fixtures: [fix('A','C','A'), fix('E','G','E'), fix('I','K','I'), fix('M','O','M')] },
-      { fixtures: [fix('A','E','A'), fix('I','M','I')] },
-      { fixtures: [fix('A','I','A')] },
+      { fixtures: [fix('A', 'B', 'A'), fix('C', 'D', 'C')] },
+      { fixtures: [fix('A', 'C', 'A')] },
     ];
     const out = attributeCupPrizes(rounds, MAINLAND_CUP_TIERS);
-    expect(out.A).toBe(CUP_PRIZE.continental_cup_winner);   // 45
-    expect(out.I).toBe(CUP_PRIZE.continental_cup_runner_up); // 25
-    expect(out.E).toBe(CUP_PRIZE.continental_cup_semi);      // 10 (lost SF)
-    expect(out.M).toBe(CUP_PRIZE.continental_cup_semi);      // 10
-    expect(out.C).toBe(CUP_PRIZE.continental_cup_r8);        // 4 (lost R8 = "quarter" in 4-round labeling)
-    expect(out.G).toBe(CUP_PRIZE.continental_cup_r8);        // 4
-    // R16 first-round losers get nothing
-    expect(out.B).toBeUndefined();
-    expect(out.D).toBeUndefined();
+    expect(out.A).toBe(CUP_PRIZE.continental_cup_winner);
+    expect(out.C).toBe(CUP_PRIZE.continental_cup_runner_up);
+    expect(out.B).toBe(CUP_PRIZE.continental_cup_semi);
+    expect(out.D).toBe(CUP_PRIZE.continental_cup_semi);
   });
 
   it('handles a 5-round (32-team) cup — 联赛杯 style', () => {

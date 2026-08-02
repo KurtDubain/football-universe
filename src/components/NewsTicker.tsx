@@ -85,7 +85,7 @@ export default function NewsTicker({
         <span className="text-xs shrink-0 text-slate-300">
           <Icon name={typeIcon[item.type] ?? 'news'} size={13} accent={typeAccent[item.type]} />
         </span>
-        <p className="text-[11px] text-slate-300 truncate flex-1 animate-slide-down" key={item.id}>
+        <p className="text-[11px] text-slate-300 truncate flex-1 animate-slide-down" key={item.id} title={item.title}>
           {item.title}
         </p>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -113,7 +113,7 @@ export default function NewsTicker({
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-200 font-medium leading-tight">{n.title}</p>
                 {n.description && (
-                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight truncate">{n.description}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight truncate" title={n.description}>{n.description}</p>
                 )}
               </div>
               <span className="text-[9px] text-slate-600 shrink-0 mt-0.5">S{n.seasonNumber}</span>

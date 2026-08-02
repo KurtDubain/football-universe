@@ -12,6 +12,7 @@ import {
   type PlayerSearchResult,
   type CoachSearchResult,
 } from '../engine/search/query-engine';
+import { SegmentedControl } from '../components/ui';
 
 const tierOptions: { value: string; label: string }[] = [
   { value: 'elite', label: '豪门' },
@@ -101,19 +102,16 @@ export default function AdvancedSearch() {
       </div>
 
       {/* Entity selector */}
-      <div className="flex gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/60 w-fit">
-        {(['team', 'player', 'coach'] as SearchEntity[]).map((e) => (
-          <button
-            key={e}
-            onClick={() => setEntity(e)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
-              entity === e ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {e === 'team' ? '球队' : e === 'player' ? '球员' : '教练'}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={entity}
+        onChange={setEntity}
+        ariaLabel="搜索对象"
+        options={[
+          { value: 'team', label: '球队' },
+          { value: 'player', label: '球员' },
+          { value: 'coach', label: '教练' },
+        ]}
+      />
 
       {/* Preset queries */}
       <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3">

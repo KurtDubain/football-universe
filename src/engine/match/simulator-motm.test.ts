@@ -9,6 +9,7 @@ function ev(partial: Partial<MatchEvent> & Pick<MatchEvent, 'type' | 'teamId'>):
   return {
     minute: 30,
     description: '',
+    playerId: partial.playerId ?? (partial.playerName ? `${partial.teamId}-${partial.playerName}` : undefined),
     ...partial,
   };
 }
@@ -20,7 +21,7 @@ describe('pickMotm', () => {
       ev({ type: 'goal', teamId: 'home', playerName: 'Alice', minute: 55 }),
       ev({ type: 'goal', teamId: 'away', playerName: 'Bob', minute: 78 }),
     ];
-    expect(pickMotm(events, 'home')).toBe('Alice');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Alice' });
   });
 
   it('weights goals (3) > assists (2) > saves (0.5)', () => {
@@ -35,7 +36,7 @@ describe('pickMotm', () => {
     // Striker on winning side: 3*2 = 6, *1.2 = 7.2
     // Maker on winning side: 2*2 = 4, *1.2 = 4.8
     // Keeper on winning side: 0.5*2 = 1, *1.2 = 1.2
-    expect(pickMotm(events, 'home')).toBe('Striker');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Striker' });
   });
 
   it('applies winner-side bonus (1.2×) over draw scoring', () => {
@@ -48,7 +49,7 @@ describe('pickMotm', () => {
     ];
     // Alice (home, winner): (3+2)*1.2 = 6
     // Carol (away, loser): (3+2) = 5
-    expect(pickMotm(events, 'home')).toBe('Alice');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Alice' });
   });
 
   it('returns undefined when no player reaches threshold (3 points)', () => {
@@ -70,7 +71,7 @@ describe('pickMotm', () => {
     ];
     // Bad: (3 - 2) * 1.2 = 1.2
     // Clean: 3 * 1.2 = 3.6
-    expect(pickMotm(events, 'home')).toBe('Clean');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Clean' });
   });
 
   it('skips shootout kicks (minute > 120)', () => {
@@ -82,14 +83,14 @@ describe('pickMotm', () => {
     ];
     // OpenPlay: 3 * 1.2 = 3.6 (qualifies)
     // Shootout kicks at minute > 120 are filtered → score = 0
-    expect(pickMotm(events, 'home')).toBe('OpenPlay');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'OpenPlay' });
   });
 
   it('counts ET goals emitted as regular goal toward MotM', () => {
     const events: MatchEvent[] = [
       ev({ type: 'goal', teamId: 'home', playerName: 'Penaltaker', minute: 110 }),
     ];
-    expect(pickMotm(events, 'home')).toBe('Penaltaker');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Penaltaker' });
   });
 
   it('ignores malformed penalty_goal events inside regular or extra time', () => {
@@ -107,7 +108,7 @@ describe('pickMotm', () => {
     ];
     // A (no bonus): 3
     // B (no bonus): 3 + 2 = 5
-    expect(pickMotm(events, null)).toBe('B');
+    expect(pickMotm(events, null)).toMatchObject({ playerName: 'B' });
   });
 
   it('ignores events without playerName', () => {
@@ -115,7 +116,21 @@ describe('pickMotm', () => {
       ev({ type: 'goal', teamId: 'home', minute: 10 }), // no playerName
       ev({ type: 'goal', teamId: 'home', playerName: 'Real', minute: 50 }),
     ];
-    expect(pickMotm(events, 'home')).toBe('Real');
+    expect(pickMotm(events, 'home')).toMatchObject({ playerName: 'Real' });
+  });
+
+  it('keeps different UUIDs separate when players share a name', () => {
+    const events: MatchEvent[] = [
+      ev({ type: 'goal', teamId: 'home', playerId: 'home-9', playerName: '同名球员', minute: 10 }),
+      ev({ type: 'goal', teamId: 'away', playerId: 'away-7', playerName: '同名球员', minute: 40 }),
+      ev({ type: 'assist', teamId: 'away', playerId: 'away-7', playerName: '同名球员', minute: 40 }),
+    ];
+
+    expect(pickMotm(events, 'away')).toEqual({
+      playerId: 'away-7',
+      playerName: '同名球员',
+      teamId: 'away',
+    });
   });
 });
 
@@ -191,7 +206,7 @@ describe('simulateMatch — motm integration', () => {
         foundMotm = true;
         // The MotM should be the name of a player from either squad.
         const allNames = new Set<string>([...ctx.homeSquad!, ...ctx.awaySquad!].map(p => p.name!));
-        expect(allNames.has(r.motm)).toBe(true);
+        expect(allNames.has(r.motm.playerName)).toBe(true);
         break;
       }
     }

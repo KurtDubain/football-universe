@@ -83,7 +83,7 @@ export default function MobileDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className="w-64 max-w-[calc(100vw-3rem)] bg-slate-800 flex flex-col shadow-2xl"
+        className="mobile-drawer-panel w-64 max-w-[calc(100vw-3rem)] bg-slate-800 flex flex-col shadow-2xl"
       >
         {children}
       </div>

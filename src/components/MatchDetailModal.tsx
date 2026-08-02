@@ -693,7 +693,7 @@ function PostMatchView({
           {/* MOTM */}
           {result.motm && (
             <div className="mt-3 bg-amber-900/20 rounded-lg px-3 py-2 text-xs text-amber-400">
-              <span className="font-semibold">全场最佳:</span> {result.motm}
+              <span className="font-semibold">全场最佳:</span> {result.motm.playerName}
             </div>
           )}
         </div>

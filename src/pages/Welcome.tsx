@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import Logo from '../components/Logo';
-import { ParticleBackground } from '../components/CanvasEffects';
 import { Icon, type IconName } from '../components/Icon';
 import { SegmentedControl } from '../components/ui';
 import { APP_VERSION } from '../version';
@@ -15,6 +14,9 @@ import {
   type ObserverLens,
 } from '../config/observer-experience';
 import type { ObservationThemePreference } from '../engine/observation/observation-theme';
+import { playGameFeedback } from '../feedback/game-feedback';
+import welcomeUniverseArtwork from '../assets/visual/welcome-universe-v1.webp';
+import { DecorativeImage } from '../components/DecorativeImage';
 
 type StartPath = 'recommended' | 'custom';
 
@@ -46,6 +48,7 @@ export default function Welcome() {
     : null;
 
   function handleStart() {
+    playGameFeedback('start');
     setStarting(true);
     const selectedTeamId = startPath === 'recommended'
       ? selectedLens.teamId
@@ -69,18 +72,24 @@ export default function Welcome() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
-      <ParticleBackground />
+    <div className="welcome-stage relative min-h-screen overflow-x-hidden text-slate-100">
+      <DecorativeImage
+        src={welcomeUniverseArtwork}
+        eager
+        testId="welcome-universe-art"
+        className="welcome-universe-art absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="welcome-art-shade absolute inset-0" aria-hidden="true" />
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-8 sm:py-8">
-        <header className="flex items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div className="flex min-w-0 items-center gap-3">
             <Logo size={48} />
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-black text-slate-50 sm:text-2xl">足球联赛宇宙</h1>
+              <h1 className="truncate text-xl font-black text-slate-50 sm:text-2xl" title="足球联赛宇宙">足球联赛宇宙</h1>
               <p className="text-xs text-slate-500">Football Universe Simulator</p>
             </div>
           </div>
-          <span className="shrink-0 text-xs tabular-nums text-slate-600">v{APP_VERSION}</span>
+          <span className="shrink-0 text-xs tabular-nums text-slate-400">v{APP_VERSION}</span>
         </header>
 
         <div className="grid flex-1 items-start gap-6 py-5 lg:grid-cols-[0.8fr_1.2fr] lg:gap-10 lg:py-10">
@@ -90,27 +99,27 @@ export default function Welcome() {
               上帝视角观察者
             </div>
             <div>
-              <h2 className="text-2xl font-bold leading-tight text-slate-100 sm:text-3xl">
+              <h2 className="max-w-xl text-2xl font-bold leading-tight text-slate-50 sm:text-3xl">
                 不执教一支球队，见证整个足球世界。
               </h2>
-              <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-400">
+              <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-300">
                 选择一条关注线索，做出赛前判断，然后让球队、球员与王朝在同一种子下自然演化。
               </p>
             </div>
-            <div className="hidden grid-cols-3 gap-3 border-t border-slate-800 pt-4 text-xs lg:grid">
+            <div className="hidden grid-cols-3 gap-3 border-t border-white/10 pt-4 text-xs lg:grid">
               <UniverseFact icon="stadium" value="三级联赛" label="持续升降级" />
               <UniverseFact icon="trophy" value="多项赛事" label="冠军写入历史" />
               <UniverseFact icon="refresh" value="无限赛季" label="同种子可复现" />
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-700 bg-slate-900/90 p-4 shadow-2xl shadow-black/30 sm:p-5" aria-labelledby="start-heading">
+          <section className="welcome-start-panel rounded-lg border border-white/15 p-4 shadow-2xl shadow-black/40 sm:p-5" aria-labelledby="start-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 id="start-heading" className="text-base font-bold text-slate-100">开始观察</h2>
                 <p className="mt-0.5 text-xs text-slate-500">推荐体验可直接进入，自选宇宙保留完整设置。</p>
               </div>
-              <Icon name="ball" size={24} className="text-blue-400" />
+              <Icon name="ball" size={24} className="text-amber-300" />
             </div>
 
             <SegmentedControl
@@ -147,14 +156,14 @@ export default function Welcome() {
                         aria-pressed={selected}
                         onClick={() => setLens(option.id)}
                         className={`min-h-[76px] rounded border p-2.5 text-left transition-colors ${selected
-                          ? 'border-blue-500 bg-blue-950/60 text-slate-100'
-                          : 'border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-600'
+                          ? 'border-emerald-500 bg-emerald-950/70 text-slate-100'
+                          : 'border-slate-700 bg-slate-900/65 text-slate-300 hover:border-slate-500'
                         }`}
                       >
                         <div className="flex items-center gap-2 text-xs font-bold">
-                          <Icon name={LENS_ICONS[option.id]} size={15} className={selected ? 'text-blue-300' : 'text-slate-500'} />
+                          <Icon name={LENS_ICONS[option.id]} size={15} className={selected ? 'text-emerald-300' : 'text-slate-500'} />
                           <span>{option.label}</span>
-                          {team && <span className="ml-auto truncate text-[11px] font-normal text-slate-500">{team.shortName}</span>}
+                          {team && <span className="ml-auto truncate text-[11px] font-normal text-slate-500" title={team.name}>{team.shortName}</span>}
                         </div>
                         <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{option.description}</p>
                       </button>
@@ -203,8 +212,8 @@ export default function Welcome() {
                           onClick={() => setMode(gameMode.id)}
                           aria-pressed={mode === gameMode.id}
                           className={`rounded border px-2.5 py-2 text-left text-xs ${mode === gameMode.id
-                            ? 'border-blue-500 bg-blue-950/60 text-slate-100'
-                            : 'border-slate-700 bg-slate-800 text-slate-400'
+                            ? 'border-emerald-500 bg-emerald-950/70 text-slate-100'
+                            : 'border-slate-700 bg-slate-900/70 text-slate-400'
                           }`}
                         >
                           <span className="font-semibold">{gameMode.label}</span>
@@ -218,10 +227,10 @@ export default function Welcome() {
                         id="universe-seed"
                         inputMode="numeric"
                         value={seed}
-                        onChange={event => setSeed(event.target.value)}
-                        placeholder="留空则自动生成"
-                        className="min-h-11 w-full rounded border border-slate-700 bg-slate-800 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
-                      />
+                    onChange={event => setSeed(event.target.value)}
+                    placeholder="留空则自动生成"
+                    className="min-h-11 w-full rounded border border-slate-700 bg-slate-900/80 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                  />
                     </div>
                   </div>
                 )}
@@ -233,7 +242,7 @@ export default function Welcome() {
                 type="button"
                 onClick={handleStart}
                 disabled={starting}
-                className="press-scale flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white shadow-lg shadow-blue-950/50 transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
+                className="press-scale flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-lg shadow-black/30 transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
                 <Icon name={starting ? 'refresh' : 'play'} size={17} />
                 {starting ? '正在构建宇宙...' : '开始观察'}
@@ -248,9 +257,9 @@ export default function Welcome() {
           </section>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-900 py-3 text-[11px] text-slate-700">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 py-3 text-[11px] text-slate-500">
           <span>纯前端 · 离线可玩 · 同种子同宇宙</span>
-          <a href="https://github.com/KurtDubain/football-universe" target="_blank" rel="noreferrer" className="hover:text-slate-500">GitHub</a>
+          <a href="https://github.com/KurtDubain/football-universe" target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-slate-500 sm:min-h-0">GitHub</a>
         </footer>
       </main>
     </div>
@@ -261,10 +270,10 @@ function UniverseFact({ icon, value, label }: { icon: IconName; value: string; l
   return (
     <div>
       <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-        <Icon name={icon} size={14} className="text-blue-400" />
+        <Icon name={icon} size={14} className="text-amber-300" />
         {value}
       </div>
-      <div className="mt-1 text-slate-600">{label}</div>
+      <div className="mt-1 text-slate-400">{label}</div>
     </div>
   );
 }

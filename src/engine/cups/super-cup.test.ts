@@ -3,6 +3,7 @@ import {
   initSuperCup,
   updateSuperCupGroupStandings,
   completeSuperCupGroupStage,
+  advanceSuperCupKnockout,
 } from './super-cup';
 import { SeededRNG } from '../match/rng';
 import { MatchResult, MatchStats } from '../../types/match';
@@ -116,5 +117,32 @@ describe('completeSuperCupGroupStage', () => {
       expect(l1.awayTeamId).toBe(l2.homeTeamId);
     }
   });
-});
 
+  it('uses a seeded shootout when a two-legged tie is still level', () => {
+    const teams = Array.from({ length: 16 }, (_, i) => `t${i + 1}`);
+    let sc = initSuperCup(teams, 1, new SeededRNG(7), false);
+    sc = updateSuperCupGroupStandings(
+      sc,
+      sc.groups.flatMap(group => group.fixtures).map(fixture => homeWins(fixture)),
+    );
+    sc = completeSuperCupGroupStage(sc, new SeededRNG(7));
+    sc = advanceSuperCupKnockout(
+      sc,
+      sc.knockoutRounds[0].fixtures.map(fixture => homeWins(fixture)),
+      new SeededRNG(99),
+    );
+
+    const secondLegResults = sc.knockoutRounds[1].fixtures.map(fixture => homeWins(fixture));
+    const advanced = advanceSuperCupKnockout(sc, secondLegResults, new SeededRNG(123));
+
+    expect(advanced.knockoutRounds[1].fixtures.every(fixture =>
+      fixture.result?.penalties
+      && fixture.result.penHome !== fixture.result.penAway,
+    )).toBe(true);
+    expect(secondLegResults.every(result =>
+      result.penalties
+      && result.penaltyHome !== result.penaltyAway,
+    )).toBe(true);
+    expect(advanced.knockoutRounds[2].roundName).toBe('SF-L1');
+  });
+});

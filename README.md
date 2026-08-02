@@ -78,14 +78,15 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 ## Features | 核心特性
 
 ### 🏟️ 完整联赛体系
-三级联赛（16+8+8），双循环赛制，升降级 + 保级附加赛。冠军/降级实时概率、积分走势折线图、收官之战标签。
+三级联赛（16+8+8），双循环赛制，升降级 + 中立场单回合附加赛。冠军/降级实时概率、积分走势折线图、收官之战标签。
 
-### 🏆 四大杯赛
+### 🏆 杯赛体系
 | 赛事 | 赛制 | 频率 |
 |------|------|------|
-| **联赛杯** | 32队单场淘汰 5轮 | 每赛季 |
-| **超级杯** | 16队 小组赛+两回合淘汰 | 每赛季 |
-| **环球冠军杯** | 32队 8组循环+淘汰赛 | 每4赛季 |
+| **联赛杯** | 32队中立场单回合淘汰 | 每赛季 |
+| **超级杯** | 16队主客场小组赛 + 两回合淘汰，决赛中立场 | 每赛季 |
+| **大陆/南洲/东洲杯** | 俱乐部积分资格，中立场3轮小组赛 + 单回合淘汰 | S5起每6赛季 |
+| **环球冠军杯** | 32队、8组中立场3轮小组赛 + 单回合淘汰 | 每4赛季 |
 
 对称淘汰赛对阵树 · 客场进球规则 · 杯赛规则卡
 
@@ -132,7 +133,7 @@ pnpm dev      # http://localhost:5173
 pnpm build    # 生产构建
 ```
 
-> 需要 Node.js 22+
+> 需要 Node.js 22.12+ 与 pnpm 10.34.5（仓库已通过 `packageManager` 固定）
 
 ---
 
@@ -142,6 +143,10 @@ pnpm build    # 生产构建
 pnpm test         # 跑一次（CI 用）
 pnpm test:watch   # 监听模式（开发用）
 pnpm test:ui      # Vitest UI（浏览器面板）
+pnpm lint         # ESLint
+pnpm build        # TypeScript + 生产/PWA 构建
+pnpm audit --prod # 生产依赖审计
+pnpm audit:current # 生产预览的长期数据与浏览器审计
 ```
 
 ---
@@ -159,7 +164,11 @@ pnpm test:ui      # Vitest UI（浏览器面板）
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-~17,000 lines · 70+ source files · 14 pages · 12 components · 24 engine modules · 30+ achievements
+~45,000 production lines · 170 source files · 89 test files · 50 browser/simulation audit scripts
+
+生产依赖审计的定向豁免与适用边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
+
+参赛前剩余工作的执行顺序、验收标准与明确延后范围记录在 [`docs/contest-final-polish-checklist.md`](docs/contest-final-polish-checklist.md)。
 
 <details>
 <summary>📁 Project Structure</summary>

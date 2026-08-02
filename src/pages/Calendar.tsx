@@ -64,7 +64,7 @@ export default function Calendar() {
 
       {/* Type legend */}
       <div className="flex flex-wrap gap-2 mb-4 text-xs">
-        {(['league', 'league_cup', 'super_cup_group', 'super_cup', 'continental_cup', 'relegation_playoff', 'season_end'] as const).map(type => (
+        {(['league', 'league_cup', 'super_cup_group', 'super_cup', 'continental_cup', 'world_cup_group', 'world_cup', 'relegation_playoff', 'season_end'] as const).map(type => (
           <span key={type} className={`px-2 py-0.5 rounded text-white/80 ${getWindowTypeColor(type)}`}>
             {getWindowTypeLabel(type)}
           </span>
@@ -210,7 +210,9 @@ export default function Calendar() {
                               <span className="text-slate-300 whitespace-nowrap" title={awayTeam.name}>{awayTeam.shortName}</span>
                             </div>
                             <span className="text-[10px] text-slate-600 ml-2 shrink-0">
-                              {calDerby ? <span className="text-orange-400">{calDerby}</span> : '预测 →'}
+                              {calDerby
+                                ? <span className="text-orange-400">{calDerby}</span>
+                                : fixture.isNeutralVenue ? '中立场 · 预测 →' : '预测 →'}
                             </span>
                           </button>
                         );

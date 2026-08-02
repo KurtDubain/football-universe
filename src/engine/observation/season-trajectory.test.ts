@@ -7,6 +7,7 @@ import {
   OBSERVER_SEASON_TRAJECTORY_LIMIT,
   type ObserverSeasonTrajectory,
 } from './season-trajectory';
+import { initializeGameWorld } from '../season/season-manager';
 
 function result(
   fixtureId: string,
@@ -36,6 +37,13 @@ function result(
     competitionType: 'league',
     competitionName: '测试联赛',
     roundLabel: fixtureId,
+    prediction: {
+      homeWinPct: 40,
+      drawPct: 30,
+      awayWinPct: 30,
+      homeExpectedGoals: 1.2,
+      awayExpectedGoals: 1,
+    },
   };
 }
 
@@ -95,7 +103,19 @@ describe('observer season trajectory', () => {
       points: 7,
       goalDifference: 3,
     });
-    expect(trajectory?.judgment).toEqual({ total: 4, correct: 3, bestStreak: 2 });
+    expect(trajectory?.judgment).toEqual({
+      total: 4,
+      correct: 3,
+      currentStreak: 2,
+      bestStreak: 2,
+    });
+    expect(trajectory?.expectedPosition).toBe(2);
+    expect(trajectory?.destinyDeviation).toMatchObject({
+      fixtureId: 'r1',
+      homeTeamId: 'alpha',
+      awayTeamId: 'beta',
+      actualProbability: 30,
+    });
     expect(trajectory?.theme).toEqual({
       type: 'player_growth',
       playerId: 'player-alpha',
@@ -126,6 +146,48 @@ describe('observer season trajectory', () => {
       goalDifference: 1,
     });
     expect(buildObserverSeasonTrajectory(world, 'missing')).toBeNull();
+  });
+
+  it('freezes a representative player by UUID even when teammates share a display name', () => {
+    const initial = initializeGameWorld(20260730);
+    const teamId = Object.keys(initial.squads)[0];
+    const opponentId = Object.keys(initial.squads).find(id =>
+      id !== teamId && initial.seasonStartLevels[id] === initial.seasonStartLevels[teamId],
+    )!;
+    const [first, second] = initial.squads[teamId]
+      .filter(player => player.position === 'MF' || player.position === 'FW');
+    const world = {
+      ...initial,
+      seasonState: {
+        ...initial.seasonState,
+        calendar: [window(0, [result('observed', teamId, opponentId, 2, 0)])],
+      },
+      squads: {
+        ...initial.squads,
+        [teamId]: initial.squads[teamId].map(player =>
+          player.uuid === first.uuid || player.uuid === second.uuid
+            ? { ...player, name: '同名球员' }
+            : player,
+        ),
+      },
+      playerStats: {
+        ...initial.playerStats,
+        [first.uuid]: {
+          ...initial.playerStats[first.uuid],
+          appearances: 12,
+          goals: 1,
+        },
+        [second.uuid]: {
+          ...initial.playerStats[second.uuid],
+          appearances: 12,
+          goals: 9,
+        },
+      },
+    };
+
+    const trajectory = buildObserverSeasonTrajectory(world, teamId);
+
+    expect(trajectory?.representativePlayerId).toBe(second.uuid);
   });
 
   it('omits the theme reference when observation themes are disabled', () => {

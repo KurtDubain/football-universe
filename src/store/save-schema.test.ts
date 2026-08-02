@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import {
   __resetSaveRecoveryForTests,
@@ -15,6 +16,15 @@ import {
 } from './save-schema';
 
 function makeSave(seasonNumber = 3) {
+  const initializedWorld = initializeGameWorld(20260730);
+  const world = {
+    ...initializedWorld,
+    seasonState: {
+      ...initializedWorld.seasonState,
+      seasonNumber,
+    },
+  };
+  const favoriteTeamId = Object.keys(world.teamBases)[0];
   return {
     version: SAVE_SCHEMA_VERSION,
     state: {
@@ -22,14 +32,31 @@ function makeSave(seasonNumber = 3) {
       lastResults: [],
       lastNews: [],
       favoriteTeamId: null,
-      favoriteTeamIds: ['a'],
-      world: {
-        seasonState: { seasonNumber, calendar: [] },
-        teamBases: { a: { id: 'a' } },
-        teamStates: { a: { id: 'a' } },
-        squads: { a: [] },
-        playerStats: {},
-      },
+      favoriteTeamIds: [favoriteTeamId],
+      world,
+    },
+  };
+}
+
+function makeSeasonFiveSave() {
+  const initializedWorld = initializeGameWorld(20260730);
+  const world = initializeNewSeason({
+    ...initializedWorld,
+    seasonState: {
+      ...initializedWorld.seasonState,
+      seasonNumber: 4,
+    },
+  });
+  const favoriteTeamId = Object.keys(world.teamBases)[0];
+  return {
+    version: SAVE_SCHEMA_VERSION,
+    state: {
+      initialized: true,
+      lastResults: [],
+      lastNews: [],
+      favoriteTeamId: null,
+      favoriteTeamIds: [favoriteTeamId],
+      world,
     },
   };
 }
@@ -71,10 +98,55 @@ describe('current schema hydration boundary', () => {
       ...makeSave(),
       state: { ...makeSave().state, world: { seasonState: { seasonNumber: 1, calendar: [] } } },
     })],
+    ['missing nested runtime fields', JSON.stringify({
+      ...makeSave(),
+      state: {
+        ...makeSave().state,
+        world: { ...makeSave().state.world, rngState: undefined },
+      },
+    })],
+    ['duplicate player UUID', (() => {
+      const save = makeSave();
+      const teamIds = Object.keys(save.state.world.squads);
+      save.state.world.squads[teamIds[1]][0].uuid = save.state.world.squads[teamIds[0]][0].uuid;
+      return JSON.stringify(save);
+    })()],
     ['invalid observation theme', JSON.stringify({
       ...makeSave(),
       state: { ...makeSave().state, observationThemePreference: 'score_boost' },
     })],
+    ['invalid observer archive counters', (() => {
+      const save = makeSave();
+      const teamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.observerSeasonTrajectories = [{
+        seasonNumber: 1,
+        teamId,
+        leagueLevel: 1,
+        checkpoints: [
+          { phase: 'opening', played: 4, position: 1, points: 10, goalDifference: 4 },
+          { phase: 'midseason', played: 8, position: 1, points: 20, goalDifference: 8 },
+          { phase: 'run_in', played: 12, position: 1, points: 30, goalDifference: 12 },
+          { phase: 'final', played: 16, position: 1, points: 40, goalDifference: 16 },
+        ],
+        judgment: { total: 3, correct: 4, currentStreak: 4, bestStreak: 4 },
+      }];
+      return JSON.stringify(save);
+    })()],
+    ['league cup fixture missing neutral venue', (() => {
+      const save = makeSave();
+      delete save.state.world.leagueCup.rounds[0].fixtures[0].isNeutralVenue;
+      return JSON.stringify(save);
+    })()],
+    ['super cup group fixture falsely marked neutral', (() => {
+      const save = makeSave();
+      save.state.world.superCup.groups[0].fixtures[0].isNeutralVenue = true;
+      return JSON.stringify(save);
+    })()],
+    ['continental group fixture using an illegal fourth round', (() => {
+      const save = makeSeasonFiveSave();
+      save.state.world.continentalCups.mainland_cup!.groups[0].fixtures[0].round = 4;
+      return JSON.stringify(save);
+    })()],
   ])('quarantines %s, clears the active key, and exposes a recovery notice', (_label, payload) => {
     localStorage.setItem(SAVE_STORAGE_KEY, payload);
 

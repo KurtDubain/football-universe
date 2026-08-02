@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { getTeamName, getTeamShortName, getCoachName } from '../utils/format';
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
+import { SegmentedControl } from '../components/ui';
 
 type SeasonRow = SeasonRecord & { teamId: string };
 
@@ -31,16 +32,15 @@ export default function Chronicle() {
   return (
     <div className="space-y-4">
       {/* Mode tabs */}
-      <div className="flex gap-1 max-w-4xl">
-        <button onClick={() => setMode('overview')}
-          className={`px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${mode === 'overview' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
-          总览
-        </button>
-        <button onClick={() => setMode('narrative')}
-          className={`px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${mode === 'narrative' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
-          全赛季叙事
-        </button>
-      </div>
+      <SegmentedControl
+        value={mode}
+        onChange={setMode}
+        ariaLabel="编年史视图"
+        options={[
+          { value: 'overview', label: '总览' },
+          { value: 'narrative', label: '全赛季叙事' },
+        ]}
+      />
 
       {mode === 'overview'
         ? <OverallChronicle world={world} onSelectSeason={setSelectedSeason} />
@@ -497,7 +497,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isPos ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>{b.label}</span>
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[b.teamId]?.color ?? '#666' }} />
                   <span className="text-slate-300">{getTeamName(b.teamId, tb)}</span>
-                  <span className="text-slate-600 text-[10px] truncate flex-1">{b.description}</span>
+                  <span className="text-slate-600 text-[10px] truncate flex-1" title={b.description}>{b.description}</span>
                 </div>
               );
             })}
@@ -682,7 +682,7 @@ function AwardBox({ emoji, label, team, detail, color }: { emoji: string; label:
           <div className="text-[10px] text-slate-500">{label}</div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color ?? '#666' }} />
-            <span className="text-xs font-semibold text-slate-200 truncate">{team}</span>
+            <span className="text-xs font-semibold text-slate-200 truncate" title={team}>{team}</span>
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">{detail}</div>
         </div>

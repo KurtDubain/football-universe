@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
-import { Icon, type IconName } from '../components/Icon';
+import { Icon } from '../components/Icon';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld, NewsItem } from '../engine/season/season-manager';
 import type { TeamBase } from '../types/team';
@@ -18,6 +18,7 @@ import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { generateStorylineCards } from '../engine/season/storyline-cards';
 import { getFixtureStorylineLabel } from '../engine/season/storylines';
+import { StoryChapterMark } from '../components/StoryChapterMark';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
 import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -34,6 +35,7 @@ import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
 import { describeDashboardAction } from '../engine/observation/dashboard-action';
+import { SegmentedControl } from '../components/ui';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -182,7 +184,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
     { key: 'matchday', label: '比赛日' },
     { key: 'results', label: '战报' },
     { key: 'overview', label: '总览' },
-    ...(hasSeasonReview ? [{ key: 'review' as TabKey, label: `S${lastCompletedSeason}回顾` }] : []),
+    ...(hasSeasonReview ? [{ key: 'review' as TabKey, label: `S${lastCompletedSeason}档案` }] : []),
   ];
 
   // Mobile swipe — left/right between tabs
@@ -300,27 +302,24 @@ function DashboardContent({ world }: { world: GameWorld }) {
       )}
 
       {/* ═══════ Tab Bar ═══════ */}
-      <div className="flex gap-2 sm:gap-2 border-b border-slate-700/50 mt-1 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`min-h-11 sm:min-h-0 pb-3 pt-2 sm:pb-2 sm:pt-0 px-2 sm:px-0 text-sm font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
-              activeTab === tab.key
-                ? 'text-blue-400'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {tab.label}
-            {tab.key === 'results' && lastResults.length > 0 && (
-              <span className="ml-1 text-[11px] text-slate-500">({lastResults.length})</span>
-            )}
-            {activeTab === tab.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full" />
-            )}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="主页视图"
+        scrollable
+        className="mt-1 w-full"
+        options={tabs.map(tab => ({
+          value: tab.key,
+          label: (
+            <>
+              {tab.label}
+              {tab.key === 'results' && lastResults.length > 0 && (
+                <span className="ml-1 text-[11px] opacity-75">({lastResults.length})</span>
+              )}
+            </>
+          ),
+        }))}
+      />
 
       {/* ═══════ Tab Content (swipe left/right to switch tabs on mobile) ═══════ */}
       <div ref={tabSwipeRef} className="flex-1 overflow-auto pt-4 pb-2 animate-tab-enter touch-pan-y" key={activeTab}>
@@ -516,7 +515,7 @@ function MatchdayTab({
               </Link>
             </>
           )}
-          <span className="ml-auto min-w-0 truncate text-right text-[11px] text-slate-500">
+          <span className="ml-auto min-w-0 truncate text-right text-[11px] text-slate-500" title={currentWindow.label}>
             {currentWindow.label}
           </span>
         </div>
@@ -586,9 +585,9 @@ function MatchdayTab({
                     <div className="focus-fixture-main mb-1 flex items-center justify-between">
                       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
                         <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
-                        <span className="truncate font-semibold text-slate-100">{ht.shortName}</span>
+                        <span className="truncate font-semibold text-slate-100" title={ht.name}>{ht.shortName}</span>
                         <span className="mx-0.5 text-slate-500">vs</span>
-                        <span className="truncate font-semibold text-slate-100">{at.shortName}</span>
+                        <span className="truncate font-semibold text-slate-100" title={at.name}>{at.shortName}</span>
                         <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
                       </div>
                       <button
@@ -668,14 +667,14 @@ function MatchdayTab({
                       className="w-1.5 h-1.5 rounded-full shrink-0"
                       style={{ backgroundColor: team?.color ?? '#64748b' }}
                     />
-                    <span className="text-xs font-semibold text-slate-100 truncate">
+                    <span className="text-xs font-semibold text-slate-100 truncate" title={h.playerName}>
                       {h.playerName}
                     </span>
                     {h.position && (
                       <span className="shrink-0 text-[11px] text-slate-500">({h.position})</span>
                     )}
                   </div>
-                  <p className="truncate text-[11px] text-slate-400">
+                  <p className="truncate text-[11px] text-slate-400" title={`${h.detail} · vs ${opponentName}`}>
                     {h.detail} · vs {opponentName}
                   </p>
                 </Link>
@@ -925,7 +924,7 @@ function ResultsTab({
         >
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-semibold text-slate-400">下一窗口</div>
-            <div className="truncate text-xs text-slate-500">{currentWindow.label}</div>
+            <div className="truncate text-xs text-slate-500" title={currentWindow.label}>{currentWindow.label}</div>
           </div>
           <button
             type="button"
@@ -1234,16 +1233,13 @@ function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; fav
           </div>
           <div className="divide-y divide-slate-700/40">
             {cards.map(card => {
-              const icon: IconName = card.type === 'dark_horse' ? 'trend-up'
-                : card.type === 'giant_crisis' ? 'warning'
-                : 'shield';
               const tone = card.type === 'dark_horse' ? 'text-emerald-300'
                 : card.type === 'giant_crisis' ? 'text-red-300'
                 : 'text-amber-300';
               return (
                 <div key={`${card.scope}-${card.teamId}-${card.type}`} className="py-2.5">
                   <div className="flex items-start gap-2">
-                    <span className={`mt-0.5 shrink-0 ${tone}`}><Icon name={icon} size={16} /></span>
+                    <StoryChapterMark type={card.type} className="mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Link to={`/team/${card.teamId}`} className={`text-sm font-semibold hover:text-blue-300 ${tone}`}>
@@ -1281,7 +1277,7 @@ function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; fav
                 {rumor.eliteTeamName}
               </Link>
               <span className="text-slate-500">{intensityText}</span>
-              <Link to={`/player/${rumor.candidateUuid}`} className="truncate font-medium text-slate-100 hover:text-blue-400">
+              <Link to={`/player/${rumor.candidateUuid}`} className="truncate font-medium text-slate-100 hover:text-blue-400" title={rumor.candidateName}>
                 {rumor.candidateName}
               </Link>
               <span className="ml-auto hidden shrink-0 text-xs text-slate-500 sm:inline">
@@ -1299,8 +1295,8 @@ function StatMini({ label, value, sub }: { label: string; value: string; sub: st
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 p-2.5">
       <div className="text-[11px] text-slate-500">{label}</div>
-      <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate">{value}</div>
-      <div className="truncate text-[11px] text-slate-500">{sub}</div>
+      <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate" title={value}>{value}</div>
+      <div className="truncate text-[11px] text-slate-500" title={sub}>{sub}</div>
     </div>
   );
 }
@@ -1417,10 +1413,10 @@ function FixtureCard({
           : null;
         return (
           <div className="mb-1 flex items-center justify-between gap-1 text-[11px] text-slate-500">
-            <span className="truncate flex-1 min-w-0">
+            <span className="truncate flex-1 min-w-0" title={homePlayer && homeScorer ? `射手 ${homePlayer.name} ${homeScorer.goals}球` : undefined}>
               {homePlayer && homeScorer ? `射手 ${homePlayer.name} ${homeScorer.goals}球` : ''}
             </span>
-            <span className="truncate flex-1 min-w-0 text-right">
+            <span className="truncate flex-1 min-w-0 text-right" title={awayPlayer && awayScorer ? `射手 ${awayPlayer.name} ${awayScorer.goals}球` : undefined}>
               {awayPlayer && awayScorer ? `射手 ${awayPlayer.name} ${awayScorer.goals}球` : ''}
             </span>
           </div>
@@ -1435,7 +1431,7 @@ function FixtureCard({
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-slate-500">
         <span className="text-green-400">{pred.homeWinPct}%</span>
-        <span className="truncate px-1">{pred.verdict}</span>
+        <span className="truncate px-1" title={pred.verdict}>{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
       </div>
     </div>

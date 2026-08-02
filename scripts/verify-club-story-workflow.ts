@@ -17,6 +17,11 @@ type AuditStore = {
       teamBases: Record<string, { name: string }>;
       squads: Record<string, Array<{ uuid: string; rating: number; injuredUntilWindow?: number }>>;
       totalElapsedWindows: number;
+      worldCup: null | {
+        groups: Array<{
+          fixtures: Array<{ isNeutralVenue?: boolean }>;
+        }>;
+      };
     };
     newGame: (seed: number) => void;
     advanceWindow: () => Promise<void>;
@@ -108,11 +113,13 @@ async function main(): Promise<void> {
       await page.screenshot({ path: `/tmp/football-squad-boost-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText('v4.8.1', { exact: true }).first().waitFor({ state: 'visible' });
-      await page.getByText('一致性复核', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText(/修正比赛日位置失衡/).waitFor({ state: 'visible' });
+      await page.getByText('v4.24.0', { exact: true }).first().waitFor({ state: 'visible' });
+      await page.getByText('洲际荣誉更稀有，中立场不再偏向任何一边', { exact: true })
+        .waitFor({ state: 'visible' });
+      await page.getByText(/洲际杯改为第5赛季起每6季举办一次/).waitFor({ state: 'visible' });
       await assertNoOverflow(page, `${viewport.name} changelog`);
-      await page.getByText('一致性复核', { exact: true }).scrollIntoViewIfNeeded();
+      await page.getByText('洲际荣誉更稀有，中立场不再偏向任何一边', { exact: true })
+        .scrollIntoViewIfNeeded();
       await page.screenshot({ path: `/tmp/football-changelog-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
@@ -122,8 +129,8 @@ async function main(): Promise<void> {
         const state = store?.getState();
         return Boolean(state && !state.isAdvancing && state.lastNews.length > 0);
       });
-      await page.getByText(/头条|重点|简讯/).first().waitFor({ state: 'visible' });
       const ticker = page.locator('button[aria-controls="global-news-list"]');
+      await ticker.waitFor({ state: 'visible' });
       await ticker.focus();
       await page.keyboard.press('Enter');
       if (await ticker.getAttribute('aria-expanded') !== 'true') {
@@ -136,24 +143,69 @@ async function main(): Promise<void> {
       }
       await page.screenshot({ path: `/tmp/football-news-${viewport.name}.png`, animations: 'disabled' });
 
-      await page.evaluate(async () => {
+      const worldCupAudit = await page.evaluate(async () => {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        await store.getState().advanceUntil('season_end');
-        await store.getState().advanceWindow();
+        let safety = 0;
+        while (
+          (
+            store.getState().world.seasonState.seasonNumber < 4
+            || !store.getState().world.worldCup
+          )
+          && safety < 240
+        ) {
+          await store.getState().advanceWindow();
+          safety += 1;
+        }
+        const world = store.getState().world;
+        const groupFixtures = world.worldCup?.groups.flatMap(group => group.fixtures) ?? [];
+        return {
+          season: world.seasonState.seasonNumber,
+          groupWindows: world.seasonState.calendar.filter(window => window.type === 'world_cup_group').length,
+          knockoutWindows: world.seasonState.calendar.filter(window => window.type === 'world_cup').length,
+          groupFixtures: groupFixtures.length,
+          allNeutral: groupFixtures.every(fixture => fixture.isNeutralVenue === true),
+        };
       });
-      await page.waitForFunction(() => {
+      if (
+        worldCupAudit.season !== 4
+        || worldCupAudit.groupWindows !== 3
+        || worldCupAudit.knockoutWindows !== 4
+        || worldCupAudit.groupFixtures !== 48
+        || !worldCupAudit.allNeutral
+      ) {
+        throw new Error(`${viewport.name}: invalid world cup format ${JSON.stringify(worldCupAudit)}`);
+      }
+      await page.goto(`${baseUrl}/cup/world_cup?audit=1`, { waitUntil: 'networkidle' });
+      await page.getByText(/32 队 · 四年一届/).waitFor({ state: 'visible' });
+      await page.locator('summary').filter({ hasText: '赛事规则' }).click();
+      await page.getByText(/中立场单循环3轮/).waitFor({ state: 'visible' });
+      await page.getByText('A 组', { exact: true }).waitFor({ state: 'visible' });
+      await assertNoOverflow(page, `${viewport.name} world cup`);
+      await page.screenshot({ path: `/tmp/football-world-cup-${viewport.name}.png`, animations: 'disabled' });
+
+      const seasonAfterAdvance = await page.evaluate(async () => {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
-        return store?.getState().world.seasonState.seasonNumber === 2;
+        if (!store) throw new Error('Audit store unavailable');
+        let safety = 0;
+        while (store.getState().world.seasonState.seasonNumber < 5 && safety < 300) {
+          await store.getState().advanceWindow();
+          safety += 1;
+        }
+        return store.getState().world.seasonState.seasonNumber;
       });
+      if (seasonAfterAdvance !== 5) {
+        throw new Error(`${viewport.name}: expected season 5, got season ${seasonAfterAdvance}`);
+      }
       const cupWindows = await page.evaluate(() => {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
         return store?.getState().world.seasonState.calendar.filter(window => window.type === 'continental_cup').length;
       });
-      if (cupWindows !== 3) throw new Error(`${viewport.name}: expected three continental windows, got ${cupWindows}`);
+      if (cupWindows !== 5) throw new Error(`${viewport.name}: expected five continental windows, got ${cupWindows}`);
       await page.goto(`${baseUrl}/cup/mainland_cup?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText(/每四个赛季举办一次/).waitFor({ state: 'visible' });
-      await page.getByText('大陆地区 · 8队', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText(/大陆地区 · 8 队 · 六年一届/).waitFor({ state: 'visible' });
+      await page.getByText('A 组', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('B 组', { exact: true }).waitFor({ state: 'visible' });
       await assertNoOverflow(page, `${viewport.name} continental cup`);
       await page.screenshot({ path: `/tmp/football-continental-${viewport.name}.png`, animations: 'disabled' });
 

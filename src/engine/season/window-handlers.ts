@@ -13,34 +13,9 @@ import { getSuperCupGroupFixtures, updateSuperCupGroupStandings, completeSuperCu
 import { updateWorldCupGroupStandings, completeWorldCupGroupStage, advanceWorldCupKnockout } from '../cups/world-cup';
 import { advanceContinentalCup, getContinentalCupCurrentFixtures } from '../cups/continental-cup';
 import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsId } from './helpers';
-import type { CompetitionType } from '../../types/match';
-
-/**
- * v23 — Decide whether a cup match should be played at a neutral venue.
- *
- * Single-elimination cups (league_cup, world_cup, continental_cup): every
- * knockout round is neutral. Two-legged cups (super_cup KO except its
- * single-leg Final): only the Final is neutral. Continental & world cup
- * group stages and league matches always pass through as home/away.
- *
- * The `Final` / `决赛` short-circuit covers any future cup that lands a
- * single-leg final regardless of competition type.
- */
-function isNeutralRound(roundName: string, competitionType: CompetitionType): boolean {
-  if (roundName === 'Final' || roundName === '决赛') return true;
-  // For single-elimination cups, ALL KO rounds are neutral.
-  if (competitionType === 'league_cup'
-      || competitionType === 'world_cup'
-      || competitionType === 'continental_cup') {
-    // League cup / world cup / continental cup KO round names include
-    // R32, R16, QF, SF, 16强, etc. Group-stage matches use a different
-    // competitionType (super_cup_group / world_cup_group) and never reach
-    // this helper, so any non-empty roundName here is a KO round.
-    return true;
-  }
-  return false;
-}
+import { applyVenuePolicy } from '../competitions/venue-policy';
 import { GameWorld, NewsItem } from './season-manager';
+import { worldCupConfig } from '../../config/competitions';
 
 // ── Public interface ────────────────────────────────────────────────
 
@@ -75,7 +50,8 @@ export function simulateFixtures(
   const results: MatchResult[] = [];
   const teamsPlayed = new Set<string>();
 
-  for (const fixture of fixtures) {
+  for (const rawFixture of fixtures) {
+    const fixture = applyVenuePolicy(rawFixture);
     const ctx = buildSimulationContext(fixture, { ...world, teamStates }, rng);
     ctx.isKnockout = isKnockout;
     const simResult = simulateMatch(ctx, fixture);
@@ -148,14 +124,13 @@ export function handleLeagueCup(
   leagueCup: CupState,
 ): WindowResult {
   const cupFixtures = getLeagueCupCurrentFixtures(leagueCup);
-  const matchFixtures: MatchFixture[] = cupFixtures.map((cf) => ({
+  const matchFixtures: MatchFixture[] = cupFixtures.map((cf) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
     competitionType: 'league_cup' as const,
     competitionName: '联赛杯',
     roundLabel: cf.roundName,
-    ...(isNeutralRound(cf.roundName, 'league_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -173,14 +148,13 @@ export function handleLeagueCup(
     );
     if (nextLCWindow && nextLCWindow.fixtures.length === 0) {
       const nextCupFixtures = getLeagueCupCurrentFixtures(updatedCup);
-      nextLCWindow.fixtures = nextCupFixtures.map((cf) => ({
+      nextLCWindow.fixtures = nextCupFixtures.map((cf) => applyVenuePolicy({
         id: cf.id,
         homeTeamId: cf.homeTeamId,
         awayTeamId: cf.awayTeamId,
         competitionType: 'league_cup' as const,
         competitionName: '联赛杯',
         roundLabel: cf.roundName,
-        ...(isNeutralRound(cf.roundName, 'league_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -208,7 +182,7 @@ export function handleSuperCupGroup(
   const groupRound = completedGroupWindows + 1;
 
   const cupFixtures = getSuperCupGroupFixtures(superCup, groupRound);
-  const matchFixtures: MatchFixture[] = cupFixtures.map((cf) => ({
+  const matchFixtures: MatchFixture[] = cupFixtures.map((cf) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
@@ -235,7 +209,7 @@ export function handleSuperCupGroup(
         (w) => w.type === 'super_cup' && !w.completed && w.label.includes('QF') && w.label.includes('首回合'),
       );
       if (qfL1Window) {
-        qfL1Window.fixtures = qfL1Round.fixtures.map((cf) => ({
+        qfL1Window.fixtures = qfL1Round.fixtures.map((cf) => applyVenuePolicy({
           id: cf.id,
           homeTeamId: cf.homeTeamId,
           awayTeamId: cf.awayTeamId,
@@ -250,7 +224,7 @@ export function handleSuperCupGroup(
         (w) => w.type === 'super_cup' && !w.completed && w.label.includes('QF') && w.label.includes('次回合'),
       );
       if (qfL2Window) {
-        qfL2Window.fixtures = qfL2Round.fixtures.map((cf) => ({
+        qfL2Window.fixtures = qfL2Round.fixtures.map((cf) => applyVenuePolicy({
           id: cf.id,
           homeTeamId: cf.homeTeamId,
           awayTeamId: cf.awayTeamId,
@@ -290,14 +264,13 @@ export function handleSuperCup(
   const currentKORound = superCup.knockoutRounds[currentKOIdx];
 
   const isFinal = currentKORound.roundName === 'Final';
-  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf) => ({
+  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
     competitionType: 'super_cup' as const,
     competitionName: '超级杯',
     roundLabel: cf.roundName,
-    ...(isNeutralRound(cf.roundName, 'super_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isFinal);
@@ -314,14 +287,13 @@ export function handleSuperCup(
       (w) => w.type === 'super_cup' && !w.completed && w.id > window.id,
     );
     if (nextSCWindow && nextSCWindow.fixtures.length === 0) {
-      nextSCWindow.fixtures = nextKORound.fixtures.map((cf) => ({
+      nextSCWindow.fixtures = nextKORound.fixtures.map((cf) => applyVenuePolicy({
         id: cf.id,
         homeTeamId: cf.homeTeamId,
         awayTeamId: cf.awayTeamId,
         competitionType: 'super_cup' as const,
         competitionName: '超级杯',
         roundLabel: cf.roundName,
-        ...(isNeutralRound(cf.roundName, 'super_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -359,7 +331,7 @@ export function handleRelegationPlayoff(
     seasonNumber,
   );
 
-  const playoffFixtures = proRelResult.playoffFixtures;
+  const playoffFixtures = proRelResult.playoffFixtures.map(applyVenuePolicy);
 
   // Populate the window's fixtures for Dashboard display
   window.fixtures = playoffFixtures;
@@ -435,7 +407,7 @@ export function handleWorldCupGroup(
     }
   }
 
-  const matchFixtures: MatchFixture[] = wcGroupFixtures.map((cf) => ({
+  const matchFixtures: MatchFixture[] = wcGroupFixtures.map((cf) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
@@ -448,8 +420,8 @@ export function handleWorldCupGroup(
 
   let updatedWorldCup = updateWorldCupGroupStandings(worldCup, sim.results);
 
-  // If group round 6, complete group stage
-  if (groupRound === 6) {
+  // Three neutral single-round-robin matchdays complete the group stage.
+  if (groupRound === worldCupConfig.groupRounds) {
     updatedWorldCup = completeWorldCupGroupStage(updatedWorldCup, rng);
 
     // Populate next world_cup knockout window with R16 fixtures
@@ -459,7 +431,7 @@ export function handleWorldCupGroup(
         (w) => w.type === 'world_cup' && !w.completed,
       );
       if (nextWCWindow) {
-        nextWCWindow.fixtures = r16Round.fixtures.map((cf) => ({
+        nextWCWindow.fixtures = r16Round.fixtures.map((cf) => applyVenuePolicy({
           id: cf.id,
           homeTeamId: cf.homeTeamId,
           awayTeamId: cf.awayTeamId,
@@ -497,14 +469,13 @@ export function handleWorldCup(
   }
   const currentKORound = worldCup.knockoutRounds[currentKOIdx];
 
-  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf) => ({
+  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
     competitionType: 'world_cup' as const,
     competitionName: '环球冠军杯',
     roundLabel: cf.roundName,
-    ...(isNeutralRound(cf.roundName, 'world_cup') && { isNeutralVenue: true }),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -519,14 +490,13 @@ export function handleWorldCup(
       (w) => w.type === 'world_cup' && !w.completed && w.id > window.id,
     );
     if (nextWCWindow && nextWCWindow.fixtures.length === 0) {
-      nextWCWindow.fixtures = nextKORound.fixtures.map((cf) => ({
+      nextWCWindow.fixtures = nextKORound.fixtures.map((cf) => applyVenuePolicy({
         id: cf.id,
         homeTeamId: cf.homeTeamId,
         awayTeamId: cf.awayTeamId,
         competitionType: 'world_cup' as const,
         competitionName: '环球冠军杯',
         roundLabel: cf.roundName,
-        ...(isNeutralRound(cf.roundName, 'world_cup') && { isNeutralVenue: true }),
       }));
     }
   }
@@ -550,9 +520,8 @@ export function handleWorldCup(
  * in parallel. Cups are disjoint by team so a single window can play matches
  * across all three without conflict.
  *
- * All active cups play their current round in parallel. The four-team South
- * and East cups complete after two windows; the eight-team Mainland cup uses
- * the third window for its final.
+ * All active cups play in parallel. Every region has three group windows;
+ * Southern/Eastern then play a final while Mainland plays SF and Final.
  */
 export function handleContinentalCup(
   world: GameWorld,
@@ -580,25 +549,23 @@ export function handleContinentalCup(
     return { results: [], teamsPlayed: new Set(), teamStates, news: [] };
   }
 
-  // Build a unified MatchFixture list and remember which cup each belongs to
+  // Build one neutral-venue fixture list across the disjoint regional cups.
   const matchFixtures: MatchFixture[] = [];
-  const fixtureCupMap = new Map<string, ContinentalCupState>();
   for (const { cup, fixtures } of allCupFixtures) {
     for (const cf of fixtures) {
-      matchFixtures.push({
+      matchFixtures.push(applyVenuePolicy({
         id: cf.id,
         homeTeamId: cf.homeTeamId,
         awayTeamId: cf.awayTeamId,
         competitionType: 'continental_cup' as const,
         competitionName: cup.name,
         roundLabel: cf.roundName,
-        ...(isNeutralRound(cf.roundName, 'continental_cup') && { isNeutralVenue: true }),
-      });
-      fixtureCupMap.set(cf.id, cup);
+      }));
     }
   }
 
-  const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
+  const isKnockout = allCupFixtures.every(({ cup }) => cup.groupStageCompleted);
+  const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isKnockout);
 
   // Group results by cup and advance each cup independently
   const updatedCups: GameWorld['continentalCups'] = { ...continentalCups };

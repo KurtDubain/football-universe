@@ -23,11 +23,7 @@ function createEmptyStanding(teamId: string): StandingEntry {
   };
 }
 
-/**
- * Generate double round-robin fixtures for a group (same algorithm as super cup).
- * Circle method: fix team 0, rotate the rest.
- * First half home/away as generated, second half reversed.
- */
+/** Generate one neutral-venue round robin: 3 rounds and 6 matches per group. */
 function generateGroupFixtures(
   teamIds: string[],
   groupIndex: number,
@@ -51,17 +47,10 @@ function generateGroupFixtures(
     rotating.unshift(rotating.pop()!);
   }
 
-  const allRoundMatches = [
-    ...singleRoundMatches,
-    ...singleRoundMatches.map((round) =>
-      round.map(([h, a]): [string, string] => [a, h]),
-    ),
-  ];
-
   const groupLetter = String.fromCharCode(65 + groupIndex);
 
-  for (let r = 0; r < allRoundMatches.length; r++) {
-    const roundMatches = allRoundMatches[r];
+  for (let r = 0; r < singleRoundMatches.length; r++) {
+    const roundMatches = singleRoundMatches[r];
     for (let m = 0; m < roundMatches.length; m++) {
       fixtures.push({
         id: `WC-S${seasonNumber}-G${groupLetter}-R${r + 1}-M${m + 1}`,
@@ -69,6 +58,7 @@ function generateGroupFixtures(
         roundName: `Group ${groupLetter} - R${r + 1}`,
         homeTeamId: roundMatches[m][0],
         awayTeamId: roundMatches[m][1],
+        isNeutralVenue: true,
       });
     }
   }
@@ -104,7 +94,7 @@ function determineSingleMatchWinner(result: MatchResult): string {
       : result.awayTeamId;
   }
 
-  return result.homeTeamId;
+  throw new Error(`Unresolved knockout result: ${result.fixtureId}`);
 }
 
 /** Map from number of matches in a round to its name. */
@@ -185,21 +175,21 @@ export function updateWorldCupGroupStandings(
   results: MatchResult[],
 ): WorldCupState {
   const resultMap = new Map(results.map((r) => [r.fixtureId, r]));
+  const participantRank = new Map(state.participantIds.map((teamId, index) => [teamId, index]));
 
   const updatedGroups = state.groups.map((group) => {
     const standingsMap = new Map(
       group.standings.map((s) => [s.teamId, { ...s, form: [...s.form] }]),
     );
 
-    for (const fixture of group.fixtures) {
+    const fixtures = group.fixtures.map((fixture) => {
       const result = resultMap.get(fixture.id);
-      if (!result) continue;
-      if (fixture.result) continue; // Already processed
-
-      fixture.result = {
-        home: result.homeGoals,
-        away: result.awayGoals,
-      };
+      if (!result || fixture.result) {
+        return {
+          ...fixture,
+          result: fixture.result ? { ...fixture.result } : undefined,
+        };
+      }
 
       const homeEntry = standingsMap.get(fixture.homeTeamId)!;
       const awayEntry = standingsMap.get(fixture.awayTeamId)!;
@@ -234,16 +224,26 @@ export function updateWorldCupGroupStandings(
 
       homeEntry.goalDifference = homeEntry.goalsFor - homeEntry.goalsAgainst;
       awayEntry.goalDifference = awayEntry.goalsFor - awayEntry.goalsAgainst;
-    }
+
+      return {
+        ...fixture,
+        result: {
+          home: result.homeGoals,
+          away: result.awayGoals,
+        },
+      };
+    });
 
     const sorted = Array.from(standingsMap.values()).sort(
       (a, b) =>
         b.points - a.points ||
         b.goalDifference - a.goalDifference ||
-        b.goalsFor - a.goalsFor,
+        b.goalsFor - a.goalsFor ||
+        (participantRank.get(a.teamId) ?? 999) - (participantRank.get(b.teamId) ?? 999) ||
+        a.teamId.localeCompare(b.teamId),
     );
 
-    return { ...group, standings: sorted };
+    return { ...group, fixtures, standings: sorted };
   });
 
   return { ...state, groups: updatedGroups };
@@ -281,6 +281,7 @@ export function completeWorldCupGroupStage(
     roundName: 'R16',
     homeTeamId: pair[0],
     awayTeamId: pair[1],
+    isNeutralVenue: true,
   }));
 
   const knockoutRounds: CupRound[] = [
@@ -313,28 +314,38 @@ export function advanceWorldCupKnockout(
   // Find the first incomplete knockout round
   const currentRoundIdx = state.knockoutRounds.findIndex((r) => !r.completed);
   if (currentRoundIdx === -1) return state;
+  const sourceRound = state.knockoutRounds[currentRoundIdx];
+  const missing = sourceRound.fixtures.find(fixture => !resultMap.has(fixture.id));
+  if (missing) throw new Error(`Missing result for fixture ${missing.id}`);
 
-  const currentRound = state.knockoutRounds[currentRoundIdx];
+  const knockoutRounds: CupRound[] = state.knockoutRounds.map(round => ({
+    ...round,
+    fixtures: round.fixtures.map(fixture => ({
+      ...fixture,
+      result: fixture.result ? { ...fixture.result } : undefined,
+    })),
+  }));
+  const currentRound = knockoutRounds[currentRoundIdx];
   const winners: string[] = [];
 
-  for (const fixture of currentRound.fixtures) {
-    const result = resultMap.get(fixture.id);
-    if (!result) continue;
+  currentRound.fixtures = currentRound.fixtures.map((fixture) => {
+    const result = resultMap.get(fixture.id)!;
 
-    // Record result including ET goals
-    fixture.result = {
+    const winnerId = determineSingleMatchWinner(result);
+    winners.push(winnerId);
+    return {
+      ...fixture,
+      result: {
       home: result.homeGoals + (result.etHomeGoals ?? 0),
       away: result.awayGoals + (result.etAwayGoals ?? 0),
       extraTime: result.extraTime || undefined,
       penalties: result.penalties || undefined,
       penHome: result.penaltyHome,
       penAway: result.penaltyAway,
+      },
+      winnerId,
     };
-
-    const winnerId = determineSingleMatchWinner(result);
-    fixture.winnerId = winnerId;
-    winners.push(winnerId);
-  }
+  });
 
   currentRound.completed = true;
 
@@ -342,6 +353,7 @@ export function advanceWorldCupKnockout(
   if (currentRound.fixtures.length === 1) {
     return {
       ...state,
+      knockoutRounds,
       completed: true,
       winnerId: winners[0],
     };
@@ -360,15 +372,16 @@ export function advanceWorldCupKnockout(
       roundName: nextRoundName,
       homeTeamId: winners[i],
       awayTeamId: winners[i + 1],
+      isNeutralVenue: true,
     });
   }
 
-  state.knockoutRounds.push({
+  knockoutRounds.push({
     roundNumber: currentRound.roundNumber + 1,
     roundName: nextRoundName,
     fixtures: nextFixtures,
     completed: false,
   });
 
-  return { ...state };
+  return { ...state, knockoutRounds };
 }

@@ -54,7 +54,7 @@ async function verifyViewport(
       };
       state.newGame(20260716);
     });
-    await page.getByRole('button', { name: '比赛日' }).waitFor({ state: 'visible' });
+    await page.getByRole('tab', { name: '比赛日' }).waitFor({ state: 'visible' });
     await page.evaluate(async () => {
       const store = (window as typeof window & {
         __gameStore?: { getState: () => Record<string, unknown> };

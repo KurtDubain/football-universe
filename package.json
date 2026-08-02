@@ -1,14 +1,17 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.22.0",
+  "version": "4.30.0",
   "type": "module",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0",
+    "pnpm": ">=10 <11"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:audit": "VITE_ENABLE_AUDIT=true pnpm build",
     "bundle:check": "tsx scripts/check-bundle-size.ts",
     "changelog:check": "tsx scripts/check-changelog.ts",
     "lint": "eslint .",
@@ -26,6 +29,10 @@
     "verify:match-explanation": "tsx scripts/verify-match-explanation.ts",
     "verify:floating-advance": "tsx scripts/verify-floating-advance.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
+    "verify:mobile-routes": "tsx scripts/verify-mobile-routes.ts",
+    "verify:feedback": "tsx scripts/verify-feedback.ts",
+    "verify:visual-assets": "tsx scripts/verify-visual-assets.ts",
+    "verify:history-summary": "tsx scripts/verify-history-summary.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",
     "verify:player-team": "tsx scripts/verify-player-team-workflow.ts",
     "verify:club-story": "tsx scripts/verify-club-story-workflow.ts",
@@ -45,7 +52,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-i18next": "^17.0.7",
-    "react-router-dom": "^7.14.1",
+    "react-router-dom": "^7.18.2",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -69,5 +76,15 @@
     "vite": "^8.0.4",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.6"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-qwww-vcr4-c8h2"
+      ]
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

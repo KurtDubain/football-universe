@@ -9,6 +9,13 @@ import type { GameWorld, GodHandIntervention } from '../engine/season/season-man
 import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 import { rankClubCoefficients } from '../engine/rankings/club-coefficient';
 import { getObservationThemeLabel } from '../engine/observation/observation-theme';
+import { describeObserverImpression } from '../engine/observation/season-archive';
+import {
+  buildSeasonHistorySummary,
+  type SeasonHistoryEvent,
+  type SeasonHistorySummary,
+} from '../engine/history/season-history-summary';
+import { Icon, type IconName } from '../components/Icon';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -19,6 +26,8 @@ export default function History() {
 
 function HistoryContent({ world }: { world: GameWorld }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
+  const [detailedSeason, setDetailedSeason] = useState<number | null>(null);
+  const [seasonRange, setSeasonRange] = useState<'recent10' | 'recent40' | 'all'>('recent10');
   const [tab, setTab] = useState<'seasons' | 'coefficient' | 'records' | 'coaches' | 'hall'>('seasons');
 
   const honors = world.honorHistory;
@@ -54,6 +63,14 @@ function HistoryContent({ world }: { world: GameWorld }) {
     () => rankClubCoefficients(world.teamBases, world.teamSeasonRecords),
     [world.teamBases, world.teamSeasonRecords],
   );
+  const expandedSummary = useMemo(
+    () => expandedSeason === null ? null : buildSeasonHistorySummary(world, expandedSeason),
+    [expandedSeason, world],
+  );
+  const visibleHonors = useMemo(() => {
+    if (seasonRange === 'all') return honors;
+    return honors.slice(seasonRange === 'recent40' ? -40 : -10);
+  }, [honors, seasonRange]);
 
   // Fun records computed from season records
   const funRecords = useMemo(() => {
@@ -159,7 +176,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
               <div key={t.teamId} className="flex items-center gap-2">
                 <span className={`w-5 text-center text-xs font-bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-500'}`}>{i + 1}</span>
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate">{t.name}</Link>
+                <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate" title={t.name}>{t.name}</Link>
                 <span className="text-sm font-bold text-amber-400">{t.count}</span>
                 <span className="text-[10px] text-slate-500">座</span>
               </div>
@@ -183,7 +200,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
                 <div key={t.teamId} className="flex items-center gap-2">
                   <span className={`w-5 text-center text-xs font-bold ${i === 0 ? 'text-emerald-400' : 'text-slate-500'}`}>{i + 1}</span>
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                  <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate">{t.name}</Link>
+                  <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate" title={t.name}>{t.name}</Link>
                   <span className="text-sm font-bold text-emerald-300">{formatMoney(t.cash)}</span>
                 </div>
               ))}
@@ -201,7 +218,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
                     <div key={t.teamId} className="flex items-center gap-2">
                       <span className="w-5 text-center text-xs font-bold text-slate-500">{wealthRanking.length - i}</span>
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                      <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate">{t.name}</Link>
+                      <Link to={`/team/${t.teamId}`} className="text-sm text-slate-200 hover:text-blue-400 flex-1 truncate" title={t.name}>{t.name}</Link>
                       <span className={`text-sm font-bold ${tone}`}>{formatMoney(t.cash)}</span>
                     </div>
                   );
@@ -259,8 +276,33 @@ function HistoryContent({ world }: { world: GameWorld }) {
           {honors.length === 0 ? (
             <p className="text-sm text-slate-500">暂无历史记录，完成至少一个赛季后显示</p>
           ) : (
-            <div className="space-y-3">
-              {[...honors].reverse().map((record) => {
+            <>
+              {honors.length > 10 && (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-y border-slate-700/60 py-2">
+                  <div className="text-[11px] text-slate-500">
+                    当前显示 {visibleHonors.length}/{honors.length} 个赛季
+                  </div>
+                  <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <span>历史范围</span>
+                    <select
+                      data-testid="season-history-range"
+                      value={seasonRange}
+                      onChange={(event) => {
+                        setSeasonRange(event.target.value as typeof seasonRange);
+                        setExpandedSeason(null);
+                        setDetailedSeason(null);
+                      }}
+                      className="min-h-9 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs text-slate-200"
+                    >
+                      <option value="recent10">最近 10 季</option>
+                      <option value="recent40">最近 40 季</option>
+                      <option value="all">全部赛季</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              <div className="space-y-3">
+              {[...visibleHonors].reverse().map((record) => {
                 const isExpanded = expandedSeason === record.seasonNumber;
                 const observerTrajectory = (world.observerSeasonTrajectories ?? [])
                   .find(entry => entry.seasonNumber === record.seasonNumber);
@@ -268,12 +310,25 @@ function HistoryContent({ world }: { world: GameWorld }) {
                   ? world.teamSeasonRecords[observerTrajectory.teamId]
                     ?.find(entry => entry.seasonNumber === record.seasonNumber)
                   : undefined;
+                const observerImpression = observerTrajectory
+                  ? describeObserverImpression(observerTrajectory.judgment)
+                  : undefined;
                 const storyCount = (world.storylineHistory ?? [])
                   .filter(storyline => storyline.seasonNumber === record.seasonNumber)
                   .length;
                 return (
-                  <div key={record.seasonNumber} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                    <button onClick={() => setExpandedSeason(isExpanded ? null : record.seasonNumber)}
+                  <div
+                    key={record.seasonNumber}
+                    data-testid="season-history-row"
+                    className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800"
+                  >
+                    <button
+                      data-testid="season-history-toggle"
+                      onClick={() => {
+                        setExpandedSeason(isExpanded ? null : record.seasonNumber);
+                        setDetailedSeason(null);
+                      }}
+                      aria-expanded={isExpanded}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors cursor-pointer text-left"
                     >
                       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -293,6 +348,11 @@ function HistoryContent({ world }: { world: GameWorld }) {
                             主题：{getObservationThemeLabel(observerTrajectory.theme.type)}
                           </span>
                         )}
+                        {observerImpression && (
+                          <span className="shrink-0 whitespace-nowrap text-[10px] text-sky-300">
+                            {observerImpression.label}
+                          </span>
+                        )}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {storyCount > 0 && (
@@ -305,14 +365,36 @@ function HistoryContent({ world }: { world: GameWorld }) {
                       </div>
                     </button>
                     {isExpanded && (
-                      <div className="border-t border-slate-700 p-4">
-                        <SeasonReview world={world} seasonNumber={record.seasonNumber} />
+                      <div className="border-t border-slate-700 px-4 pb-4">
+                        {expandedSummary?.seasonNumber === record.seasonNumber && (
+                          <SeasonHistorySummaryPanel summary={expandedSummary} />
+                        )}
+                        <div className="mt-3 border-t border-slate-700/60 pt-3">
+                          <button
+                            type="button"
+                            data-testid="toggle-season-detail"
+                            onClick={() => setDetailedSeason(
+                              detailedSeason === record.seasonNumber ? null : record.seasonNumber,
+                            )}
+                            aria-expanded={detailedSeason === record.seasonNumber}
+                            className="flex min-h-11 w-full items-center justify-between rounded-md border border-slate-700 px-3 text-left text-xs font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-900/30 hover:text-white"
+                          >
+                            <span>{detailedSeason === record.seasonNumber ? '收起完整赛季档案' : '查看完整赛季档案'}</span>
+                            <span aria-hidden="true">{detailedSeason === record.seasonNumber ? '−' : '+'}</span>
+                          </button>
+                          {detailedSeason === record.seasonNumber && (
+                            <div className="mt-4" data-testid="season-detail">
+                              <SeasonReview world={world} seasonNumber={record.seasonNumber} />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
                 );
               })}
-            </div>
+              </div>
+            </>
           )}
         </>
       )}
@@ -506,7 +588,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
                     <span className="text-xl shrink-0">{r.icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] text-slate-500">{r.label}</div>
-                      <div className="text-xs text-slate-200 font-medium mt-0.5 truncate">{r.team}</div>
+                      <div className="text-xs text-slate-200 font-medium mt-0.5 truncate" title={r.team}>{r.team}</div>
                     </div>
                     {r.detail && <span className="text-xs text-amber-400 font-bold shrink-0">{r.detail}</span>}
                   </div>
@@ -669,6 +751,97 @@ function HistoryContent({ world }: { world: GameWorld }) {
   );
 }
 
+const EVENT_PRESENTATION: Record<SeasonHistoryEvent['type'], {
+  icon: IconName;
+  tone: string;
+  border: string;
+}> = {
+  league: { icon: 'trophy', tone: 'text-amber-300', border: 'border-amber-700/50' },
+  cups: { icon: 'medal', tone: 'text-sky-300', border: 'border-sky-700/50' },
+  movement: { icon: 'trend-up', tone: 'text-emerald-300', border: 'border-emerald-700/50' },
+  deviation: { icon: 'burst', tone: 'text-rose-300', border: 'border-rose-700/50' },
+  story: { icon: 'sparkle', tone: 'text-violet-300', border: 'border-violet-700/50' },
+  person: { icon: 'star-glow', tone: 'text-amber-300', border: 'border-amber-700/50' },
+};
+
+const LABEL_TONE: Record<SeasonHistorySummary['labels'][number]['type'], string> = {
+  dynasty: 'border-amber-700/50 bg-amber-950/30 text-amber-200',
+  promotion_run: 'border-emerald-700/50 bg-emerald-950/30 text-emerald-200',
+  relegation_run: 'border-rose-700/50 bg-rose-950/30 text-rose-200',
+  decline: 'border-slate-600 bg-slate-900/50 text-slate-300',
+};
+
+function SeasonHistorySummaryPanel({ summary }: { summary: SeasonHistorySummary }) {
+  return (
+    <section className="pt-4" data-testid="season-history-summary">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-100">这个赛季发生了什么</h3>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            只保留能够从冻结记录核对的关键事实
+          </p>
+        </div>
+        <span className="text-[11px] text-slate-500">{summary.events.length} 条关键事件</span>
+      </div>
+
+      {summary.labels.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="长期历史标签">
+          {summary.labels.map(label => (
+            <Link
+              key={label.id}
+              to={`/team/${label.teamId}`}
+              title={label.detail}
+              className={`rounded border px-2 py-1 text-[11px] font-semibold transition-colors hover:text-white ${LABEL_TONE[label.type]}`}
+            >
+              {label.title}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 divide-y divide-slate-700/60 border-y border-slate-700/60">
+        {summary.events.map(event => {
+          const presentation = EVENT_PRESENTATION[event.type];
+          return (
+            <article
+              key={event.id}
+              data-event-type={event.type}
+              className={`grid grid-cols-[1.75rem_minmax(0,1fr)] gap-2 border-l-2 py-3 pl-2 ${presentation.border}`}
+            >
+              <Icon name={presentation.icon} size={16} className={`mt-0.5 ${presentation.tone}`} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h4 className="text-xs font-bold text-slate-200">{event.title}</h4>
+                  {event.replayStatus === 'summary_only' && (
+                    <span className="text-[10px] text-slate-500">仅保留摘要</span>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] leading-5 text-slate-400">{event.detail}</p>
+                {event.links.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    {event.links.map(link => (
+                      <Link
+                        key={`${event.id}-${link.kind}-${link.to}-${link.label}`}
+                        to={link.to}
+                        data-link-kind={link.kind}
+                        className={`text-[11px] font-medium hover:text-white ${
+                          link.kind === 'match' ? 'text-emerald-300' : 'text-sky-300'
+                        }`}
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function godHandFieldLabel(field: GodHandIntervention['effects'][number]['field']): string {
   const labels: Record<GodHandIntervention['effects'][number]['field'], string> = {
     attack: '进攻',
@@ -700,7 +873,7 @@ function RecordDetail({ emoji, title, team, detail, teamId, color }: { emoji: st
         <div className="text-[10px] text-slate-500">{title}</div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color ?? '#666' }} />
-          <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-200 hover:text-blue-400 truncate">{team}</Link>
+          <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-200 hover:text-blue-400 truncate" title={team}>{team}</Link>
         </div>
         <div className="text-[10px] text-slate-400 mt-0.5">{detail}</div>
       </div>

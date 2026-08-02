@@ -40,7 +40,7 @@ export function scoreClubSeason(record: SeasonRecord): number {
     '冠军': 8, '亚军': 5, '四强': 3, '八强': 1.5, '小组赛淘汰': 0.5,
   });
   const continentalCup = cupPoints(record.continentalCupResult, {
-    '冠军': 18, '亚军': 12, '四强': 7, '八强': 4, '16强': 2,
+    '冠军': 18, '亚军': 12, '四强': 7, '八强': 4, '16强': 2, '小组赛淘汰': 1,
   });
   const worldCup = cupPoints(record.worldCupResult, {
     '冠军': 25, '亚军': 17, '四强': 10, '八强': 6, '16强': 3, '小组赛淘汰': 1,

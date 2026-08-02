@@ -1,0 +1,118 @@
+import { getFeedbackPreferences } from './preferences';
+import { shouldVibrateForCue, type GameFeedbackCue } from './feedback-policy';
+
+type AudioContextConstructor = new () => AudioContext;
+
+export interface FeedbackDelivery {
+  cue: GameFeedbackCue;
+  audioPlayed: boolean;
+  hapticPlayed: boolean;
+}
+
+const RATE_LIMIT_MS: Record<GameFeedbackCue, number> = {
+  start: 800,
+  goal: 250,
+  major_upset: 2_000,
+  story_upgrade: 2_000,
+  season_end: 2_000,
+};
+
+let audioContext: AudioContext | null = null;
+const lastCueAt = new Map<GameFeedbackCue, number>();
+let lastHapticAt = Number.NEGATIVE_INFINITY;
+
+function audioContextConstructor(): AudioContextConstructor | null {
+  if (typeof window === 'undefined') return null;
+  const audioWindow = window as typeof window & { webkitAudioContext?: AudioContextConstructor };
+  return window.AudioContext ?? audioWindow.webkitAudioContext ?? null;
+}
+
+function reducedFeedbackEnvironment(): boolean {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return true;
+  if (typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return true;
+  if (typeof navigator !== 'undefined') {
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    if ((navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 1)
+      || (deviceMemory != null && deviceMemory <= 1)) return true;
+  }
+  return false;
+}
+
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+export function unlockGameAudio(): boolean {
+  if (!getFeedbackPreferences().soundEnabled || reducedFeedbackEnvironment()) return false;
+  try {
+    if (!audioContext || audioContext.state === 'closed') {
+      const AudioContextClass = audioContextConstructor();
+      if (!AudioContextClass) return false;
+      audioContext = new AudioContextClass();
+    }
+    if (audioContext.state === 'suspended') void audioContext.resume();
+    return true;
+  } catch {
+    audioContext = null;
+    return false;
+  }
+}
+
+export function suspendGameAudio(): void {
+  if (audioContext?.state === 'running') {
+    try {
+      void audioContext.suspend();
+    } catch {
+      // Audio is optional; background transitions cannot affect the game loop.
+    }
+  }
+}
+
+function playAudioCue(cue: GameFeedbackCue): boolean {
+  if (!getFeedbackPreferences().soundEnabled || reducedFeedbackEnvironment()) return false;
+  const timestamp = now();
+  if (timestamp - (lastCueAt.get(cue) ?? Number.NEGATIVE_INFINITY) < RATE_LIMIT_MS[cue]) return false;
+  if (!unlockGameAudio() || !audioContext) return false;
+  const context = audioContext;
+  lastCueAt.set(cue, timestamp);
+  void import('./feedback-sounds')
+    .then(({ scheduleFeedbackCue }) => {
+      if (!getFeedbackPreferences().soundEnabled || reducedFeedbackEnvironment()
+        || context.state === 'closed') return;
+      scheduleFeedbackCue(context, cue);
+    })
+    .catch(() => {
+      // A missing optional sound chunk must never affect the game.
+    });
+  return true;
+}
+
+function playHapticCue(cue: GameFeedbackCue): boolean {
+  const preferences = getFeedbackPreferences();
+  if (!preferences.hapticsEnabled || !shouldVibrateForCue(cue) || reducedFeedbackEnvironment()) return false;
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return false;
+  const timestamp = now();
+  if (timestamp - lastHapticAt < 2_000) return false;
+  try {
+    const accepted = navigator.vibrate(cue === 'season_end' ? [18, 40, 24] : 22);
+    if (accepted) lastHapticAt = timestamp;
+    return accepted;
+  } catch {
+    return false;
+  }
+}
+
+export function playGameFeedback(cue: GameFeedbackCue): FeedbackDelivery {
+  const delivery = {
+    cue,
+    audioPlayed: playAudioCue(cue),
+    hapticPlayed: playHapticCue(cue),
+  };
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<FeedbackDelivery>('football-feedback-played', {
+      detail: delivery,
+    }));
+  }
+  return delivery;
+}

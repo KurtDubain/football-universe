@@ -11,6 +11,15 @@ import { BALANCE } from '../config/balance';
 import type { GameWorld } from '../engine/season/season-manager';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 import { CHANGELOG } from '../config/changelog';
+import {
+  setFeedbackPreferences,
+  useFeedbackPreferences,
+} from '../feedback/preferences';
+import {
+  playGameFeedback,
+  suspendGameAudio,
+  unlockGameAudio,
+} from '../feedback/game-feedback';
 
 const DevDataHealthPanel = import.meta.env.DEV
   ? lazy(() => import('../components/DataHealthPanel'))
@@ -34,6 +43,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const feedbackPreferences = useFeedbackPreferences();
 
   const saveKey = SAVE_STORAGE_KEY;
   let saveSize = '未知';
@@ -80,15 +90,15 @@ function SettingsContent({ world }: { world: GameWorld }) {
     },
     {
       key: 'league', title: '联赛体系', icon: '🏟️',
-      content: '三级联赛：顶级(16队)、甲级(8队)、乙级(8队)。顶级双循环30轮，甲乙双循环14轮。赛季末：顶级后3名降入甲级，甲级前2名直升，甲级第3 vs 顶级倒数第3打保级附加赛(主客两回合)。甲级后2名降入乙级，乙级前2名升入甲级。积分相同比净胜球，再同比进球数。',
+      content: '三级联赛：顶级(16队)、甲级(8队)、乙级(8队)。顶级双循环30轮，甲乙双循环14轮。赛季末：顶级后2名直接降级，倒数第3与甲级第3进行中立场单回合附加赛；甲级与乙级之间采用相同规则。积分相同比净胜球，再同比进球数。',
     },
     {
       key: 'cups', title: '杯赛赛制', icon: '🏆',
-      content: '联赛杯：32队单场淘汰。超级杯：16队分组后进入淘汰赛。洲际杯：S2起每4季举办一次，大陆8队、南洲和东洲各4队，按近5季俱乐部积分取得资格。环球冠军杯：每4季举办一次，全部32队参赛，是最高荣誉。',
+      content: '联赛杯：32队中立场单回合淘汰。超级杯：16队主客场小组赛后进入两回合淘汰赛，决赛为中立场单回合。洲际杯：S5起每6季举办一次，大陆8队、南洲和东洲各4队，按近5季俱乐部积分取得资格，采用中立场单循环小组赛和单回合淘汰赛。环球冠军杯：每4季举办一次，32队进行3轮中立场小组赛及单回合淘汰赛。',
     },
     {
       key: 'match', title: '比赛模拟', icon: '⚽',
-      content: `影响比赛结果的因素：球队OVR、教练加成、主场优势(${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%)、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)、动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)、弱队补正(${(BALANCE.UNDERDOG_BOOST * 100).toFixed(0)}%)。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
+      content: `影响比赛结果的因素：球队OVR、教练加成、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)、动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)、弱队补正(${(BALANCE.UNDERDOG_BOOST * 100).toFixed(0)}%)。真实主场比赛具有${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%主场优势；世界杯、洲际杯、联赛杯、单回合决赛和升降级附加赛均为中立场，不应用该加成。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
     },
     {
       key: 'coach', title: '教练系统', icon: '👔',
@@ -127,6 +137,55 @@ function SettingsContent({ world }: { world: GameWorld }) {
         </div>
         <p className="text-[10px] text-slate-500 mt-2">部分内容（球队名称、新闻文案）暂时仅支持中文</p>
       </div>
+
+      <section
+        data-testid="feedback-settings"
+        className="rounded-lg border border-slate-700 bg-slate-800 p-4"
+        aria-labelledby="feedback-settings-title"
+      >
+        <h3 id="feedback-settings-title" className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          关键反馈
+        </h3>
+        <div className="divide-y divide-slate-700/60">
+          <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
+            <span>
+              <span className="block text-sm font-medium text-slate-200">关键声音</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">只在开局、进球、重大爆冷、故事升级和赛季结束时播放</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              data-testid="sound-preference"
+              checked={feedbackPreferences.soundEnabled}
+              onChange={event => {
+                const soundEnabled = event.target.checked;
+                setFeedbackPreferences({ soundEnabled });
+                if (soundEnabled) {
+                  unlockGameAudio();
+                  playGameFeedback('start');
+                } else {
+                  suspendGameAudio();
+                }
+              }}
+              className="h-5 w-5 shrink-0 accent-emerald-500"
+            />
+          </label>
+          <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
+            <span>
+              <span className="block text-sm font-medium text-slate-200">重大时刻触觉</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">默认关闭，仅在重大爆冷和赛季结束时短促触发</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              data-testid="haptics-preference"
+              checked={feedbackPreferences.hapticsEnabled}
+              onChange={event => setFeedbackPreferences({ hapticsEnabled: event.target.checked })}
+              className="h-5 w-5 shrink-0 accent-emerald-500"
+            />
+          </label>
+        </div>
+      </section>
 
       {/* Favorite teams (up to 3) */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
@@ -422,7 +481,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
 function StatCard({ label, value, small }: { label: string; value: string; small?: boolean }) {
   return (
     <div className="bg-slate-700/30 rounded-lg p-2.5 text-center">
-      <div className={`font-bold text-slate-100 truncate ${small ? 'text-xs' : 'text-lg'}`}>{value}</div>
+      <div className={`font-bold text-slate-100 truncate ${small ? 'text-xs' : 'text-lg'}`} title={value}>{value}</div>
       <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
     </div>
   );

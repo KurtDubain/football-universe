@@ -4,6 +4,7 @@ import type { MatchEvent, MatchResult } from '../../types/match';
 import type { TransferRecord } from '../../types/transfer';
 import { playerTeamStatKey } from '../players/stats';
 import { selectMatchday } from '../players/injuries';
+import { isNeutralVenueFixture } from '../competitions/venue-policy';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -1615,6 +1616,48 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
     }
   }
 
+  const validateNeutralSingleRoundGroup = (
+    fixtures: GameWorld['superCup']['groups'][number]['fixtures'],
+    context: string,
+  ) => {
+    const pairs = new Set<string>();
+    const appearances = new Map<string, number>();
+    for (const fixture of fixtures) {
+      pairs.add([fixture.homeTeamId, fixture.awayTeamId].sort().join(':'));
+      appearances.set(fixture.homeTeamId, (appearances.get(fixture.homeTeamId) ?? 0) + 1);
+      appearances.set(fixture.awayTeamId, (appearances.get(fixture.awayTeamId) ?? 0) + 1);
+      if (fixture.isNeutralVenue !== true) {
+        pushIssue(issues, {
+          severity: 'error',
+          code: 'neutral_group_fixture_not_neutral',
+          message: `${context} fixture ${fixture.id} is missing its neutral venue policy.`,
+          fixtureId: fixture.id,
+        });
+      }
+    }
+    if (
+      fixtures.length !== 6
+      || pairs.size !== 6
+      || appearances.size !== 4
+      || [...appearances.values()].some(count => count !== 3)
+    ) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'neutral_group_schedule_invalid',
+        message: `${context} is not a four-team, three-round single round robin.`,
+      });
+    }
+  };
+  for (const [index, group] of (world.worldCup?.groups ?? []).entries()) {
+    validateNeutralSingleRoundGroup(group.fixtures, `World Cup group ${index + 1}`);
+  }
+  for (const cup of Object.values(world.continentalCups ?? {})) {
+    if (!cup) continue;
+    for (const [index, group] of cup.groups.entries()) {
+      validateNeutralSingleRoundGroup(group.fixtures, `${cup.name} group ${index + 1}`);
+    }
+  }
+
   for (const [windowIndex, window] of (world.seasonState?.calendar ?? []).entries()) {
     for (const fixture of window.fixtures ?? []) {
       if (!teamBaseIds.has(fixture.homeTeamId)) {
@@ -1623,6 +1666,15 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
           code: 'fixture_unknown_home_team',
           message: `Fixture ${fixture.id} references unknown home team ${fixture.homeTeamId}.`,
           teamId: fixture.homeTeamId,
+          fixtureId: fixture.id,
+        });
+      }
+      const expectedNeutral = isNeutralVenueFixture(fixture);
+      if (expectedNeutral !== Boolean(fixture.isNeutralVenue)) {
+        pushIssue(issues, {
+          severity: 'error',
+          code: 'fixture_venue_policy_mismatch',
+          message: `Fixture ${fixture.id} has a venue policy inconsistent with ${fixture.competitionType}/${fixture.roundLabel}.`,
           fixtureId: fixture.id,
         });
       }
@@ -1641,6 +1693,18 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       ? currentSeasonStartGlobalIdx + completedResultWindowOrdinal
       : undefined;
     for (const result of window.results ?? []) {
+      const expectedNeutral = isNeutralVenueFixture({
+        competitionType: result.competitionType,
+        roundLabel: result.roundLabel,
+      });
+      if (expectedNeutral !== Boolean(result.isNeutralVenue)) {
+        pushIssue(issues, {
+          severity: 'error',
+          code: 'result_venue_policy_mismatch',
+          message: `Result ${result.fixtureId} has an inconsistent venue policy.`,
+          fixtureId: result.fixtureId,
+        });
+      }
       validateResult(
         world,
         result,

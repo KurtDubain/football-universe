@@ -165,7 +165,7 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
         </span>
 
         {/* Player */}
-        <Link to={`/player/${record.playerId}`} className="text-sm text-slate-100 font-medium hover:text-blue-300 truncate min-w-[60px]">
+        <Link to={`/player/${record.playerId}`} className="text-sm text-slate-100 font-medium hover:text-blue-300 truncate min-w-[60px]" title={record.playerName}>
           {record.playerName}
         </Link>
 
@@ -188,7 +188,7 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
         )}
       </div>
       {record.reason && (
-        <div className="text-[10px] text-slate-500 ml-12 mt-0.5 truncate">{record.reason}</div>
+        <div className="text-[10px] text-slate-500 ml-12 mt-0.5 truncate" title={record.reason}>{record.reason}</div>
       )}
     </div>
   );

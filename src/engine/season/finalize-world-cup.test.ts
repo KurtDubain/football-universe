@@ -77,10 +77,10 @@ describe('finalizeWorldCup — prize money payout (Phase H regression)', () => {
   it('pays winner / runner-up / semi prizes to teamFinances cash', () => {
     const world = mkBaseWorld();
     const result = finalizeWorldCup(world);
-    expect(result.teamFinances.WIN.cash).toBe(100 + CUP_PRIZE.world_cup_winner);   // 100 + 30 = 130
-    expect(result.teamFinances.RU.cash).toBe(80 + CUP_PRIZE.world_cup_runner_up);   // 80 + 15 = 95
-    expect(result.teamFinances.S1.cash).toBe(60 + CUP_PRIZE.world_cup_semi);        // 60 + 5 = 65
-    expect(result.teamFinances.S2.cash).toBe(50 + CUP_PRIZE.world_cup_semi);        // 50 + 5 = 55
+    expect(result.teamFinances.WIN.cash).toBe(100 + CUP_PRIZE.world_cup_winner);
+    expect(result.teamFinances.RU.cash).toBe(80 + CUP_PRIZE.world_cup_runner_up);
+    expect(result.teamFinances.S1.cash).toBe(60 + CUP_PRIZE.world_cup_semi);
+    expect(result.teamFinances.S2.cash).toBe(50 + CUP_PRIZE.world_cup_semi);
   });
 
   it('patches the just-archived FinanceSeasonRecord (history.tail) so breakdown shows WC prize', () => {

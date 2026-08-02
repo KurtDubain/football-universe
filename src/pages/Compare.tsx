@@ -238,7 +238,7 @@ function CompareContent({ world }: { world: GameWorld }) {
                         {m.homeGoals} - {m.awayGoals}
                       </span>
                       <span className="flex-1 whitespace-nowrap text-slate-400 text-right" title={getTeamName(m.away, world.teamBases)}>{getTeamShortName(m.away, world.teamBases)}</span>
-                      <span className="text-[10px] text-slate-600 w-12 text-right shrink-0 truncate">{m.comp}</span>
+                      <span className="text-[10px] text-slate-600 w-12 text-right shrink-0 truncate" title={m.comp}>{m.comp}</span>
                       {m.et && <span className="text-[9px] text-amber-500">ET</span>}
                       {m.pen && <span className="text-[9px] text-amber-500">P{m.pen}</span>}
                     </div>

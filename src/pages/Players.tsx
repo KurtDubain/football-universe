@@ -169,7 +169,7 @@ export default function Players() {
                 className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: teamBase.color }}
               />
-              <span className="text-sm text-slate-300 group-hover:text-blue-300 truncate">
+              <span className="text-sm text-slate-300 group-hover:text-blue-300 truncate" title={teamBase.name}>
                 {teamBase.shortName}
               </span>
             </Link>

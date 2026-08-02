@@ -863,9 +863,13 @@ export const useGameStore = create<GameStore>()(
 );
 
 
-// The production audit runs against a built preview. Expose the local-only
-// store bridge only for an explicit audit URL; normal sessions expose nothing.
-if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('audit')) {
+// Browser audits use a dedicated build. Normal production bundles compile this
+// branch away, so an URL parameter alone can never expose the store.
+if (
+  import.meta.env.VITE_ENABLE_AUDIT === 'true'
+  && typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).has('audit')
+) {
   const auditWindow = window as unknown as {
     __gameStore?: typeof useGameStore;
     __gameAudit?: {

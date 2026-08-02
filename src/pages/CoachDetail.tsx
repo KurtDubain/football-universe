@@ -257,7 +257,7 @@ export default function CoachDetail() {
                 <div className="space-y-1">
                   {stintImpacts.map((s, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-300 flex-1 truncate">{s.teamName}</span>
+                      <span className="text-slate-300 flex-1 truncate" title={s.teamName}>{s.teamName}</span>
                       <span className={`font-bold tabular-nums ${s.delta > 0 ? 'text-emerald-400' : s.delta < 0 ? 'text-red-400' : 'text-slate-500'}`}>
                         {s.delta > 0 ? `+${s.delta}` : s.delta} OVR
                       </span>

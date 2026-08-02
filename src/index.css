@@ -49,6 +49,11 @@
 
 * { box-sizing: border-box; }
 
+:where(button, a, input, select, textarea, summary, [role='button'], [role='tab']):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 body {
   margin: 0;
   background: var(--bg-primary);
@@ -58,6 +63,46 @@ body {
 }
 
 #root { min-height: 100vh; }
+
+.welcome-stage {
+  background-color: #080c10;
+}
+
+.welcome-universe-art {
+  object-position: center 48%;
+  animation: welcome-art-enter 900ms var(--ease-out) both;
+}
+
+.welcome-art-shade {
+  background:
+    linear-gradient(180deg, rgb(4 7 10 / 72%) 0%, rgb(4 7 10 / 42%) 44%, rgb(4 7 10 / 86%) 100%),
+    linear-gradient(90deg, rgb(4 7 10 / 54%) 0%, rgb(4 7 10 / 10%) 46%, rgb(4 7 10 / 42%) 100%);
+}
+
+.welcome-start-panel {
+  background: rgb(11 16 21 / 88%);
+  backdrop-filter: blur(12px);
+}
+
+.story-chapter-mark {
+  position: relative;
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 3rem;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.story-chapter-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 5%);
+}
 
 .ui-page-shell {
   width: 100%;
@@ -412,6 +457,35 @@ body {
 }
 
 @media (max-width: 639px) {
+  :where(button, [role='button'], [role='tab'], summary) {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  :where(select, textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='hidden'])) {
+    min-height: 2.75rem;
+  }
+  .text-\[8px\],
+  .text-\[9px\],
+  .text-\[10px\] {
+    font-size: 0.6875rem;
+  }
+  .mobile-nav-item { min-height: 2.75rem; }
+  [data-testid='player-directory-row'] > td {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .mobile-drawer-panel {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app-shell-header {
+    height: calc(3rem + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  .app-route-content {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+  }
   .matchday-focus-fixture[data-secondary='true'] {
     min-height: 2.75rem;
     padding-block: 0;
@@ -453,6 +527,10 @@ body {
 @keyframes slide-up {
   from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+@keyframes welcome-art-enter {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
 }
 @keyframes slide-down {
   from { transform: translateY(-12px); opacity: 0; }
@@ -609,4 +687,13 @@ body {
   }
   .hover-lift:hover,
   .press-scale:active { transform: none; }
+}
+
+@media (forced-colors: active), (prefers-contrast: more) {
+  .decorative-artwork { display: none !important; }
+  .welcome-art-shade { background: Canvas; opacity: 0.92; }
+  .welcome-start-panel {
+    background: Canvas;
+    backdrop-filter: none;
+  }
 }

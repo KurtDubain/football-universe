@@ -53,7 +53,7 @@ async function main(): Promise<void> {
         const favorite = document.querySelector('[data-testid="favorite-team-summaries"]');
         const focus = document.querySelector('[data-testid="focus-matches"]');
         const matchdayTab = [...document.querySelectorAll('button')]
-          .find(button => button.textContent?.trim() === '比赛日');
+          .find(button => button.getAttribute('role') === 'tab' && button.textContent?.trim() === '比赛日');
         return {
           favoriteTop: favorite?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
           tabsTop: matchdayTab?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,

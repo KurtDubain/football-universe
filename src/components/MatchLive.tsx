@@ -12,6 +12,13 @@ import {
   PLAYBACK_MODE_OPTIONS,
   type PlaybackMode,
 } from './match-live/playback-mode';
+import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
+import {
+  setFeedbackPreferences,
+  useFeedbackPreferences,
+} from '../feedback/preferences';
+import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
+import { DecorativeImage } from './DecorativeImage';
 
 interface Props {
   result: MatchResult;
@@ -80,6 +87,20 @@ const initialPlaybackState: PlaybackState = {
   hasHadExtraTimeBreak: false,
   hasHadShootoutBreak: false,
 };
+
+function getPlaybackStageLabel(
+  state: Pick<PlaybackState, 'minute' | 'phase'>,
+  hasPenalties: boolean,
+): string {
+  if (state.phase === 'finished') return '全场';
+  if (state.phase === 'halftime') return '中场';
+  if (state.phase === 'extra_time_break') return '加时前';
+  if (state.phase === 'shootout_break') return '点球前';
+  if (hasPenalties && state.minute > 120) return '点球大战';
+  if (state.minute > 90) return '加时赛';
+  if (state.minute > 45) return '下半场';
+  return '上半场';
+}
 
 function isScoreEvent(event: MatchEvent): boolean {
   return event.type === 'goal' || event.type === 'own_goal';
@@ -197,7 +218,8 @@ export default function MatchLive(props: Props) {
 
 function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
-  const [muted, setMuted] = useState(true);
+  const [locallyMuted, setLocallyMuted] = useState(false);
+  const feedbackPreferences = useFeedbackPreferences();
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
   const [reducedMotion, setReducedMotion] = useState(() =>
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -225,6 +247,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const extraTimeBreak = playback.phase === 'extra_time_break';
   const shootoutBreak = playback.phase === 'shootout_break';
   const isBreak = halftime || extraTimeBreak || shootoutBreak;
+  const stageLabel = getPlaybackStageLabel(playback, Boolean(result.penalties));
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -287,20 +310,17 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   }, [isBreak, pageVisible, playback.mode, reducedMotion]);
 
   useEffect(() => {
-    if (muted || !playback.flashEvent) return;
-    const AudioContextClass = window.AudioContext;
-    const audioContext = new AudioContextClass();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const isGoal = playback.flashEvent.type === 'goal' || playback.flashEvent.type === 'own_goal' || playback.flashEvent.type === 'penalty_goal';
-    oscillator.frequency.value = isGoal ? 660 : 330;
-    gain.gain.setValueAtTime(0.035, audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (isGoal ? 0.22 : 0.1));
-    oscillator.connect(gain).connect(audioContext.destination);
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + (isGoal ? 0.22 : 0.1));
-    oscillator.addEventListener('ended', () => void audioContext.close(), { once: true });
-  }, [muted, playback.flashEvent, playback.flashVersion]);
+    if (!feedbackPreferences.soundEnabled || locallyMuted || !playback.flashEvent) return;
+    const isGoal = playback.flashEvent.type === 'goal'
+      || playback.flashEvent.type === 'own_goal'
+      || playback.flashEvent.type === 'penalty_goal';
+    if (isGoal) playGameFeedback('goal');
+  }, [
+    feedbackPreferences.soundEnabled,
+    locallyMuted,
+    playback.flashEvent,
+    playback.flashVersion,
+  ]);
 
   useEffect(() => {
     if (!playback.flashEvent) return;
@@ -388,9 +408,19 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         </div>
 
         {/* Scoreboard with team colors */}
-        <div className="relative overflow-hidden"
+        <div className="live-scoreboard relative overflow-hidden"
           style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}18 0%, #0f172a 40%, #0f172a 60%, ${at?.color ?? '#333'}18 100%)` }}
         >
+          <DecorativeImage
+            src={liveScoreboardArtwork}
+            testId="live-scoreboard-art"
+            className="absolute inset-0 h-full w-full object-cover opacity-55"
+          />
+          <div
+            className="absolute inset-0"
+            aria-hidden="true"
+            style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}2e 0%, transparent 38%, transparent 62%, ${at?.color ?? '#333'}2e 100%)` }}
+          />
           {/* Goal flash overlay */}
           {playback.goalFlash && (
             <div className="absolute inset-0 animate-fade-in" style={{
@@ -400,11 +430,14 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             }} />
           )}
 
-          <div className="relative flex items-center justify-center py-5 px-4 gap-2">
+          <div className="relative flex items-center justify-center gap-2 px-4 pb-8 pt-5">
             {/* Home */}
             <div className="flex-1 text-right">
               <div className="flex items-center gap-2 justify-end">
-                <span className="text-sm sm:text-lg font-bold text-slate-100 truncate">{ht?.name ?? '主队'}</span>
+                <span className="min-w-0 truncate text-sm font-bold text-slate-100 sm:text-lg" title={ht?.name ?? '主队'}>
+                  <span className="sm:hidden">{ht?.shortName ?? ht?.name ?? '主队'}</span>
+                  <span className="hidden sm:inline">{ht?.name ?? '主队'}</span>
+                </span>
                 <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: ht?.color ?? '#666' }} />
               </div>
             </div>
@@ -428,9 +461,18 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: at?.color ?? '#666' }} />
-                <span className="text-sm sm:text-lg font-bold text-slate-100 truncate">{at?.name ?? '客队'}</span>
+                <span className="min-w-0 truncate text-sm font-bold text-slate-100 sm:text-lg" title={at?.name ?? '客队'}>
+                  <span className="sm:hidden">{at?.shortName ?? at?.name ?? '客队'}</span>
+                  <span className="hidden sm:inline">{at?.name ?? '客队'}</span>
+                </span>
               </div>
             </div>
+          </div>
+          <div
+            data-testid="live-stage"
+            className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-sm border border-white/10 bg-black/45 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-300"
+          >
+            {stageLabel}{paused ? ' · 已暂停' : ''}
           </div>
         </div>
 
@@ -498,7 +540,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                   : <span>•</span>}
               </span>
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: e.teamId === result.homeTeamId ? ht?.color : at?.color }} />
-              <span className="truncate">{e.description}</span>
+              <span className="truncate" title={e.description}>{e.description}</span>
             </div>
           ))}
         </div>
@@ -506,7 +548,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         {/* Controls */}
         <div
           data-testid="live-controls"
-          className="grid grid-cols-1 gap-2 border-t border-slate-800/60 px-4 py-2.5 min-[360px]:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid grid-cols-1 gap-2 border-t border-slate-800/60 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="flex min-w-0 gap-1">
             <div
@@ -534,9 +576,30 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
             <button onClick={() => dispatch({ type: 'togglePause' })} disabled={isBreak}
               className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60"
             >{isBreak ? '休息' : paused ? '继续' : '暂停'}</button>
-            <button onClick={() => setMuted(value => !value)} aria-label={muted ? '开启比赛声音' : '关闭比赛声音'}
-              className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer"
-            >{muted ? '静音' : '声音'}</button>
+            <button
+              type="button"
+              data-testid="live-sound-toggle"
+              aria-label={!feedbackPreferences.soundEnabled
+                ? '开启全局声音'
+                : locallyMuted ? '开启本场声音' : '关闭本场声音'}
+              aria-pressed={feedbackPreferences.soundEnabled && !locallyMuted}
+              onClick={() => {
+                if (!feedbackPreferences.soundEnabled) {
+                  setFeedbackPreferences({ soundEnabled: true });
+                  setLocallyMuted(false);
+                  unlockGameAudio();
+                  return;
+                }
+                setLocallyMuted(value => !value);
+              }}
+              className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700 sm:min-h-0"
+            >
+              <Icon
+                name={feedbackPreferences.soundEnabled && !locallyMuted ? 'volume' : 'volume-off'}
+                size={14}
+              />
+              <span>{!feedbackPreferences.soundEnabled ? '全局静音' : locallyMuted ? '本场静音' : '声音'}</span>
+            </button>
           </div>
           <div className="flex justify-end gap-2">
             {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}

@@ -17,6 +17,7 @@ import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
+import { cloneSquadsForMutation } from '../players/injuries';
 import { syncPlayerStatSegments, syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
 import { applyAnnualRevaluation } from '../economy/market-value';
@@ -38,6 +39,7 @@ import {
   MAINLAND_CUP_TIERS,
   SMALL_CONTINENTAL_CUP_TIERS,
 } from '../economy/finance';
+import { worldCupConfig } from '../../config/competitions';
 
 /**
  * Walk knockout rounds from latest to earliest, return the round in which
@@ -85,7 +87,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   let transferHistory = world.transferHistory;
   let playerStats = world.playerStats;
   let playerStatSegments = world.playerStatSegments ?? {};
-  let squads = world.squads;
+  // Annual development and some transfer/economy paths mutate Player fields.
+  // Establish one writable ownership boundary before any of those passes.
+  let squads = cloneSquadsForMutation(world.squads);
   // ── A2 retirement / coach-pool locals (introduced in v11) ──
   // Initialised to (defensive) empty arrays so legacy worlds that haven't yet
   // been touched by the v10 → v11 migration don't blow up here. The migration
@@ -426,10 +430,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // for retired players — historical references resolve, but they no longer
   // accrue stats since their uuid is removed from squads.
   //
-  // Reads from `world.squads` directly (still equals the local `squads`
-  // here). Writes to LOCAL `squads`, `retirementHistory`, `coachCandidatePool`,
+  // Reads from the writable local squad snapshot. Writes to LOCAL `squads`,
+  // `retirementHistory`, `coachCandidatePool`,
   // `nextPlayerUuidCounter` — never to `world.X`.
-  const retirementResult = processRetirements(world, rng);
+  const preRetirementSquads = squads;
+  const retirementResult = processRetirements({ ...world, squads: preRetirementSquads }, rng);
   if (retirementResult.retirements.length > 0) {
     squads = retirementResult.squads;
     nextPlayerUuidCounter = retirementResult.nextPlayerUuidCounter;
@@ -450,10 +455,10 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       GK: '门将', DF: '后卫', MF: '中场', FW: '前锋',
     };
     const currentWindowIdx = world.totalElapsedWindows ?? 0;
-    // Build a uuid → player lookup from the PRE-retirement world so we can
+    // Build a uuid → player lookup from the pre-retirement snapshot so we can
     // detect the "forced by long injury" case via injuryHistory.
     const preRetirePlayerLookup = new Map<string, import('../../types/player').Player>();
-    for (const sq of Object.values(world.squads)) {
+    for (const sq of Object.values(preRetirementSquads)) {
       if (!Array.isArray(sq)) continue;
       for (const p of sq) preRetirePlayerLookup.set(p.uuid, p);
     }
@@ -830,10 +835,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
 
 
   // ── Annual market value revaluation ──────────────────────────
-  // Mutates squad in place (also bumps each player's age). Pass the LOCAL
-  // squads/playerStats — when transfers happened, these are fresh records;
-  // when they didn't, they reference the same Player objects as world.squads
-  // and the in-place mutation persists into the new world via the spread.
+  // Mutates squad in place (also bumps each player's age). `squads` has been
+  // isolated from the input world at the start of this function.
   applyAnnualRevaluation(
     squads,
     playerStats,
@@ -989,14 +992,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
         if (teamId === cup.winnerId) {
           continentalCupResult = '冠军';
         } else {
-          // Was this team in the bracket at all?
-          const wasInBracket = cup.rounds.some(r =>
-            r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
-          );
-          if (!wasInBracket) {
+          if (!cup.participantIds.includes(teamId)) {
             continentalCupResult = '未参加';
           } else {
-            // Final loser?
             const finalRound = cup.rounds.at(-1);
             const finalFix = finalRound?.fixtures[0];
             const inFinal = finalFix && (finalFix.homeTeamId === teamId || finalFix.awayTeamId === teamId);
@@ -1006,6 +1004,13 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
               const elimRound = findTeamEliminationRound(cup.rounds, teamId);
               if (elimRound) {
                 continentalCupResult = cnRoundLabel(elimRound);
+              } else if (cup.groupStageCompleted) {
+                const inKnockout = cup.rounds.some(round =>
+                  round.fixtures.some(fixture =>
+                    fixture.homeTeamId === teamId || fixture.awayTeamId === teamId,
+                  ),
+                );
+                continentalCupResult = inKnockout ? '参赛中' : '小组赛淘汰';
               } else {
                 continentalCupResult = '参赛中';
               }
@@ -1454,9 +1459,9 @@ export function initializeWorldCup(world: GameWorld): GameWorld {
   // Initialize world cup
   const worldCup = initWorldCup(participants, seasonNumber, rng);
 
-  // Get group fixtures for all 6 rounds
+  // Get group fixtures for all 3 neutral single-round-robin rounds.
   const groupRoundFixtures: CupFixture[][] = [];
-  for (let r = 1; r <= 6; r++) {
+  for (let r = 1; r <= worldCupConfig.groupRounds; r++) {
     const roundFixtures: CupFixture[] = [];
     for (const group of worldCup.groups) {
       for (const fixture of group.fixtures) {

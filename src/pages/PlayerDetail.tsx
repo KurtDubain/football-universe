@@ -352,8 +352,8 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
               <div key={i} className="flex items-center gap-2 text-xs">
                 <span className="text-amber-400 inline-flex"><Icon name="ball" size={12} /></span>
                 <span className="text-slate-500 w-8 shrink-0">{h.minute}'</span>
-                <span className="text-slate-300 flex-1 truncate">{h.desc}</span>
-                <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[100px]">{h.window}</span>
+                <span className="text-slate-300 flex-1 truncate" title={h.desc}>{h.desc}</span>
+                <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[100px]" title={h.window}>{h.window}</span>
               </div>
             ))}
           </div>
@@ -416,7 +416,7 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
                       className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: row.identity.teamColor ?? '#64748b' }}
                     />
-                    <span className="truncate">{row.identity.teamName}</span>
+                    <span className="truncate" title={row.identity.teamName}>{row.identity.teamName}</span>
                   </Link>
                 </td>
                 <td className="py-1 text-right text-slate-300 tabular-nums">{row.appearances}</td>
@@ -468,8 +468,8 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.color} font-semibold inline-flex items-center gap-1`}>
                 <Icon name={meta.icon} size={11} accent={meta.accent} /> {meta.label}
               </span>
-              <span className="text-slate-400 flex-1 truncate">{a.statLabel}</span>
-              <span className="text-[10px] text-slate-500 truncate max-w-[100px]">于 {a.teamName}</span>
+              <span className="text-slate-400 flex-1 truncate" title={a.statLabel}>{a.statLabel}</span>
+              <span className="text-[10px] text-slate-500 truncate max-w-[100px]" title={`于 ${a.teamName}`}>于 {a.teamName}</span>
             </div>
           );
         })}
@@ -665,7 +665,7 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
               return (
                 <tr key={h.season + '-' + h.teamId} className="border-b border-slate-700/20 hover:bg-slate-700/20">
                   <td className="py-1 text-slate-400">S{h.season}</td>
-                  <td className="py-1 text-slate-300 truncate max-w-[80px]">{teamName}</td>
+                  <td className="py-1 text-slate-300 truncate max-w-[80px]" title={teamName}>{teamName}</td>
                   <td className="py-1 text-right text-slate-400 tabular-nums">{rank}</td>
                   <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}({h.starts ?? h.appearances}/{h.substituteAppearances ?? 0})</td>
                   <td className="py-1 text-right text-slate-400 tabular-nums">{h.minutesPlayed ?? h.appearances * 90}</td>
@@ -704,8 +704,8 @@ function RivalsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
             className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-slate-700/40 transition-colors"
           >
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.teamColor }} />
-            <span className="text-slate-200 font-medium truncate">{r.playerName}</span>
-            <span className="text-[10px] text-slate-500 truncate max-w-[100px]">@ {r.teamName}</span>
+            <span className="text-slate-200 font-medium truncate" title={r.playerName}>{r.playerName}</span>
+            <span className="text-[10px] text-slate-500 truncate max-w-[100px]" title={`@ ${r.teamName}`}>@ {r.teamName}</span>
             {r.isDerbyRival && (
               <span className="text-[10px] px-1 py-0.5 rounded bg-red-900/40 text-red-300 border border-red-700/40 font-semibold">
                 德比
@@ -748,11 +748,11 @@ function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeo
               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeChip.cls}`}>
                 {typeChip.text}
               </span>
-              <Link to={`/team/${t.fromTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]">
+              <Link to={`/team/${t.fromTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]" title={t.fromTeamName}>
                 {t.fromTeamName}
               </Link>
               <span className="text-slate-500">→</span>
-              <Link to={`/team/${t.toTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]">
+              <Link to={`/team/${t.toTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]" title={t.toTeamName}>
                 {t.toTeamName}
               </Link>
               {t.fee && (
@@ -825,7 +825,7 @@ function InjurySection({
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${severityColor[inj.type] ?? ''}`}>
                 {severityLabel[inj.type] ?? inj.type}
               </span>
-              <span className="text-slate-300 flex-1 truncate">{inj.reason}</span>
+              <span className="text-slate-300 flex-1 truncate" title={inj.reason}>{inj.reason}</span>
               <span className="text-[10px] text-slate-500 shrink-0">{inj.durationMatches}场</span>
             </div>
           ))}

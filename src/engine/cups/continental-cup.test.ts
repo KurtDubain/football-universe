@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { ContinentalCupState, CupFixture } from '../../types/cup';
+import type { MatchResult, MatchStats } from '../../types/match';
+import { SeededRNG } from '../match/rng';
 import {
-  initContinentalCup,
   advanceContinentalCup,
   getContinentalCupCurrentFixtures,
+  initContinentalCup,
 } from './continental-cup';
-import { SeededRNG } from '../match/rng';
-import { MatchResult, MatchStats } from '../../types/match';
-import { CupFixture } from '../../types/cup';
 
 const EMPTY_STATS: MatchStats = {
   possession: [50, 50],
@@ -32,137 +32,179 @@ function homeWins(fixture: CupFixture): MatchResult {
     competitionType: 'continental_cup',
     competitionName: '洲际杯',
     roundLabel: fixture.roundName,
+    isNeutralVenue: true,
   };
 }
 
-const TEAMS_8  = Array.from({ length: 8 },  (_, i) => `s${i + 1}`);
-const TEAMS_4  = Array.from({ length: 4 },  (_, i) => `e${i + 1}`);
+function playCurrent(cup: ContinentalCupState): ContinentalCupState {
+  return advanceContinentalCup(
+    cup,
+    getContinentalCupCurrentFixtures(cup).map(homeWins),
+  );
+}
+
+function expectSingleRoundRobin(cup: ContinentalCupState): void {
+  for (const group of cup.groups) {
+    expect(group.teamIds).toHaveLength(4);
+    expect(group.fixtures).toHaveLength(6);
+    expect(group.fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+
+    const appearances = new Map(group.teamIds.map(teamId => [teamId, 0]));
+    const pairs = new Set<string>();
+    for (const fixture of group.fixtures) {
+      appearances.set(fixture.homeTeamId, appearances.get(fixture.homeTeamId)! + 1);
+      appearances.set(fixture.awayTeamId, appearances.get(fixture.awayTeamId)! + 1);
+      pairs.add([fixture.homeTeamId, fixture.awayTeamId].sort().join(':'));
+    }
+    expect([...appearances.values()]).toEqual([3, 3, 3, 3]);
+    expect(pairs.size).toBe(6);
+  }
+}
+
+const TEAMS_8 = Array.from({ length: 8 }, (_, index) => `m${index + 1}`);
+const TEAMS_4 = Array.from({ length: 4 }, (_, index) => `s${index + 1}`);
 
 describe('initContinentalCup', () => {
-  it('rejects mismatched team counts per region', () => {
-    expect(() => initContinentalCup('大陆', ['a', 'b'], 1, new SeededRNG(0))).toThrow(/8/);
-    expect(() => initContinentalCup('南洲', TEAMS_8, 1, new SeededRNG(0))).toThrow(/4/);
-    expect(() => initContinentalCup('东洲', ['a', 'b', 'c'], 1, new SeededRNG(0))).toThrow(/4/);
+  it('rejects mismatched regional fields', () => {
+    expect(() => initContinentalCup('大陆', ['a', 'b'], 5, new SeededRNG(0))).toThrow(/8/);
+    expect(() => initContinentalCup('南洲', TEAMS_8, 5, new SeededRNG(0))).toThrow(/4/);
   });
 
-  it('builds a 大陆杯 QF round covering all 8 qualified teams', () => {
-    const cup = initContinentalCup('大陆', TEAMS_8, 18, new SeededRNG(11));
-    expect(cup.type).toBe('mainland_cup');
-    expect(cup.region).toBe('大陆');
-    expect(cup.name).toBe('大陆杯');
-    expect(cup.currentRound).toBe(1);
-    expect(cup.rounds).toHaveLength(1);
-    expect(cup.rounds[0].roundName).toBe('QF');
-    expect(cup.rounds[0].fixtures).toHaveLength(4);
-    // Every team should appear exactly once
-    const teamsUsed = cup.rounds[0].fixtures.flatMap((f) => [f.homeTeamId, f.awayTeamId]);
-    expect(new Set(teamsUsed).size).toBe(8);
-    // Fixture ids embed the season + type
-    expect(cup.rounds[0].fixtures[0].id).toMatch(/^CC-mainland_cup-S18-QF-M1$/);
+  it('draws Mainland into two seeded neutral groups with one match per pair', () => {
+    const cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(11));
+    expect(cup).toMatchObject({
+      type: 'mainland_cup',
+      region: '大陆',
+      name: '大陆杯',
+      currentRound: 0,
+      groupStageCompleted: false,
+      completed: false,
+    });
+    expect(cup.groups).toHaveLength(2);
+    expect(cup.rounds).toHaveLength(0);
+    expect(new Set(cup.groups.flatMap(group => group.teamIds))).toEqual(new Set(TEAMS_8));
+    expectSingleRoundRobin(cup);
+
+    for (const group of cup.groups) {
+      expect(group.teamIds.filter(teamId => TEAMS_8.slice(0, 2).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_8.slice(2, 4).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_8.slice(4, 6).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_8.slice(6, 8).includes(teamId))).toHaveLength(1);
+    }
   });
 
-  it('builds a 南洲杯 SF round covering four qualified teams', () => {
-    const cup = initContinentalCup('南洲', TEAMS_4, 18, new SeededRNG(22));
-    expect(cup.type).toBe('southern_cup');
-    expect(cup.region).toBe('南洲');
-    expect(cup.rounds[0].roundName).toBe('SF');
-    expect(cup.rounds[0].fixtures).toHaveLength(2);
-    expect(cup.rounds[0].fixtures[0].id).toMatch(/^CC-southern_cup-S18-SF-M1$/);
+  it.each([
+    ['南洲', 'southern_cup'],
+    ['东洲', 'eastern_cup'],
+  ] as const)('draws %s as one neutral group followed by a final', (region, type) => {
+    const cup = initContinentalCup(region, TEAMS_4, 5, new SeededRNG(22));
+    expect(cup.type).toBe(type);
+    expect(cup.groups).toHaveLength(1);
+    expectSingleRoundRobin(cup);
   });
 
-  it('builds a 东洲杯 SF round (tagged eastern_cup)', () => {
-    const cup = initContinentalCup('东洲', TEAMS_4, 22, new SeededRNG(33));
-    expect(cup.type).toBe('eastern_cup');
-    expect(cup.region).toBe('东洲');
-    expect(cup.rounds[0].fixtures[0].id).toMatch(/^CC-eastern_cup-S22-SF-M1$/);
-  });
-
-  it('produces deterministic pairings for the same seed', () => {
-    const a = initContinentalCup('大陆', TEAMS_8, 2, new SeededRNG(42));
-    const b = initContinentalCup('大陆', TEAMS_8, 2, new SeededRNG(42));
-    expect(a.rounds[0].fixtures.map((f) => [f.homeTeamId, f.awayTeamId]))
-      .toEqual(b.rounds[0].fixtures.map((f) => [f.homeTeamId, f.awayTeamId]));
-  });
-});
-
-describe('getContinentalCupCurrentFixtures', () => {
-  it('returns the active round fixtures', () => {
-    const cup = initContinentalCup('大陆', TEAMS_8, 18, new SeededRNG(7));
-    const fixtures = getContinentalCupCurrentFixtures(cup);
-    expect(fixtures).toHaveLength(4);
-    expect(fixtures[0].round).toBe(1);
+  it('is deterministic for the same seed and qualification order', () => {
+    const first = initContinentalCup('大陆', TEAMS_8, 11, new SeededRNG(42));
+    const second = initContinentalCup('大陆', TEAMS_8, 11, new SeededRNG(42));
+    expect(first.groups.map(group => group.teamIds)).toEqual(second.groups.map(group => group.teamIds));
+    expect(first.groups.flatMap(group => group.fixtures)).toEqual(second.groups.flatMap(group => group.fixtures));
   });
 });
 
 describe('advanceContinentalCup', () => {
-  it('runs 大陆杯 QF → SF → Final and marks completed after the Final', () => {
-    let cup = initContinentalCup('大陆', TEAMS_8, 18, new SeededRNG(11));
+  it('runs Mainland through three group rounds, SF and Final', () => {
+    let cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(11));
 
-    // QF → SF
-    let results = cup.rounds[0].fixtures.map(homeWins);
-    cup = advanceContinentalCup(cup, results);
-    expect(cup.rounds[0].completed).toBe(true);
+    for (let round = 1; round <= 3; round++) {
+      const fixtures = getContinentalCupCurrentFixtures(cup);
+      expect(fixtures).toHaveLength(4);
+      expect(new Set(fixtures.map(fixture => fixture.round))).toEqual(new Set([round]));
+      cup = playCurrent(cup);
+    }
+
+    expect(cup.groupStageCompleted).toBe(true);
+    expect(cup.groups.every(group => group.standings.every(entry => entry.played === 3))).toBe(true);
+    expect(cup.rounds).toHaveLength(1);
+    expect(cup.rounds[0].roundName).toBe('SF');
+    expect(cup.rounds[0].fixtures).toHaveLength(2);
+
+    cup = playCurrent(cup);
     expect(cup.rounds).toHaveLength(2);
-    expect(cup.rounds[1].roundName).toBe('SF');
-    expect(cup.rounds[1].fixtures).toHaveLength(2);
-    expect(cup.completed).toBe(false);
-
-    // SF → Final
-    results = cup.rounds[1].fixtures.map(homeWins);
-    cup = advanceContinentalCup(cup, results);
-    expect(cup.rounds[2].roundName).toBe('Final');
-    expect(cup.rounds[2].fixtures).toHaveLength(1);
-    expect(cup.completed).toBe(false);
-
-    // Final
-    const finalFixture = cup.rounds[2].fixtures[0];
-    cup = advanceContinentalCup(cup, [homeWins(finalFixture)]);
-    expect(cup.completed).toBe(true);
-    expect(cup.winnerId).toBe(finalFixture.homeTeamId);
-
-    cup.rounds.forEach((r) => {
-      r.fixtures.forEach((f) => expect(f.winnerId).toBeTruthy());
-    });
-  });
-
-  it('runs 南洲杯 SF → Final (2 rounds for 4-team cups)', () => {
-    let cup = initContinentalCup('南洲', TEAMS_4, 18, new SeededRNG(99));
-    // SF
-    cup = advanceContinentalCup(cup, cup.rounds[0].fixtures.map(homeWins));
     expect(cup.rounds[1].roundName).toBe('Final');
     expect(cup.rounds[1].fixtures).toHaveLength(1);
-    // Final
-    const finalFix = cup.rounds[1].fixtures[0];
-    cup = advanceContinentalCup(cup, [homeWins(finalFix)]);
+
+    const final = cup.rounds[1].fixtures[0];
+    cup = playCurrent(cup);
     expect(cup.completed).toBe(true);
-    expect(cup.winnerId).toBe(finalFix.homeTeamId);
+    expect(cup.winnerId).toBe(final.homeTeamId);
+    expect(cup.rounds.flatMap(round => round.fixtures).every(fixture => fixture.isNeutralVenue)).toBe(true);
   });
 
-  it('resolves a final tied after extra time via penalty shootout', () => {
-    let cup = initContinentalCup('东洲', TEAMS_4, 22, new SeededRNG(123));
-    // Advance to final with home wins
-    cup = advanceContinentalCup(cup, cup.rounds[0].fixtures.map(homeWins));
-    const finalFix = cup.rounds[1].fixtures[0];
-    const tiedResult: MatchResult = {
-      fixtureId: finalFix.id,
-      homeTeamId: finalFix.homeTeamId,
-      awayTeamId: finalFix.awayTeamId,
-      homeGoals: 1, awayGoals: 1,
-      extraTime: true, etHomeGoals: 0, etAwayGoals: 0,
-      penalties: true, penaltyHome: 3, penaltyAway: 5,
-      events: [], stats: EMPTY_STATS,
-      competitionType: 'continental_cup', competitionName: '东洲杯',
-      roundLabel: 'Final',
-    };
-    cup = advanceContinentalCup(cup, [tiedResult]);
+  it('runs Southern/Eastern through three group rounds and a final', () => {
+    let cup = initContinentalCup('南洲', TEAMS_4, 11, new SeededRNG(99));
+    cup = playCurrent(playCurrent(playCurrent(cup)));
+    expect(cup.groupStageCompleted).toBe(true);
+    expect(cup.rounds).toHaveLength(1);
+    expect(cup.rounds[0].roundName).toBe('Final');
+
+    const final = cup.rounds[0].fixtures[0];
+    cup = playCurrent(cup);
     expect(cup.completed).toBe(true);
-    expect(cup.winnerId).toBe(finalFix.awayTeamId);
+    expect(cup.winnerId).toBe(final.homeTeamId);
   });
 
-  it('throws when a fixture is missing from results', () => {
-    const cup = initContinentalCup('大陆', TEAMS_8, 18, new SeededRNG(1));
-    // Pass only half the results
-    const partial = cup.rounds[0].fixtures.slice(0, 2).map(homeWins);
-    expect(() => advanceContinentalCup(cup, partial)).toThrow(/Missing result/);
+  it('uses qualification order as the stable final group tie-break', () => {
+    let cup = initContinentalCup('南洲', TEAMS_4, 5, new SeededRNG(5));
+    for (let round = 0; round < 3; round++) {
+      const draws = getContinentalCupCurrentFixtures(cup).map(fixture => ({
+        ...homeWins(fixture),
+        homeGoals: 0,
+        awayGoals: 0,
+      }));
+      cup = advanceContinentalCup(cup, draws);
+    }
+    expect(cup.groups[0].standings.map(entry => entry.teamId))
+      .toEqual(TEAMS_4);
+  });
+
+  it('resolves a tied final through penalties', () => {
+    let cup = initContinentalCup('东洲', TEAMS_4, 17, new SeededRNG(123));
+    cup = playCurrent(playCurrent(playCurrent(cup)));
+    const final = cup.rounds[0].fixtures[0];
+    cup = advanceContinentalCup(cup, [{
+      ...homeWins(final),
+      homeGoals: 1,
+      awayGoals: 1,
+      extraTime: true,
+      etHomeGoals: 0,
+      etAwayGoals: 0,
+      penalties: true,
+      penaltyHome: 3,
+      penaltyAway: 5,
+    }]);
+    expect(cup.completed).toBe(true);
+    expect(cup.winnerId).toBe(final.awayTeamId);
+  });
+
+  it('rejects an unresolved tied final without favoring the home slot', () => {
+    let cup = initContinentalCup('南洲', TEAMS_4, 5, new SeededRNG(123));
+    cup = playCurrent(playCurrent(playCurrent(cup)));
+    const before = structuredClone(cup);
+    const final = cup.rounds[0].fixtures[0];
+
+    expect(() => advanceContinentalCup(cup, [{
+      ...homeWins(final),
+      homeGoals: 0,
+      awayGoals: 0,
+    }])).toThrow(/Unresolved knockout result/);
+    expect(cup).toEqual(before);
+  });
+
+  it('rejects a partial window and leaves the input state unchanged', () => {
+    const cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(1));
+    const before = structuredClone(cup);
+    const fixtures = getContinentalCupCurrentFixtures(cup);
+    expect(() => advanceContinentalCup(cup, fixtures.slice(0, 2).map(homeWins))).toThrow(/Missing result/);
+    expect(cup).toEqual(before);
   });
 });

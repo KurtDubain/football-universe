@@ -343,6 +343,7 @@ export default function League() {
                               <Link
                                 to={`/player/${scorer.playerId}`}
                                 className="text-xs text-slate-300 hover:text-blue-400 truncate inline-block max-w-[120px]"
+                                title={`${player.name} ${scorer.goals}球`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <span className="text-slate-200">{player.name}</span>

@@ -1,5 +1,46 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-07-31 Contest Final Polish Phase 7
+
+- Added six original, versioned visual assets for only the four approved families: Welcome universe hero, three reusable story chapter marks, live-score foundation, and season archive frame. No names, scores, season identifiers, Chinese copy, commands, or real club marks are baked into artwork.
+- Welcome now uses one 126,952-byte full-bleed stadium/history scene and no longer runs the old random particle Canvas. The product name, observer premise, start path, lens choice, and action remain live text over a stable dark fallback.
+- Dark horse, giant crisis, and promoted survival share one engraved broadcast family. Their 192px images remain route/surface lazy, while the existing shared Icon remains visible under every mark for Save-Data, extreme low-resource, high-contrast, and failed-image cases.
+- Match Live uses a 12,692-byte neutral graphite foundation under dynamic team colors, live names, scores, and a real stage label. Mobile names use stable short names; visual QA found and fixed the 390px playback group clipping its 3x option.
+- Season archive export dynamically imports, predecodes, and caches one 72,600-byte frame only after the export command. The 1200x1500 Canvas keeps all text and team color dynamic, falls back to the former plain background, and exported a visually inspected 1.98MB PNG in about 110ms.
+- `docs/visual-assets.md` records generation source, version, use, dimensions, budgets, prompt intent, and delivery rules. PWA precaching now includes WebP.
+- Dedicated production verification passed 320x568 reduced-motion, 390x844 mobile, and 1440x900 desktop with zero overflow and CLS, decoded live/story assets, lazy archive loading, no clipped playback modes, Save-Data/high-contrast/broken-request fallbacks, a 2.30s Welcome decode under a 1.6Mbps/150ms mobile profile, and offline Welcome replay.
+- Final regression passed 94 test files / 699 tests, ESLint, frozen install, TypeScript/PWA production build, bundle/changelog budgets, production dependency audit with the existing documented ignored advisory, match presentation, storyline signals, 82 mobile route checks, the standard game client, and a 10-season/499-advance audit with zero data or runtime issues.
+
+### Phase 8 Handoff
+
+- Run three-person blind testing, refresh the repeatable 15-minute judge route, capture submission media, verify current Tencent contest rules, and perform the final Vercel/release gate.
+
+## 2026-07-30 Season Observation Archive
+
+- Reused the bounded primary-observer season trajectory as the archive identity. The only new frozen facts are preseason expected position, season-ending current judgment streak, representative player UUID, and a compact highest-deviation match summary; no standings, trophies, full results, event lists, or prose are duplicated.
+- Added a pure archive descriptor for final fate, preseason deviation, cup paths, season-only judgment accuracy, restrained observation impressions, representative-player resolution, and exactly one next-season hook. Zero judgments remain `纯粹见证者`, one to four remain `记录形成中`, and only five or more receive a tested descriptive impression.
+- Season Review now presents the archive conclusion before evidence. Dashboard exposes an explicit `Sx档案` tab, History adds a compact impression, and a still-resolvable deviation match links to its real memorable replay. Changing the primary favorite and advancing into later seasons cannot rewrite the archived team or facts.
+- Added a deterministic `1200x1500` Chinese PNG export. Its roughly `2.5 KB` renderer is dynamically imported only after the user clicks `保存档案图`; the game card remains fully readable when export is unavailable.
+- Current-save validation now enforces the 40-season cap, unique seasons, team references, four checkpoints, judgment invariants, theme values, and compact deviation facts. Fixed-seed tests cover pure/small/rated samples, promotion, championship without a cup, duplicate-name UUID identity, export naming, and malformed archive rejection.
+- Final verification passed 90 test files / 680 tests, ESLint, TypeScript/PWA audit build, the standard game client, real PNG download, memorable-match replay, and `320x568`, `390x844`, `430x932`, and `1440x900` browser checks with no overflow. The 10-season audit completed 499 advances with zero issues; S150 completed 7,584 advances with zero issues, kept exactly 40 archives, matched all reload/advance digests, and stored 1,733,548 compressed bytes.
+
+## 2026-07-30 Competition Format And Venue Pass
+
+- Centralized competition venue policy now distinguishes genuine hosted league/super-cup fixtures from neutral single-leg cups, finals, World Cup matches, continental cups, and relegation playoffs. Prediction, simulation, result persistence, save validation, Calendar, Cup, Settings, and match details consume the same semantics.
+- Continental cups now run in S5/S11/S17 on a six-season cycle. Mainland uses two four-team neutral groups followed by semifinals and a final; Southern/Eastern use one four-team neutral group followed by a final. Qualification remains based on the rolling five-season club coefficient.
+- The World Cup keeps 32 teams and four pots but now uses three neutral single-round-robin group windows plus four neutral single-leg knockout windows. Invalid current-schema group schedules, duplicated pairs, wrong rounds, and venue mismatches are rejected at import.
+- Removed hidden home-slot fallbacks from single-leg cups. Super Cup aggregate ties that the match simulator cannot anticipate are now resolved by a seeded, persisted shootout instead of favoring the second-leg home team.
+- Final verification passed 89 test files / 669 tests, ESLint, TypeScript/PWA audit build, bundle/changelog budgets, production dependency audit with the documented router advisory exception, and 320/390/1440px World Cup/continental UI workflows. The 10-season browser audit completed 499 advances with zero errors/warnings; S150 completed 7,584 advances with zero errors/warnings and a 1,729,906-byte compressed save. Mobile advance p50/p95 was 16.2/26.1ms normally and 27.1/45.4ms at 4x CPU, with 20 rapid attempts accepting exactly one advance.
+
+## 2026-07-30 Season Rollover Immutability Closure
+
+- Added one explicit writable squad boundary for season and match-window orchestration. It copies player records plus injury and suspension histories before discipline cleanup, retirement, transfer, or annual age/rating/value mutation.
+- `initializeNewSeason` and the real `season_end` path now preserve their input world deeply. Short injuries and every suspension reset in the returned season, active long-term injuries carry over, and old player/history objects remain untouched.
+- Window handlers now receive a shallow writable calendar shell. Dynamic league-cup, super-cup, continental-cup, playoff, and World Cup fixture population is retained in the returned world without mutating current or future windows in the caller's calendar.
+- Fixed the retirement-news lookup to retain a dedicated pre-retirement squad snapshot, preserving injury-forced retirement narratives after ownership isolation.
+- Added regression coverage for nested squad cloning, direct new-season initialization, real season-end aging and injury rollover, and every World Cup phase window. Fixed-seed RNG, calendars, squads, save reloads, and next-advance digests remain deterministic.
+- Final verification passed 89 test files / 672 tests, ESLint, TypeScript/PWA audit build, and the production browser audit. The 10-season audit completed 499 advances with zero errors/warnings; S150 completed 7,584 advances with zero errors/warnings or cap failures, all four browser checkpoint digests matched, and the S150 compressed save measured 1,730,538 bytes.
+
 ## 2026-07-16
 
 - Goal: improve the existing top-down match animation without changing simulation results or player statistics.
@@ -443,3 +484,78 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Audit the already-recorded observation streak, season accuracy, and total-count feedback against checklist 4.3; fill only any missing presentation or season-archive link without introducing rewards or a second progression system.
 - Keep related-match/trophy detail jumps and broader historical world summaries as separate bounded follow-ups after the observation feedback audit.
+
+## 2026-07-30 Contest Engineering Audit Closure
+
+- Upgraded React Router to the latest published stable release and documented the single ignored advisory. Its affected RSC server-action path is absent from this static BrowserRouter application; production audit exits successfully.
+- Removed the game-store audit bridge from ordinary production bundles. Browser audits now require both the dedicated `build:audit` command and the `?audit` query, while CI uses that explicit path.
+- Added a root Error Boundary with reload, home, and confirmed save-reset recovery paths. A forced lazy-chunk failure reached the recovery UI cleanly on mobile with no secondary runtime errors.
+- Made season-window execution copy squads, players, injury histories, and dynamically assigned playoff calendars before mutation. Fixed-seed tests and a runtime identity probe confirm the input world remains deep-equal and returned nested objects are not shared.
+- Replaced shallow save and custom-team checks with structural validation for all teams, states, squads, players, UUID references, numeric ranges, fixtures, results, calendar state, and league quotas. Malformed nested saves and duplicate player identities are rejected before persistence.
+- Changed MOTM aggregation and storage from display names to player UUIDs, while retaining player name and team identity for presentation. Duplicate-name players can no longer merge into one candidate.
+- Pinned Node 22.12.0 and pnpm 10.34.5 across local metadata and CI, refreshed README scale/commands, and published the v4.23.0 changelog and security-audit rationale.
+- Final verification passed 88 test files / 648 tests, ESLint, frozen install, TypeScript/PWA production build, bundle/changelog budgets, match presentation at desktop and two mobile widths, Error Boundary browser recovery, and production bridge absence.
+- The 10-season audit completed 509 advances with zero issues. The S150 audit completed 7,684 advances with zero rollover errors/warnings or cap failures; actual storage was 1,735,758 bytes and S1/S50/S100/S150 reload plus next-advance digests matched.
+- Production mobile advance p95 measured 21.6ms normally and 54.3ms under 4x CPU. Every sample rendered feedback first, and 20 rapid attempts accepted exactly one advance.
+
+## 2026-07-30 Contest Final Polish Planning
+
+- Added `docs/contest-final-polish-checklist.md` as the bounded execution plan after v4.23.0. It separates eight independently verifiable phases: season-rollover immutability, competition format/venue semantics, season observer archive, mobile route consistency, key audiovisual feedback, historical season summaries, original visual assets, and blind-test/submission closure.
+- The plan defines canonical data sources, persistence and performance limits, mobile/desktop acceptance matrices, release gates, and explicit exclusions. It keeps the observer identity intact and defers manager systems, currencies, branching saves, IndexedDB, aggressive compaction, and broad asset production.
+- No feature implementation was marked complete during planning. Future phases must update the new checklist only after automated, browser, performance, and long-save evidence passes.
+- Added a dedicated competition-design phase: continental cups move from every four seasons to S5 and every six seasons thereafter, using the existing five-season coefficient and a compact neutral-venue group-plus-knockout format; the World Cup moves from six to three neutral group rounds while retaining four single-leg neutral knockout rounds. A full venue matrix prevents home advantage from leaking into neutral fixtures while preserving it for league and genuine two-leg home/away matches.
+
+## 2026-07-30 Contest Final Polish Phase 4
+
+- Completed the mobile all-route interaction pass without changing simulation, RNG, or persisted game data. Mobile detail routes now have deterministic return targets, drawer rows are fully actionable, and Team Editor rows support focus, Enter, and Space.
+- Replaced local tab implementations on Dashboard, Coaches, Chronicle, Advanced Search, and Memorable Matches with the shared segmented control. Selected tabs scroll into view, expose proper tab semantics, and retain compact desktop density.
+- Established a 44px mobile target floor, visible global focus treatment, safe-area-aware shell spacing, 11px minimum microcopy, and tabular numeric rendering. Truncated club, player, coach, competition, and story labels now retain a full accessible name.
+- Reworked Memorable Matches and Team Editor at narrow widths so club identity remains distinguishable instead of collapsing to a single character or unexplained ellipsis.
+- Added `verify:mobile-routes`, a fixed-seed production browser audit covering 22 routes/states across `320x568`, `390x844`, `430x932`, `1280x720`, and `1440x900`. Its 82 route/viewport checks also cover drawer focus restoration, keyboard rows, detail return, selected-tab scrolling, large text, reduced motion, offline revisit, Welcome, and Error Boundary recovery.
+- Final verification passed 90 test files / 680 tests, ESLint, TypeScript/PWA production build, bundle/changelog budgets, match presentation, floating advance, and the standard game client. The 10-season audit completed 499 advances with zero errors or warnings.
+- Mobile advance p50/p95 measured 14.7/19.5ms normally and 33.6/61.3ms under 4x CPU. Twenty rapid attempts accepted exactly one advance; match animation remained within its desktop/mobile/reduced-motion budgets.
+
+### Phase 5 Handoff
+
+- Add a deliberately small feedback layer for start observation, goals, major upsets, story escalation, and season end.
+- Keep audio and optional haptics nonessential, rate-limited, persisted through one global preference, and absent from simulation or the initial critical bundle.
+
+## 2026-07-30 Contest Final Polish Phase 5
+
+- Added five deliberately short feedback cues for start observation, live goals, major upsets, major story escalation, and season end. Existing transitions, score flashes, deviation labels, story cards, and season archives remain the sole visual source of truth.
+- Ordinary matches, ordinary news, and batch advancement stay silent. One completed world response selects at most one global cue in the order season end, major upset, then major story; per-cue and haptic limits prevent repeated playback.
+- Added one persisted global sound preference and a separately persisted, default-off haptic preference outside the game save. The header exposes the global control, Settings explains both controls, and Match Live shares the global state while retaining a local mute.
+- AudioContext is created or resumed only after a pointer or keyboard gesture. Hidden pages, reduced motion, extreme low-resource environments, disabled sound, missing Web Audio, and a failed optional chunk all degrade without touching advancement or rendering.
+- Haptics are restricted to major upsets and season end, never carry exclusive information, and silently skip browsers without `navigator.vibrate`. Browser validation caught and fixed a first-use rate-limit boundary that could suppress an immediate season-end vibration.
+- All tones are generated from original in-repo Web Audio parameters documented in `docs/audio-feedback.md`. The tone definitions load on first actual feedback as a 1,340-byte / 510-byte gzip chunk and are absent from the initial dependency graph while remaining PWA-precacheable.
+- Dedicated production-browser validation passed first-gesture unlock, 44px global control, persisted mute, live/global semantics, one three-tone and one-vibration season ending, reduced-motion suppression, offline revisit, and zero mobile overflow/runtime errors.
+- Final verification passed 92 test files / 687 tests, ESLint, TypeScript/PWA builds, bundle/changelog budgets, match presentation, animation performance, the standard game client, and a ten-season 499-advance audit with zero data warnings or errors.
+- Mobile advance p50/p95 measured 15.5/25.2ms normally and 30.3/56.4ms under 4x CPU. Match Canvas averaged 0.31/0.88ms per draw under normal/4x CPU and retained hidden/covered pauses, exact final scores, and clean reopen/reset behavior.
+
+### Phase 6 Handoff
+
+- Build the bounded History summary answering “what happened this season” from frozen season records, archived story conclusions, canonical destiny deviation, and existing awards.
+- Keep each season to five to seven events, render details on demand, and avoid storing duplicate standings, results, or prose unless an old bounded record cannot reproduce the fact.
+
+## 2026-07-31 Floating Advance All-Route Fix
+
+- Made the floating advance action default-on for initialized games and available on Dashboard plus every routed game page, while preserving the explicit global hide preference. Welcome and pre-game Team Editor remain excluded because no season can advance there.
+- Restricted drag and restore coordinates to the current route content rectangle, keeping the control away from the desktop sidebar, mobile header, and news strip. Existing modal and drawer layers remain above it.
+- Stored edge, relative vertical position, and viewport dimensions alongside legacy absolute coordinates. Same-view reloads remain pixel-stable, while viewport and breakpoint changes restore the control inside the new usable area.
+- Expanded `verify:floating-advance` from one route to 27 routes across `320x568`, `390x844`, `430x932`, and `1440x900`, for 108 route checks plus preference, drag, reload, resize, dashboard persistence, and exactly-once advancement.
+- Final verification passed 92 test files / 690 tests, ESLint, TypeScript/PWA audit build, and browser visual inspection. The change does not touch simulation, RNG, save schema, or the advancement computation path.
+
+## 2026-07-31 Contest Final Polish Phase 6
+
+- Added a read-only season-history summary derived from frozen honors, trophy records, the canonical destiny-deviation snapshot, completed storylines, player awards, and team season records. No persisted field, random decision, or parallel ranking was introduced.
+- Every completed season now yields three fixed facts (league champions, major cups, promotion/relegation) plus the largest available destiny deviation, at most two archived story endings, and one representative award winner, capped at seven events.
+- Added evidence thresholds for long-term labels: at least three consecutive top-flight titles for a dynasty, two adjacent promotion/relegation seasons for a movement run, and three consecutively worse seasons with a material level or position decline.
+- History defaults to the latest ten seasons and can switch to the latest forty or all seasons. The compact narrative opens first; the existing full Season Review remains available behind a second on-demand control.
+- Entity links resolve teams, award-winning players, and champion coaches only when their canonical records still exist. Trimmed memorable-match detail falls back to a score, competition, round, and canonical pre-match probability summary.
+- Added six fixed-seed unit tests plus `verify:history-summary` for mobile/desktop interaction and synthetic S40/S100/S150 route, filter, scroll, and expansion budgets. The S150 summary expanded in about 31ms and switching all 150 rows took about 11ms.
+- Full verification passed 93 test files / 696 tests, ESLint, the 82-check mobile route audit, and a ten-season 499-advance current audit with zero data issues. The real S150 audit completed 7,584 advances with zero warnings/errors; all reload/next-advance digests matched and storage remained 1,733,574 bytes.
+
+### Phase 7 Handoff
+
+- Produce only the four bounded asset families already listed in the contest checklist: start-observation hero, three story chapter marks, live-score foundation, and season archive frame.
+- Keep all names, scores, season numbers, and Chinese copy as accessible live text; no functional command should become a bitmap.

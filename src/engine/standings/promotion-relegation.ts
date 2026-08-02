@@ -17,7 +17,8 @@ export interface PromotionRelegationResult {
  *                    3rd plays promotion playoff (up), 3rd from bottom plays relegation playoff (down)
  * - Low league (3): top 2 promoted, 3rd plays promotion playoff
  *
- * Playoffs are single-match: the higher-tier team has home advantage.
+ * Playoffs are single-match at a neutral venue. The home/away slots are
+ * retained only for score and outcome attribution.
  *
  * The returned promoted/relegated arrays contain only the DIRECT movements.
  * Playoff outcomes are resolved separately via applyPlayoffResults().
@@ -64,7 +65,7 @@ export function determinePromotionRelegation(
   // --- Playoff fixtures ---
 
   // Playoff 1: League 1 vs League 2
-  // L1 3rd-from-bottom (home, higher tier) vs L2 3rd place (away)
+  // L1 3rd-from-bottom vs L2 3rd place at a neutral venue.
   const l1PlayoffTeam = league1Standings[n1 - 3].teamId;
   const l2PromotionCandidate = league2Standings[2].teamId;
 
@@ -75,10 +76,11 @@ export function determinePromotionRelegation(
     competitionType: 'relegation_playoff',
     competitionName: 'League 1/2 Playoff',
     roundLabel: 'Playoff',
+    isNeutralVenue: true,
   });
 
   // Playoff 2: League 2 vs League 3
-  // L2 3rd-from-bottom (home, higher tier) vs L3 3rd place (away)
+  // L2 3rd-from-bottom vs L3 3rd place at a neutral venue.
   const l2RelegationCandidate = league2Standings[n2 - 3].teamId;
   const l3PromotionCandidate = league3Standings[2].teamId;
 
@@ -89,6 +91,7 @@ export function determinePromotionRelegation(
     competitionType: 'relegation_playoff',
     competitionName: 'League 2/3 Playoff',
     roundLabel: 'Playoff',
+    isNeutralVenue: true,
   });
 
   return { promoted, relegated, playoffFixtures };
@@ -113,8 +116,7 @@ function didHomeTeamWin(result: MatchResult): boolean {
     return (result.penaltyHome ?? 0) > (result.penaltyAway ?? 0);
   }
 
-  // Should not happen in a playoff, but default to home advantage
-  return true;
+  throw new Error(`Unresolved playoff result: ${result.fixtureId}`);
 }
 
 /**

@@ -6,6 +6,8 @@ export interface CupFixture {
   roundName: string;
   homeTeamId: string;
   awayTeamId: string;
+  /** The team slots are labels only; neither side receives home advantage. */
+  isNeutralVenue?: boolean;
   result?: { home: number; away: number; extraTime?: boolean; penalties?: boolean; penHome?: number; penAway?: number };
   winnerId?: string;
 }
@@ -20,19 +22,18 @@ export interface CupState {
 }
 
 /**
- * Continental cups — three coefficient-qualified knockouts that run every
- * four seasons (S2, S6, S10...):
- *   大陆杯 / mainland_cup — 8 teams (QF → SF → Final)
- *   南洲杯 / southern_cup — 4 teams (SF → Final)
- *   东洲杯 / eastern_cup  — 4 teams (SF → Final)
- *
- * The shape extends `CupState` so existing bracket-rendering logic and the
- * Cup page work without bifurcation. `region` is carried so news / UI can
- * label the cup without re-deriving from `type`.
+ * Continental cups run in S5, S11, S17... and use a neutral-venue group
+ * stage followed by a compact knockout. `rounds` contains knockout rounds
+ * only so shared bracket, prize and elimination helpers remain authoritative.
  */
 export type CupRegion = '大陆' | '南洲' | '东洲';
 export interface ContinentalCupState extends CupState {
   region: CupRegion;
+  groups: SuperCupGroup[];
+  groupStageCompleted: boolean;
+  participantIds: string[];
+  /** Qualification order, used as the deterministic final group tie-break. */
+  qualificationOrder: string[];
 }
 
 export interface CupRound {

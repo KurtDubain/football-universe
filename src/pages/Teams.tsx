@@ -341,7 +341,7 @@ function TeamCard({
             <span className={`w-2 h-2 rounded-full inline-block ${moraleDot}`} />
           </span>
           {/* Coach */}
-          <span className="truncate max-w-[7rem] sm:max-w-none">
+          <span className="truncate max-w-[7rem] sm:max-w-none" title={coachName}>
             {coachName}
           </span>
           {/* Form badges */}

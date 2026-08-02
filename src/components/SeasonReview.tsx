@@ -1,9 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
 import { getTeamName, getTeamShortName } from '../utils/format';
 import {
-  getSeasonPlayerStatRows,
   getSeasonTopAssistRows,
   getSeasonTopScorerRows,
 } from '../engine/players/player-stat-selectors';
@@ -14,7 +14,12 @@ import type {
   ObserverSeasonTrajectory,
 } from '../engine/observation/season-trajectory';
 import { describeObservationThemeResult } from '../engine/observation/observation-theme-result';
+import {
+  buildSeasonObservationArchive,
+  type ObserverImpressionTone,
+} from '../engine/observation/season-archive';
 import { Icon, type IconName } from './Icon';
+import { StoryChapterMark } from './StoryChapterMark';
 
 interface Props {
   world: GameWorld;
@@ -70,21 +75,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
     .find(entry => entry.seasonNumber === seasonNumber);
   const primaryRecord = primaryTrajectory
     ? seasonRecords.find(record => record.teamId === primaryTrajectory.teamId)
-    : undefined;
-  const primaryContributor = primaryTrajectory
-    ? getSeasonPlayerStatRows(world, seasonNumber)
-      .filter(row => row.teamId === primaryTrajectory.teamId)
-      .sort((a, b) => {
-        const impact = (row: typeof a) => (
-          row.goals * 4
-          + row.assists * 3
-          + row.cleanSheets * 1.2
-          + row.keyBlocks * 1.5
-          + row.saves * 0.15
-          + row.appearances * 0.1
-        );
-        return impact(b) - impact(a) || b.appearances - a.appearances;
-      })[0]
     : undefined;
   const seasonStorylines = (world.storylineHistory ?? [])
     .filter(storyline => storyline.seasonNumber === seasonNumber)
@@ -172,7 +162,6 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           trajectory={primaryTrajectory}
           record={primaryRecord}
           world={world}
-          contributor={primaryContributor}
         />
       )}
 
@@ -219,24 +208,28 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               const meta = STORYLINE_META[storyline.type];
               return (
                 <div key={storyline.id} className="border-b border-slate-700/40 py-2.5 last:border-b-0">
-                  <div className="flex items-center gap-2">
-                    <Icon name={meta.icon} size={15} className={meta.color} />
-                    <Link to={`/team/${storyline.teamId}`} className="min-w-0 truncate text-sm font-semibold text-slate-100 hover:text-blue-300">
-                      {getTeamName(storyline.teamId, tb)}
-                    </Link>
-                    <span className={`shrink-0 text-[11px] ${meta.color}`}>{meta.label}</span>
-                    <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
-                      storyline.outcome === 'success'
-                        ? 'bg-emerald-950/70 text-emerald-300'
-                        : 'bg-red-950/60 text-red-300'
-                    }`}>
-                      {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
-                    </span>
+                  <div className="flex items-start gap-2.5">
+                    <StoryChapterMark type={storyline.type} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Link to={`/team/${storyline.teamId}`} className="min-w-0 truncate text-sm font-semibold text-slate-100 hover:text-blue-300" title={getTeamName(storyline.teamId, tb)}>
+                          {getTeamName(storyline.teamId, tb)}
+                        </Link>
+                        <span className={`shrink-0 text-[11px] ${meta.color}`}>{meta.label}</span>
+                        <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
+                          storyline.outcome === 'success'
+                            ? 'bg-emerald-950/70 text-emerald-300'
+                            : 'bg-red-950/60 text-red-300'
+                        }`}>
+                          {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">{storyline.conclusion}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-600" title={`S${storyline.seasonNumber} W${storyline.startedWindow + 1} 出现 · ${storyline.evidence.join(' · ')}`}>
+                        S{storyline.seasonNumber} W{storyline.startedWindow + 1} 出现 · {storyline.evidence.join(' · ')}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">{storyline.conclusion}</p>
-                  <p className="mt-0.5 truncate text-[11px] text-slate-600">
-                    S{storyline.seasonNumber} W{storyline.startedWindow + 1} 出现 · {storyline.evidence.join(' · ')}
-                  </p>
                 </div>
               );
             })}
@@ -308,8 +301,8 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                       <span className="text-base">{meta.emoji}</span>
                       <span className={`text-[10px] font-semibold ${meta.color}`}>{meta.label}</span>
                     </div>
-                    <div className="text-sm font-bold text-slate-100 truncate">{a.playerName}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{a.teamName}</div>
+                    <div className="text-sm font-bold text-slate-100 truncate" title={a.playerName}>{a.playerName}</div>
+                    <div className="text-[10px] text-slate-400 truncate" title={a.teamName}>{a.teamName}</div>
                     <div className={`text-[10px] mt-0.5 font-semibold ${meta.color}`}>{a.statLabel}</div>
                   </Link>
                 );
@@ -347,7 +340,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
-                        <span className="flex-1 truncate text-slate-300">{s.identity.teamName} {s.identity.playerName}</span>
+                        <span className="flex-1 truncate text-slate-300" title={`${s.identity.teamName} ${s.identity.playerName}`}>{s.identity.teamName} {s.identity.playerName}</span>
                         <span className="text-slate-200 font-bold">{s.goals}球</span>
                       </div>
                     );
@@ -384,7 +377,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                       <div key={s.playerId} className="flex items-center gap-2 text-[11px]">
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
-                        <span className="flex-1 truncate text-slate-300">{s.identity.teamName} {s.identity.playerName}</span>
+                        <span className="flex-1 truncate text-slate-300" title={`${s.identity.teamName} ${s.identity.playerName}`}>{s.identity.teamName} {s.identity.playerName}</span>
                         <span className="text-slate-200 font-bold">{s.assists}助</span>
                       </div>
                     );
@@ -469,7 +462,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                   </span>
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[buff.teamId]?.color ?? '#666' }} />
                   <span className="text-slate-300">{getTeamName(buff.teamId, tb)}</span>
-                  <span className="text-slate-600 text-[10px] truncate flex-1">{buff.description}</span>
+                  <span className="text-slate-600 text-[10px] truncate flex-1" title={buff.description}>{buff.description}</span>
                 </div>
               );
             })}
@@ -531,7 +524,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                       <span className="text-sm shrink-0 relative z-10 bg-slate-800">{icon}</span>
                       <div className="min-w-0">
                         <div className="text-xs text-slate-200 font-medium leading-tight">{n.title}</div>
-                        {n.description && <div className="text-[10px] text-slate-500 mt-0.5 truncate">{n.description}</div>}
+                        {n.description && <div className="text-[10px] text-slate-500 mt-0.5 truncate" title={n.description}>{n.description}</div>}
                       </div>
                     </div>
                   );
@@ -641,33 +634,15 @@ function PrimaryTeamTrajectory({
   trajectory,
   record,
   world,
-  contributor,
 }: {
   trajectory: ObserverSeasonTrajectory;
   record: RecordWithTeam;
   world: GameWorld;
-  contributor?: ReturnType<typeof getSeasonPlayerStatRows>[number];
 }) {
+  const [exportState, setExportState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
+  const archive = buildSeasonObservationArchive(world, trajectory, record);
+  const contributor = archive.representative;
   const team = world.teamBases[trajectory.teamId];
-  const firstPosition = trajectory.checkpoints[0]?.position ?? record.leaguePosition;
-  const rankChange = firstPosition - record.leaguePosition;
-  const outcome = record.relegated
-    ? { label: '遗憾降级', tone: 'text-red-300' }
-    : record.promoted
-      ? { label: '成功升级', tone: 'text-emerald-300' }
-      : record.leaguePosition === 1
-        ? { label: '联赛夺冠', tone: 'text-amber-300' }
-        : rankChange >= 3
-          ? { label: `上升${rankChange}位`, tone: 'text-emerald-300' }
-          : rankChange <= -3
-            ? { label: `回落${Math.abs(rankChange)}位`, tone: 'text-red-300' }
-            : { label: '稳定收官', tone: 'text-slate-300' };
-  const cupPaths = [
-    ['联赛杯', record.cupResult],
-    ['超级杯', record.superCupResult],
-    ['洲际杯', record.continentalCupResult],
-    ['环球冠军杯', record.worldCupResult],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1] && entry[1] !== '未参加'));
   const contributorDetail = contributor
     ? contributor.identity.position === 'GK'
       ? `${contributor.appearances}场 · ${contributor.saves}次扑救 · ${contributor.cleanSheets}场零封`
@@ -681,6 +656,54 @@ function PrimaryTeamTrajectory({
     : themeResult?.tone === 'caution'
       ? 'text-amber-300'
       : 'text-slate-300';
+  const fateTone = archive.finalFate.tone === 'positive'
+    ? 'text-emerald-300'
+    : archive.finalFate.tone === 'caution'
+      ? 'text-amber-300'
+      : 'text-slate-200';
+  const impressionTone: Record<ObserverImpressionTone, string> = {
+    emerald: 'border-emerald-700/50 bg-emerald-950/60 text-emerald-300',
+    sky: 'border-sky-700/50 bg-sky-950/60 text-sky-300',
+    amber: 'border-amber-700/50 bg-amber-950/60 text-amber-300',
+    slate: 'border-slate-600 bg-slate-800 text-slate-300',
+  };
+  const deviation = trajectory.destinyDeviation;
+  const deviationReplayable = deviation
+    ? (world.memorableMatches ?? []).some(entry => entry.result.fixtureId === deviation.fixtureId)
+    : false;
+
+  const exportArchive = async () => {
+    if (exportState === 'working') return;
+    setExportState('working');
+    try {
+      const { downloadSeasonArchiveImage } = await import('../engine/observation/season-archive-image');
+      await downloadSeasonArchiveImage({
+        seasonNumber: trajectory.seasonNumber,
+        teamName: getTeamName(trajectory.teamId, world.teamBases),
+        teamColor: team?.color ?? '#34d399',
+        fateLabel: archive.finalFate.label,
+        fateDetail: archive.finalFate.detail,
+        impressionLabel: archive.impression.label,
+        impressionDetail: archive.impression.detail,
+        judgmentLine: archive.judgment.total > 0
+          ? `本季判断 ${archive.judgment.correct}/${archive.judgment.total} · 当前连中 ${archive.judgment.currentStreak} · 最佳 ${archive.judgment.bestStreak}`
+          : '本季未留下赛前判断',
+        themeLine: themeResult ? `${themeResult.label}：${themeResult.verdict} · ${themeResult.summary}` : undefined,
+        representativeLine: contributor ? `代表球员：${contributor.identity.playerName} · ${contributorDetail}` : undefined,
+        deviationLine: deviation
+          ? `最大命运偏差：${getTeamShortName(deviation.homeTeamId, world.teamBases)} ${deviation.homeGoals}-${deviation.awayGoals} ${getTeamShortName(deviation.awayTeamId, world.teamBases)} · 实际走向赛前概率 ${deviation.actualProbability}%`
+          : undefined,
+        cupLine: archive.cupPaths.length > 0
+          ? `杯赛：${archive.cupPaths.map(path => `${path.label}${path.result}`).join(' · ')}`
+          : '杯赛：本季无可记录征程',
+        nextWatch: archive.nextWatch,
+      });
+      setExportState('done');
+      window.setTimeout(() => setExportState('idle'), 1800);
+    } catch {
+      setExportState('error');
+    }
+  };
 
   return (
     <section
@@ -691,7 +714,7 @@ function PrimaryTeamTrajectory({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-400">
             <Icon name="eye" size={15} />
-            主要观察球队
+            S{trajectory.seasonNumber} 赛季观察档案
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-2">
             <span
@@ -714,11 +737,48 @@ function PrimaryTeamTrajectory({
             {record.leagueGF}:{record.leagueGA}
           </p>
         </div>
-        <div className="text-right">
-          <div className={`text-sm font-bold ${outcome.tone}`}>{outcome.label}</div>
-          <div className="mt-0.5 text-[11px] text-slate-500">
-            第{record.leaguePosition}名 · {record.leaguePoints}分
+        <div className="flex min-w-[10rem] flex-col items-end gap-2 text-right">
+          <div>
+            <div className={`text-base font-black ${fateTone}`}>{archive.finalFate.label}</div>
+            <div className="mt-0.5 max-w-64 text-[11px] leading-5 text-slate-500">
+              {archive.finalFate.detail}
+            </div>
           </div>
+          <span className={`rounded border px-2 py-1 text-[11px] font-semibold ${impressionTone[archive.impression.tone]}`}>
+            {archive.impression.label}
+          </span>
+          <button
+            type="button"
+            onClick={exportArchive}
+            disabled={exportState === 'working'}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded border border-slate-600 px-3 text-xs text-slate-300 transition-colors hover:border-emerald-600 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Icon name="outbox" size={15} />
+            {exportState === 'working'
+              ? '生成中'
+              : exportState === 'done'
+                ? '已保存'
+                : exportState === 'error'
+                  ? '导出失败'
+                  : '保存档案图'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mx-1 mt-3 border-y border-slate-700/60 py-3 sm:mx-2">
+        <div className="text-[11px] font-semibold text-slate-400">观察印象</div>
+        <p className="mt-1 text-xs leading-5 text-slate-300">{archive.impression.detail}</p>
+        <div className="mt-1 text-[11px] text-slate-500">
+          {archive.judgment.total > 0 ? (
+            <>
+              本季命中 {archive.judgment.correct}/{archive.judgment.total}
+              {archive.impression.sampleState === 'rated' && archive.judgment.accuracy !== null
+                ? ` · ${Math.round(archive.judgment.accuracy * 100)}%`
+                : ' · 样本积累中'}
+              {' · '}当前连中 {archive.judgment.currentStreak}
+              {' · '}最佳 {archive.judgment.bestStreak}
+            </>
+          ) : '本季未留下赛前判断'}
         </div>
       </div>
 
@@ -763,12 +823,12 @@ function PrimaryTeamTrajectory({
         ))}
       </div>
 
-      <div className="mt-4 grid gap-x-5 gap-y-2 border-t border-slate-700/50 px-1 pt-3 text-xs sm:grid-cols-3 sm:px-2">
+      <div className="mt-4 grid gap-x-5 gap-y-3 border-t border-slate-700/50 px-1 pt-3 text-xs sm:grid-cols-2 sm:px-2">
         <div>
           <div className="text-[10px] text-slate-500">杯赛足迹</div>
           <div className="mt-0.5 leading-5 text-slate-300">
-            {cupPaths.length > 0
-              ? cupPaths.map(([label, value]) => `${label}${value}`).join(' · ')
+            {archive.cupPaths.length > 0
+              ? archive.cupPaths.map(path => `${path.label}${path.result}`).join(' · ')
               : '本季无杯赛征程'}
           </div>
         </div>
@@ -786,24 +846,46 @@ function PrimaryTeamTrajectory({
           )}
         </div>
         <div>
-          <div className="text-[10px] text-slate-500">观察档案</div>
-          {trajectory.judgment ? (
+          <div className="text-[10px] text-slate-500">本季最大命运偏差</div>
+          {deviation ? (
             <>
-              <div className="mt-0.5 font-semibold text-slate-200">
-                命中 {trajectory.judgment.correct}/{trajectory.judgment.total}
-                {' · '}
-                {Math.round(trajectory.judgment.correct / trajectory.judgment.total * 100)}%
+              {deviationReplayable ? (
+                <Link
+                  to={`/memorable?fixture=${encodeURIComponent(deviation.fixtureId)}`}
+                  className="mt-0.5 block font-semibold text-slate-200 hover:text-emerald-300"
+                >
+                  {getTeamShortName(deviation.homeTeamId, world.teamBases)}
+                  {' '}{deviation.homeGoals}-{deviation.awayGoals}{' '}
+                  {getTeamShortName(deviation.awayTeamId, world.teamBases)}
+                </Link>
+              ) : (
+                <div className="mt-0.5 font-semibold text-slate-200">
+                  {getTeamShortName(deviation.homeTeamId, world.teamBases)}
+                  {' '}{deviation.homeGoals}-{deviation.awayGoals}{' '}
+                  {getTeamShortName(deviation.awayTeamId, world.teamBases)}
+                </div>
+              )}
+              <div className="text-[11px] leading-5 text-slate-500">
+                {deviation.competitionName} · {deviation.roundLabel}
+                {' · '}实际走向赛前概率 {deviation.actualProbability}%
               </div>
-              <div className="text-[11px] text-slate-500">最佳连续命中 {trajectory.judgment.bestStreak} 次</div>
             </>
           ) : (
-            <div className="mt-0.5 text-slate-500">本季未留下赛前判断</div>
+            <div className="mt-0.5 text-slate-500">本季比赛没有可核对的赛前概率</div>
           )}
           {world.coachBases[record.coachId] && (
             <Link to={`/coach/${record.coachId}`} className="mt-1 inline-block text-[11px] text-slate-400 hover:text-emerald-300">
               主教练：{world.coachBases[record.coachId].name}
             </Link>
           )}
+        </div>
+      </div>
+
+      <div className="mx-1 mt-3 flex items-start gap-2 border-t border-slate-700/50 pt-3 text-xs sm:mx-2">
+        <Icon name="sparkle" size={15} className="mt-0.5 shrink-0 text-amber-300" />
+        <div>
+          <div className="text-[10px] text-slate-500">下赛季继续观察</div>
+          <p className="mt-0.5 leading-5 text-slate-300">{archive.nextWatch}</p>
         </div>
       </div>
     </section>
@@ -814,8 +896,8 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
       <div className="text-[10px] text-slate-500">{label}</div>
-      <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate">{value}</div>
-      <div className="text-[10px] text-slate-500 truncate">{sub}</div>
+      <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate" title={value}>{value}</div>
+      <div className="text-[10px] text-slate-500 truncate" title={sub}>{sub}</div>
     </div>
   );
 }
@@ -825,7 +907,7 @@ function AwardCard({ emoji, title, value, sub }: { emoji: string; title: string;
     <div className="bg-slate-800 p-3 text-center">
       <div className="text-xl mb-1">{emoji}</div>
       <div className="text-[10px] text-purple-400 font-semibold">{title}</div>
-      <div className="text-xs text-slate-200 font-medium mt-1 truncate">{value}</div>
+      <div className="text-xs text-slate-200 font-medium mt-1 truncate" title={value}>{value}</div>
       <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>
     </div>
   );

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { defaultTeams } from '../config/teams';
 import type { TeamBase, TeamTier } from '../types/team';
+import { parseCustomTeams } from '../engine/validation/custom-teams';
 
 const TIER_LABELS: Record<TeamTier, string> = {
   elite: '豪门', strong: '劲旅', mid: '中游', lower: '平民', underdog: '草根'
@@ -17,7 +18,7 @@ export default function TeamEditor() {
   const [teams, setTeams] = useState<TeamBase[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) return parseCustomTeams(JSON.parse(saved));
     } catch {
       // Ignore malformed editor drafts and start from the built-in teams.
     }
@@ -38,10 +39,10 @@ export default function TeamEditor() {
 
   const saveTemplate = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parseCustomTeams(teams)));
       alert('模板已保存到本地');
-    } catch {
-      alert('保存失败');
+    } catch (error) {
+      alert(error instanceof Error ? `保存失败：${error.message}` : '保存失败');
     }
   };
 
@@ -71,15 +72,11 @@ export default function TeamEditor() {
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
-          const parsed = JSON.parse(ev.target?.result as string);
-          if (Array.isArray(parsed) && parsed.length === 32) {
-            setTeams(parsed);
-            alert('导入成功');
-          } else {
-            alert('导入失败：必须是 32 支球队的数组');
-          }
-        } catch {
-          alert('导入失败：JSON 格式错误');
+          const parsed = parseCustomTeams(JSON.parse(ev.target?.result as string));
+          setTeams(parsed);
+          alert('导入成功');
+        } catch (error) {
+          alert(error instanceof Error ? `导入失败：${error.message}` : '导入失败：JSON 格式错误');
         }
       };
       reader.readAsText(file);
@@ -88,12 +85,12 @@ export default function TeamEditor() {
   };
 
   const startGameWithCustom = () => {
-    if (teams.length !== 32) {
-      alert('必须有正好 32 支球队才能开始');
-      return;
+    try {
+      newGame(undefined, { customTeams: parseCustomTeams(teams), gameMode: 'sandbox' });
+      navigate('/');
+    } catch (error) {
+      alert(error instanceof Error ? `无法开始：${error.message}` : '无法开始：球队数据无效');
     }
-    newGame(undefined, { customTeams: teams, gameMode: 'sandbox' });
-    navigate('/');
   };
 
   const startVanilla = () => {
@@ -102,7 +99,7 @@ export default function TeamEditor() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-4 sm:p-6">
+    <div className="min-h-screen bg-slate-950 text-slate-200 p-4 sm:p-6 tabular-nums">
       <div className="max-w-5xl mx-auto space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -126,7 +123,7 @@ export default function TeamEditor() {
 
         {/* Teams list */}
         <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-slate-700/60 text-[10px] text-slate-500 font-semibold uppercase">
+          <div className="hidden sm:grid grid-cols-12 gap-2 px-3 py-2 border-b border-slate-700/60 text-[10px] text-slate-500 font-semibold uppercase">
             <div className="col-span-3">名称 / 简称</div>
             <div className="col-span-2">联赛 / 档次</div>
             <div className="col-span-1 text-center">OVR</div>
@@ -139,20 +136,37 @@ export default function TeamEditor() {
           <div className="divide-y divide-slate-800/60 max-h-[60vh] overflow-y-auto">
             {filtered.map(({ team, idx }) => (
               <div key={idx}>
-                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs items-center hover:bg-slate-800/30 cursor-pointer"
-                  onClick={() => setEditingIdx(editingIdx === idx ? null : idx)}>
-                  <div className="col-span-3">
-                    <span className="w-2 h-2 inline-block rounded-full mr-1.5" style={{ backgroundColor: team.color }} />
-                    <span className="font-medium">{team.name}</span>
-                    <span className="text-slate-500 ml-1.5">{team.shortName}</span>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={editingIdx === idx}
+                  aria-label={`编辑球队 ${team.name}`}
+                  className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-2 text-xs items-center hover:bg-slate-800/30 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)] sm:grid-cols-12"
+                  onClick={() => setEditingIdx(editingIdx === idx ? null : idx)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setEditingIdx(editingIdx === idx ? null : idx);
+                    }
+                  }}
+                >
+                  <div className="min-w-0 sm:col-span-3" title={`${team.name} (${team.shortName})`}>
+                    <div className="flex min-w-0 items-center">
+                      <span className="w-2 h-2 inline-block rounded-full mr-1.5 shrink-0" style={{ backgroundColor: team.color }} />
+                      <span className="break-words font-medium">{team.name}</span>
+                      <span className="hidden text-slate-500 ml-1.5 sm:inline">{team.shortName}</span>
+                    </div>
+                    <div className="mt-1 break-words text-[11px] leading-4 text-slate-500 sm:hidden">
+                      {team.shortName} · L{team.initialLeagueLevel} · {TIER_LABELS[team.tier]} · {team.region}
+                    </div>
                   </div>
-                  <div className="col-span-2 text-slate-400">L{team.initialLeagueLevel} · {TIER_LABELS[team.tier]}</div>
-                  <div className="col-span-1 text-center font-bold">{team.overall}</div>
-                  <div className="col-span-1 text-center text-slate-400">{team.attack}</div>
-                  <div className="col-span-1 text-center text-slate-400">{team.midfield}</div>
-                  <div className="col-span-1 text-center text-slate-400">{team.defense}</div>
-                  <div className="col-span-2 text-slate-500 text-[10px] truncate">{team.region}</div>
-                  <div className="col-span-1 text-center">
+                  <div className="hidden text-slate-400 sm:col-span-2 sm:block">L{team.initialLeagueLevel} · {TIER_LABELS[team.tier]}</div>
+                  <div className="text-right font-bold sm:col-span-1 sm:text-center"><span className="text-[10px] text-slate-500 sm:hidden">OVR </span>{team.overall}</div>
+                  <div className="hidden text-center text-slate-400 sm:col-span-1 sm:block">{team.attack}</div>
+                  <div className="hidden text-center text-slate-400 sm:col-span-1 sm:block">{team.midfield}</div>
+                  <div className="hidden text-center text-slate-400 sm:col-span-1 sm:block">{team.defense}</div>
+                  <div className="hidden text-slate-500 text-[10px] sm:col-span-2 sm:block" title={team.region}>{team.region}</div>
+                  <div className="hidden text-center sm:col-span-1 sm:block">
                     <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: team.color }} />
                   </div>
                 </div>

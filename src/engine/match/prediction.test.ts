@@ -74,6 +74,51 @@ describe('shared match forecast', () => {
     expect(Math.abs(neutral.homeWinPct - neutral.awayWinPct)).toBeLessThanOrEqual(1);
   });
 
+  it('keeps a neutral forecast symmetric when the team slots are swapped', () => {
+    const stronger = team('stronger', 86);
+    const weaker = team('weaker', 76);
+    const strongerState = state('stronger');
+    const weakerState = state('weaker');
+    const forward = predictMatch(
+      stronger,
+      weaker,
+      strongerState,
+      weakerState,
+      null,
+      null,
+      {
+        fixture: {
+          ...fixture(true),
+          homeTeamId: stronger.id,
+          awayTeamId: weaker.id,
+          competitionType: 'world_cup_group',
+        },
+      },
+    );
+    const reversed = predictMatch(
+      weaker,
+      stronger,
+      weakerState,
+      strongerState,
+      null,
+      null,
+      {
+        fixture: {
+          ...fixture(true),
+          homeTeamId: weaker.id,
+          awayTeamId: stronger.id,
+          competitionType: 'world_cup_group',
+        },
+      },
+    );
+
+    expect(forward.homeWinPct).toBe(reversed.awayWinPct);
+    expect(forward.drawPct).toBe(reversed.drawPct);
+    expect(forward.awayWinPct).toBe(reversed.homeWinPct);
+    expect(forward.factors.some(factor => factor.source === 'home_advantage')).toBe(false);
+    expect(reversed.factors.some(factor => factor.source === 'home_advantage')).toBe(false);
+  });
+
   it('prices the predicted favorite at lower odds and persists the same forecast in simulation', () => {
     const home = team('home', 86);
     const away = team('away', 72);

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
 import TrophyBreakdown from '../components/TrophyBreakdown';
+import { SegmentedControl } from '../components/ui';
 
 type SortKey = 'rating' | 'name' | 'trophies' | 'pressure';
 type FilterTab = 'all' | 'employed' | 'unemployed';
@@ -79,23 +80,16 @@ export default function Coaches() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/50 w-fit">
-        {([
-          { key: 'all', label: `全部 (${coaches.length})` },
-          { key: 'employed', label: `在职 (${employed.length})` },
-          { key: 'unemployed', label: `空闲 (${unemployed.length})` },
-        ] as const).map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`px-3 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-              filter === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={filter}
+        onChange={setFilter}
+        ariaLabel="教练状态筛选"
+        options={[
+          { value: 'all', label: `全部 (${coaches.length})` },
+          { value: 'employed', label: `在职 (${employed.length})` },
+          { value: 'unemployed', label: `空闲 (${unemployed.length})` },
+        ]}
+      />
 
       {/* Coach list */}
       <div className="space-y-2">
@@ -120,7 +114,7 @@ export default function Coaches() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="min-w-0 truncate text-sm font-semibold text-slate-100">{base.name}</span>
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-100" title={base.name}>{base.name}</span>
                     <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${styleColor[base.style] ?? 'bg-slate-700 text-slate-400'}`}>
                       {getCoachStyleLabel(base.style)}
                     </span>
@@ -130,7 +124,7 @@ export default function Coaches() {
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                     {team ? (
-                      <span className="flex min-w-0 items-center gap-1 truncate">
+                      <span className="flex min-w-0 items-center gap-1 truncate" title={team.name}>
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
                         {team.name}
                       </span>

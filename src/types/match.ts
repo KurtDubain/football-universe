@@ -34,8 +34,8 @@ export interface MatchFixture {
   leg?: 1 | 2; // for two-legged ties
   firstLegResult?: { home: number; away: number }; // for second legs
   /**
-   * v23 — set true for matches played at a neutral venue (cup FINALS).
-   * When true: no home advantage applied in the simulator, UI hides
+   * Set true for matches played at a neutral venue.
+   * When true: no home advantage is applied in the simulator, UI hides
    * the (主)/(客) suffix and renders a "中立场" badge instead. The
    * `homeTeamId` / `awayTeamId` fields are still used for stats and
    * event attribution; "home" is just a label, not a venue.
@@ -112,11 +112,16 @@ export interface MatchResult {
   competitionType: CompetitionType;
   competitionName: string;
   roundLabel: string;
-  motm?: string; // man of the match description
+  motm?: {
+    /** Stable Player.uuid used for aggregation and navigation. */
+    playerId: string;
+    playerName: string;
+    teamId: string;
+  };
   /** Exact squad selected by the simulator; optional for legacy saves. */
   homeMatchday?: MatchdaySnapshot;
   awayMatchday?: MatchdaySnapshot;
-  /** v23 — true if the match was at a neutral venue (cup finals). */
+  /** True if the match was played at a neutral venue. */
   isNeutralVenue?: boolean;
   /** Deterministic pre-match forecast used by predictions, odds, and upset labels. */
   prediction?: {

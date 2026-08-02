@@ -69,7 +69,11 @@ describe('FloatingAdvanceButton', () => {
     act(() => floating.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })));
     expect(floating.style.left).toBe('88px');
     expect(floating.style.top).toBe('100px');
-    expect(JSON.parse(localStorage.getItem('floating-advance-position-v2') ?? '{}')).toEqual({ x: 88, y: 100 });
+    expect(JSON.parse(localStorage.getItem('floating-advance-position-v2') ?? '{}')).toMatchObject({
+      x: 88,
+      y: 100,
+      edge: 'left',
+    });
 
     act(() => floating.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })));
     expect(floating.style.left).toBe('');

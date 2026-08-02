@@ -102,4 +102,18 @@ describe('advanceLeagueCup', () => {
       r.fixtures.forEach((f) => expect(f.winnerId).toBeTruthy());
     });
   });
+
+  it('rejects an unresolved neutral tie without favoring the home slot', () => {
+    const cup = initLeagueCup(TEAMS_32, 1, new SeededRNG(42));
+    const before = structuredClone(cup);
+    const results = cup.rounds[0].fixtures.map(homeWins);
+    results[0] = {
+      ...results[0],
+      homeGoals: 0,
+      awayGoals: 0,
+    };
+
+    expect(() => advanceLeagueCup(cup, results)).toThrow(/Unresolved knockout result/);
+    expect(cup).toEqual(before);
+  });
 });

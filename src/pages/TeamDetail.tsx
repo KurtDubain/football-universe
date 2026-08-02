@@ -315,7 +315,7 @@ export default function TeamDetail() {
                       </td>
                       <td className="px-2 py-1.5">
                         {rec.coachId ? (
-                          <Link to={`/coach/${rec.coachId}`} className="text-xs text-slate-400 hover:text-blue-400 truncate block max-w-[80px]">
+                          <Link to={`/coach/${rec.coachId}`} className="text-xs text-slate-400 hover:text-blue-400 truncate block max-w-[80px]" title={getCoachName(rec.coachId, world.coachBases)}>
                             {getCoachName(rec.coachId, world.coachBases)}
                           </Link>
                         ) : <span className="text-xs text-slate-600">-</span>}
@@ -464,7 +464,7 @@ function TeamStoryPanel({ teamId }: { teamId: string }) {
           {story.rivalry ? (
             <div>
               <div className="flex items-center justify-between gap-2">
-                <Link to={`/team/${story.rivalry.opponentId}`} className="text-sm font-semibold text-blue-300 hover:text-blue-200 truncate">
+                <Link to={`/team/${story.rivalry.opponentId}`} className="text-sm font-semibold text-blue-300 hover:text-blue-200 truncate" title={story.rivalry.opponentName}>
                   {story.rivalry.opponentName}
                 </Link>
                 <span className="shrink-0 rounded bg-red-900/30 px-1.5 py-0.5 text-[11px] text-red-300">{story.rivalry.label}</span>
@@ -915,7 +915,7 @@ function InjuryBoard({ teamId }: { teamId: string }) {
                     to={`/player/${p.uuid}`}
                     className="flex items-center gap-2 text-[11px] bg-red-900/15 hover:bg-red-900/30 border border-red-900/30 rounded px-2 py-1 transition-colors"
                   >
-                    <span className="text-slate-300 truncate flex-1">{p.name}</span>
+                    <span className="text-slate-300 truncate flex-1" title={p.name}>{p.name}</span>
                     <span className="text-[11px] text-slate-500">{lastInj?.reason ?? '伤病'}</span>
                     <span className="text-red-400 font-mono shrink-0">{remaining}场</span>
                   </Link>
@@ -938,7 +938,7 @@ function InjuryBoard({ teamId }: { teamId: string }) {
                     to={`/player/${p.uuid}`}
                     className="flex items-center gap-2 text-[11px] bg-yellow-900/10 hover:bg-yellow-900/20 border border-yellow-900/30 rounded px-2 py-1 transition-colors"
                   >
-                    <span className="text-slate-300 truncate flex-1">{p.name}</span>
+                    <span className="text-slate-300 truncate flex-1" title={p.name}>{p.name}</span>
                     <span className="text-[11px] text-slate-500">累计纪律</span>
                     <span className="text-yellow-400 font-mono shrink-0">{remaining}场</span>
                   </Link>

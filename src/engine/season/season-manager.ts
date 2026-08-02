@@ -26,9 +26,10 @@ import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
 import { getTeamIdsByLeague, getAllTeamIds, createNewsId } from './helpers';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
-import { superCupConfig } from '../../config/competitions';
+import { continentalCupConfig, superCupConfig } from '../../config/competitions';
 import { BALANCE } from '../../config/balance';
 import { getGameModeConfig, type GameMode } from '../../types/game-mode';
+import { parseCustomTeams } from '../validation/custom-teams';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
@@ -37,7 +38,11 @@ import { syncPlayerStatsTeamIds } from '../players/stats';
 import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
 import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
-import { processInjuriesAndSuspensions, resetDisciplineForNewSeason } from '../players/injuries';
+import {
+  cloneSquadsForMutation,
+  processInjuriesAndSuspensions,
+  resetDisciplineForNewSeason,
+} from '../players/injuries';
 import { initTeamFinances } from '../economy/finance';
 import { rankClubCoefficients } from '../rankings/club-coefficient';
 import { advanceStorylines } from './storylines';
@@ -99,7 +104,7 @@ export interface GameWorld {
   superCup: SuperCupState;
   worldCup: WorldCupState | null;
   /**
-   * Continental cups. Populated every four seasons (S2, S6, S10...)
+   * Continental cups. Populated every six seasons (S5, S11, S17...)
    * after `initializeNewSeason`; null in off-years. Each region's cup is
    * independent — disjoint team rosters mean all three can play on the same
    * continental_cup window without conflict.
@@ -419,9 +424,7 @@ function snapshotPlayerStatsHistory(
  */
 export function initializeGameWorld(seed: number, options?: { gameMode?: GameMode; customTeams?: TeamBase[] }): GameWorld {
   // 1. Team bases — apply custom teams or game mode overrides
-  const baseTeams = options?.customTeams && options.customTeams.length === 32
-    ? options.customTeams
-    : defaultTeams;
+  const baseTeams = options?.customTeams ? parseCustomTeams(options.customTeams) : defaultTeams;
   const modeConfig = options?.gameMode ? getGameModeConfig(options.gameMode) : null;
   const finalTeams = modeConfig?.applyTeamOverrides ? modeConfig.applyTeamOverrides(baseTeams) : baseTeams;
   const teamBases: Record<string, TeamBase> = {};
@@ -621,15 +624,15 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   const superCup = initSuperCup(superCupTeams, seasonNumber, rng, superCupConfig.awayGoalRule);
 
   // ── Continental cups ──
-  // S2, S6, S10...: rare enough to matter and offset from the World Cup.
-  // Qualification is based on the rolling club coefficient; reputation and
-  // overall only break ties when little or no history exists.
+  // S5, S11, S17...: a six-season cycle that never overlaps the four-season
+  // World Cup. Qualification uses the rolling five-season club coefficient.
   const continentalCups: GameWorld['continentalCups'] = {
     mainland_cup: null,
     southern_cup: null,
     eastern_cup: null,
   };
-  const isContinentalCupSeason = seasonNumber % 4 === 2;
+  const isContinentalCupSeason = seasonNumber >= continentalCupConfig.firstSeason
+    && (seasonNumber - continentalCupConfig.firstSeason) % continentalCupConfig.interval === 0;
   if (isContinentalCupSeason) {
     const teamsByRegion: Record<CupRegion, string[]> = { '大陆': [], '南洲': [], '东洲': [] };
     for (const teamId of allTeamIds) {
@@ -644,14 +647,29 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     const regionalRanking = (region: CupRegion) => [...teamsByRegion[region]]
       .sort((a, b) => (coefficientRank.get(a) ?? 999) - (coefficientRank.get(b) ?? 999));
 
-    if (teamsByRegion['大陆'].length >= 8) {
-      continentalCups.mainland_cup = initContinentalCup('大陆', regionalRanking('大陆').slice(0, 8), seasonNumber, rng);
+    if (teamsByRegion['大陆'].length >= continentalCupConfig.mainlandTeams) {
+      continentalCups.mainland_cup = initContinentalCup(
+        '大陆',
+        regionalRanking('大陆').slice(0, continentalCupConfig.mainlandTeams),
+        seasonNumber,
+        rng,
+      );
     }
-    if (teamsByRegion['南洲'].length >= 4) {
-      continentalCups.southern_cup = initContinentalCup('南洲', regionalRanking('南洲').slice(0, 4), seasonNumber, rng);
+    if (teamsByRegion['南洲'].length >= continentalCupConfig.regionalTeams) {
+      continentalCups.southern_cup = initContinentalCup(
+        '南洲',
+        regionalRanking('南洲').slice(0, continentalCupConfig.regionalTeams),
+        seasonNumber,
+        rng,
+      );
     }
-    if (teamsByRegion['东洲'].length >= 4) {
-      continentalCups.eastern_cup = initContinentalCup('东洲', regionalRanking('东洲').slice(0, 4), seasonNumber, rng);
+    if (teamsByRegion['东洲'].length >= continentalCupConfig.regionalTeams) {
+      continentalCups.eastern_cup = initContinentalCup(
+        '东洲',
+        regionalRanking('东洲').slice(0, continentalCupConfig.regionalTeams),
+        seasonNumber,
+        rng,
+      );
     }
   }
 
@@ -673,8 +691,8 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     leagueCupR1Fixtures,
     superCupGroupRoundFixtures,
     continentalCupRounds: continentalCups.mainland_cup
-      ? 3
-      : (continentalCups.southern_cup || continentalCups.eastern_cup ? 2 : 0),
+      ? 5
+      : (continentalCups.southern_cup || continentalCups.eastern_cup ? 4 : 0),
   };
   const calendar = buildSeasonCalendar(calendarInput);
 
@@ -726,7 +744,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     const coefficientRank = new Map(coefficient.map(entry => [entry.teamId, entry.rank]));
     for (const cup of [continentalCups.mainland_cup, continentalCups.southern_cup, continentalCups.eastern_cup]) {
       if (!cup) continue;
-      const qualifierIds = cup.rounds[0].fixtures.flatMap(fixture => [fixture.homeTeamId, fixture.awayTeamId]);
+      const qualifierIds = [...cup.participantIds];
       const qualifierNames = qualifierIds
         .sort((a, b) => (coefficientRank.get(a) ?? 999) - (coefficientRank.get(b) ?? 999))
         .map(id => `${world.teamBases[id]?.shortName ?? id}(#${coefficientRank.get(id) ?? '-'})`)
@@ -734,8 +752,8 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
       drawNews.push({
         id: `draw-cc-${cup.type}-S${seasonNumber}`,
         seasonNumber, windowIndex: 0, type: 'match_result', importance: 'major',
-        title: `${cup.name}资格揭晓 · 四年一届`,
-        description: `${cup.region}积分领先的${qualifierIds.length}队入围：${qualifierNames}。完整名单：${qualifierIds.map(id => world.teamBases[id]?.name ?? id).join('、')}`,
+        title: `${cup.name}资格揭晓 · 六年一届`,
+        description: `${cup.region}近五季俱乐部积分领先的${qualifierIds.length}队入围中立场赛事：${qualifierNames}。完整名单：${qualifierIds.map(id => world.teamBases[id]?.name ?? id).join('、')}`,
       });
     }
   }
@@ -803,10 +821,10 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     newBuffsHistory.push({ season: prevSeason, buffs: world.seasonBuffs ?? [] });
   }
 
-  // Phase G — off-season cleanup. Wipes all suspensions; resets non-long-term
-  // injuries. Mutates squads in place (the Player objects are shared across
-  // the world snapshot — see note in `processInjuriesAndSuspensions`).
-  resetDisciplineForNewSeason(world.squads, world.totalElapsedWindows ?? 0);
+  // Phase G — off-season cleanup. The helper mutates its argument, so direct
+  // initializeNewSeason callers receive a fresh squad/player ownership graph.
+  const squads = cloneSquadsForMutation(world.squads);
+  resetDisciplineForNewSeason(squads, world.totalElapsedWindows ?? 0);
 
   // v19 — snapshot just-finished season's player stats into history
   // BEFORE the reset below. We pick up team's goals-conceded total so
@@ -826,8 +844,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     worldCup: null,
     continentalCups,
     coachChangesThisSeason: [],
-    playerStats: createInitialPlayerStats(world.squads),
-    playerStatSegments: createInitialPlayerStatSegments(world.squads),
+    squads,
+    playerStats: createInitialPlayerStats(squads),
+    playerStatSegments: createInitialPlayerStatSegments(squads),
     playerStatsHistory,
     newsLog: [...(world.newsLog ?? []), ...drawNews, ...buffNews],
     rngState,
@@ -1047,12 +1066,22 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     };
   }
 
+  // Window handlers populate current and future fixture slots as cup rounds
+  // advance. Give them a writable calendar shell so those assignments are
+  // retained in the returned world without touching the caller's calendar.
+  const workingCalendar = world.seasonState.calendar.map(entry => ({ ...entry }));
+  const workingSeasonState: SeasonState = {
+    ...world.seasonState,
+    calendar: workingCalendar,
+  };
+  window = workingCalendar[windowIndex];
+
   // Dispatch to window-type handler
   const windowResult = dispatchWindow(
     world,
     window,
     { ...world.teamStates },
-    world.seasonState,
+    workingSeasonState,
     rng,
     world.league1Standings,
     world.league2Standings,
@@ -1085,7 +1114,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     windowResult.league1Standings ?? world.league1Standings,
     windowResult.league2Standings ?? world.league2Standings,
     windowResult.league3Standings ?? world.league3Standings,
-    world.seasonState,
+    workingSeasonState,
   );
 
   // Update player stats — passes the post-bump global window so injured /
@@ -1097,19 +1126,16 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     ? updatePlayerStatSegmentsFromResults(world.playerStatSegments ?? {}, windowResult.results, world.squads, totalElapsedWindowsAfter)
     : world.playerStatSegments;
 
-  // Phase G — injury rolls + suspension folding. Mutates `world.squads`
-  // (in place — we are crossing the immutability fence intentionally here:
-  // the players themselves are objects shared across the world snapshot,
-  // and the existing economy / retirement passes already mutate them. The
-  // squads ARRAY identity stays the same; only player FIELDS update.). The
-  // returned news is wired into the news log alongside the other post-match
-  // notifications. We pass a MUTABLE shallow-copied playerStats so the
-  // counter resets land on the same object the caller will commit. (We
-  // already cloned this above for the appearance-credit pass.)
+  // Phase G mutates player fields while folding injuries and suspensions.
+  // Give it an isolated snapshot so executing a window never changes the
+  // caller's world or any player objects retained by React selectors.
+  const updatedSquads = windowResult.results.length > 0
+    ? cloneSquadsForMutation(world.squads)
+    : world.squads;
   const injuryResult = windowResult.results.length > 0
     ? processInjuriesAndSuspensions({
         results: windowResult.results,
-        squads: world.squads,
+        squads: updatedSquads,
         playerStats: updatedPlayerStats,
         playerStatSegments: updatedPlayerStatSegments,
         teamBases: postMatch.teamBases,
@@ -1121,7 +1147,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     : { injuriesApplied: [], suspensionsApplied: [], news: [] };
 
   // Mark window completed, advance index
-  const seasonState = { ...world.seasonState };
+  const seasonState = workingSeasonState;
   const updatedCalendar = [...seasonState.calendar];
   updatedCalendar[windowIndex] = {
     ...updatedCalendar[windowIndex],
@@ -1154,6 +1180,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     coachStates: postMatch.coachStates,
     coachCareers: postMatch.coachCareers,
     coachChangesThisSeason: postMatch.coachChanges,
+    squads: updatedSquads,
     playerStats: updatedPlayerStats,
     playerStatSegments: updatedPlayerStatSegments,
     activeEvents: postMatch.activeEvents,
@@ -1208,7 +1235,15 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
           updatedWorld.league3Standings,
           seasonNumber,
         );
-        nextWin.fixtures = pr.playoffFixtures;
+        const nextCalendar = [...cal];
+        nextCalendar[nwi] = { ...nextWin, fixtures: pr.playoffFixtures };
+        updatedWorld = {
+          ...updatedWorld,
+          seasonState: {
+            ...updatedWorld.seasonState,
+            calendar: nextCalendar,
+          },
+        };
       }
     }
   }

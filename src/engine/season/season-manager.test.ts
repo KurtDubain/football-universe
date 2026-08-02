@@ -77,24 +77,39 @@ describe('initializeGameWorld', () => {
     expect(a.leagueCup.rounds[0].fixtures.length).toBe(b.leagueCup.rounds[0].fixtures.length);
   });
 
-  it('schedules compact continental cups every four seasons from season two', () => {
-    const seasonOne = initializeGameWorld(2024);
-    expect(Object.values(seasonOne.continentalCups).every(cup => cup === null)).toBe(true);
-    expect(seasonOne.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
+  it('schedules group-based continental cups in S5 and every six seasons', () => {
+    let world = initializeGameWorld(2024);
+    for (let season = 1; season <= 4; season++) {
+      expect(Object.values(world.continentalCups).every(cup => cup === null)).toBe(true);
+      expect(world.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
+      world = initializeNewSeason(world);
+    }
 
-    const seasonTwo = initializeNewSeason(seasonOne);
-    expect(seasonTwo.continentalCups.mainland_cup?.rounds[0].fixtures).toHaveLength(4);
-    expect(seasonTwo.continentalCups.southern_cup?.rounds[0].fixtures).toHaveLength(2);
-    expect(seasonTwo.continentalCups.eastern_cup?.rounds[0].fixtures).toHaveLength(2);
-    expect(seasonTwo.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(3);
+    expect(world.seasonState.seasonNumber).toBe(5);
+    expect(world.continentalCups.mainland_cup?.groups).toHaveLength(2);
+    expect(world.continentalCups.southern_cup?.groups).toHaveLength(1);
+    expect(world.continentalCups.eastern_cup?.groups).toHaveLength(1);
+    expect(world.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(5);
 
-    const seasonThree = initializeNewSeason(seasonTwo);
-    expect(Object.values(seasonThree.continentalCups).every(cup => cup === null)).toBe(true);
-    const seasonSix = initializeNewSeason({
-      ...seasonThree,
-      seasonState: { ...seasonThree.seasonState, seasonNumber: 5 },
+    let firstContinentalWindow = world;
+    while (getCurrentWindow(firstContinentalWindow)?.type !== 'continental_cup') {
+      firstContinentalWindow = executeCurrentWindow(firstContinentalWindow).world;
+    }
+    const continentalRound = executeCurrentWindow(firstContinentalWindow);
+    expect(continentalRound.results).toHaveLength(8);
+    expect(continentalRound.results.every(result => result.isNeutralVenue)).toBe(true);
+    expect(continentalRound.results.every(result =>
+      result.prediction?.factors?.every(factor => factor.source !== 'home_advantage'),
+    )).toBe(true);
+
+    const seasonSix = initializeNewSeason(world);
+    expect(Object.values(seasonSix.continentalCups).every(cup => cup === null)).toBe(true);
+    const seasonEleven = initializeNewSeason({
+      ...seasonSix,
+      seasonState: { ...seasonSix.seasonState, seasonNumber: 10 },
     });
-    expect(seasonSix.continentalCups.mainland_cup).not.toBeNull();
+    expect(seasonEleven.continentalCups.mainland_cup).not.toBeNull();
+    expect(seasonEleven.seasonState.isWorldCupYear).toBe(false);
   });
 
   it('does not reserve empty continental windows when custom regions have no eligible cup', () => {
@@ -102,10 +117,13 @@ describe('initializeGameWorld', () => {
       gameMode: 'sandbox',
       customTeams: makeCustomTeams().map(team => ({ ...team, region: '自定义洲+地区' })),
     });
-    const seasonTwo = initializeNewSeason(seasonOne);
+    const seasonFive = initializeNewSeason({
+      ...seasonOne,
+      seasonState: { ...seasonOne.seasonState, seasonNumber: 4 },
+    });
 
-    expect(Object.values(seasonTwo.continentalCups).every(cup => cup === null)).toBe(true);
-    expect(seasonTwo.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
+    expect(Object.values(seasonFive.continentalCups).every(cup => cup === null)).toBe(true);
+    expect(seasonFive.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(0);
   });
 
   it('generates squads and player stats from custom final teams', () => {
@@ -221,6 +239,80 @@ describe('initializeGameWorld', () => {
     expect(history?.goals).toBe(6);
     expect(next.playerStats[player.uuid]).toBeUndefined();
   });
+
+  it('isolates squad ownership while resetting offseason injuries and suspensions', () => {
+    const initial = initializeGameWorld(20260730);
+    const [teamId, originalSquad] = Object.entries(initial.squads)[0];
+    const [shortAbsence, longAbsence] = originalSquad;
+    const input = {
+      ...initial,
+      squads: {
+        ...initial.squads,
+        [teamId]: originalSquad.map(player => {
+          if (player.uuid === shortAbsence.uuid) {
+            return {
+              ...player,
+              injuredUntilWindow: 999,
+              suspendedUntilWindow: 999,
+              injuryHistory: [{
+                type: 'major' as const,
+                startSeason: 1,
+                startWindow: 1,
+                durationMatches: 10,
+                reason: '膝伤',
+              }],
+              suspensionHistory: [{
+                startSeason: 1,
+                startWindow: 2,
+                unavailableFromWindow: 3,
+                suspendedUntilWindow: 5,
+                banWindows: 2,
+                reason: 'red_cards' as const,
+              }],
+            };
+          }
+          if (player.uuid === longAbsence.uuid) {
+            return {
+              ...player,
+              injuredUntilWindow: 999,
+              suspendedUntilWindow: 999,
+              injuryHistory: [{
+                type: 'long_term' as const,
+                startSeason: 1,
+                startWindow: 1,
+                durationMatches: 30,
+                reason: '十字韧带断裂',
+              }],
+            };
+          }
+          return player;
+        }),
+      },
+    };
+    const before = structuredClone(input);
+    const sourceShort = input.squads[teamId].find(player => player.uuid === shortAbsence.uuid)!;
+    const sourceLong = input.squads[teamId].find(player => player.uuid === longAbsence.uuid)!;
+
+    const next = initializeNewSeason(input);
+    const repeated = initializeNewSeason(structuredClone(before));
+    const nextShort = next.squads[teamId].find(player => player.uuid === shortAbsence.uuid)!;
+    const nextLong = next.squads[teamId].find(player => player.uuid === longAbsence.uuid)!;
+
+    expect(input).toEqual(before);
+    expect(next.squads).not.toBe(input.squads);
+    expect(next.squads[teamId]).not.toBe(input.squads[teamId]);
+    expect(nextShort).not.toBe(sourceShort);
+    expect(nextLong).not.toBe(sourceLong);
+    expect(nextShort.injuryHistory).not.toBe(sourceShort.injuryHistory);
+    expect(nextShort.suspensionHistory).not.toBe(sourceShort.suspensionHistory);
+    expect(nextShort.injuredUntilWindow).toBe(0);
+    expect(nextShort.suspendedUntilWindow).toBe(0);
+    expect(nextLong.injuredUntilWindow).toBe(999);
+    expect(nextLong.suspendedUntilWindow).toBe(0);
+    expect(next.rngState).toEqual(repeated.rngState);
+    expect(next.seasonState.calendar).toEqual(repeated.seasonState.calendar);
+    expect(next.squads).toEqual(repeated.squads);
+  });
 });
 
 describe('executeCurrentWindow', () => {
@@ -238,6 +330,20 @@ describe('executeCurrentWindow', () => {
     expect(world.seasonState.calendar[initialIdx].completed).toBe(true);
     // Returned results are an array (might be empty for pre-season-style windows)
     expect(Array.isArray(out.results)).toBe(true);
+  });
+
+  it('does not mutate the input world or its player objects', () => {
+    const world = initializeGameWorld(20260729);
+    const before = structuredClone(world);
+    const firstTeamId = Object.keys(world.squads)[0];
+
+    const out = executeCurrentWindow(world);
+
+    expect(world).toEqual(before);
+    expect(out.world).not.toBe(world);
+    expect(out.world.squads).not.toBe(world.squads);
+    expect(out.world.squads[firstTeamId]).not.toBe(world.squads[firstTeamId]);
+    expect(out.world.squads[firstTeamId][0]).not.toBe(world.squads[firstTeamId][0]);
   });
 
   it('smoke test: advance 5 windows in sequence; world stays consistent and index increments', () => {
@@ -332,6 +438,72 @@ describe('executeCurrentWindow', () => {
     expect(rollover.news.some(item => item.type === 'trophy' && item.importance === 'major')).toBe(true);
   });
 
+  it('does not mutate season-end input while aging players and carrying only long-term injuries', () => {
+    let world = initializeGameWorld(20260730);
+    while (getCurrentWindow(world)?.type !== 'season_end') {
+      world = executeCurrentWindow(world).world;
+    }
+    const [teamId, squad] = Object.entries(world.squads)[0];
+    const [shortAbsence, longAbsence] = squad.filter(player => player.age < 30).slice(0, 2);
+    world = {
+      ...world,
+      squads: {
+        ...world.squads,
+        [teamId]: squad.map(player => {
+          if (player.uuid === shortAbsence.uuid) {
+            return {
+              ...player,
+              injuredUntilWindow: 9999,
+              suspendedUntilWindow: 9999,
+              injuryHistory: [{
+                type: 'major' as const,
+                startSeason: 1,
+                startWindow: world.totalElapsedWindows,
+                durationMatches: 10,
+                reason: '膝伤',
+              }],
+            };
+          }
+          if (player.uuid === longAbsence.uuid) {
+            return {
+              ...player,
+              injuredUntilWindow: 9999,
+              suspendedUntilWindow: 9999,
+              injuryHistory: [{
+                type: 'long_term' as const,
+                startSeason: 1,
+                startWindow: world.totalElapsedWindows,
+                durationMatches: 30,
+                reason: '十字韧带断裂',
+              }],
+            };
+          }
+          return player;
+        }),
+      },
+    };
+    const before = structuredClone(world);
+    const sourceShort = world.squads[teamId].find(player => player.uuid === shortAbsence.uuid)!;
+    const sourceLong = world.squads[teamId].find(player => player.uuid === longAbsence.uuid)!;
+
+    const rollover = executeCurrentWindow(world);
+    const nextShort = Object.values(rollover.world.squads).flat()
+      .find(player => player.uuid === shortAbsence.uuid)!;
+    const nextLong = Object.values(rollover.world.squads).flat()
+      .find(player => player.uuid === longAbsence.uuid)!;
+
+    expect(world).toEqual(before);
+    expect(rollover.world.squads).not.toBe(world.squads);
+    expect(nextShort).not.toBe(sourceShort);
+    expect(nextLong).not.toBe(sourceLong);
+    expect(sourceShort.age).toBe(before.squads[teamId].find(player => player.uuid === shortAbsence.uuid)!.age);
+    expect(nextShort.age).toBe(sourceShort.age + 1);
+    expect(nextShort.injuredUntilWindow).toBe(0);
+    expect(nextShort.suspendedUntilWindow).toBe(0);
+    expect(nextLong.injuredUntilWindow).toBe(9999);
+    expect(nextLong.suspendedUntilWindow).toBe(0);
+  });
+
   it('refreshes World Cup season stats without replacing the pre-aging identity', () => {
     let world = initializeGameWorld(20260720);
     while (world.seasonState.seasonNumber < 4 || getCurrentWindow(world)?.type !== 'season_end') {
@@ -341,14 +513,32 @@ describe('executeCurrentWindow', () => {
       player.uuid,
       { age: player.age, rating: player.rating },
     ]));
-    world = executeCurrentWindow(world).world;
+    const domesticInput = world;
+    const domesticBefore = structuredClone(domesticInput);
+    world = executeCurrentWindow(domesticInput).world;
+    expect(domesticInput).toEqual(domesticBefore);
+    expect(world.squads).not.toBe(domesticInput.squads);
+    expect(world.seasonState.calendar.filter(window => window.type === 'world_cup_group')).toHaveLength(3);
+    expect(world.seasonState.calendar.filter(window => window.type === 'world_cup')).toHaveLength(4);
+    expect(world.worldCup!.groups.flatMap(group => group.fixtures).every(fixture => fixture.isNeutralVenue)).toBe(true);
     const worldCupTeamId = world.worldCup!.participantIds[0];
     const starter = [...world.squads[worldCupTeamId]].sort((a, b) => b.rating - a.rating)[0];
     const domesticAppearances = world.playerStats[starter.uuid].appearances;
 
+    const firstGroupRound = executeCurrentWindow(world);
+    expect(firstGroupRound.results).toHaveLength(16);
+    expect(firstGroupRound.results.every(result => result.isNeutralVenue)).toBe(true);
+    expect(firstGroupRound.results.every(result =>
+      result.prediction?.factors?.every(factor => factor.source !== 'home_advantage'),
+    )).toBe(true);
+    world = firstGroupRound.world;
+
     let completionNews = [] as ReturnType<typeof executeCurrentWindow>['news'];
     while (world.seasonState.seasonNumber === 4) {
-      const result = executeCurrentWindow(world);
+      const worldCupInput = world;
+      const worldCupBefore = structuredClone(worldCupInput);
+      const result = executeCurrentWindow(worldCupInput);
+      expect(worldCupInput).toEqual(worldCupBefore);
       world = result.world;
       completionNews = result.news;
     }

@@ -25,8 +25,7 @@ function determineSingleMatchWinner(result: MatchResult): string {
       : result.awayTeamId;
   }
 
-  // Fallback (should not happen if match engine always resolves knockouts)
-  return result.homeTeamId;
+  throw new Error(`Unresolved knockout result: ${result.fixtureId}`);
 }
 
 /**
@@ -62,6 +61,7 @@ export function initLeagueCup(
     roundName: ROUND_NAMES[0],
     homeTeamId: pair[0],
     awayTeamId: pair[1],
+    isNeutralVenue: true,
   }));
 
   const firstRound: CupRound = {
@@ -106,14 +106,18 @@ export function advanceLeagueCup(
   // Map results by fixtureId for quick lookup
   const resultMap = new Map(results.map((r) => [r.fixtureId, r]));
 
-  // Determine winners for each fixture in the current round
-  const winners: string[] = [];
-  for (const fixture of currentRound.fixtures) {
+  // Resolve the whole window before mutating the cup. An invalid tied result
+  // must never leave a partially completed round or favor the nominal home slot.
+  const resolved = currentRound.fixtures.map((fixture) => {
     const result = resultMap.get(fixture.id);
     if (!result) {
       throw new Error(`Missing result for fixture ${fixture.id}`);
     }
+    return { fixture, result, winnerId: determineSingleMatchWinner(result) };
+  });
 
+  const winners: string[] = [];
+  for (const { fixture, result, winnerId } of resolved) {
     // Record result on fixture
     fixture.result = {
       home: result.homeGoals + (result.etHomeGoals ?? 0),
@@ -124,7 +128,6 @@ export function advanceLeagueCup(
       penAway: result.penaltyAway,
     };
 
-    const winnerId = determineSingleMatchWinner(result);
     fixture.winnerId = winnerId;
     winners.push(winnerId);
   }
@@ -155,6 +158,7 @@ export function advanceLeagueCup(
       roundName: nextRoundName,
       homeTeamId: winners[i],
       awayTeamId: winners[i + 1],
+      isNeutralVenue: true,
     });
   }
 

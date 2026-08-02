@@ -103,7 +103,7 @@ async function main(): Promise<void> {
         animations: 'disabled',
       });
 
-      await page.getByRole('button', { name: '比赛日' }).click();
+      await page.getByRole('tab', { name: '比赛日' }).click();
       await page.getByTestId('dashboard-advance').click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       const afterTwo = await page.evaluate(readRouteSnapshot);
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: no staged story update within the review route`);
       }
 
-      await page.getByRole('button', { name: '比赛日' }).click();
+      await page.getByRole('tab', { name: '比赛日' }).click();
       await theme.waitFor();
       const finalText = ((await theme.textContent()) ?? '').replace(/\s+/g, ' ').trim();
       if (finalText === initialText || storySnapshot.primaryPlayed <= initial.primaryPlayed) {

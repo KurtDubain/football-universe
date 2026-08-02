@@ -8,6 +8,7 @@ import {
   pickMatchday,
   selectMatchday,
   appendInjuryHistory,
+  cloneSquadsForMutation,
   hasActiveLongTermInjury,
   resetDisciplineForNewSeason,
   processInjuriesAndSuspensions,
@@ -350,6 +351,43 @@ describe('appendInjuryHistory', () => {
 // ── 6. Season transition reset ──────────────────────────────
 
 describe('resetDisciplineForNewSeason', () => {
+  it('can operate on a fully isolated squad snapshot', () => {
+    const source = {
+      t1: [
+        makePlayer('p-1', {
+          injuredUntilWindow: 100,
+          suspendedUntilWindow: 80,
+          injuryHistory: [{
+            type: 'major', startSeason: 1, startWindow: 20,
+            durationMatches: 10, reason: '膝伤',
+          }],
+          suspensionHistory: [{
+            startSeason: 1,
+            startWindow: 20,
+            unavailableFromWindow: 21,
+            suspendedUntilWindow: 23,
+            banWindows: 2,
+            reason: 'red_cards',
+          }],
+        }),
+      ],
+    };
+    const sourceBefore = structuredClone(source);
+    const writable = cloneSquadsForMutation(source);
+
+    resetDisciplineForNewSeason(writable, 30);
+
+    expect(source).toEqual(sourceBefore);
+    expect(writable).not.toBe(source);
+    expect(writable.t1).not.toBe(source.t1);
+    expect(writable.t1[0]).not.toBe(source.t1[0]);
+    expect(writable.t1[0].injuryHistory).not.toBe(source.t1[0].injuryHistory);
+    expect(writable.t1[0].injuryHistory?.[0]).not.toBe(source.t1[0].injuryHistory?.[0]);
+    expect(writable.t1[0].suspensionHistory).not.toBe(source.t1[0].suspensionHistory);
+    expect(writable.t1[0].suspendedUntilWindow).toBe(0);
+    expect(writable.t1[0].injuredUntilWindow).toBe(0);
+  });
+
   it('clears suspendedUntilWindow on every player', () => {
     const squads = {
       t1: [

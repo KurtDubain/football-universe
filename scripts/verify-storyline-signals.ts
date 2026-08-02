@@ -47,7 +47,7 @@ async function main(): Promise<void> {
         await store.getState().batchAdvance(12);
       });
 
-      await page.getByRole('button', { name: '比赛日' }).click();
+      await page.getByRole('tab', { name: '比赛日' }).click();
       const signals = page.getByTestId('storyline-signals');
       await signals.waitFor({ state: 'visible', timeout: 10_000 });
       const storyRows = signals.locator('section > div.divide-y > div');
@@ -88,11 +88,11 @@ async function main(): Promise<void> {
         window.dispatchEvent(new PopStateEvent('popstate'));
       });
       await page.getByTestId('dashboard').waitFor({ state: 'visible', timeout: 20_000 });
-      const reviewTab = page.getByRole('button', { name: /S1回顾/ });
+      const reviewTab = page.getByRole('tab', { name: /S1(?:回顾|档案)/ });
       await reviewTab.waitFor({ state: 'visible', timeout: 20_000 });
       await page.evaluate(() => {
         const button = [...document.querySelectorAll('button')]
-          .find(candidate => candidate.textContent?.includes('S1回顾'));
+          .find(candidate => /S1(?:回顾|档案)/.test(candidate.textContent ?? ''));
         if (!(button instanceof HTMLButtonElement)) throw new Error('Season review tab unavailable');
         button.click();
       });

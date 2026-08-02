@@ -65,7 +65,7 @@ async function openFirstLiveMatch(page: Page): Promise<{ fixtureId: string; expe
     };
     state.newGame(20260716);
   });
-  await page.getByRole('button', { name: '比赛日' }).waitFor({ state: 'visible' });
+  await page.getByRole('tab', { name: '比赛日' }).waitFor({ state: 'visible' });
   const expected = await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     const state = store?.getState() as {

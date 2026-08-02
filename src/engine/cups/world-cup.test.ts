@@ -1,6 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { initWorldCup } from './world-cup';
+import {
+  advanceWorldCupKnockout,
+  completeWorldCupGroupStage,
+  initWorldCup,
+  updateWorldCupGroupStandings,
+} from './world-cup';
 import { SeededRNG } from '../match/rng';
+import type { CupFixture } from '../../types/cup';
+import type { MatchResult } from '../../types/match';
+
+function draw(fixture: CupFixture): MatchResult {
+  return {
+    fixtureId: fixture.id,
+    homeTeamId: fixture.homeTeamId,
+    awayTeamId: fixture.awayTeamId,
+    homeGoals: 0,
+    awayGoals: 0,
+    extraTime: false,
+    penalties: false,
+    events: [],
+    stats: {
+      possession: [50, 50],
+      shots: [0, 0],
+      shotsOnTarget: [0, 0],
+      corners: [0, 0],
+      fouls: [0, 0],
+      yellowCards: [0, 0],
+      redCards: [0, 0],
+    },
+    competitionType: 'world_cup_group',
+    competitionName: '环球冠军杯',
+    roundLabel: fixture.roundName,
+    isNeutralVenue: true,
+  };
+}
 
 describe('initWorldCup', () => {
   it('throws on non-32 inputs', () => {
@@ -48,11 +81,64 @@ describe('initWorldCup', () => {
     expect(new Set(allInGroups).size).toBe(32);
   });
 
-  it('generates 12 double round-robin fixtures per group (96 total)', () => {
+  it('generates one neutral match per pair: 6 fixtures per group, 48 total', () => {
     const teams = Array.from({ length: 32 }, (_, i) => `t${i + 1}`);
     const wc = initWorldCup(teams, 1, new SeededRNG(11));
     const total = wc.groups.reduce((s, g) => s + g.fixtures.length, 0);
-    expect(total).toBe(96); // 8 × 12
-    wc.groups.forEach((g) => expect(g.fixtures).toHaveLength(12));
+    expect(total).toBe(48);
+    for (const group of wc.groups) {
+      expect(group.fixtures).toHaveLength(6);
+      expect(group.fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+      expect(new Set(group.fixtures.map(fixture => fixture.round))).toEqual(new Set([1, 2, 3]));
+      const appearances = new Map(group.teamIds.map(teamId => [teamId, 0]));
+      const pairs = new Set<string>();
+      for (const fixture of group.fixtures) {
+        appearances.set(fixture.homeTeamId, appearances.get(fixture.homeTeamId)! + 1);
+        appearances.set(fixture.awayTeamId, appearances.get(fixture.awayTeamId)! + 1);
+        pairs.add([fixture.homeTeamId, fixture.awayTeamId].sort().join(':'));
+      }
+      expect([...appearances.values()]).toEqual([3, 3, 3, 3]);
+      expect(pairs.size).toBe(6);
+    }
+  });
+
+  it('completes three neutral group rounds without mutating the input states', () => {
+    const teams = Array.from({ length: 32 }, (_, i) => `t${i + 1}`);
+    let wc = initWorldCup(teams, 4, new SeededRNG(11));
+    for (let round = 1; round <= 3; round++) {
+      const input = wc;
+      const before = structuredClone(input);
+      const fixtures = wc.groups.flatMap(group =>
+        group.fixtures.filter(fixture => fixture.round === round),
+      );
+      wc = updateWorldCupGroupStandings(input, fixtures.map(draw));
+      expect(input).toEqual(before);
+    }
+    expect(wc.groups.every(group => group.standings.every(entry => entry.played === 3))).toBe(true);
+
+    const completed = completeWorldCupGroupStage(wc, new SeededRNG(11));
+    expect(completed.knockoutRounds[0].roundName).toBe('R16');
+    expect(completed.knockoutRounds[0].fixtures).toHaveLength(8);
+    expect(completed.knockoutRounds[0].fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+  });
+
+  it('rejects partial or unresolved knockout results without favoring a team slot', () => {
+    const teams = Array.from({ length: 32 }, (_, i) => `t${i + 1}`);
+    let wc = initWorldCup(teams, 4, new SeededRNG(11));
+    for (let round = 1; round <= 3; round++) {
+      const fixtures = wc.groups.flatMap(group =>
+        group.fixtures.filter(fixture => fixture.round === round),
+      );
+      wc = updateWorldCupGroupStandings(wc, fixtures.map(draw));
+    }
+    wc = completeWorldCupGroupStage(wc, new SeededRNG(11));
+    const before = structuredClone(wc);
+    const fixtures = wc.knockoutRounds[0].fixtures;
+
+    expect(() => advanceWorldCupKnockout(wc, [draw(fixtures[0])], new SeededRNG(11)))
+      .toThrow(/Missing result/);
+    expect(() => advanceWorldCupKnockout(wc, fixtures.map(draw), new SeededRNG(11)))
+      .toThrow(/Unresolved knockout result/);
+    expect(wc).toEqual(before);
   });
 });

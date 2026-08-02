@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -10,9 +11,12 @@ import {
 import { Icon } from './Icon';
 import {
   clampFloatingPosition,
+  createFloatingPositionMemory,
   FLOATING_EDGE_MARGIN,
   type FloatingPosition,
+  type FloatingPositionMemory,
   type FloatingViewportBounds,
+  restoreFloatingPosition,
 } from './floating-position';
 
 const KEYBOARD_STEP = 12;
@@ -21,35 +25,61 @@ const POSITION_STORAGE_KEY = 'floating-advance-position-v2';
 
 function getViewportBounds(): FloatingViewportBounds {
   const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth);
+  const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+  const content = document.querySelector<HTMLElement>('.app-route-content')?.getBoundingClientRect();
+  const left = Math.max(viewportLeft, content?.left ?? viewportLeft);
+  const top = Math.max(viewportTop, content?.top ?? viewportTop);
+  const right = Math.min(viewportRight, content?.right ?? viewportRight);
+  const bottom = Math.min(viewportBottom, content?.bottom ?? viewportBottom);
   return {
-    left: viewport?.offsetLeft ?? 0,
-    top: viewport?.offsetTop ?? 0,
-    width: viewport?.width ?? window.innerWidth,
-    height: viewport?.height ?? window.innerHeight,
+    left,
+    top,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
   };
 }
 
 function getElementSize(element: HTMLElement | null): { width: number; height: number } {
   const rect = element?.getBoundingClientRect();
-  return { width: rect?.width ?? 56, height: rect?.height ?? 56 };
+  if (rect?.width && rect.height) return { width: rect.width, height: rect.height };
+  return window.innerWidth < 640
+    ? { width: 56, height: 56 }
+    : { width: 96, height: 48 };
 }
 
 function readSavedPosition(): FloatingPosition | null {
   try {
     const raw = localStorage.getItem(POSITION_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<FloatingPosition>;
+    const parsed = JSON.parse(raw) as Partial<FloatingPositionMemory>;
     return Number.isFinite(parsed.x) && Number.isFinite(parsed.y)
-      ? { x: Number(parsed.x), y: Number(parsed.y) }
+      ? restoreFloatingPosition({
+        x: Number(parsed.x),
+        y: Number(parsed.y),
+        edge: parsed.edge,
+        verticalRatio: parsed.verticalRatio,
+        viewportWidth: parsed.viewportWidth,
+        viewportHeight: parsed.viewportHeight,
+      }, getElementSize(null), getViewportBounds())
       : null;
   } catch {
     return null;
   }
 }
 
-function persistPosition(position: FloatingPosition | null): void {
+function persistPosition(position: FloatingPosition | null, element: HTMLElement | null): void {
   try {
-    if (position) localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
+    if (position) {
+      const memory = createFloatingPositionMemory(
+        position,
+        getElementSize(element),
+        getViewportBounds(),
+      );
+      localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(memory));
+    }
     else localStorage.removeItem(POSITION_STORAGE_KEY);
   } catch {
     // Position memory is optional and must never block the advance action.
@@ -94,12 +124,21 @@ export default function FloatingAdvanceButton({
     clampFloatingPosition(next, getElementSize(containerRef.current), getViewportBounds())
   ), []);
 
-  useEffect(() => {
-    const current = latestPositionRef.current;
+  useLayoutEffect(() => {
+    // The route content box only exists after commit, so resolve saved relative
+    // coordinates once more before paint using the real draggable area.
+    const current = readSavedPosition() ?? latestPositionRef.current;
     if (current) {
       const clamped = clampCurrentPosition(current);
-      updatePosition(clamped);
-      persistPosition(clamped);
+      latestPositionRef.current = clamped;
+      if (containerRef.current) {
+        containerRef.current.style.left = `${clamped.x}px`;
+        containerRef.current.style.top = `${clamped.y}px`;
+        containerRef.current.classList.remove('floating-advance-docked');
+      }
+      persistPosition(clamped, containerRef.current);
+      const frame = requestAnimationFrame(() => updatePosition(clamped));
+      return () => cancelAnimationFrame(frame);
     }
   }, [clampCurrentPosition, updatePosition]);
 
@@ -109,7 +148,7 @@ export default function FloatingAdvanceButton({
       if (!current) return;
       const clamped = clampCurrentPosition(current);
       updatePosition(clamped);
-      persistPosition(clamped);
+      persistPosition(clamped, containerRef.current);
     };
     const viewport = window.visualViewport;
     window.addEventListener('resize', keepVisible);
@@ -170,7 +209,7 @@ export default function FloatingAdvanceButton({
         y: current.y,
       });
       updatePosition(snapped);
-      persistPosition(snapped);
+      persistPosition(snapped, containerRef.current);
     }
     dragRef.current.pointerId = -1;
     setDragging(false);
@@ -189,7 +228,7 @@ export default function FloatingAdvanceButton({
     if (event.key === 'Home') {
       event.preventDefault();
       updatePosition(null);
-      persistPosition(null);
+      persistPosition(null, containerRef.current);
       return;
     }
     const direction = {
@@ -204,7 +243,7 @@ export default function FloatingAdvanceButton({
     if (!rect) return;
     const next = clampCurrentPosition({ x: rect.left + direction[0], y: rect.top + direction[1] });
     updatePosition(next);
-    persistPosition(next);
+    persistPosition(next, containerRef.current);
   }, [clampCurrentPosition, updatePosition]);
 
   return (

@@ -374,13 +374,11 @@ export const CUP_PRIZE = {
   world_cup_semi: 15,
   world_cup_runner_up: 30,
   world_cup_winner: 60,
-  // 大陆杯 (8-team coefficient-qualified knockout)
-  continental_cup_r8: 4,
+  // 大陆杯 (8-team groups + SF/Final)
   continental_cup_semi: 10,
   continental_cup_runner_up: 25,
   continental_cup_winner: 45,
-  // 南洲杯 / 东洲杯 (4-team coefficient-qualified knockout)
-  small_continental_cup_sf: 8,
+  // 南洲杯 / 东洲杯 (4-team group + Final)
   small_continental_cup_runner_up: 20,
   small_continental_cup_winner: 40,
 };
@@ -439,20 +437,20 @@ export const WORLD_CUP_TIERS: CupTierConfig = {
   r16LoserPrize: CUP_PRIZE.world_cup_r16,
 };
 
-// 大陆杯: 8-team knockout, 3 rounds (QF → SF → Final).
+// 大陆杯: group exits get €0; the knockout is SF → Final.
 export const MAINLAND_CUP_TIERS: CupTierConfig = {
   finalWinnerPrize: CUP_PRIZE.continental_cup_winner,
   finalRunnerUpPrize: CUP_PRIZE.continental_cup_runner_up,
   semiLoserPrize: CUP_PRIZE.continental_cup_semi,
-  quarterLoserPrize: CUP_PRIZE.continental_cup_r8,
+  quarterLoserPrize: 0,
   r16LoserPrize: 0,
 };
 
-// 南洲杯 / 东洲杯: 4-team knockout, 2 rounds (SF → Final).
+// 南洲杯 / 东洲杯: group exits get €0; only the Final is a knockout round.
 export const SMALL_CONTINENTAL_CUP_TIERS: CupTierConfig = {
   finalWinnerPrize: CUP_PRIZE.small_continental_cup_winner,
   finalRunnerUpPrize: CUP_PRIZE.small_continental_cup_runner_up,
-  semiLoserPrize: CUP_PRIZE.small_continental_cup_sf,
+  semiLoserPrize: 0,
   quarterLoserPrize: 0,
   r16LoserPrize: 0,
 };

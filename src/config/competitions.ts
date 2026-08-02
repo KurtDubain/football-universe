@@ -54,7 +54,16 @@ export const worldCupConfig = {
   participantCount: 32,   // all teams
   groupCount: 8,          // 8 groups
   teamsPerGroup: 4,       // 2顶+1甲+1乙
+  groupRounds: 3,         // neutral single round robin
   advancePerGroup: 2,     // top 2 advance to R16
+} as const;
+
+export const continentalCupConfig = {
+  firstSeason: 5,
+  interval: 6,
+  mainlandTeams: 8,
+  regionalTeams: 4,
+  groupRounds: 3,
 } as const;
 
 export const leagueCupConfig = {

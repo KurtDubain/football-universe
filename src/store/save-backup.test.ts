@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
+import { initializeGameWorld } from '../engine/season/season-manager';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
 import { SAVE_SCHEMA_VERSION } from './save-schema';
@@ -13,13 +14,7 @@ const currentSave = {
     lastNews: [],
     favoriteTeamId: null,
     favoriteTeamIds: [],
-    world: {
-      seasonState: { seasonNumber: 3, calendar: [] },
-      teamBases: { a: { id: 'a' } },
-      teamStates: { a: { id: 'a' } },
-      squads: { a: [] },
-      playerStats: {},
-    },
+    world: initializeGameWorld(20260730),
   },
 };
 

@@ -9,6 +9,7 @@ import type { NewsItem } from '../engine/season/season-manager';
 import MatchLive from './MatchLive';
 import ResultAnimation from './ResultAnimation';
 import NewsTicker from './NewsTicker';
+import { setFeedbackPreferences } from '../feedback/preferences';
 
 vi.mock('./PitchCanvas', () => ({
   default: () => <div data-testid="pitch" />,
@@ -30,6 +31,7 @@ let root: Root;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  setFeedbackPreferences({ soundEnabled: true, hapticsEnabled: false });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -137,6 +139,32 @@ describe('MatchLive playback state machine', () => {
     expect(score('客队比分')).toBe('0');
     expect(document.body.textContent).toContain('主队破门');
     expect(document.body.textContent).toContain('进球了');
+  });
+
+  it('uses the global preference and emits one goal cue from the live event cursor', () => {
+    const cues: string[] = [];
+    const handleFeedback = (event: Event) => {
+      cues.push((event as CustomEvent<{ cue: string }>).detail.cue);
+    };
+    window.addEventListener('football-feedback-played', handleFeedback);
+    try {
+      render(<MatchLive result={makeResult('live-sound', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
+      expect(button('声音').getAttribute('aria-pressed')).toBe('true');
+      act(() => button('1x').click());
+      advanceTicks(2, 280);
+      expect(cues.filter(cue => cue === 'goal')).toHaveLength(1);
+    } finally {
+      window.removeEventListener('football-feedback-played', handleFeedback);
+    }
+  });
+
+  it('can enable global sound from the live-local control', () => {
+    setFeedbackPreferences({ soundEnabled: false });
+    render(<MatchLive result={makeResult('live-muted')} teamBases={teamBases} onClose={() => undefined} />);
+    const sound = button('全局静音');
+    expect(sound.getAttribute('aria-pressed')).toBe('false');
+    act(() => sound.click());
+    expect(button('声音').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('defaults to highlights, crosses quiet periods quickly, and holds key events', () => {

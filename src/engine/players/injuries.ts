@@ -349,20 +349,37 @@ export function hasActiveLongTermInjury(
 // ── Season transition reset ───────────────────────────────────
 
 /**
+ * Create the writable squad boundary used by season/window orchestration.
+ * Player histories are copied as well because later injury/suspension passes
+ * replace or append to those arrays.
+ */
+export function cloneSquadsForMutation(
+  squads: Record<string, Player[]>,
+): Record<string, Player[]> {
+  return Object.fromEntries(
+    Object.entries(squads).map(([teamId, players]) => [
+      teamId,
+      players.map(player => ({
+        ...player,
+        injuryHistory: player.injuryHistory?.map(injury => ({ ...injury })),
+        suspensionHistory: player.suspensionHistory?.map(suspension => ({ ...suspension })),
+      })),
+    ]),
+  );
+}
+
+/**
  * Off-season cleanup. Called from `initializeNewSeason` AFTER the new
  * window counter is established (this helper doesn't move it).
  *
  * Behaviour per player on every squad:
  *   - clear `suspendedUntilWindow` (ALL bans wiped on offseason)
- *   - if the most recent injury (`injuryHistory.at(-1)`) had duration <= 30
- *     matches → clear `injuredUntilWindow`. Long-term (15-25) injuries by
- *     duration end up retained when `durationMatches` > 30 — but our
- *     long_term distribution is 15-25, so in practice everything resets
- *     UNLESS the active injury is a `long_term` AND the until-window still
- *     exceeds the new global counter. We use TYPE rather than duration as
- *     the source of truth: only `long_term` carries over.
+ *   - clear `injuredUntilWindow` unless the most recent injury is explicitly
+ *     `long_term` and still active at the global window counter. Severity is
+ *     the source of truth; duration alone never decides cross-season carry.
  *
- * Mutates squads in place. Doesn't change identity of the squad arrays.
+ * Mutates the supplied squads in place. Callers that retain the source world
+ * must pass a writable snapshot from `cloneSquadsForMutation`.
  */
 export function resetDisciplineForNewSeason(
   squads: Record<string, Player[]>,
