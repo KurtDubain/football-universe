@@ -392,6 +392,12 @@ function snapshotPlayerStatsHistory(
       keyBlocks: stat.keyBlocks,
       bigChances: stat.bigChances,
       keyPasses: stat.keyPasses,
+      routineSaves: stat.routineSaves ?? 0,
+      shotsOnTargetFaced: stat.shotsOnTargetFaced ?? 0,
+      cleanSheetMinutes: stat.cleanSheetMinutes ?? 0,
+      goalsConcededWhileOnPitch: stat.goalsConcededWhileOnPitch ?? 0,
+      interceptions: stat.interceptions ?? 0,
+      clearances: stat.clearances ?? 0,
     };
     const existing = next[uuid] ?? [];
     const existingIndex = existing.findIndex(e => e.season === seasonJustFinished && e.teamId === seasonTeamId);

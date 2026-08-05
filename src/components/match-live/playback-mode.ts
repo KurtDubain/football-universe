@@ -1,14 +1,14 @@
 import type { MatchEvent } from '../../types/match';
 
-export type PlaybackMode = 'highlights' | 'normal' | 'fast';
+export type PlaybackMode = 'highlights' | 'live' | 'immersive';
 
 export const PLAYBACK_MODE_OPTIONS: ReadonlyArray<{
   value: PlaybackMode;
   label: string;
 }> = [
   { value: 'highlights', label: '精华' },
-  { value: 'normal', label: '1x' },
-  { value: 'fast', label: '3x' },
+  { value: 'live', label: '直播' },
+  { value: 'immersive', label: '沉浸' },
 ];
 
 const HIGHLIGHT_EVENT_TYPES = new Set<MatchEvent['type']>([
@@ -48,8 +48,17 @@ export function playbackTickDelay(
   flashEvent: MatchEvent | null,
   reducedMotion: boolean,
 ): number {
-  if (mode === 'normal') return 280;
-  if (mode === 'fast') return 280 / 3;
+  const eventJustRevealed = flashEvent?.minute === minute;
+  if (mode === 'live') {
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 350 : 1200;
+    if (eventJustRevealed) return reducedMotion ? 250 : 700;
+    return reducedMotion ? 180 : 380;
+  }
+  if (mode === 'immersive') {
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1800;
+    if (eventJustRevealed) return reducedMotion ? 300 : 1050;
+    return reducedMotion ? 240 : 620;
+  }
 
   const holdingHighlight = isHighlightEvent(flashEvent)
     && minute <= (flashEvent?.minute ?? -1) + 1;
@@ -62,7 +71,7 @@ export function playbackBreakDelay(
   reducedMotion: boolean,
 ): number {
   if (reducedMotion) return 250;
-  if (mode === 'normal') return 2000;
-  if (mode === 'fast') return 800;
+  if (mode === 'live') return 1800;
+  if (mode === 'immersive') return 2800;
   return 650;
 }

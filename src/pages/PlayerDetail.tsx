@@ -6,6 +6,7 @@ import { TAG_META } from '../engine/players/tags';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
+import { computePlayerPerformance, PLAYER_RANKING_MINUTES } from '../engine/players/player-performance';
 import {
   getCurrentPlayerClubStatRows,
   getCurrentPlayerStatRows,
@@ -69,15 +70,24 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   // early return above the hooks.
   const posRanking = useMemo(() => {
     if (!player) return { rank: 0, total: 0 };
-    if ((world.playerStats[uuid]?.appearances ?? 0) < 3) return { rank: 0, total: 0 };
+    const ownPerformance = computePlayerPerformance(
+      player.position,
+      world.playerStats[uuid],
+      world.seasonStartLevels?.[player.teamId],
+    );
+    if (!ownPerformance.eligible) return { rank: 0, total: 0 };
     const allSamePos = getCurrentPlayerStatRows(world)
-      .filter(row => row.identity.position === player.position && row.appearances >= 3);
-    const score = (s: typeof allSamePos[number]) => {
-      if (player.position === 'FW') return s.goals * 2 + s.assists + s.bigChances * 0.3;
-      if (player.position === 'MF') return s.assists * 2 + s.goals + s.keyPasses * 0.4;
-      if (player.position === 'GK') return s.cleanSheets * 2 + s.saves * 0.5 + s.appearances * 0.1;
-      return s.cleanSheets * 2 + s.keyBlocks * 0.8 + s.appearances * 0.1;
-    };
+      .filter(row => row.identity.position === player.position)
+      .filter(row => computePlayerPerformance(
+        player.position,
+        row,
+        world.seasonStartLevels?.[row.teamId],
+      ).eligible);
+    const score = (s: typeof allSamePos[number]) => computePlayerPerformance(
+      player.position,
+      s,
+      world.seasonStartLevels?.[s.teamId],
+    ).score;
     const sorted = [...allSamePos].sort((a, b) => {
       return score(b) - score(a);
     });
@@ -263,7 +273,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
             </div>
             <div data-testid="position-headline-metrics" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {headlineMetrics.map(metric => (
-                <StatBox key={metric.label} label={metric.label} value={metric.value} color={metric.color} />
+                <StatBox key={metric.label} label={metric.label} value={metric.value} color={metric.color} tooltip={metric.tooltip} />
               ))}
             </div>
             <p className="text-xs text-slate-500">
@@ -424,12 +434,12 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
                 <td className="py-1 text-right text-slate-400 tabular-nums">{row.minutesPlayed ?? 0}</td>
                 <td className="py-1 text-right text-amber-300 tabular-nums">{row.goals}</td>
                 <td className="py-1 text-right text-blue-300 tabular-nums">{row.assists}</td>
-                <td className="py-1 text-right text-slate-400 tabular-nums" title="零封仅统计实际登场且球队整场（含加时）零失球的门将与后卫">
+                <td className="py-1 text-right text-slate-400 tabular-nums" title="当前赛季全赛事，按效力球队分段统计">
                   {row.identity.position === 'GK'
-                    ? `${row.cleanSheets}零封/${row.saves}神扑`
+                    ? `${row.routineSaves ?? 0}扑救/${row.saves}关键`
                     : row.identity.position === 'DF'
-                    ? `${row.cleanSheets}零封/${row.keyBlocks}关键封堵`
-                    : `${row.bigChances}关键射门/${row.keyPasses}威胁传球`}
+                    ? `${row.interceptions ?? 0}拦截/${row.clearances ?? 0}解围`
+                    : `${Math.max(0, row.bigChances - row.goals)}额外机会/${Math.max(0, row.keyPasses - row.assists)}额外创造`}
                 </td>
               </tr>
             ))}
@@ -444,6 +454,7 @@ const AWARD_META: Record<string, { label: string; icon: IconName; accent: string
   mvp:           { label: '金球奖',  icon: 'trophy',     accent: '#fbbf24', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
   golden_boot:   { label: '金靴奖',  icon: 'boot',       accent: '#fb923c', color: 'bg-orange-900/40 text-orange-300 border-orange-700/40' },
   best_defender: { label: '最佳后卫', icon: 'shield',     accent: '#3b82f6', color: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
+  best_goalkeeper:{ label: '最佳门将', icon: 'gloves',     accent: '#22d3ee', color: 'bg-cyan-900/40 text-cyan-300 border-cyan-700/40' },
   young_player:  { label: '最佳新星', icon: 'sparkle',    accent: '#34d399', color: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
 };
 
@@ -478,20 +489,6 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   );
 }
 
-// ── v19 — Position-specific performance metric ────────────────────
-//
-// Each position has a different "shining" KPI:
-//   FW: 0.7 × goals/match + 0.3 × bigChances/match  → rewards
-//       finishing + threat. Elite ~0.4 goals + 0.6 bigChances per game.
-//   MF: 0.7 × (goals+assists)/match + 0.3 × keyPasses/match → rewards
-//       finishing + creativity. Elite ~0.6 G+A + 0.5 keyPass per game.
-//   DF: 0.5 × cleanSheetRate + 0.3 × (keyBlocks/match × 80) + 0.2 ×
-//       teamDefense → individual blocks dominate, team context modulates.
-//   GK: 0.5 × cleanSheetRate + 0.5 × (saves/match × 50) → elite GK with
-//       35% clean rate + 0.5 saves/match = 100 score.
-// v22: every position now uses an INDIVIDUAL counter (bigChances /
-// keyPasses / keyBlocks / saves) sourced from the deny pipeline, so two
-// players on the same team can finally diverge on these metrics.
 function computePositionScore(
   player: Player,
   stats: PlayerSeasonStats | undefined,
@@ -499,76 +496,44 @@ function computePositionScore(
 ): {
   score: number;
   rating: string;
+  eligible: boolean;
+  minutes: number;
   perGame?: number;
   label: string;
-  /** v21/v22 — extra context line (e.g. "12 场零封 / 28 出场 · 0.3 神扑/场"). */
+  /** Position-specific, current-season evidence shown below the score. */
   detail?: string;
 } {
   const apps = stats?.appearances ?? 0;
-  const goals = stats?.goals ?? 0;
-  const assists = stats?.assists ?? 0;
-  if (apps === 0) return { score: 0, rating: '—', label: '本赛季未出场' };
-
+  if (apps === 0) return { score: 0, rating: '—', eligible: false, minutes: 0, label: '本赛季未出场' };
+  const result = computePlayerPerformance(
+    player.position,
+    stats,
+    world.seasonStartLevels?.[player.teamId],
+  );
+  const metrics = result.metrics;
+  const label = result.eligible ? '当前赛季全赛事综合' : `样本不足 · 需 ${PLAYER_RANKING_MINUTES} 分钟`;
   if (player.position === 'FW') {
-    const bigChances = stats?.bigChances ?? goals;
-    const goalRate = goals / apps;
-    const chanceRate = bigChances / apps;
-    const score = Math.min(100, (goalRate * 0.7 + chanceRate * 0.3) * 200);
-    const detail = `进球 ${goals} · 关键射门 ${bigChances} (${chanceRate.toFixed(2)}/场)`;
-    return { score, rating: scoreToGrade(score), perGame: goalRate, label: '场均进球', detail };
+    return {
+      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.goalsPer90, label,
+      detail: `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外关键机会 ${metrics.extraBigChancesPer90.toFixed(2)}/90`,
+    };
   }
   if (player.position === 'MF') {
-    const keyPasses = stats?.keyPasses ?? assists;
-    const gaRate = (goals + assists) / apps;
-    const keyRate = keyPasses / apps;
-    const score = Math.min(100, (gaRate * 0.7 + keyRate * 0.3) * 200);
-    const detail = `传射 ${goals + assists} (${goals}进/${assists}助) · 威胁传球 ${keyPasses}`;
-    return { score, rating: scoreToGrade(score), perGame: gaRate, label: '场均传射贡献', detail };
+    return {
+      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.assistsPer90, label,
+      detail: `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外创造机会 ${metrics.extraKeyPassesPer90.toFixed(2)}/90`,
+    };
   }
-  // DF / GK — the team context deliberately uses league standings only.
-  // Individual stats remain current-season totals across all competitions;
-  // the UI labels this mixed scope explicitly. GK score has no team context.
-  let teamGC = 0;
-  let teamMatches = 0;
-  for (const st of [world.league1Standings, world.league2Standings, world.league3Standings]) {
-    const row = (st ?? []).find(s => s.teamId === player.teamId);
-    if (row && row.played > 0) {
-      teamGC = row.goalsAgainst;
-      teamMatches = row.played;
-      break;
-    }
-  }
-  const cleanSheets = stats?.cleanSheets ?? 0;
-  const cleanRate = cleanSheets / apps; // 0..1
-  const gcPerGame = teamMatches > 0 ? teamGC / teamMatches : 2;
-  const teamDefenseScore = Math.max(0, 100 - gcPerGame * 25); // 0..100, team context
   if (player.position === 'GK') {
-    const saves = stats?.saves ?? 0;
-    const savesPerGame = saves / apps;
-    // 50% clean rate weight (35% rate = 100) + 50% saves weight (0.5/match = 100)
-    const score = Math.min(100, cleanRate * 285 * 0.5 + savesPerGame * 100 * 0.5);
-    const detail = `零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 神扑 ${saves} (${savesPerGame.toFixed(2)}/场)`;
-    return { score, rating: scoreToGrade(score), perGame: cleanRate, label: '门将综合', detail };
+    return {
+      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.savePercentage, label,
+      detail: `普通扑救 ${stats?.routineSaves ?? 0} · 关键扑救 ${stats?.saves ?? 0} · 扑救率 ${(metrics.savePercentage * 100).toFixed(1)}% · 零封贡献 ${(metrics.cleanSheetContribution * 100).toFixed(0)}% · 失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`,
+    };
   }
-  // DF
-  const keyBlocks = stats?.keyBlocks ?? 0;
-  const blocksPerGame = keyBlocks / apps;
-  // 50% clean rate (40% = 100 score) + 30% blocks (0.2/match = ~80) + 20% team
-  const score = Math.min(100,
-    cleanRate * 250 * 0.5
-    + Math.min(100, blocksPerGame * 400) * 0.3
-    + teamDefenseScore * 0.2,
-  );
-  const detail = `全赛事零封 ${cleanSheets}/${apps} (${(cleanRate * 100).toFixed(0)}%) · 关键封堵 ${keyBlocks} (${blocksPerGame.toFixed(2)}/场) · 球队联赛失球 ${gcPerGame.toFixed(2)}/场`;
-  return { score, rating: scoreToGrade(score), perGame: cleanRate, label: '后卫综合', detail };
-}
-
-function scoreToGrade(score: number): string {
-  if (score >= 85) return 'S';
-  if (score >= 70) return 'A';
-  if (score >= 55) return 'B';
-  if (score >= 40) return 'C';
-  return 'D';
+  return {
+    score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.cleanSheetContribution, label,
+    detail: `拦截 ${metrics.interceptionsPer90.toFixed(2)}/90 · 解围 ${metrics.clearancesPer90.toFixed(2)}/90 · 门线封堵 ${stats?.keyBlocks ?? 0} · 零封贡献 ${(metrics.cleanSheetContribution * 100).toFixed(0)}% · 在场失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`,
+  };
 }
 
 function PositionPerformanceCard({
@@ -582,11 +547,13 @@ function PositionPerformanceCard({
 }) {
   const result = computePositionScore(player, stats, world);
   if (result.score === 0 && result.label === '本赛季未出场') return null;
-  const barColor = result.score >= 70 ? 'bg-emerald-500'
+  const barColor = !result.eligible ? 'bg-blue-500'
+    : result.score >= 70 ? 'bg-emerald-500'
     : result.score >= 50 ? 'bg-amber-500'
     : result.score >= 30 ? 'bg-orange-500'
     : 'bg-red-500';
-  const gradeColor = result.score >= 70 ? 'text-emerald-300'
+  const gradeColor = !result.eligible ? 'text-cyan-300'
+    : result.score >= 70 ? 'text-emerald-300'
     : result.score >= 50 ? 'text-amber-300'
     : result.score >= 30 ? 'text-orange-300'
     : 'text-red-300';
@@ -602,28 +569,33 @@ function PositionPerformanceCard({
         {result.label}
         {result.perGame !== undefined ? ` ${player.position === 'GK' || player.position === 'DF' ? (result.perGame * 100).toFixed(0) + '%' : result.perGame.toFixed(2)}` : ''}
       </div>
-      {player.position === 'DF' && (
-        <div className="text-[10px] text-slate-500 mb-1">评分口径: 个人全赛事数据 + 球队联赛防守背景</div>
+      {(player.position === 'DF' || player.position === 'GK') && (
+        <div className="text-[10px] text-slate-500 mb-1">个人数据权重 75% · 零封与在场失球背景 25%</div>
       )}
       {result.detail && (
         <div className="text-[10px] text-slate-400 mb-2">{result.detail}</div>
       )}
       <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(100, result.score)}%` }} />
+        <div
+          className={`h-full rounded-full ${barColor} transition-all`}
+          style={{ width: `${result.eligible
+            ? Math.min(100, result.score)
+            : Math.min(100, result.minutes / PLAYER_RANKING_MINUTES * 100)}%` }}
+        />
       </div>
       <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-        <span>{result.score.toFixed(0)}/100</span>
-        <span>{positionScoreHint(player.position)}</span>
+        <span>{result.eligible ? `${result.score.toFixed(0)}/100` : `${result.minutes}/${PLAYER_RANKING_MINUTES}分钟`}</span>
+        <span>{result.eligible ? positionScoreHint(player.position) : '暂不排名'}</span>
       </div>
     </div>
   );
 }
 
 function positionScoreHint(pos: string): string {
-  if (pos === 'FW') return '0.5球/场 = 100分';
-  if (pos === 'MF') return '0.5传射/场 = 100分';
-  if (pos === 'GK') return '35%零封 + 0.5神扑/场';
-  return '40%零封 + 0.2关键封堵/场 + 联赛球队防守';
+  if (pos === 'FW') return '进球/助攻/额外机会';
+  if (pos === 'MF') return '进球/助攻/额外创造';
+  if (pos === 'GK') return '扑救率/扑救/零封贡献';
+  return '拦截/解围/门线封堵';
 }
 
 /** Per-season career history table (v19). */
@@ -835,9 +807,9 @@ function InjurySection({
   );
 }
 
-function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
+function StatBox({ label, value, color, tooltip }: { label: string; value: number; color?: string; tooltip?: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center">
+    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center" title={tooltip}>
       <div className={`text-2xl font-bold ${color ?? 'text-slate-100'}`}>{value}</div>
       <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
     </div>

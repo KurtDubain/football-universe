@@ -101,11 +101,11 @@ describe('updatePlayerStatsFromResults — shootout exclusion', () => {
     const totals = updatePlayerStatsFromResults(initialStats, [result], squads);
     const segments = updatePlayerStatSegmentsFromResults(initialSegments, [result], squads);
 
-    expect(totals[starter.uuid]).toMatchObject({ appearances: 1, starts: 1, substituteAppearances: 0, minutesPlayed: 70, cleanSheets: 1 });
-    expect(totals[substitute.uuid]).toMatchObject({ appearances: 1, starts: 0, substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 1 });
+    expect(totals[starter.uuid]).toMatchObject({ appearances: 1, starts: 1, substituteAppearances: 0, minutesPlayed: 70, cleanSheets: 1, cleanSheetMinutes: 70 });
+    expect(totals[substitute.uuid]).toMatchObject({ appearances: 1, starts: 0, substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 0, cleanSheetMinutes: 20 });
     expect(totals[unused.uuid]).toMatchObject({ appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0 });
-    expect(segments[playerTeamStatKey(starter.uuid, 'A')]).toMatchObject({ starts: 1, minutesPlayed: 70, cleanSheets: 1 });
-    expect(segments[playerTeamStatKey(substitute.uuid, 'A')]).toMatchObject({ substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 1 });
+    expect(segments[playerTeamStatKey(starter.uuid, 'A')]).toMatchObject({ starts: 1, minutesPlayed: 70, cleanSheets: 1, cleanSheetMinutes: 70 });
+    expect(segments[playerTeamStatKey(substitute.uuid, 'A')]).toMatchObject({ substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 0, cleanSheetMinutes: 20 });
     expect(segments[playerTeamStatKey(unused.uuid, 'A')]).toMatchObject({ appearances: 0, minutesPlayed: 0, cleanSheets: 0 });
   });
 
@@ -222,6 +222,50 @@ describe('updatePlayerStatsFromResults — shootout exclusion', () => {
     expect(updated.assister.assists).toBe(2);
     expect(updated.assister.keyPasses).toBe(2);
     expect(updated['own-goal-df'].goals).toBe(0);
+  });
+
+  it('keeps routine saves, key saves, goals faced, and defender actions distinct', () => {
+    const goalkeeper = mkPlayer('home-gk', 'A', 'GK');
+    const defender = mkPlayer('home-df', 'A', 'DF');
+    const attacker = mkPlayer('away-fw', 'B', 'FW');
+    const squads = { A: [goalkeeper, defender], B: [attacker] };
+    const initialStats = createInitialPlayerStats(squads);
+    const initialSegments = createInitialPlayerStatSegments(squads);
+    const result: MatchResult = {
+      ...mkLeagueResult('A', 'B', 0, 1, [
+        { minute: 10, type: 'goal', teamId: 'B', playerId: attacker.uuid, description: '进球' },
+        { minute: 30, type: 'gk_save', teamId: 'A', playerId: goalkeeper.uuid, deniedScorerId: attacker.uuid, description: '关键扑救' },
+        { minute: 40, type: 'df_block', teamId: 'A', playerId: defender.uuid, deniedScorerId: attacker.uuid, description: '门线封堵' },
+      ]),
+      homeMatchday: {
+        durationMinutes: 90, emergencyFloor: true, availableCount: 2,
+        players: [
+          { playerId: goalkeeper.uuid, position: 'GK', role: 'starter', enteredMinute: 0, exitedMinute: 90, minutesPlayed: 90 },
+          { playerId: defender.uuid, position: 'DF', role: 'starter', enteredMinute: 0, exitedMinute: 90, minutesPlayed: 90 },
+        ],
+      },
+      awayMatchday: {
+        durationMinutes: 90, emergencyFloor: true, availableCount: 1,
+        players: [{ playerId: attacker.uuid, position: 'FW', role: 'starter', enteredMinute: 0, exitedMinute: 90, minutesPlayed: 90 }],
+      },
+      defensiveContributions: {
+        [defender.uuid]: { playerId: defender.uuid, teamId: 'A', interceptions: 3, clearances: 5 },
+        [goalkeeper.uuid]: { playerId: goalkeeper.uuid, teamId: 'A', interceptions: 0, clearances: 0, routineSaves: 1 },
+      },
+    };
+
+    const totals = updatePlayerStatsFromResults(initialStats, [result], squads);
+    const segments = updatePlayerStatSegmentsFromResults(initialSegments, [result], squads);
+
+    expect(totals[goalkeeper.uuid]).toMatchObject({
+      routineSaves: 1, saves: 1, shotsOnTargetFaced: 3,
+      goalsConcededWhileOnPitch: 1, interceptions: 0, clearances: 0,
+    });
+    expect(totals[defender.uuid]).toMatchObject({
+      keyBlocks: 1, goalsConcededWhileOnPitch: 1, interceptions: 3, clearances: 5,
+    });
+    expect(segments[playerTeamStatKey(goalkeeper.uuid, 'A')]).toMatchObject({ routineSaves: 1, saves: 1, shotsOnTargetFaced: 3 });
+    expect(segments[playerTeamStatKey(defender.uuid, 'A')]).toMatchObject({ keyBlocks: 1, interceptions: 3, clearances: 5 });
   });
 });
 

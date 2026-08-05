@@ -7,6 +7,7 @@ export type PlayerAwardType =
   | 'mvp'           // 金球奖 — best overall
   | 'golden_boot'   // 金靴奖 — most goals
   | 'best_defender' // 最佳后卫
+  | 'best_goalkeeper' // 最佳门将
   | 'young_player'; // 最佳新星 — top scorer in low-tier team
 
 export interface PlayerAward {

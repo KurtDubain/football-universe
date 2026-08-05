@@ -13,6 +13,7 @@ import {
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
+import { computePlayerPerformance, PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 
 type Tab = 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
@@ -104,6 +105,9 @@ export default function Players() {
     const playerNumber = identity.playerNumber;
     const playerName = identity.playerName;
     const position = identity.position;
+    const performance = position
+      ? computePlayerPerformance(position, stat, world.seasonStartLevels?.[stat.teamId])
+      : null;
     const sourceLabel =
       identity.source === 'retired' ? '退役'
       : identity.source === 'history' ? '历史'
@@ -211,27 +215,27 @@ export default function Players() {
         ) : mode === 'defense' ? (
           <>
             <td className="px-2 py-2 text-center">
-              <span className="text-sm text-blue-300 font-semibold">{stat.cleanSheets}</span>
+              <span className="text-sm text-blue-300 font-semibold">{performance?.score.toFixed(1)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.keyBlocks}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.interceptions ?? 0}/{stat.clearances ?? 0}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}/{stat.starts ?? 0}
+              {stat.keyBlocks}/{performance?.metrics.goalsConcededPer90.toFixed(2)}
             </td>
           </>
         ) : mode === 'keepers' ? (
           <>
             <td className="px-2 py-2 text-center">
-              <span className="text-sm text-amber-300 font-semibold">{stat.cleanSheets}</span>
+              <span className="text-sm text-amber-300 font-semibold">{performance?.score.toFixed(1)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.saves}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.routineSaves ?? 0}/{stat.saves}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
-              {stat.appearances}/{stat.starts ?? 0}
+              {((performance?.metrics.savePercentage ?? 0) * 100).toFixed(1)}%/{performance?.metrics.goalsConcededPer90.toFixed(2)}
             </td>
           </>
         ) : mode === 'creation' ? (
           <>
             <td className="px-2 py-2 text-center">
-              <span className="text-sm text-emerald-300 font-semibold">{stat.keyPasses}</span>
+              <span className="text-sm text-emerald-300 font-semibold">{Math.max(0, stat.keyPasses - stat.assists)}</span>
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.assists}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
@@ -330,23 +334,19 @@ export default function Players() {
                   </>
                 ) : tab === 'defense' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title="仅统计实际登场且球队整场（含加时）零失球的门将与后卫">零封</th>
-                    <th className="px-2 py-2.5 text-center">关键封堵</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场/首发
-                    </th>
+                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-center" title="当前赛季全赛事拦截/解围">拦截/解围</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="门线封堵/在场失球每90分钟">门线/失球90</th>
                   </>
                 ) : tab === 'keepers' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title="仅统计实际登场且球队整场（含加时）零失球的门将与后卫">零封</th>
-                    <th className="px-2 py-2.5 text-center">神扑</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
-                      出场/首发
-                    </th>
+                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-center" title="普通扑救/关键扑救，两者不重复">扑救 普/关键</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="扑救率/在场失球每90分钟">扑救率/失球90</th>
                   </>
                 ) : tab === 'creation' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">威胁传球</th>
+                    <th className="px-2 py-2.5 text-center" title="keyPasses 减去 assists，避免重复计算助攻">额外创造</th>
                     <th className="px-2 py-2.5 text-center">助攻</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                       传射
@@ -389,7 +389,9 @@ export default function Players() {
                     {tab === 'careerScorers' || tab === 'careerAssists'
                       ? '暂无生涯数据'
                       : hasCompletedMatches
-                        ? '本赛季尚无符合该榜单的数据'
+                        ? tab === 'defense' || tab === 'keepers'
+                          ? '暂无达到 600 分钟排名门槛的球员'
+                          : '本赛季尚无符合该榜单的数据'
                         : '赛季尚未开始，完成首场比赛后生成当前赛季数据'}
                   </td>
                 </tr>

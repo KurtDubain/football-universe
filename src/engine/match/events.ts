@@ -1,4 +1,4 @@
-import { MatchEvent, CompetitionType } from '../../types';
+import { MatchEvent, CompetitionType, PenaltyShootoutKick } from '../../types';
 import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
 
@@ -42,16 +42,6 @@ const PENALTY_GOALS = [
   '点球推射右下角入网',
 ];
 
-const SAVE_DESCRIPTIONS = [
-  '门将飞身扑救将球托出',
-  '近距离条件反射式扑救',
-  '强有力的掌挡将球击出横梁',
-  '精彩的一对一扑救',
-  '极限指尖扑救力拒射门',
-  '门将神勇鱼跃扑救化解险情',
-  '门将双掌将皮球牢牢抱住',
-];
-
 const MISS_DESCRIPTIONS = [
   '好位置射门打飞了',
   '禁区外射门偏出立柱',
@@ -87,11 +77,19 @@ const PENALTY_SHOOTOUT_GOAL = [
   '果断推射正中球门中路得手',
 ];
 
-const PENALTY_SHOOTOUT_MISS = [
+const PENALTY_SHOOTOUT_SAVED = [
   '点球被门将扑出！',
+  '点球力量不足被门将稳稳抱住！',
+];
+
+const PENALTY_SHOOTOUT_OFF_TARGET = [
   '点球打飞了横梁！',
+  '点球偏出立柱！',
+];
+
+const PENALTY_SHOOTOUT_WOODWORK = [
   '点球击中立柱弹出！',
-  '点球力量不足被门将轻松扑住',
+  '点球重重砸在横梁上！',
 ];
 
 // ── Player picking helpers ────────────────────────────────────────
@@ -191,6 +189,17 @@ function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
   );
 }
 
+function buildPenaltyTakerOrder(squad: Player[] | undefined, rng: SeededRNG): Player[] {
+  const remaining = (squad ?? []).filter(player => player.position !== 'GK');
+  const order: Player[] = [];
+  while (remaining.length > 0) {
+    const selected = pickPlayer(remaining, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true);
+    order.push(selected);
+    remaining.splice(remaining.findIndex(player => player.uuid === selected.uuid), 1);
+  }
+  return order;
+}
+
 /**
  * Format a description with optional player name + number prefix.
  */
@@ -258,8 +267,7 @@ export function generateMatchEvents(
   _competitionType: CompetitionType,
   rng: SeededRNG,
   extraTime: boolean,
-  penaltyHome?: number,
-  penaltyAway?: number,
+  penaltyShootout?: PenaltyShootoutKick[],
   homeSquad?: Player[],
   awaySquad?: Player[],
   etHomeGoals: number = 0,
@@ -271,7 +279,6 @@ export function generateMatchEvents(
   awayRedCardCandidatesAtMinute?: (minute: number) => Player[],
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
-  const maxNormalMinute = 90;
   const maxMinute = extraTime ? 120 : 90;
   const dismissedAt = new Map<string, number>();
 
@@ -410,39 +417,6 @@ export function generateMatchEvents(
     });
   }
 
-  // ── Key saves (1-4) ──────────────────────────────────────────────
-
-  const totalSaves = rng.nextInt(1, 4);
-  for (let i = 0; i < totalSaves; i++) {
-    // Saves are attributed to the keeper's team
-    const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(1, maxMinute, rng);
-    const description = rng.pick(SAVE_DESCRIPTIONS);
-    const squad = getSquad(teamId, minute);
-
-    let playerId: string | undefined;
-    let playerNumber: number | undefined;
-    let playerName: string | undefined;
-    if (squad?.length) {
-      const gk = pickGoalkeeper(squad);
-      if (gk) {
-        playerId = gk.uuid;
-        playerNumber = gk.number;
-        playerName = gk.name;
-      }
-    }
-
-    events.push({
-      minute,
-      type: 'save',
-      teamId,
-      playerId,
-      playerNumber,
-      playerName,
-      description: formatDescription(description, playerNumber, playerName),
-    });
-  }
-
   // ── Near misses (1-3) ────────────────────────────────────────────
 
   const totalMisses = rng.nextInt(1, 3);
@@ -475,103 +449,39 @@ export function generateMatchEvents(
 
   // ── Penalty shootout events ──────────────────────────────────────
 
-  if (penaltyHome !== undefined && penaltyAway !== undefined) {
-    // Simulate a realistic shootout order.
-    // Standard: 5 rounds, then sudden death.
-    const homeScored = penaltyHome;
-    const awayScored = penaltyAway;
-    const totalPens = Math.max(homeScored + awayScored, 6); // at least 3 rounds each
-    const maxRounds = Math.ceil(totalPens / 2);
+  if (penaltyShootout?.length) {
+    const homeShootoutSquad = getSquad(homeTeamId, maxMinute);
+    const awayShootoutSquad = getSquad(awayTeamId, maxMinute);
+    const homeTakers = buildPenaltyTakerOrder(homeShootoutSquad, rng);
+    const awayTakers = buildPenaltyTakerOrder(awayShootoutSquad, rng);
+    const homeKeeper = pickGoalkeeper(homeShootoutSquad ?? []);
+    const awayKeeper = pickGoalkeeper(awayShootoutSquad ?? []);
 
-    let homeRemaining = homeScored;
-    let awayRemaining = awayScored;
-    let penMinute = maxNormalMinute + (extraTime ? 30 : 0) + 1; // 121 typically
-
-    for (let round = 0; round < maxRounds; round++) {
-      // Home takes
-      const homeShooterSquad = getSquad(homeTeamId, maxMinute - 1);
-      let homeShooterPlayerId: string | undefined;
-      let homeShooterNumber: number | undefined;
-      let homeShooterName: string | undefined;
-      if (homeShooterSquad?.length) {
-        // Pick from outfield players for shootout
-        const outfield = homeShooterSquad.filter((p) => p.position !== 'GK');
-        const shooter =
-          outfield.length > 0
-            ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
-            : homeShooterSquad[0];
-        homeShooterPlayerId = shooter.uuid;
-        homeShooterNumber = shooter.number;
-        homeShooterName = shooter.name;
-      }
-
-      if (homeRemaining > 0) {
-        const desc = rng.pick(PENALTY_SHOOTOUT_GOAL);
-        events.push({
-          minute: penMinute,
-          type: 'penalty_goal',
-          teamId: homeTeamId,
-          playerId: homeShooterPlayerId,
-          playerNumber: homeShooterNumber,
-          playerName: homeShooterName,
-          description: formatDescription(desc, homeShooterNumber, homeShooterName),
-        });
-        homeRemaining--;
-      } else {
-        const desc = rng.pick(PENALTY_SHOOTOUT_MISS);
-        events.push({
-          minute: penMinute,
-          type: 'penalty_miss',
-          teamId: homeTeamId,
-          playerId: homeShooterPlayerId,
-          playerNumber: homeShooterNumber,
-          playerName: homeShooterName,
-          description: formatDescription(desc, homeShooterNumber, homeShooterName),
-        });
-      }
-      penMinute++;
-
-      // Away takes
-      const awayShooterSquad = getSquad(awayTeamId, maxMinute - 1);
-      let awayShooterPlayerId: string | undefined;
-      let awayShooterNumber: number | undefined;
-      let awayShooterName: string | undefined;
-      if (awayShooterSquad?.length) {
-        const outfield = awayShooterSquad.filter((p) => p.position !== 'GK');
-        const shooter =
-          outfield.length > 0
-            ? pickPlayer(outfield, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true)
-            : awayShooterSquad[0];
-        awayShooterPlayerId = shooter.uuid;
-        awayShooterNumber = shooter.number;
-        awayShooterName = shooter.name;
-      }
-
-      if (awayRemaining > 0) {
-        const desc = rng.pick(PENALTY_SHOOTOUT_GOAL);
-        events.push({
-          minute: penMinute,
-          type: 'penalty_goal',
-          teamId: awayTeamId,
-          playerId: awayShooterPlayerId,
-          playerNumber: awayShooterNumber,
-          playerName: awayShooterName,
-          description: formatDescription(desc, awayShooterNumber, awayShooterName),
-        });
-        awayRemaining--;
-      } else {
-        const desc = rng.pick(PENALTY_SHOOTOUT_MISS);
-        events.push({
-          minute: penMinute,
-          type: 'penalty_miss',
-          teamId: awayTeamId,
-          playerId: awayShooterPlayerId,
-          playerNumber: awayShooterNumber,
-          playerName: awayShooterName,
-          description: formatDescription(desc, awayShooterNumber, awayShooterName),
-        });
-      }
-      penMinute++;
+    for (const kick of penaltyShootout) {
+      const takers = kick.team === 'home' ? homeTakers : awayTakers;
+      const shooter = takers.length > 0 ? takers[(kick.teamKickNumber - 1) % takers.length] : undefined;
+      const goalkeeper = kick.team === 'home' ? awayKeeper : homeKeeper;
+      const descriptionPool = kick.outcome === 'scored'
+        ? PENALTY_SHOOTOUT_GOAL
+        : kick.outcome === 'saved'
+          ? PENALTY_SHOOTOUT_SAVED
+          : kick.outcome === 'woodwork'
+            ? PENALTY_SHOOTOUT_WOODWORK
+            : PENALTY_SHOOTOUT_OFF_TARGET;
+      events.push({
+        minute: maxMinute + kick.kickNumber,
+        type: kick.outcome === 'scored' ? 'penalty_goal' : 'penalty_miss',
+        teamId: kick.team === 'home' ? homeTeamId : awayTeamId,
+        playerId: shooter?.uuid,
+        playerNumber: shooter?.number,
+        playerName: shooter?.name,
+        description: formatDescription(rng.pick(descriptionPool), shooter?.number, shooter?.name),
+        shootout: {
+          ...kick,
+          goalkeeperId: goalkeeper?.uuid,
+          goalkeeperName: goalkeeper?.name,
+        },
+      });
     }
   }
 
@@ -584,7 +494,7 @@ export function generateMatchEvents(
   let runHome = 0;
   let runAway = 0;
   for (const ev of events) {
-    if (ev.type !== 'goal' && ev.type !== 'penalty_goal' && ev.type !== 'own_goal') continue;
+    if (ev.type !== 'goal' && ev.type !== 'own_goal') continue;
     const isHomeGoal = ev.teamId === homeTeamId;
     if (isHomeGoal) runHome++; else runAway++;
 

@@ -388,7 +388,10 @@ type EventDerivedStatField =
   | 'saves'
   | 'keyBlocks'
   | 'bigChances'
-  | 'keyPasses';
+  | 'keyPasses'
+  | 'routineSaves'
+  | 'interceptions'
+  | 'clearances';
 
 type EventDerivedStats = Record<EventDerivedStatField, number>;
 
@@ -399,6 +402,9 @@ const EVENT_DERIVED_FIELDS: EventDerivedStatField[] = [
   'keyBlocks',
   'bigChances',
   'keyPasses',
+  'routineSaves',
+  'interceptions',
+  'clearances',
 ];
 
 function emptyEventDerivedStats(): EventDerivedStats {
@@ -409,6 +415,9 @@ function emptyEventDerivedStats(): EventDerivedStats {
     keyBlocks: 0,
     bigChances: 0,
     keyPasses: 0,
+    routineSaves: 0,
+    interceptions: 0,
+    clearances: 0,
   };
 }
 
@@ -459,6 +468,13 @@ function collectEventDerivedStats(
       continue;
     }
 
+    if (event.type === 'save') {
+      addEventDerivedStats(playerStats, segmentStats, event.playerId, event.teamId, {
+        routineSaves: 1,
+      });
+      continue;
+    }
+
     if (event.type !== 'gk_save' && event.type !== 'df_block') continue;
 
     addEventDerivedStats(playerStats, segmentStats, event.playerId, event.teamId, {
@@ -474,6 +490,14 @@ function collectEventDerivedStats(
       keyPasses: 1,
     });
   }
+
+  for (const contribution of Object.values(result.defensiveContributions ?? {})) {
+    addEventDerivedStats(playerStats, segmentStats, contribution.playerId, contribution.teamId, {
+      routineSaves: contribution.routineSaves ?? 0,
+      interceptions: contribution.interceptions,
+      clearances: contribution.clearances,
+    });
+  }
 }
 
 function eventDerivedMismatchDetails(
@@ -486,8 +510,8 @@ function eventDerivedMismatchDetails(
       .map((field) => `${field} expected ${expected[field]} but row is missing`);
   }
   return EVENT_DERIVED_FIELDS
-    .filter((field) => expected[field] !== actual[field])
-    .map((field) => `${field} expected ${expected[field]} but found ${actual[field]}`);
+    .filter((field) => expected[field] !== (actual[field] ?? 0))
+    .map((field) => `${field} expected ${expected[field]} but found ${actual[field] ?? 0}`);
 }
 
 function validateEventDerivedStats(
@@ -502,7 +526,7 @@ function validateEventDerivedStats(
   const playerIds = new Set([
     ...eventDerivedByPlayer.keys(),
     ...Object.entries(world.playerStats)
-      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => stat[field] > 0))
+      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => (stat[field] ?? 0) > 0))
       .map(([playerId]) => playerId),
   ]);
   for (const playerId of playerIds) {
@@ -510,8 +534,8 @@ function validateEventDerivedStats(
     const actual = world.playerStats[playerId];
     const details = hasArchivedResults && actual
       ? EVENT_DERIVED_FIELDS
-        .filter((field) => actual[field] < expected[field])
-        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field]}`)
+        .filter((field) => (actual[field] ?? 0) < expected[field])
+        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field] ?? 0}`)
       : eventDerivedMismatchDetails(expected, actual);
     if (details.length === 0) continue;
     pushIssue(issues, {
@@ -528,7 +552,7 @@ function validateEventDerivedStats(
   const segmentKeys = new Set([
     ...eventDerivedBySegment.keys(),
     ...Object.entries(world.playerStatSegments ?? {})
-      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => stat[field] > 0))
+      .filter(([, stat]) => EVENT_DERIVED_FIELDS.some((field) => (stat[field] ?? 0) > 0))
       .map(([segmentKey]) => segmentKey),
   ]);
   for (const segmentKey of segmentKeys) {
@@ -537,8 +561,8 @@ function validateEventDerivedStats(
     const actual = world.playerStatSegments?.[segmentKey];
     const details = hasArchivedResults && actual
       ? EVENT_DERIVED_FIELDS
-        .filter((field) => actual[field] < expected[field])
-        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field]}`)
+        .filter((field) => (actual[field] ?? 0) < expected[field])
+        .map((field) => `${field} expected at least ${expected[field]} but found ${actual[field] ?? 0}`)
       : eventDerivedMismatchDetails(expected, actual);
     if (details.length === 0) continue;
     pushIssue(issues, {
@@ -557,6 +581,7 @@ interface MatchdayDerivedStats {
   substituteAppearances: number;
   minutesPlayed: number;
   cleanSheets: number;
+  cleanSheetMinutes: number;
 }
 
 function incrementMatchdayDerived(
@@ -568,13 +593,15 @@ function incrementMatchdayDerived(
 ): void {
   const current = map.get(key) ?? {
     appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+    cleanSheetMinutes: 0,
   };
   map.set(key, {
     appearances: current.appearances + 1,
     starts: current.starts + (role === 'starter' ? 1 : 0),
     substituteAppearances: current.substituteAppearances + (role === 'bench' ? 1 : 0),
     minutesPlayed: current.minutesPlayed + minutesPlayed,
-    cleanSheets: current.cleanSheets + (cleanSheet ? 1 : 0),
+    cleanSheets: current.cleanSheets + (cleanSheet && minutesPlayed >= 60 ? 1 : 0),
+    cleanSheetMinutes: current.cleanSheetMinutes + (cleanSheet ? minutesPlayed : 0),
   });
 }
 
@@ -613,7 +640,7 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
 
   for (const [playerId, stat] of Object.entries(world.playerStats ?? {})) {
     const expected = expectedByPlayer.get(playerId) ?? {
-      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0, cleanSheetMinutes: 0,
     };
     if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
@@ -645,11 +672,21 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         playerId,
       });
     }
+    const cleanSheetMinutes = stat.cleanSheetMinutes ?? 0;
+    if (hasLegacyResults
+      ? cleanSheetMinutes < expected.cleanSheetMinutes
+      : cleanSheetMinutes !== expected.cleanSheetMinutes) {
+      pushIssue(issues, {
+        severity: 'warning', code: 'player_clean_sheet_minutes_matchday_mismatch',
+        message: `Player ${playerId} has ${stat.cleanSheetMinutes ?? 0} clean-sheet minutes, but snapshots explain ${expected.cleanSheetMinutes}.`,
+        teamId: stat.teamId, playerId,
+      });
+    }
   }
 
   for (const [segmentKey, stat] of Object.entries(world.playerStatSegments ?? {})) {
     const expected = expectedBySegment.get(segmentKey) ?? {
-      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0,
+      appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0, cleanSheetMinutes: 0,
     };
     if (hasLegacyResults ? stat.appearances < expected.appearances : stat.appearances !== expected.appearances) {
       pushIssue(issues, {
@@ -681,7 +718,18 @@ function validateMatchdayDerivedStats(world: GameWorld, issues: WorldDataIssue[]
         playerId: stat.playerId,
       });
     }
+    const cleanSheetMinutes = stat.cleanSheetMinutes ?? 0;
+    if (hasLegacyResults
+      ? cleanSheetMinutes < expected.cleanSheetMinutes
+      : cleanSheetMinutes !== expected.cleanSheetMinutes) {
+      pushIssue(issues, {
+        severity: 'warning', code: 'player_segment_clean_sheet_minutes_matchday_mismatch',
+        message: `Player segment ${segmentKey} has ${stat.cleanSheetMinutes ?? 0} clean-sheet minutes, but snapshots explain ${expected.cleanSheetMinutes}.`,
+        teamId: stat.teamId, playerId: stat.playerId,
+      });
+    }
   }
+
 }
 
 const PARTICIPATION_FIELDS = [
@@ -690,6 +738,12 @@ const PARTICIPATION_FIELDS = [
   'substituteAppearances',
   'minutesPlayed',
   'cleanSheets',
+  'routineSaves',
+  'shotsOnTargetFaced',
+  'cleanSheetMinutes',
+  'goalsConcededWhileOnPitch',
+  'interceptions',
+  'clearances',
 ] as const;
 
 function validateParticipationCounters(world: GameWorld, issues: WorldDataIssue[]): void {
@@ -1073,6 +1127,41 @@ function validateEventSemantics(
     }
   }
 
+  const isShootoutEvent = event.type === 'penalty_goal' || event.type === 'penalty_miss';
+  if (event.shootout && !isShootoutEvent) {
+    pushIssue(issues, {
+      severity: 'error', code: 'shootout_metadata_on_regular_event',
+      message: `Regular event ${event.type} carries penalty-shootout metadata.`,
+      teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+    });
+  }
+  if (event.shootout) {
+    const validOrdinal = Number.isInteger(event.shootout.kickNumber) && event.shootout.kickNumber > 0
+      && Number.isInteger(event.shootout.round) && event.shootout.round > 0
+      && Number.isInteger(event.shootout.teamKickNumber) && event.shootout.teamKickNumber > 0;
+    const outcomeMatchesType = event.type === 'penalty_goal'
+      ? event.shootout.outcome === 'scored'
+      : event.shootout.outcome !== 'scored';
+    if (!validOrdinal || !outcomeMatchesType || event.shootout.suddenDeath !== (event.shootout.round > 5)) {
+      pushIssue(issues, {
+        severity: 'error', code: 'invalid_shootout_metadata',
+        message: `Penalty event ${event.minute}' has inconsistent kick order, phase, or outcome metadata.`,
+        teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+      });
+    }
+    const defendingTeamId = event.teamId === result.homeTeamId ? result.awayTeamId : result.homeTeamId;
+    if (event.shootout.goalkeeperId
+      && !isOnFieldAtMinute(result, defendingTeamId, event.shootout.goalkeeperId, event.minute)) {
+      pushIssue(issues, {
+        severity: 'error', code: 'shootout_goalkeeper_not_on_field',
+        message: `Shootout goalkeeper ${event.shootout.goalkeeperId} was not on the field for ${defendingTeamId}.`,
+        teamId: defendingTeamId,
+        playerId: event.shootout.goalkeeperId,
+        fixtureId: result.fixtureId,
+      });
+    }
+  }
+
   if (
     event.playerId
     && event.type !== 'own_goal'
@@ -1407,6 +1496,44 @@ function validateResult(
       });
     }
   }
+
+  for (const contribution of Object.values(result.defensiveContributions ?? {})) {
+    const values = [contribution.interceptions, contribution.clearances, contribution.routineSaves ?? 0];
+    if (values.some(value => !Number.isFinite(value) || value < 0)) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'invalid_defensive_contribution',
+        message: `Fixture ${result.fixtureId} has invalid defensive contribution values for ${contribution.playerId}.`,
+        teamId: contribution.teamId,
+        playerId: contribution.playerId,
+        fixtureId: result.fixtureId,
+      });
+      continue;
+    }
+    const snapshot = contribution.teamId === result.homeTeamId
+      ? result.homeMatchday
+      : contribution.teamId === result.awayTeamId
+        ? result.awayMatchday
+        : undefined;
+    const participant = snapshot?.players.find(player => (
+      player.playerId === contribution.playerId && (player.minutesPlayed ?? 0) > 0
+    ));
+    const positionMatches = participant
+      && ((participant.position === 'DF' && (contribution.routineSaves ?? 0) === 0)
+        || (participant.position === 'GK'
+          && contribution.interceptions === 0
+          && contribution.clearances === 0));
+    if (!positionMatches) {
+      pushIssue(issues, {
+        severity: 'warning',
+        code: 'defensive_contribution_participation_mismatch',
+        message: `Fixture ${result.fixtureId} credits defensive actions to an ineligible participant ${contribution.playerId}.`,
+        teamId: contribution.teamId,
+        playerId: contribution.playerId,
+        fixtureId: result.fixtureId,
+      });
+    }
+  }
 }
 
 export function validateWorldData(world: GameWorld): WorldDataValidationResult {
@@ -1579,6 +1706,26 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       });
     }
 
+    for (const field of [
+      'routineSaves', 'shotsOnTargetFaced', 'cleanSheetMinutes',
+      'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
+    ] as const) {
+      const value = stat[field] ?? 0;
+      if (Number.isFinite(value) && value >= 0) continue;
+      pushIssue(issues, {
+        severity: 'error', code: 'invalid_player_defensive_stat',
+        message: `Player ${playerId} has invalid ${field}: ${String(value)}.`,
+        teamId: stat.teamId, playerId,
+      });
+    }
+    if ((stat.cleanSheetMinutes ?? 0) > (stat.minutesPlayed ?? stat.appearances * 90)) {
+      pushIssue(issues, {
+        severity: 'error', code: 'clean_sheet_minutes_exceed_minutes',
+        message: `Player ${playerId} has more clean-sheet minutes than minutes played.`,
+        teamId: stat.teamId, playerId,
+      });
+    }
+
     const livePlayer = activePlayers.get(playerId);
     if (livePlayer && stat.saves > 0 && livePlayer.position !== 'GK') {
       pushIssue(issues, {
@@ -1589,6 +1736,17 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
         playerId,
       });
     }
+    if (
+      livePlayer
+      && ((stat.routineSaves ?? 0) > 0 || (stat.shotsOnTargetFaced ?? 0) > 0)
+      && livePlayer.position !== 'GK'
+    ) {
+      pushIssue(issues, {
+        severity: 'warning', code: 'non_gk_goalkeeping_stats',
+        message: `Non-GK player ${playerId} has goalkeeper-only statistics.`,
+        teamId: stat.teamId, playerId,
+      });
+    }
     if (livePlayer && stat.keyBlocks > 0 && livePlayer.position !== 'DF') {
       pushIssue(issues, {
         severity: 'warning',
@@ -1596,6 +1754,17 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
         message: `Non-DF player ${playerId} has key blocks.`,
         teamId: stat.teamId,
         playerId,
+      });
+    }
+    if (
+      livePlayer
+      && ((stat.interceptions ?? 0) > 0 || (stat.clearances ?? 0) > 0)
+      && livePlayer.position !== 'DF'
+    ) {
+      pushIssue(issues, {
+        severity: 'warning', code: 'non_df_defensive_volume',
+        message: `Non-DF player ${playerId} has defender-only volume statistics.`,
+        teamId: stat.teamId, playerId,
       });
     }
   }

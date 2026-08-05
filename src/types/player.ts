@@ -139,9 +139,9 @@ export interface PlayerSeasonStats {
   substituteAppearances?: number;
   minutesPlayed?: number;
   /**
-   * Individual clean-sheet count. Incremented for each DF/GK who actually
-   * appeared when their side conceded 0 goals across regulation and extra
-   * time. Unused bench players and outfield attackers never receive credit.
+   * Individual full clean-sheet count. Incremented for each DF/GK who plays
+   * at least 60 minutes when their side concedes 0 goals across regulation
+   * and extra time. Short substitutes only add `cleanSheetMinutes`.
    */
   cleanSheets: number;
   /**
@@ -164,6 +164,17 @@ export interface PlayerSeasonStats {
   keyBlocks: number;
   bigChances: number;
   keyPasses: number;
+  /** Ordinary saves backed by the match shots-on-target total. */
+  routineSaves?: number;
+  /** Shots that reached this goalkeeper: goals plus routine/key saves. */
+  shotsOnTargetFaced?: number;
+  /** Minutes played in matches where the player's team kept a clean sheet. */
+  cleanSheetMinutes?: number;
+  /** Goals conceded while this GK/DF was actually on the pitch. */
+  goalsConcededWhileOnPitch?: number;
+  /** Match-derived defensive actions. DF only. */
+  interceptions?: number;
+  clearances?: number;
 }
 
 /**
@@ -177,7 +188,7 @@ export type PlayerTeamSeasonStats = PlayerSeasonStats;
 /**
  * v19 — historical per-season snapshot of a player's stats, captured at
  * season-end before the current-season `playerStats` is reset. Kept FIFO
- * at most 15 entries per player (older seasons drop off).
+ * at most 25 entries per player (older seasons drop off).
  *
  * Adds `season` + frozen team context so UI can compute per-season
  * position-aware metrics and show the team environment as it was then,
@@ -219,6 +230,12 @@ export interface PlayerSeasonStatsHistoryEntry {
   keyBlocks?: number;
   bigChances?: number;
   keyPasses?: number;
+  routineSaves?: number;
+  shotsOnTargetFaced?: number;
+  cleanSheetMinutes?: number;
+  goalsConcededWhileOnPitch?: number;
+  interceptions?: number;
+  clearances?: number;
 }
 
 /**

@@ -54,6 +54,7 @@ const AWARD_PRIORITY: Record<string, number> = {
   mvp: 4,
   golden_boot: 3,
   best_defender: 2,
+  best_goalkeeper: 2,
   young_player: 1,
 };
 

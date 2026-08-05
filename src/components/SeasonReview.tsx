@@ -645,10 +645,10 @@ function PrimaryTeamTrajectory({
   const team = world.teamBases[trajectory.teamId];
   const contributorDetail = contributor
     ? contributor.identity.position === 'GK'
-      ? `${contributor.appearances}场 · ${contributor.saves}次扑救 · ${contributor.cleanSheets}场零封`
+      ? `${contributor.appearances}场 · ${contributor.routineSaves ?? 0}次普通扑救 · ${contributor.saves}次关键扑救`
       : contributor.identity.position === 'DF'
-        ? `${contributor.appearances}场 · ${contributor.keyBlocks}次关键封堵 · ${contributor.cleanSheets}场零封`
-        : `${contributor.appearances}场 · ${contributor.goals}球 · ${contributor.assists}助攻`
+        ? `${contributor.appearances}场 · ${contributor.interceptions ?? 0}次拦截 · ${contributor.clearances ?? 0}次解围`
+        : `${contributor.appearances}场 · ${contributor.goals}球 · ${contributor.assists}助攻 · ${Math.max(0, contributor.keyPasses - contributor.assists)}次额外创造`
     : '';
   const themeResult = describeObservationThemeResult(world, trajectory, record);
   const themeTone = themeResult?.tone === 'positive'

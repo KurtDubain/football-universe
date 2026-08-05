@@ -83,6 +83,34 @@ export interface MatchEvent {
   playerOutId?: string;
   playerInName?: string;
   playerOutName?: string;
+  /** Authoritative kick context for penalty-shootout events. Optional for legacy saves. */
+  shootout?: {
+    /** Overall kick order, starting at 1. */
+    kickNumber: number;
+    /** Round within the initial five or sudden-death sequence. */
+    round: number;
+    /** This team's kick number, starting at 1. */
+    teamKickNumber: number;
+    suddenDeath: boolean;
+    outcome: 'scored' | 'saved' | 'off_target' | 'woodwork';
+    goalkeeperId?: string;
+    goalkeeperName?: string;
+  };
+}
+
+export interface PenaltyShootoutKick {
+  team: 'home' | 'away';
+  kickNumber: number;
+  round: number;
+  teamKickNumber: number;
+  suddenDeath: boolean;
+  outcome: 'scored' | 'saved' | 'off_target' | 'woodwork';
+}
+
+export interface PenaltyShootoutResult {
+  homeScore: number;
+  awayScore: number;
+  kicks: PenaltyShootoutKick[];
 }
 
 export interface MatchStats {
@@ -109,6 +137,20 @@ export interface MatchResult {
   penaltyAway?: number;
   events: MatchEvent[];
   stats: MatchStats;
+  /**
+   * Compact, authoritative defensive totals generated from this match's
+   * possession, shots, corners, player ability, and actual participation.
+   * Kept separate from the event feed so routine defensive volume does not
+   * bloat long-running saves with dozens of low-value timeline entries.
+   */
+  defensiveContributions?: Record<string, {
+    playerId: string;
+    teamId: string;
+    interceptions: number;
+    clearances: number;
+    /** Ordinary saves inferred from this match's reconciled shots on target. */
+    routineSaves?: number;
+  }>;
   competitionType: CompetitionType;
   competitionName: string;
   roundLabel: string;

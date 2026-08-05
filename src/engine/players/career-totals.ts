@@ -16,6 +16,12 @@ export interface PlayerCareerTotals {
   keyBlocks: number;
   bigChances: number;
   keyPasses: number;
+  routineSaves: number;
+  shotsOnTargetFaced: number;
+  cleanSheetMinutes: number;
+  goalsConcededWhileOnPitch: number;
+  interceptions: number;
+  clearances: number;
   currentSeasonIncluded: boolean;
 }
 
@@ -34,6 +40,12 @@ function addHistoryEntry(total: PlayerCareerTotals, entry: PlayerSeasonStatsHist
   total.keyBlocks += entry.keyBlocks ?? 0;
   total.bigChances += entry.bigChances ?? entry.goals;
   total.keyPasses += entry.keyPasses ?? entry.assists;
+  total.routineSaves += entry.routineSaves ?? 0;
+  total.shotsOnTargetFaced += entry.shotsOnTargetFaced ?? 0;
+  total.cleanSheetMinutes += entry.cleanSheetMinutes ?? 0;
+  total.goalsConcededWhileOnPitch += entry.goalsConcededWhileOnPitch ?? 0;
+  total.interceptions += entry.interceptions ?? 0;
+  total.clearances += entry.clearances ?? 0;
 }
 
 function addCurrentSeason(total: PlayerCareerTotals, stat: PlayerSeasonStats): void {
@@ -50,6 +62,12 @@ function addCurrentSeason(total: PlayerCareerTotals, stat: PlayerSeasonStats): v
   total.keyBlocks += stat.keyBlocks;
   total.bigChances += stat.bigChances;
   total.keyPasses += stat.keyPasses;
+  total.routineSaves += stat.routineSaves ?? 0;
+  total.shotsOnTargetFaced += stat.shotsOnTargetFaced ?? 0;
+  total.cleanSheetMinutes += stat.cleanSheetMinutes ?? 0;
+  total.goalsConcededWhileOnPitch += stat.goalsConcededWhileOnPitch ?? 0;
+  total.interceptions += stat.interceptions ?? 0;
+  total.clearances += stat.clearances ?? 0;
   total.currentSeasonIncluded = true;
 }
 
@@ -79,6 +97,12 @@ export function computePlayerCareerTotals(
     keyBlocks: 0,
     bigChances: 0,
     keyPasses: 0,
+    routineSaves: 0,
+    shotsOnTargetFaced: 0,
+    cleanSheetMinutes: 0,
+    goalsConcededWhileOnPitch: 0,
+    interceptions: 0,
+    clearances: 0,
     currentSeasonIncluded: false,
   };
 

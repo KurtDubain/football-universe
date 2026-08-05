@@ -91,6 +91,30 @@ describe('current schema hydration boundary', () => {
     expect(getSaveRecoveryMessage()).toBeNull();
   });
 
+  it('accepts current-version saves created before optional defensive fields existed', () => {
+    const save = makeSave();
+    for (const stat of Object.values(save.state.world.playerStats)) {
+      delete stat.routineSaves;
+      delete stat.shotsOnTargetFaced;
+      delete stat.cleanSheetMinutes;
+      delete stat.goalsConcededWhileOnPitch;
+      delete stat.interceptions;
+      delete stat.clearances;
+    }
+    for (const stat of Object.values(save.state.world.playerStatSegments ?? {})) {
+      delete stat.routineSaves;
+      delete stat.shotsOnTargetFaced;
+      delete stat.cleanSheetMinutes;
+      delete stat.goalsConcededWhileOnPitch;
+      delete stat.interceptions;
+      delete stat.clearances;
+    }
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(save));
+    __flushCompressedStorageForTests();
+    expect(currentSaveStorage.getItem(SAVE_STORAGE_KEY)).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+  });
+
   it.each([
     ['malformed JSON', '{not-json'],
     ['wrong version', JSON.stringify({ ...makeSave(), version: SAVE_SCHEMA_VERSION - 1 })],

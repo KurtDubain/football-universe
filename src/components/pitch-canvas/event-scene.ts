@@ -31,6 +31,7 @@ function hashText(text: string): number {
 
 function outcomeFor(event: MatchEvent): ShotOutcome {
   if (event.type === 'goal' || event.type === 'penalty_goal' || event.type === 'own_goal') return 'goal';
+  if (event.type === 'penalty_miss' && event.shootout?.outcome === 'saved') return 'save';
   if (event.type === 'df_block') return 'block';
   if (event.type === 'miss' || event.type === 'penalty_miss') return 'miss';
   return 'save';

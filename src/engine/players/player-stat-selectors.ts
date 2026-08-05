@@ -8,6 +8,7 @@ import type {
 } from '../../types/player';
 import { emptyPlayerStat, playerTeamStatKey } from './stats';
 import { computePlayerCareerTotals } from './career-totals';
+import { computePlayerPerformance } from './player-performance';
 
 export type PlayerIdentitySource = 'active' | 'retired' | 'history' | 'stat';
 
@@ -172,6 +173,12 @@ function statFromHistory(playerId: string, history: PlayerSeasonStatsHistoryEntr
     keyBlocks: history.keyBlocks ?? 0,
     bigChances: history.bigChances ?? history.goals,
     keyPasses: history.keyPasses ?? history.assists,
+    routineSaves: history.routineSaves ?? 0,
+    shotsOnTargetFaced: history.shotsOnTargetFaced ?? 0,
+    cleanSheetMinutes: history.cleanSheetMinutes ?? 0,
+    goalsConcededWhileOnPitch: history.goalsConcededWhileOnPitch ?? 0,
+    interceptions: history.interceptions ?? 0,
+    clearances: history.clearances ?? 0,
   };
 }
 
@@ -304,6 +311,12 @@ export function getCareerPlayerStatRows(world: GameWorld): PlayerStatRow[] {
       keyBlocks: totals.keyBlocks,
       bigChances: totals.bigChances,
       keyPasses: totals.keyPasses,
+      routineSaves: totals.routineSaves,
+      shotsOnTargetFaced: totals.shotsOnTargetFaced,
+      cleanSheetMinutes: totals.cleanSheetMinutes,
+      goalsConcededWhileOnPitch: totals.goalsConcededWhileOnPitch,
+      interceptions: totals.interceptions,
+      clearances: totals.clearances,
     };
     rows.push(rowFromStat(world, stat, activePlayers, retiredPlayers, historyForIdentity));
   }
@@ -328,30 +341,35 @@ export function sortRowsByDiscipline(rows: PlayerStatRow[]): PlayerStatRow[] {
   );
 }
 
-export function sortRowsByDefense(rows: PlayerStatRow[]): PlayerStatRow[] {
+export function sortRowsByDefense(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      b.cleanSheets - a.cleanSheets ||
-      b.keyBlocks - a.keyBlocks ||
-      b.appearances - a.appearances ||
+      computePlayerPerformance('DF', b, world?.seasonStartLevels?.[b.teamId]).score
+      - computePlayerPerformance('DF', a, world?.seasonStartLevels?.[a.teamId]).score ||
+      (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0) ||
       (b.identity.rating ?? 0) - (a.identity.rating ?? 0),
   );
 }
 
-export function sortRowsByGoalkeeping(rows: PlayerStatRow[]): PlayerStatRow[] {
+export function sortRowsByGoalkeeping(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      b.cleanSheets - a.cleanSheets ||
-      b.saves - a.saves ||
-      b.appearances - a.appearances ||
+      computePlayerPerformance('GK', b, world?.seasonStartLevels?.[b.teamId]).score
+      - computePlayerPerformance('GK', a, world?.seasonStartLevels?.[a.teamId]).score ||
+      (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0) ||
       (b.identity.rating ?? 0) - (a.identity.rating ?? 0),
   );
 }
 
-export function sortRowsByCreation(rows: PlayerStatRow[]): PlayerStatRow[] {
+export function sortRowsByCreation(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      b.keyPasses - a.keyPasses ||
+      computePlayerPerformance(
+        b.identity.position === 'FW' ? 'FW' : 'MF', b, world?.seasonStartLevels?.[b.teamId],
+      ).score
+      - computePlayerPerformance(
+        a.identity.position === 'FW' ? 'FW' : 'MF', a, world?.seasonStartLevels?.[a.teamId],
+      ).score ||
       b.assists - a.assists ||
       b.goals - a.goals ||
       b.appearances - a.appearances,
@@ -376,8 +394,9 @@ export function getCurrentDefenderRows(world: GameWorld, limit = 20): PlayerStat
   return sortRowsByDefense(
     getCurrentPlayerStatRows(world).filter((row) =>
       row.identity.position === 'DF'
-      && (row.cleanSheets > 0 || row.keyBlocks > 0 || row.appearances > 0)
+      && computePlayerPerformance('DF', row, world.seasonStartLevels?.[row.teamId]).eligible
     ),
+    world,
   ).slice(0, limit);
 }
 
@@ -385,8 +404,9 @@ export function getCurrentGoalkeeperRows(world: GameWorld, limit = 20): PlayerSt
   return sortRowsByGoalkeeping(
     getCurrentPlayerStatRows(world).filter((row) =>
       row.identity.position === 'GK'
-      && (row.cleanSheets > 0 || row.saves > 0 || row.appearances > 0)
+      && computePlayerPerformance('GK', row, world.seasonStartLevels?.[row.teamId]).eligible
     ),
+    world,
   ).slice(0, limit);
 }
 
@@ -396,6 +416,7 @@ export function getCurrentCreatorRows(world: GameWorld, limit = 20): PlayerStatR
       (row.identity.position === 'MF' || row.identity.position === 'FW')
       && (row.keyPasses > 0 || row.assists > 0)
     ),
+    world,
   ).slice(0, limit);
 }
 

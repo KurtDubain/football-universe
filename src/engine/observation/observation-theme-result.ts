@@ -135,9 +135,9 @@ function playerGrowthResult(
   const verdict = appearances >= 10 ? '成为轮换核心' : appearances > 0 ? '留下赛季足迹' : '等待机会';
   const tone: ObservationThemeResultTone = appearances > 0 ? 'positive' : 'neutral';
   const contribution = player?.identity.position === 'GK'
-    ? `${player.saves}次扑救 · ${player.cleanSheets}场零封`
+    ? `${player.routineSaves ?? 0}次普通扑救 · ${player.saves}次关键扑救`
     : player?.identity.position === 'DF'
-      ? `${player.keyBlocks}次关键封堵 · ${player.cleanSheets}场零封`
+      ? `${player.interceptions ?? 0}次拦截 · ${player.clearances ?? 0}次解围`
       : `${player?.goals ?? 0}球 · ${player?.assists ?? 0}助攻`;
   return {
     label: getObservationThemeLabel('player_growth'),

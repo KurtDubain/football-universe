@@ -150,6 +150,26 @@ const PLAYER_STAT_NUMBER_FIELDS = [
   'keyPasses',
 ] as const;
 
+const OPTIONAL_PLAYER_STAT_NUMBER_FIELDS = [
+  'starts',
+  'substituteAppearances',
+  'minutesPlayed',
+  'routineSaves',
+  'shotsOnTargetFaced',
+  'cleanSheetMinutes',
+  'goalsConcededWhileOnPitch',
+  'interceptions',
+  'clearances',
+] as const;
+
+function validateOptionalNonNegativeNumbers(value: JsonRecord, context: string): void {
+  for (const key of OPTIONAL_PLAYER_STAT_NUMBER_FIELDS) {
+    if (value[key] === undefined) continue;
+    const field = requireFiniteNumber(value, key, context);
+    if (field < 0) throw new Error(`${context}字段 ${key} 不能为负数`);
+  }
+}
+
 function validateCalendarWindow(value: unknown, index: number, teamIds: Set<string>): void {
   if (!isRecord(value)) throw new Error(`存档赛程窗口 ${index + 1} 无效`);
   requireFiniteNumber(value, 'id', `存档赛程窗口 ${index + 1} `);
@@ -195,6 +215,22 @@ function validateCalendarWindow(value: unknown, index: number, teamIds: Set<stri
     requireBoolean(result, 'penalties', '存档赛果 ');
     requireArray(result, 'events');
     requireRecord(result, 'stats');
+    if (result.defensiveContributions !== undefined) {
+      if (!isRecord(result.defensiveContributions)) {
+        throw new Error(`存档赛果 ${result.fixtureId as string} 的防守贡献无效`);
+      }
+      for (const [playerId, contribution] of Object.entries(result.defensiveContributions)) {
+        if (!isRecord(contribution) || contribution.playerId !== playerId) {
+          throw new Error(`存档赛果 ${result.fixtureId as string} 的防守贡献球员无效`);
+        }
+        requireString(contribution, 'teamId', `球员 ${playerId} 防守贡献 `);
+        for (const field of ['interceptions', 'clearances']) {
+          const amount = requireFiniteNumber(contribution, field, `球员 ${playerId} 防守贡献 `);
+          if (amount < 0) throw new Error(`球员 ${playerId} 防守贡献字段 ${field} 不能为负数`);
+        }
+        validateOptionalNonNegativeNumbers(contribution, `球员 ${playerId} 防守贡献 `);
+      }
+    }
     if (!teamIds.has(homeTeamId) || !teamIds.has(awayTeamId)) {
       throw new Error(`存档赛果 ${result.fixtureId as string} 引用了无效球队`);
     }
@@ -565,6 +601,28 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
         throw new Error(`球员 ${uuid} 的统计归属无效`);
       }
       for (const key of PLAYER_STAT_NUMBER_FIELDS) requireFiniteNumber(stats, key, `球员 ${uuid} 统计 `);
+      validateOptionalNonNegativeNumbers(stats, `球员 ${uuid} 统计 `);
+    }
+  }
+
+  if (world.playerStatSegments !== undefined) {
+    if (!isRecord(world.playerStatSegments)) throw new Error('存档字段 playerStatSegments 无效');
+    for (const [segmentKey, segment] of Object.entries(world.playerStatSegments)) {
+      if (!isRecord(segment)) throw new Error(`球员球队分段 ${segmentKey} 无效`);
+      requireString(segment, 'playerId', `球员球队分段 ${segmentKey} `);
+      const teamId = requireString(segment, 'teamId', `球员球队分段 ${segmentKey} `);
+      if (!teamIds.has(teamId)) throw new Error(`球员球队分段 ${segmentKey} 引用了无效球队`);
+      for (const key of PLAYER_STAT_NUMBER_FIELDS) requireFiniteNumber(segment, key, `球员球队分段 ${segmentKey} `);
+      validateOptionalNonNegativeNumbers(segment, `球员球队分段 ${segmentKey} `);
+    }
+  }
+
+  const playerStatsHistory = requireRecord(world, 'playerStatsHistory');
+  for (const [playerId, entries] of Object.entries(playerStatsHistory)) {
+    if (!Array.isArray(entries)) throw new Error(`球员 ${playerId} 历史统计无效`);
+    for (const [index, entry] of entries.entries()) {
+      if (!isRecord(entry)) throw new Error(`球员 ${playerId} 历史统计第 ${index + 1} 行无效`);
+      validateOptionalNonNegativeNumbers(entry, `球员 ${playerId} 历史统计第 ${index + 1} 行 `);
     }
   }
 

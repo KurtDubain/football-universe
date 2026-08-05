@@ -2,6 +2,7 @@ import type { GameWorld } from '../season/season-manager';
 import { createInitialStandings, updateStandings } from '../standings/standings';
 import { analyzeDestinyDeviation, type DestinyDeviationTier } from '../match/analysis';
 import type { ObservationTheme, ObservationThemeType } from './observation-theme';
+import { computePlayerPerformance } from '../players/player-performance';
 
 export type ObserverSeasonPhase = 'opening' | 'midseason' | 'run_in' | 'final';
 
@@ -68,15 +69,9 @@ function playerImpact(
   position: 'GK' | 'DF' | 'MF' | 'FW' | undefined,
   stat: GameWorld['playerStats'][string],
 ): number {
-  if (position === 'GK') {
-    return stat.saves * 0.7 + stat.cleanSheets * 3 + stat.appearances * 0.15;
-  }
-  if (position === 'DF') {
-    return stat.keyBlocks * 1.5 + stat.cleanSheets * 1.2
-      + stat.goals * 4 + stat.assists * 3 + stat.appearances * 0.1;
-  }
-  return stat.goals * 4 + stat.assists * 3
-    + stat.bigChances * 0.2 + stat.keyPasses * 0.2 + stat.appearances * 0.1;
+  if (!position) return 0;
+  const performance = computePlayerPerformance(position, stat);
+  return performance.score + performance.metrics.minutes / 10_000;
 }
 
 function selectRepresentativePlayerId(

@@ -19,6 +19,7 @@ import {
 } from '../feedback/preferences';
 import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
 import { DecorativeImage } from './DecorativeImage';
+import { buildLiveCommentary, shootoutEventLabel } from './match-live/live-commentary';
 
 interface Props {
   result: MatchResult;
@@ -72,7 +73,7 @@ type PlaybackAction =
 
 const initialPlaybackState: PlaybackState = {
   minute: 0,
-  mode: 'highlights',
+  mode: 'live',
   phase: 'playing',
   consumedEventCount: 0,
   homeScore: 0,
@@ -212,6 +213,96 @@ function playbackKey(result: MatchResult): string {
   return `${result.fixtureId}:${result.homeGoals}:${result.awayGoals}:${result.etHomeGoals ?? 0}:${result.etAwayGoals ?? 0}:${eventKey}`;
 }
 
+function ShootoutTracker({
+  events,
+  homeTeamId,
+  homeName,
+  awayName,
+  homeColor,
+  awayColor,
+  homeScore,
+  awayScore,
+  nextEvent,
+}: {
+  events: MatchEvent[];
+  homeTeamId: string;
+  homeName: string;
+  awayName: string;
+  homeColor: string;
+  awayColor: string;
+  homeScore: number;
+  awayScore: number;
+  nextEvent?: MatchEvent;
+}) {
+  const homeKicks = events.filter(event => event.teamId === homeTeamId);
+  const awayKicks = events.filter(event => event.teamId !== homeTeamId);
+  const slotCount = Math.max(5, homeKicks.length, awayKicks.length);
+  const latest = events.at(-1);
+  const stage = latest?.shootout?.suddenDeath
+    ? `突然死亡 · 第${latest.shootout.round - 5}轮`
+    : `点球大战 · 第${latest?.shootout?.round ?? 1}轮`;
+  const nextTeamName = nextEvent?.teamId === homeTeamId ? homeName : awayName;
+  const nextTeamScore = nextEvent?.teamId === homeTeamId ? homeScore : awayScore;
+  const opponentScore = nextEvent?.teamId === homeTeamId ? awayScore : homeScore;
+  const nextTeamTaken = Math.max(0, (nextEvent?.shootout?.teamKickNumber ?? 1) - 1);
+  const opponentTaken = events.filter(event => event.teamId !== nextEvent?.teamId).length;
+  const nextKickWins = Boolean(nextEvent && !nextEvent.shootout?.suddenDeath
+    && nextTeamScore + 1 > opponentScore + Math.max(0, 5 - opponentTaken));
+  const mustScore = Boolean(nextEvent && !nextEvent.shootout?.suddenDeath
+    && nextTeamScore + Math.max(0, 5 - nextTeamTaken) <= opponentScore);
+  const pressure = !nextEvent
+    ? '逐罚结束'
+    : nextEvent.shootout?.suddenDeath
+      ? `${nextTeamName}进入突然死亡主罚`
+      : mustScore
+        ? `${nextTeamName}必须罚进`
+        : nextKickWins
+          ? `${nextTeamName}命中即可结束`
+          : `${nextTeamName}即将主罚`;
+
+  const row = (name: string, color: string, kicks: MatchEvent[], score: number) => (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        <span className="truncate text-[11px] font-semibold text-slate-300" title={name}>{name}</span>
+      </div>
+      <div className="flex flex-wrap justify-end gap-1" aria-label={`${name}点球记录`}>
+        {Array.from({ length: slotCount }, (_, index) => {
+          const kick = kicks[index];
+          const scored = kick?.type === 'penalty_goal';
+          return (
+            <span
+              key={index}
+              title={kick?.description ?? '尚未主罚'}
+              className={`h-3 w-3 rounded-full border ${
+                !kick
+                  ? 'border-slate-600 bg-transparent'
+                  : scored
+                    ? 'border-emerald-300 bg-emerald-400'
+                    : 'border-rose-300 bg-rose-500'
+              }`}
+            />
+          );
+        })}
+      </div>
+      <span className="w-5 text-right text-sm font-black tabular-nums text-amber-300">{score}</span>
+    </div>
+  );
+
+  return (
+    <div data-testid="shootout-tracker" className="border-y border-amber-400/15 bg-amber-400/[0.04] px-4 py-2.5">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-[10px] font-semibold text-amber-300">{stage}</span>
+        <span className="text-[10px] text-slate-500">{pressure} · <span className="tabular-nums">{homeScore} - {awayScore}</span></span>
+      </div>
+      <div className="space-y-1.5">
+        {row(homeName, homeColor, homeKicks, homeScore)}
+        {row(awayName, awayColor, awayKicks, awayScore)}
+      </div>
+    </div>
+  );
+}
+
 export default function MatchLive(props: Props) {
   return <MatchLiveSession key={playbackKey(props.result)} {...props} />;
 }
@@ -224,7 +315,10 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [reducedMotion, setReducedMotion] = useState(() =>
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   );
+  const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
+  const [unseenEventCount, setUnseenEventCount] = useState(0);
   const logRef = useRef<HTMLDivElement>(null);
+  const previousEventCountRef = useRef(0);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -233,13 +327,31 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     ? Math.max(121, ...result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss').map(event => event.minute))
     : maxMin;
 
-  const allEvents = useMemo(() =>
-    result.events.map((event, order) => ({ event, order }))
+  const allEvents = useMemo(() => {
+    let homeKickCount = 0;
+    let awayKickCount = 0;
+    return result.events.map((sourceEvent, order) => {
+      let event = sourceEvent;
+      if ((event.type === 'penalty_goal' || event.type === 'penalty_miss') && !event.shootout) {
+        const isHome = event.teamId === result.homeTeamId;
+        const teamKickNumber = isHome ? ++homeKickCount : ++awayKickCount;
+        event = {
+          ...event,
+          shootout: {
+            kickNumber: homeKickCount + awayKickCount,
+            round: teamKickNumber,
+            teamKickNumber,
+            suddenDeath: teamKickNumber > 5,
+            outcome: event.type === 'penalty_goal' ? 'scored' : 'off_target',
+          },
+        };
+      }
+      return { event, order };
+    })
       .filter(({ event }) => event.minute <= timelineMax)
       .sort((a, b) => a.event.minute - b.event.minute || a.order - b.order)
-      .map(({ event }) => event),
-    [result.events, timelineMax]
-  );
+      .map(({ event }) => event);
+  }, [result.events, result.homeTeamId, timelineMax]);
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
   const finished = playback.phase === 'finished';
   const paused = playback.phase === 'paused';
@@ -248,6 +360,8 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const shootoutBreak = playback.phase === 'shootout_break';
   const isBreak = halftime || extraTimeBreak || shootoutBreak;
   const stageLabel = getPlaybackStageLabel(playback, Boolean(result.penalties));
+  const shootoutEvents = shownEvents.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
+  const inShootout = Boolean(result.penalties && playback.minute > 120);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -344,14 +458,20 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
 
   useEffect(() => {
     if (playback.consumedEventCount === 0) return;
+    const added = Math.max(0, playback.consumedEventCount - previousEventCountRef.current);
+    previousEventCountRef.current = playback.consumedEventCount;
+    if (!followingLiveFeed) {
+      setUnseenEventCount(count => count + added);
+      return;
+    }
     const timer = window.setTimeout(() => {
       logRef.current?.scrollTo?.({
-        top: logRef.current.scrollHeight,
+        top: 0,
         behavior: reducedMotion ? 'auto' : 'smooth',
       });
     }, 100);
     return () => clearTimeout(timer);
-  }, [playback.consumedEventCount, reducedMotion]);
+  }, [followingLiveFeed, playback.consumedEventCount, reducedMotion]);
 
   const skip = useCallback(() => {
     dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
@@ -359,23 +479,37 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
 
   // Commentary text for current state
   const commentary = useMemo(() => {
-    if (finished) return '比赛结束！全场战罢。';
-    if (halftime) return '中场休息 — 双方回到更衣室';
-    if (extraTimeBreak) return '九十分钟战平 — 稍事休整后进入加时赛';
-    if (shootoutBreak) return '加时赛仍未分胜负 — 点球大战即将开始';
-    if (playback.flashEvent?.type === 'goal' || playback.flashEvent?.type === 'penalty_goal' || playback.flashEvent?.type === 'own_goal') return '进球了！！！';
-    if (playback.flashEvent?.type === 'save' || playback.flashEvent?.type === 'gk_save') return '门将做出精彩扑救！';
-    if (playback.flashEvent?.type === 'df_block') return '后卫在门线上完成关键封堵！';
-    if (playback.flashEvent?.type === 'miss' || playback.flashEvent?.type === 'penalty_miss') return '射门偏出，错失机会';
-    if (playback.flashEvent?.type === 'yellow_card') return '裁判出示黄牌警告';
-    if (playback.flashEvent?.type === 'red_card') return '红牌！有球员被罚下！';
-    if (playback.flashEvent?.type === 'substitution') return playback.flashEvent.description;
-    if (playback.minute < 3) return '开球！比赛正式开始';
-    if (playback.minute >= 85) return '比赛进入伤停补时阶段...';
-    if (playback.minute >= 70) return '比赛进入最后阶段';
-    if (playback.minute === 46) return '下半场开始！';
-    return '';
-  }, [playback.minute, playback.flashEvent, finished, halftime, extraTimeBreak, shootoutBreak]);
+    if (finished) return `比赛结束，最终比分 ${playback.homeScore}:${playback.awayScore}${result.penalties ? `，点球 ${playback.penaltyHomeScore}:${playback.penaltyAwayScore}` : ''}。`;
+    if (halftime) return `中场休息，比分 ${playback.homeScore}:${playback.awayScore}。`;
+    if (extraTimeBreak) return '九十分钟未分胜负，双方准备进入加时赛。';
+    if (shootoutBreak) return '加时赛仍未分胜负，点球大战即将开始。';
+    return buildLiveCommentary({
+      event: playback.flashEvent,
+      minute: playback.minute,
+      homeScore: playback.homeScore,
+      awayScore: playback.awayScore,
+      penaltyHomeScore: playback.penaltyHomeScore,
+      penaltyAwayScore: playback.penaltyAwayScore,
+      homeTeamId: result.homeTeamId,
+      homeTeamName: ht?.name ?? '主队',
+      awayTeamName: at?.name ?? '客队',
+    });
+  }, [
+    at?.name,
+    extraTimeBreak,
+    finished,
+    halftime,
+    ht?.name,
+    playback.awayScore,
+    playback.flashEvent,
+    playback.homeScore,
+    playback.minute,
+    playback.penaltyAwayScore,
+    playback.penaltyHomeScore,
+    result.homeTeamId,
+    result.penalties,
+    shootoutBreak,
+  ]);
 
   // Mobile — swipe down on overlay or content to close
   const swipeRef = useSwipe<HTMLDivElement>({
@@ -392,18 +526,24 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
       data-fixture-id={result.fixtureId}
       className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
-      <div className={`bg-slate-900 rounded-2xl w-full max-w-lg max-h-[calc(100dvh-16px)] overflow-y-auto shadow-2xl animate-scale-in motion-reduce:animate-none border ${
+      <div className={`flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
+
+        <div className="min-h-0 overflow-y-auto">
 
         {/* Header bar */}
         <div className="bg-slate-800/80 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${finished ? 'bg-red-500' : 'bg-green-500 animate-breathe'}`} />
-            <span className="text-[11px] text-slate-400">{result.competitionName} · {result.roundLabel}</span>
+            <span className="truncate text-[11px] text-slate-400">{result.competitionName} · {result.roundLabel}</span>
           </div>
           <span data-testid="live-minute" className={`text-[10px] px-2 py-0.5 rounded-full ${finished ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
-            {finished ? '全场结束' : `${playback.minute}'`}
+            {finished
+              ? '全场结束'
+              : inShootout
+                ? shootoutEventLabel(shootoutEvents.at(-1) ?? { minute: 121, type: 'penalty_miss', teamId: result.homeTeamId, description: '' })
+                : `${playback.minute}'`}
           </span>
         </div>
 
@@ -476,79 +616,131 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
           </div>
         </div>
 
-        {result.penalties && playback.minute > 120 && (
-          <div className="-mt-1 pb-2 text-center text-[11px] font-semibold text-amber-400 tabular-nums">
-            点球 {playback.penaltyHomeScore} - {playback.penaltyAwayScore}
-          </div>
-        )}
+        <div className="lg:grid lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.8fr)]">
+          <div className="min-w-0">
+            {inShootout && (
+              <ShootoutTracker
+                events={shootoutEvents}
+                homeTeamId={result.homeTeamId}
+                homeName={ht?.name ?? '主队'}
+                awayName={at?.name ?? '客队'}
+                homeColor={ht?.color ?? '#ef4444'}
+                awayColor={at?.color ?? '#3b82f6'}
+                homeScore={playback.penaltyHomeScore}
+                awayScore={playback.penaltyAwayScore}
+                nextEvent={allEvents[playback.consumedEventCount]}
+              />
+            )}
 
-        {/* Pitch */}
-        <div className="px-3 py-2">
-          <PitchCanvas
-            minute={Math.min(playback.minute, maxMin)}
-            maxMinute={maxMin}
-            homeColor={ht?.color ?? '#ef4444'}
-            awayColor={at?.color ?? '#3b82f6'}
-            homeTeamId={result.homeTeamId}
-            flashEvent={playback.flashEvent}
-            allEvents={allEvents}
-            homeMatchday={result.homeMatchday}
-            awayMatchday={result.awayMatchday}
-            finished={finished}
-            halftime={isBreak}
-            active={playback.phase === 'playing' && pageVisible}
-            playbackMode={playback.mode}
-          />
-        </div>
-
-        {/* Commentary line */}
-        {commentary && (
-          <div className="px-4 py-1">
-            <p className="text-[11px] text-emerald-400/80 italic animate-slide-up" key={commentary}>{commentary}</p>
-          </div>
-        )}
-
-        {/* Progress bar with markers */}
-        <div className="px-4 py-1">
-          <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-300 motion-reduce:transition-none" style={{ width: `${(playback.minute / timelineMax) * 100}%` }} />
-            {/* HT marker */}
-            <div className="absolute top-0 bottom-0 w-px bg-slate-600" style={{ left: `${(45 / timelineMax) * 100}%` }} />
-            {/* Goal markers */}
-            {shownEvents.filter(e => e.type === 'goal' || e.type === 'penalty_goal').map((e, i) => (
-              <div key={`${e.minute}:${e.type}:${i}`} className="absolute top-0 w-1 h-full bg-amber-400 rounded-full" style={{ left: `${(e.minute / timelineMax) * 100}%` }} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
-            <span>0'</span><span>45'</span><span>{timelineMax > 120 ? '点球' : `${maxMin}'`}</span>
-          </div>
-        </div>
-
-        {/* Event log */}
-        <div ref={logRef} className="px-4 py-1 max-h-24 overflow-y-auto scroll-smooth">
-          {[...shownEvents].reverse().filter(e =>
-            e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
-            || e.type === 'yellow_card' || e.type === 'red_card'
-            || e.type === 'save' || e.type === 'gk_save' || e.type === 'df_block'
-            || e.type === 'miss' || e.type === 'penalty_miss' || e.type === 'substitution'
-          ).slice(0, 6).map((e, i) => (
-            <div key={`${e.minute}:${e.type}:${e.teamId}:${e.playerId ?? ''}:${i}`} className={`flex items-center gap-2 text-[11px] py-0.5 ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
-              <span className="w-6 text-right font-mono text-[10px]">{e.minute}'</span>
-              <span className="text-sm inline-flex items-center justify-center w-4 h-4">
-                {EVENT_ICONS[e.type]
-                  ? <Icon name={EVENT_ICONS[e.type].name} size={14} accent={EVENT_ICONS[e.type].accent} />
-                  : <span>•</span>}
-              </span>
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: e.teamId === result.homeTeamId ? ht?.color : at?.color }} />
-              <span className="truncate" title={e.description}>{e.description}</span>
+            <div className="px-3 py-2 lg:px-4 lg:py-3">
+              <PitchCanvas
+                minute={Math.min(playback.minute, maxMin)}
+                maxMinute={maxMin}
+                homeColor={ht?.color ?? '#ef4444'}
+                awayColor={at?.color ?? '#3b82f6'}
+                homeTeamId={result.homeTeamId}
+                flashEvent={playback.flashEvent}
+                allEvents={allEvents}
+                homeMatchday={result.homeMatchday}
+                awayMatchday={result.awayMatchday}
+                finished={finished}
+                halftime={isBreak}
+                breakLabel={shootoutBreak
+                  ? { label: '点球大战', sublabel: 'PENALTY SHOOTOUT' }
+                  : extraTimeBreak
+                    ? { label: '加时赛', sublabel: 'EXTRA TIME' }
+                    : { label: '中场休息', sublabel: 'HALF TIME' }}
+                active={playback.phase === 'playing' && pageVisible}
+                playbackMode={playback.mode}
+                shootout={inShootout}
+              />
             </div>
-          ))}
+
+            {!inShootout && (
+              <div className="px-4 pb-3 pt-1">
+                <div className="relative h-2 overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300 motion-reduce:transition-none"
+                    style={{ width: `${(Math.min(playback.minute, maxMin) / maxMin) * 100}%` }}
+                  />
+                  <div className="absolute inset-y-0 w-px bg-slate-600" style={{ left: `${(45 / maxMin) * 100}%` }} />
+                  {maxMin > 90 && <div className="absolute inset-y-0 w-px bg-slate-600" style={{ left: `${(90 / maxMin) * 100}%` }} />}
+                  {shownEvents.filter(e => e.type === 'goal' || e.type === 'own_goal').map((e, i) => (
+                    <div key={`${e.minute}:${e.type}:${i}`} className="absolute top-0 h-full w-1 rounded-full bg-amber-400" style={{ left: `${(e.minute / maxMin) * 100}%` }} />
+                  ))}
+                </div>
+                <div className="mt-0.5 flex justify-between text-[9px] text-slate-600">
+                  <span>0'</span><span>45'</span><span>{maxMin}'</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <aside className="min-w-0 border-t border-slate-800/70 lg:border-l lg:border-t-0">
+            <div className="min-h-16 border-b border-slate-800/70 px-4 py-3">
+              <div className="mb-1 text-[9px] font-semibold text-slate-500">现场播报</div>
+              <p className="text-[12px] leading-5 text-emerald-300/90 animate-slide-up" key={commentary}>{commentary}</p>
+            </div>
+
+            <div className="relative">
+              {unseenEventCount > 0 && (
+                <button
+                  type="button"
+                  data-testid="new-live-events"
+                  onClick={() => {
+                    setFollowingLiveFeed(true);
+                    setUnseenEventCount(0);
+                    logRef.current?.scrollTo?.({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+                  }}
+                  className="absolute right-3 top-2 z-10 min-h-9 rounded-md border border-emerald-500/30 bg-emerald-950 px-2 text-[10px] text-emerald-300 shadow-lg"
+                >{unseenEventCount} 条新战况</button>
+              )}
+              <div
+                ref={logRef}
+                data-testid="live-event-log"
+                onScroll={event => {
+                  const atTop = event.currentTarget.scrollTop <= 8;
+                  setFollowingLiveFeed(atTop);
+                  if (atTop) setUnseenEventCount(0);
+                }}
+                className="max-h-28 overflow-y-auto scroll-smooth px-4 py-2 lg:max-h-[260px]"
+              >
+                {shownEvents.length === 0 && <p className="py-2 text-[11px] text-slate-600">等待第一条比赛战况</p>}
+                {[...shownEvents].reverse().filter(e =>
+                  e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
+                  || e.type === 'yellow_card' || e.type === 'red_card'
+                  || e.type === 'save' || e.type === 'gk_save' || e.type === 'df_block'
+                  || e.type === 'miss' || e.type === 'penalty_miss' || e.type === 'substitution'
+                ).slice(0, 10).map((e, i) => (
+                  <div key={`${e.minute}:${e.type}:${e.teamId}:${e.playerId ?? ''}:${i}`} className={`flex min-h-8 items-start gap-2 py-1 text-[11px] ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
+                    <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[10px]">{shootoutEventLabel(e)}</span>
+                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sm">
+                      {EVENT_ICONS[e.type]
+                        ? <Icon name={EVENT_ICONS[e.type].name} size={14} accent={EVENT_ICONS[e.type].accent} />
+                        : <span>•</span>}
+                    </span>
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: e.teamId === result.homeTeamId ? ht?.color : at?.color }} />
+                    <span className="min-w-0 leading-4" title={e.description}>{e.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {/* Final results */}
+        {finished && (
+          <div className="px-4 pb-3 text-center space-y-1 animate-slide-up">
+            {result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
+            {result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
+          </div>
+        )}
         </div>
 
         {/* Controls */}
         <div
           data-testid="live-controls"
-          className="grid grid-cols-1 gap-2 border-t border-slate-800/60 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid shrink-0 grid-cols-1 gap-2 border-t border-slate-800/60 bg-slate-900 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="flex min-w-0 gap-1">
             <div
@@ -563,7 +755,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                   aria-pressed={playback.mode === option.value}
                   data-testid={`playback-mode-${option.value}`}
                   onClick={() => dispatch({ type: 'setMode', mode: option.value })}
-                  className={`min-h-11 min-w-11 cursor-pointer px-2 py-1 text-[10px] transition-colors sm:min-h-0 ${
+                  className={`min-h-11 min-w-11 cursor-pointer px-2.5 py-1 text-[10px] transition-colors sm:min-h-9 ${
                     playback.mode === option.value
                       ? 'bg-emerald-600 text-white'
                       : 'text-slate-400 hover:bg-slate-700'
@@ -574,7 +766,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
               ))}
             </div>
             <button onClick={() => dispatch({ type: 'togglePause' })} disabled={isBreak}
-              className="min-w-11 min-h-11 sm:min-h-0 px-2.5 py-1 text-[10px] rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60"
+              className="min-h-11 min-w-11 rounded-md bg-slate-800 px-2.5 py-1 text-[10px] text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60 sm:min-h-9"
             >{isBreak ? '休息' : paused ? '继续' : '暂停'}</button>
             <button
               type="button"
@@ -592,7 +784,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                 }
                 setLocallyMuted(value => !value);
               }}
-              className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700 sm:min-h-0"
+              className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-700 sm:min-h-9"
             >
               <Icon
                 name={feedbackPreferences.soundEnabled && !locallyMuted ? 'volume' : 'volume-off'}
@@ -609,13 +801,6 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
           </div>
         </div>
 
-        {/* Final results */}
-        {finished && (
-          <div className="px-4 pb-3 text-center space-y-1 animate-slide-up">
-            {result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
-            {result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
-          </div>
-        )}
       </div>
     </div>,
     document.body,

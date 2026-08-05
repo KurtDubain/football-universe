@@ -786,9 +786,9 @@ function SquadRoster({ teamId }: { teamId: string }) {
                           <>
                             <span>{stats.appearances}场/{stats.starts ?? 0}首发</span>
                             {(player.position === 'FW' || player.position === 'MF') && <span>{stats.goals}球/{stats.assists}助</span>}
-                            {(player.position === 'GK' || player.position === 'DF') && <span>{stats.cleanSheets}零封</span>}
-                            {player.position === 'GK' && <span>{stats.saves}神扑</span>}
-                            {player.position === 'DF' && <span>{stats.keyBlocks}封堵</span>}
+                            {(player.position === 'GK' || player.position === 'DF') && <span>{stats.cleanSheetMinutes ?? 0}零封分钟</span>}
+                            {player.position === 'GK' && <span>{stats.routineSaves ?? 0}扑救/{stats.saves}关键</span>}
+                            {player.position === 'DF' && <span>{stats.interceptions ?? 0}拦截/{stats.clearances ?? 0}解围</span>}
                           </>
                         ) : <span>本季尚未出场</span>}
                       </div>
@@ -824,24 +824,24 @@ function SquadRoster({ teamId }: { teamId: string }) {
                               {stats.assists}助
                             </span>
                           )}
-                          {(player.position === 'GK' || player.position === 'DF') && stats.cleanSheets > 0 && (
-                            <span className="text-blue-300" title="实际登场且球队整场（含加时）零失球">
-                              {stats.cleanSheets}零封
+                          {(player.position === 'GK' || player.position === 'DF') && (stats.cleanSheetMinutes ?? 0) > 0 && (
+                            <span className="text-blue-300" title="球队整场零失球时，该球员实际出场的分钟数">
+                              {stats.cleanSheetMinutes ?? 0}零封分钟
                             </span>
                           )}
-                          {player.position === 'GK' && stats.saves > 0 && (
-                            <span className="text-amber-300">
-                              {stats.saves}神扑
+                          {player.position === 'GK' && ((stats.routineSaves ?? 0) > 0 || stats.saves > 0) && (
+                            <span className="text-amber-300" title="普通扑救/关键扑救，当前赛季全赛事">
+                              {stats.routineSaves ?? 0}扑救/{stats.saves}关键
                             </span>
                           )}
-                          {player.position === 'DF' && stats.keyBlocks > 0 && (
-                            <span className="text-blue-400">
-                              {stats.keyBlocks}关键封堵
+                          {player.position === 'DF' && ((stats.interceptions ?? 0) > 0 || (stats.clearances ?? 0) > 0) && (
+                            <span className="text-blue-400" title="当前赛季全赛事拦截/解围">
+                              {stats.interceptions ?? 0}拦截/{stats.clearances ?? 0}解围
                             </span>
                           )}
                           {(player.position === 'MF' || player.position === 'FW') && stats.keyPasses > stats.assists && (
                             <span className="text-emerald-300">
-                              {stats.keyPasses}威胁传球
+                              {stats.keyPasses - stats.assists}额外创造
                             </span>
                           )}
                           {stats.yellowCards > 0 && (

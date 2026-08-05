@@ -121,7 +121,7 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
     await page.evaluate(() => { (window as AuditWindow).__animationLongTasks = []; });
     const dialog = page.getByRole('dialog', { name: '比赛直播回放' });
-    await dialog.getByRole('button', { name: '3x' }).click();
+    await dialog.getByRole('button', { name: '精华' }).click();
     await page.waitForTimeout(1800);
     const rendering = await readRendering(page);
 

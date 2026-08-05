@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
 import { buildCareerArc, type CareerArcPoint } from '../engine/players/career-arc';
+import { computePlayerCareerTotals } from '../engine/players/career-totals';
 import TrophyBreakdown from '../components/TrophyBreakdown';
 import type { PlayerPosition, PlayerRetirement } from '../types/player';
 import type { CoachCandidate, CoachRetirement } from '../types/coach';
@@ -241,6 +242,12 @@ function RetireeCard({
   world: ReturnType<typeof useGameStore.getState>['world'];
 }) {
   const team = world?.teamBases[retiree.teamId];
+  const career = world ? computePlayerCareerTotals(world, retiree.uuid) : null;
+  const positionCareer = retiree.position === 'GK'
+    ? { firstLabel: '生涯普通扑救', firstValue: career?.routineSaves ?? 0, secondLabel: '生涯关键扑救', secondValue: career?.saves ?? 0 }
+    : retiree.position === 'DF'
+      ? { firstLabel: '生涯拦截', firstValue: career?.interceptions ?? 0, secondLabel: '生涯解围', secondValue: career?.clearances ?? 0 }
+      : { firstLabel: '生涯进球', firstValue: career?.goals ?? retiree.careerGoals ?? 0, secondLabel: '生涯助攻', secondValue: career?.assists ?? 0 };
 
   // Career arc — peakAge isn't stored on PlayerRetirement (the retirement
   // record predates the v10 peakAge field on Player); fall back to 27.
@@ -292,8 +299,9 @@ function RetireeCard({
         <StatPill label="巅峰" value={String(retiree.peakRating)} accent="text-amber-300" />
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2 text-center">
-        <StatPill label="生涯进球" value={String(retiree.careerGoals ?? 0)} accent="text-amber-400" />
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center" title="生涯统计来自保留的赛季档案；旧赛季新增防守字段按旧口径显示">
+        <StatPill label={positionCareer.firstLabel} value={String(positionCareer.firstValue)} accent="text-amber-400" />
+        <StatPill label={positionCareer.secondLabel} value={String(positionCareer.secondValue)} />
         <StatPill
           label="冠军"
           value={String(retiree.careerTrophies?.length ?? 0)}

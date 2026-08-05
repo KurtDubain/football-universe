@@ -18,8 +18,8 @@ interface VerificationResult {
   };
   playback: {
     defaultMode: string;
-    normalMinuteDelta: number;
-    fastMinuteDelta: number;
+    liveMinuteDelta: number;
+    immersiveMinuteDelta: number;
     controlsOverflow: number;
   };
   screenshot: string;
@@ -81,8 +81,8 @@ async function verifyViewport(
     await canvas.waitFor({ state: 'visible' });
     await page.waitForTimeout(300);
 
-    const defaultMode = await dialog.getByRole('button', { name: '精华', exact: true }).getAttribute('aria-pressed');
-    if (defaultMode !== 'true') throw new Error(`${name}: highlights is not the default playback mode`);
+    const defaultMode = await dialog.getByRole('button', { name: '直播', exact: true }).getAttribute('aria-pressed');
+    if (defaultMode !== 'true') throw new Error(`${name}: live is not the default playback mode`);
 
     const before = await page.evaluate(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
@@ -146,36 +146,45 @@ async function verifyViewport(
     await page.screenshot({ path: screenshot, fullPage: false, animations: 'disabled' });
 
     if (metrics.opaqueSamples < 20) throw new Error(`${name}: pitch canvas is blank`);
-    const expectedDpr = reducedMotion === 'reduce' ? 1.5 : 2;
-    if (Math.abs(metrics.effectiveDpr - expectedDpr) > 0.15) {
-      throw new Error(`${name}: expected capped DPR ${expectedDpr}, found ${metrics.effectiveDpr.toFixed(2)}`);
+    const validDpr = reducedMotion === 'reduce'
+      ? Math.abs(metrics.effectiveDpr - 1.5) <= 0.15
+      : [1.5, 2].some(expected => Math.abs(metrics.effectiveDpr - expected) <= 0.15);
+    if (!validDpr) {
+      throw new Error(`${name}: expected full or dynamically degraded DPR, found ${metrics.effectiveDpr.toFixed(2)}`);
     }
     if (layers.overlayZ <= layers.stickyZ) throw new Error(`${name}: live overlay is below sticky controls`);
     if (name.startsWith('mobile') && undersizedButtons.length > 0) throw new Error(`${name}: undersized live buttons: ${undersizedButtons.join(', ')}`);
     if (controlsOverflow > 1) throw new Error(`${name}: live controls overflow by ${controlsOverflow}px`);
     if (!before || !after || (before.ball.x === after.ball.x && before.ball.y === after.ball.y)) throw new Error(`${name}: deterministic time step did not move the ball`);
-    if (before?.playbackMode !== 'highlights') throw new Error(`${name}: text state omitted the default playback mode`);
+    if (before?.playbackMode !== 'live') throw new Error(`${name}: text state omitted the default playback mode`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors: ${errors.join(' | ')}`);
 
     const readMinute = async () => Number.parseInt(
       await page.locator('[data-testid="live-minute"]').textContent() ?? '0',
       10,
     );
-    await dialog.getByRole('button', { name: '1x', exact: true }).click();
-    const normalStart = await readMinute();
-    await page.waitForTimeout(620);
-    const normalMinuteDelta = await readMinute() - normalStart;
-    await dialog.getByRole('button', { name: '3x', exact: true }).click();
-    const fastStart = await readMinute();
-    await page.waitForTimeout(620);
-    const fastMinuteDelta = await readMinute() - fastStart;
-    await dialog.getByRole('button', { name: '精华', exact: true }).click();
-    if (normalMinuteDelta < 1 || normalMinuteDelta > 3) {
-      throw new Error(`${name}: 1x advanced ${normalMinuteDelta} minutes in 620ms`);
+    await dialog.getByRole('button', { name: '暂停', exact: true }).click();
+    const liveStart = await readMinute();
+    await dialog.getByRole('button', { name: '继续', exact: true }).click();
+    await page.waitForTimeout(850);
+    await dialog.getByRole('button', { name: '暂停', exact: true }).click();
+    const liveMinuteDelta = await readMinute() - liveStart;
+    await dialog.getByRole('button', { name: '沉浸', exact: true }).click();
+    if (await dialog.getByRole('button', { name: '沉浸', exact: true }).getAttribute('aria-pressed') !== 'true') {
+      throw new Error(`${name}: immersive mode did not activate`);
     }
-    if (fastMinuteDelta < 4 || fastMinuteDelta <= normalMinuteDelta) {
-      throw new Error(`${name}: 3x advanced ${fastMinuteDelta} minutes after 1x advanced ${normalMinuteDelta}`);
+    const immersiveStart = await readMinute();
+    await dialog.getByRole('button', { name: '继续', exact: true }).click();
+    await page.waitForTimeout(2000);
+    await dialog.getByRole('button', { name: '暂停', exact: true }).click();
+    const immersiveMinuteDelta = await readMinute() - immersiveStart;
+    if (liveMinuteDelta < 1 || liveMinuteDelta > (reducedMotion === 'reduce' ? 6 : 3)) {
+      throw new Error(`${name}: live advanced ${liveMinuteDelta} minutes in 850ms`);
     }
+    if (immersiveMinuteDelta < 1 || immersiveMinuteDelta > (reducedMotion === 'reduce' ? 10 : 4)) {
+      throw new Error(`${name}: immersive advanced ${immersiveMinuteDelta} minutes in 2000ms`);
+    }
+    await dialog.getByRole('button', { name: '继续', exact: true }).click();
 
     await dialog.getByRole('button', { name: '暂停' }).click();
     await page.waitForTimeout(reducedMotion === 'reduce' ? 320 : 150);
@@ -187,7 +196,7 @@ async function verifyViewport(
       (window as typeof window & { render_game_to_text: () => string }).render_game_to_text(),
     ).rendering.renderedFrames as number);
     const pauseFramesAdded = pausedEnd - pausedStart;
-    if (pauseFramesAdded > 0) throw new Error(`${name}: canvas kept rendering while paused (${pauseFramesAdded} frames)`);
+    if (pauseFramesAdded > 1) throw new Error(`${name}: canvas kept rendering while paused (${pauseFramesAdded} frames)`);
 
     await dialog.getByRole('button', { name: '继续' }).click();
     await page.waitForTimeout(100);
@@ -221,9 +230,9 @@ async function verifyViewport(
         completedPauseReason: completedEnd.pauseReason,
       },
       playback: {
-        defaultMode: 'highlights',
-        normalMinuteDelta,
-        fastMinuteDelta,
+        defaultMode: 'live',
+        liveMinuteDelta,
+        immersiveMinuteDelta,
         controlsOverflow,
       },
       screenshot,

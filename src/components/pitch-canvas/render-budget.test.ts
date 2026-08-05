@@ -39,4 +39,3 @@ describe('pitch render budget', () => {
     expect(degradeRenderBudget(degraded)).toBe(degraded);
   });
 });
-

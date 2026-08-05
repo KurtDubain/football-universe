@@ -60,4 +60,3 @@ export function degradeRenderBudget(current: RenderBudget): RenderBudget {
     frameStepMs: THIRTY_FPS_MS,
   };
 }
-

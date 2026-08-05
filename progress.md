@@ -1,5 +1,20 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-05 Immersive Match Live Pass
+
+- User approved the recommended direction: replace numeric 3x playback with semantic highlight/live/immersive pacing, default to live, keep commentary text-led with lightweight feedback, and avoid interrupting ordinary simulation with automatic replays.
+- Scope: authoritative penalty-shootout kick sequence, contextual commentary, reliable newest-first live-feed following, shootout-specific presentation, wider desktop broadcast layout, and desktop/mobile/reduced-motion verification.
+- Preserve the lightweight observer-game identity, deterministic normal match results, existing matchday participation, and the current performant 2D canvas. Do not add 3D, TTS, or player body animation.
+- Verification required: focused unit/component tests, full test/lint/build, match presentation and animation performance audits, required web-game client, and visual inspection of ordinary and shootout screenshots.
+- Replaced aggregate-only shootout resolution with a seeded authoritative kick sequence covering alternating kicks, early clinches, sudden death, takers, goalkeepers, and scored/saved/off-target/woodwork outcomes. Match totals, event metadata, validation, replay, details, and live presentation now consume that same sequence.
+- Reworked live pacing into `精华 / 直播 / 沉浸`, defaulting to live. The slower modes hold meaningful events and match breaks longer, while reduced-motion and the existing Canvas render budgets remain respected.
+- Added event-grounded contextual commentary and a dedicated desktop broadcast rail. The newest-first feed follows the latest update until the user deliberately reviews older messages, then exposes an explicit new-update affordance instead of stealing scroll position.
+- Added a shootout tracker with per-team kick marks, current shootout score, next taker, must-score/clinching/sudden-death states, and penalty-specific Canvas staging. Shootout events use `点1`/`骤1` labels rather than fake 121+ minute labels, and no longer contaminate ordinary equalizer or late-winner annotations.
+- Mobile live controls now stay in a stable bottom control region outside the scrolling match content. At 320x568 and 390x844, controls fit without horizontal overflow and all interactive targets meet the mobile size threshold.
+- Final verification under Node 22.22.2 passed 97 test files / 714 tests, ESLint, TypeScript/PWA production build, changelog and bundle budgets, ordinary-match presentation checks across four viewport/motion profiles, and dedicated shootout checks across desktop and two mobile viewports. Canvas movement, two-player penalty staging, score reconciliation, control bounds, and runtime-console checks all passed.
+- The animation performance audit passed at normal and 4x CPU profiles with average Canvas draw costs of 0.287ms and 1.103ms. The player-defense long audit also remained clean across 72,910 matches, confirming that this presentation pass did not disturb simulation data.
+- Production dependency audit still reports one high-severity ignored advisory with no actionable advisory record or upgrade action, matching the repository's previously documented audit exception.
+
 ## 2026-07-31 Contest Final Polish Phase 7
 
 - Added six original, versioned visual assets for only the four approved families: Welcome universe hero, three reusable story chapter marks, live-score foundation, and season archive frame. No names, scores, season identifiers, Chinese copy, commands, or real club marks are baked into artwork.

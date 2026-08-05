@@ -15,6 +15,7 @@ function withoutReplayDetails(world: ReturnType<typeof initializeGameWorld>): un
     delete canonical.events;
     delete canonical.homeMatchday;
     delete canonical.awayMatchday;
+    delete canonical.defensiveContributions;
     delete canonical.detailsArchived;
     return canonical;
   }));
@@ -58,7 +59,10 @@ describe('save compaction', () => {
     expect(canonicalAfter).toEqual(canonicalBefore);
     expect(cleanup.world.playerStats).toEqual(playerStatsBefore);
     expect(afterResults.filter((result) => result.detailsArchived)
-      .every((result) => result.events.length === 0 && !result.homeMatchday && !result.awayMatchday)).toBe(true);
+      .every((result) => result.events.length === 0
+        && !result.homeMatchday
+        && !result.awayMatchday
+        && !result.defensiveContributions)).toBe(true);
     expect(withoutReplayDetails(cleanup.world)).toEqual(withoutReplayDetails(world));
 
     const originalNext = executeCurrentWindow(structuredClone(world));

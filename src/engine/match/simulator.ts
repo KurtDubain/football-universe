@@ -4,6 +4,8 @@ import {
   MatchStats,
   MatchEvent,
   CompetitionType,
+  MatchdaySnapshot,
+  PenaltyShootoutResult,
 } from '../../types';
 import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
@@ -23,6 +25,7 @@ import {
 } from './participation';
 import type { AdjustedStrengths } from './model';
 import { calculateMatchModel, competitionRandomness, computeMatchdayModelReport, expectedGoals, forecastFromModel } from './model';
+import { simulatePenaltyShootout } from './penalty-shootout';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -54,6 +57,151 @@ export interface SimulationResult {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function stableStringHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash | 0;
+}
+
+function localMatchRng(fixtureId: string, salt: string, state: number): SeededRNG {
+  return new SeededRNG(stableStringHash(`${fixtureId}:${salt}`) ^ state);
+}
+
+function distributeDefensiveTotal(
+  total: number,
+  teamId: string,
+  snapshot: MatchdaySnapshot | undefined,
+  squad: Player[] | undefined,
+  field: 'interceptions' | 'clearances',
+  rng: SeededRNG,
+  out: NonNullable<MatchResult['defensiveContributions']>,
+): void {
+  if (total <= 0) return;
+  const byId = new Map((squad ?? []).map(player => [player.uuid, player]));
+  const candidates = (snapshot?.players ?? [])
+    .filter(entry => entry.position === 'DF' && (entry.minutesPlayed ?? 0) > 0)
+    .map(entry => ({ player: byId.get(entry.playerId), minutes: entry.minutesPlayed ?? 0 }))
+    .filter((entry): entry is { player: Player; minutes: number } => Boolean(entry.player));
+  if (candidates.length === 0) return;
+
+  const weights = candidates.map(({ player, minutes }) => minutes * (0.55 + player.rating / 100));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  for (let action = 0; action < total; action++) {
+    let roll = rng.next() * weightTotal;
+    let selected = candidates.at(-1)!;
+    for (let index = 0; index < candidates.length; index++) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        selected = candidates[index];
+        break;
+      }
+    }
+    const current = out[selected.player.uuid] ?? {
+      playerId: selected.player.uuid,
+      teamId,
+      interceptions: 0,
+      clearances: 0,
+    };
+    current[field]++;
+    out[selected.player.uuid] = current;
+  }
+}
+
+function distributeRoutineSaves(
+  total: number,
+  teamId: string,
+  snapshot: MatchdaySnapshot | undefined,
+  squad: Player[] | undefined,
+  rng: SeededRNG,
+  out: NonNullable<MatchResult['defensiveContributions']>,
+): void {
+  if (total <= 0) return;
+  const byId = new Map((squad ?? []).map(player => [player.uuid, player]));
+  const candidates = snapshot
+    ? snapshot.players
+      .filter(entry => entry.position === 'GK' && (entry.minutesPlayed ?? 0) > 0 && byId.has(entry.playerId))
+      .map(entry => ({ player: byId.get(entry.playerId)!, minutes: entry.minutesPlayed ?? 0 }))
+    : (squad ?? [])
+      .filter(player => player.position === 'GK')
+      .slice(0, 1)
+      .map(player => ({ player, minutes: 90 }));
+  const minutesTotal = candidates.reduce((sum, candidate) => sum + candidate.minutes, 0);
+  if (minutesTotal <= 0) return;
+
+  for (let save = 0; save < total; save++) {
+    let roll = rng.next() * minutesTotal;
+    let selected = candidates.at(-1)!;
+    for (const candidate of candidates) {
+      roll -= candidate.minutes;
+      if (roll <= 0) {
+        selected = candidate;
+        break;
+      }
+    }
+    const current = out[selected.player.uuid] ?? {
+      playerId: selected.player.uuid,
+      teamId,
+      interceptions: 0,
+      clearances: 0,
+    };
+    current.routineSaves = (current.routineSaves ?? 0) + 1;
+    out[selected.player.uuid] = current;
+  }
+}
+
+function generateDefensiveContributions(
+  fixtureId: string,
+  stats: MatchStats,
+  state: number,
+  homeTeamId: string,
+  awayTeamId: string,
+  homeSnapshot: MatchdaySnapshot | undefined,
+  awaySnapshot: MatchdaySnapshot | undefined,
+  homeSquad: Player[] | undefined,
+  awaySquad: Player[] | undefined,
+  homeRoutineSaves: number,
+  awayRoutineSaves: number,
+): NonNullable<MatchResult['defensiveContributions']> {
+  const rng = localMatchRng(fixtureId, 'defensive-contributions-v1', state);
+  const out: NonNullable<MatchResult['defensiveContributions']> = {};
+  const teamInputs = [
+    {
+      teamId: homeTeamId,
+      snapshot: homeSnapshot,
+      squad: homeSquad,
+      opponentPossession: stats.possession[1],
+      opponentShots: stats.shots[1],
+      opponentCorners: stats.corners[1],
+    },
+    {
+      teamId: awayTeamId,
+      snapshot: awaySnapshot,
+      squad: awaySquad,
+      opponentPossession: stats.possession[0],
+      opponentShots: stats.shots[0],
+      opponentCorners: stats.corners[0],
+    },
+  ];
+
+  for (const input of teamInputs) {
+    const interceptions = clamp(Math.round(
+      3 + input.opponentPossession * 0.07 + input.opponentShots * 0.18 + rng.nextFloat(-1.5, 1.5),
+    ), 4, 13);
+    const clearances = clamp(Math.round(
+      4 + input.opponentShots * 0.55 + input.opponentCorners * 0.45
+      + Math.max(0, input.opponentPossession - 50) * 0.08 + rng.nextFloat(-2, 2),
+    ), 5, 20);
+    distributeDefensiveTotal(interceptions, input.teamId, input.snapshot, input.squad, 'interceptions', rng, out);
+    distributeDefensiveTotal(clearances, input.teamId, input.snapshot, input.squad, 'clearances', rng, out);
+  }
+  distributeRoutineSaves(homeRoutineSaves, homeTeamId, homeSnapshot, homeSquad, rng, out);
+  distributeRoutineSaves(awayRoutineSaves, awayTeamId, awaySnapshot, awaySquad, rng, out);
+  return out;
 }
 
 function generateMatchStats(
@@ -118,33 +266,6 @@ function generateMatchStats(
   };
 }
 
-function simulatePenaltyShootout(rng: SeededRNG): [number, number] {
-  let homeScore = 0;
-  let awayScore = 0;
-
-  // First 5 rounds
-  for (let round = 0; round < 5; round++) {
-    if (rng.next() < 0.75) homeScore++;
-    if (rng.next() < 0.75) awayScore++;
-  }
-
-  // If still level after 5 rounds, sudden death
-  while (homeScore === awayScore) {
-    const homeScores = rng.next() < 0.75;
-    const awayScores = rng.next() < 0.75;
-
-    if (homeScores) homeScore++;
-    if (awayScores) awayScore++;
-
-    // If both scored or both missed, continue
-    if (homeScores === awayScores) continue;
-    // Otherwise one team leads, shootout over
-    break;
-  }
-
-  return [homeScore, awayScore];
-}
-
 function updateFormArray(
   current: ('W' | 'D' | 'L')[],
   result: 'W' | 'D' | 'L',
@@ -170,6 +291,8 @@ function updateFormArray(
 export function pickMotm(
   events: MatchEvent[],
   winnerTeamId: string | null,
+  defensiveContributions?: MatchResult['defensiveContributions'],
+  players?: Map<string, Player>,
 ): MatchResult['motm'] {
   const candidates = new Map<string, { playerName: string; teamId: string; score: number }>();
   for (const e of events) {
@@ -189,6 +312,17 @@ export function pickMotm(
       playerName: current?.playerName ?? e.playerName,
       teamId: current?.teamId ?? e.teamId,
       score: (current?.score ?? 0) + delta,
+    });
+  }
+  for (const contribution of Object.values(defensiveContributions ?? {})) {
+    const player = players?.get(contribution.playerId);
+    if (!player || !contribution.routineSaves) continue;
+    const multiplier = winnerTeamId === contribution.teamId ? 1.2 : 1;
+    const current = candidates.get(contribution.playerId);
+    candidates.set(contribution.playerId, {
+      playerName: current?.playerName ?? player.name,
+      teamId: current?.teamId ?? contribution.teamId,
+      score: (current?.score ?? 0) + contribution.routineSaves * 0.5 * multiplier,
     });
   }
   let best: MatchResult['motm'];
@@ -271,6 +405,7 @@ export function simulateMatch(
   let penalties = false;
   let penaltyHome: number | undefined;
   let penaltyAway: number | undefined;
+  let penaltyShootout: PenaltyShootoutResult | undefined;
 
   // 5. Handle knockout logic
   if (ctx.isKnockout && homeGoals === awayGoals) {
@@ -290,7 +425,9 @@ export function simulateMatch(
     // Still level? Penalties.
     if (homeGoals === awayGoals) {
       penalties = true;
-      [penaltyHome, penaltyAway] = simulatePenaltyShootout(rng);
+      penaltyShootout = simulatePenaltyShootout(rng);
+      penaltyHome = penaltyShootout.homeScore;
+      penaltyAway = penaltyShootout.awayScore;
     }
   }
 
@@ -332,8 +469,7 @@ export function simulateMatch(
     ctx.competitionType,
     rng.fork(),
     extraTime,
-    penaltyHome,
-    penaltyAway,
+    penaltyShootout?.kicks,
     homeStarters,
     awayStarters,
     etHomeGoals ?? 0,
@@ -404,6 +540,32 @@ export function simulateMatch(
     rng.fork(),
   );
 
+  const homeKeySaves = events.filter(event => event.type === 'gk_save' && event.teamId === homeTeam.id).length;
+  const awayKeySaves = events.filter(event => event.type === 'gk_save' && event.teamId === awayTeam.id).length;
+  const homeGoalLineBlocks = events.filter(event => event.type === 'df_block' && event.teamId === homeTeam.id).length;
+  const awayGoalLineBlocks = events.filter(event => event.type === 'df_block' && event.teamId === awayTeam.id).length;
+  stats.shotsOnTarget = [
+    Math.max(stats.shotsOnTarget[0], homeGoals + awayKeySaves + awayGoalLineBlocks),
+    Math.max(stats.shotsOnTarget[1], awayGoals + homeKeySaves + homeGoalLineBlocks),
+  ];
+
+  const localState = rng.getState();
+  const homeRoutineSaves = Math.max(0, stats.shotsOnTarget[1] - awayGoals - homeKeySaves - homeGoalLineBlocks);
+  const awayRoutineSaves = Math.max(0, stats.shotsOnTarget[0] - homeGoals - awayKeySaves - awayGoalLineBlocks);
+  const defensiveContributions = generateDefensiveContributions(
+    fixture.id,
+    stats,
+    localState,
+    homeTeam.id,
+    awayTeam.id,
+    homeParticipation?.snapshot,
+    awayParticipation?.snapshot,
+    ctx.homeSquad,
+    ctx.awaySquad,
+    homeRoutineSaves,
+    awayRoutineSaves,
+  );
+
   // Reconcile card counts from events
   stats.yellowCards = [
     events.filter((e) => e.type === 'yellow_card' && e.teamId === homeTeam.id).length,
@@ -429,6 +591,7 @@ export function simulateMatch(
     ...(penaltyAway !== undefined && { penaltyAway }),
     events,
     stats,
+    defensiveContributions,
     competitionType: ctx.competitionType,
     competitionName: fixture.competitionName,
     roundLabel: fixture.roundLabel,
@@ -446,7 +609,9 @@ export function simulateMatch(
     totalHome > totalAway ? homeTeam.id
     : totalAway > totalHome ? awayTeam.id
     : null;
-  const motm = pickMotm(events, winnerTeamId);
+  const motmPlayers = new Map([...(ctx.homeSquad ?? []), ...(ctx.awaySquad ?? [])]
+    .map(player => [player.uuid, player]));
+  const motm = pickMotm(events, winnerTeamId, defensiveContributions, motmPlayers);
   if (motm) matchResult.motm = motm;
 
   // 9. Calculate state changes

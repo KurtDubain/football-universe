@@ -78,13 +78,19 @@ export function drawPitch(
 /**
  * Black overlay + "中场休息 / HALF TIME" centered text.
  */
-export function drawHalftime(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+export function drawHalftime(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  label = '中场休息',
+  sublabel = 'HALF TIME',
+): void {
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('中场休息', W / 2, H / 2 - 4);
+  ctx.fillText(label, W / 2, H / 2 - 4);
   ctx.font = '11px sans-serif'; ctx.fillStyle = '#94a3b8';
-  ctx.fillText('HALF TIME', W / 2, H / 2 + 14);
+  ctx.fillText(sublabel, W / 2, H / 2 + 14);
 }
 
 /**

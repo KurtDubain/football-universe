@@ -15,6 +15,7 @@ import {
   getCoachStyleLabel,
   formatForm,
 } from '../utils/format';
+import { shootoutEventLabel } from './match-live/live-commentary';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -446,7 +447,10 @@ function PostMatchView({
   const turningPoints = extractMatchTurningPoints(result);
 
   const goalEvents = result.events.filter(
-    (event) => event.type === 'goal' || event.type === 'penalty_goal' || event.type === 'own_goal',
+    (event) => event.type === 'goal' || event.type === 'own_goal',
+  );
+  const shootoutEvents = result.events.filter(
+    event => event.type === 'penalty_goal' || event.type === 'penalty_miss',
   );
 
   return (
@@ -588,7 +592,7 @@ function PostMatchView({
             进球时间线
           </h4>
           <div className="space-y-1.5">
-            {goalEvents
+            {[...goalEvents]
               .sort((a, b) => a.minute - b.minute)
               .map((event, i) => {
                 const isHomeGoal =
@@ -603,9 +607,6 @@ function PostMatchView({
                           <span className="text-slate-300">{event.description}</span>
                           {event.type === 'own_goal' && (
                             <span className="text-red-400 text-xs ml-1">(乌龙球)</span>
-                          )}
-                          {event.type === 'penalty_goal' && (
-                            <span className="text-amber-400 text-xs ml-1">(P)</span>
                           )}
                         </div>
                         <span className="w-10 text-center text-xs font-mono text-amber-400 bg-slate-700 rounded px-1.5 py-0.5 shrink-0">
@@ -624,15 +625,28 @@ function PostMatchView({
                           {event.type === 'own_goal' && (
                             <span className="text-red-400 text-xs ml-1">(乌龙球)</span>
                           )}
-                          {event.type === 'penalty_goal' && (
-                            <span className="text-amber-400 text-xs ml-1">(P)</span>
-                          )}
                         </div>
                       </>
                     )}
                   </div>
                 );
               })}
+          </div>
+        </div>
+      )}
+
+      {shootoutEvents.length > 0 && (
+        <div className="border-b border-slate-700/50 px-6 py-4">
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">点球大战</h4>
+          <div className="space-y-1.5">
+            {shootoutEvents.map((event, index) => (
+              <div key={`${event.minute}:${event.teamId}:${index}`} className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_auto] items-center gap-2 text-xs">
+                <span className="font-mono text-[10px] text-amber-400">{shootoutEventLabel(event)}</span>
+                <span className={`h-2.5 w-2.5 rounded-full ${event.type === 'penalty_goal' ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                <span className="min-w-0 text-slate-400">{event.description}</span>
+                <span className="text-[10px] text-slate-600">{getTeamShortName(event.teamId, world.teamBases)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -665,7 +679,7 @@ function PostMatchView({
             赛事回顾
           </h4>
           <div className="space-y-1">
-            {result.events
+            {[...result.events]
               .sort((a, b) => a.minute - b.minute)
               .map((event, i) => (
                 <div
@@ -673,7 +687,7 @@ function PostMatchView({
                   className="flex items-center text-xs py-1 border-b border-slate-700/30 last:border-0"
                 >
                   <span className="w-8 text-right font-mono text-slate-500 shrink-0">
-                    {event.minute}'
+                    {shootoutEventLabel(event)}
                   </span>
                   <span className="mx-2 shrink-0">{getEventIcon(event.type)}</span>
                   <span

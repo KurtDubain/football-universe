@@ -257,7 +257,7 @@ function AnimatedResultCard({ result: r, teamBases, importance, isNew, onClick, 
         {isKeyMatch && r.events.length > 0 && (
           <div className="mt-1 flex gap-1.5 overflow-hidden text-[11px] text-slate-500">
             {r.events
-              .filter(e => e.type === 'goal' || e.type === 'penalty_goal')
+              .filter(e => e.type === 'goal' || e.type === 'own_goal')
               .slice(0, 3)
               .map((e, i) => (
                 <span key={i}>

@@ -175,11 +175,13 @@ describe('observer season trajectory', () => {
         [first.uuid]: {
           ...initial.playerStats[first.uuid],
           appearances: 12,
+          minutesPlayed: 900,
           goals: 1,
         },
         [second.uuid]: {
           ...initial.playerStats[second.uuid],
           appearances: 12,
+          minutesPlayed: 900,
           goals: 9,
         },
       },

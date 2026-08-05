@@ -93,7 +93,7 @@ function makeStanding(teamId: string, played = 30, ga = 30): StandingEntry {
 }
 
 describe('computeSeasonAwards', () => {
-  it('returns up to 4 awards (mvp / golden_boot / best_defender / young_player)', () => {
+  it('returns the supported awards when eligible players exist', () => {
     const teamA = makeTeam('teamA', 85); // top team
     const teamB = makeTeam('teamB', 80);
     const youngTeam = makeTeam('youngTeam', 65); // overall < 70 → young player eligible
@@ -123,7 +123,7 @@ describe('computeSeasonAwards', () => {
     expect(types).toContain('golden_boot');
     expect(types).toContain('best_defender');
     expect(types).toContain('young_player');
-    expect(awards.length).toBeLessThanOrEqual(4);
+    expect(awards.length).toBeLessThanOrEqual(5);
   });
 
   it('Golden Boot is the player with the most goals', () => {
@@ -155,7 +155,7 @@ describe('computeSeasonAwards', () => {
     expect(mvp?.playerId).toBe('teamA-10');
   });
 
-  it('Best defender is from the team with the fewest goals against', () => {
+  it('Best defender follows individual defensive performance instead of team goals against', () => {
     const teamA = makeTeam('teamA', 80);
     const teamB = makeTeam('teamB', 80);
     const squads = {
@@ -163,17 +163,17 @@ describe('computeSeasonAwards', () => {
       teamB: [makePlayer('teamB', 4, 'DF', 85)], // higher rating, but worse defence team
     };
     const stats = {
-      'teamA-4': makeStat('teamA-4', 'teamA', 0, 0, 30),
-      'teamB-4': makeStat('teamB-4', 'teamB', 0, 0, 30),
+      'teamA-4': { ...makeStat('teamA-4', 'teamA', 0, 0, 30), minutesPlayed: 2700, interceptions: 50, clearances: 70, goalsConcededWhileOnPitch: 10, cleanSheetMinutes: 900 },
+      'teamB-4': { ...makeStat('teamB-4', 'teamB', 0, 0, 30), minutesPlayed: 2700, interceptions: 110, clearances: 150, keyBlocks: 4, goalsConcededWhileOnPitch: 22, cleanSheetMinutes: 720 },
     };
     const standings = [
-      makeStanding('teamA', 30, 10), // fewer GA → best defender comes from here
+      makeStanding('teamA', 30, 10),
       makeStanding('teamB', 30, 40),
     ];
     const awards = computeSeasonAwards(1, stats, squads, { teamA, teamB }, standings);
     const bd = awards.find((a) => a.type === 'best_defender');
-    expect(bd?.teamId).toBe('teamA');
-    expect(bd?.statValue).toBe(10);
+    expect(bd?.teamId).toBe('teamB');
+    expect(bd?.statLabel).toContain('个人防守评分');
   });
 
   it('Young Player only fires for a team with overall < 70 AND a player with 5+ goals', () => {

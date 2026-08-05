@@ -45,6 +45,12 @@ export function createInitialPlayerStats(
         keyBlocks: 0,
         bigChances: 0,
         keyPasses: 0,
+        routineSaves: 0,
+        shotsOnTargetFaced: 0,
+        cleanSheetMinutes: 0,
+        goalsConcededWhileOnPitch: 0,
+        interceptions: 0,
+        clearances: 0,
       };
     }
   }
@@ -72,6 +78,12 @@ export function emptyPlayerStat(playerId: string, teamId: string): PlayerSeasonS
     keyBlocks: 0,
     bigChances: 0,
     keyPasses: 0,
+    routineSaves: 0,
+    shotsOnTargetFaced: 0,
+    cleanSheetMinutes: 0,
+    goalsConcededWhileOnPitch: 0,
+    interceptions: 0,
+    clearances: 0,
   };
 }
 
@@ -132,6 +144,8 @@ function ensureSegment(
 type StatMatchdayPlayer = Pick<Player, 'uuid' | 'position'> & {
   role: 'starter' | 'bench';
   minutesPlayed: number;
+  enteredMinute: number;
+  exitedMinute: number;
 };
 
 function resolveResultMatchday(
@@ -147,23 +161,144 @@ function resolveResultMatchday(
       position: player.position,
       role: player.role ?? 'starter',
       minutesPlayed: player.minutesPlayed ?? 90,
+      enteredMinute: player.enteredMinute ?? 0,
+      exitedMinute: player.exitedMinute ?? result[side === 'home' ? 'homeMatchday' : 'awayMatchday']?.durationMinutes ?? 90,
     }));
   }
   const matchday = pickMatchdayWithDiscipline(squad, globalWindowIdx) ?? [];
   const starterIds = new Set(selectStartingEleven(matchday).map(player => player.uuid));
   return matchday
     .filter(player => starterIds.has(player.uuid))
-    .map(player => ({ ...player, role: 'starter' as const, minutesPlayed: 90 }));
+    .map(player => ({ ...player, role: 'starter' as const, minutesPlayed: 90, enteredMinute: 0, exitedMinute: 90 }));
 }
 
-function addParticipation(stat: PlayerSeasonStats, player: StatMatchdayPlayer): PlayerSeasonStats {
-  return {
-    ...stat,
-    appearances: stat.appearances + 1,
-    starts: (stat.starts ?? 0) + (player.role === 'starter' ? 1 : 0),
-    substituteAppearances: (stat.substituteAppearances ?? 0) + (player.role === 'bench' ? 1 : 0),
-    minutesPlayed: (stat.minutesPlayed ?? 0) + player.minutesPlayed,
-  };
+const STAT_COUNTER_FIELDS = [
+  'goals', 'assists', 'yellowCards', 'redCards', 'appearances', 'starts',
+  'substituteAppearances', 'minutesPlayed', 'cleanSheets', 'saves', 'keyBlocks',
+  'bigChances', 'keyPasses', 'routineSaves', 'shotsOnTargetFaced',
+  'cleanSheetMinutes', 'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
+] as const;
+
+type StatCounterField = typeof STAT_COUNTER_FIELDS[number];
+type PlayerStatDelta = Record<StatCounterField, number> & { playerId: string; teamId: string };
+
+function emptyPlayerStatDelta(playerId: string, teamId: string): PlayerStatDelta {
+  return Object.assign(
+    { playerId, teamId },
+    Object.fromEntries(STAT_COUNTER_FIELDS.map(field => [field, 0])),
+  ) as unknown as PlayerStatDelta;
+}
+
+function incrementDelta(
+  deltas: Map<string, PlayerStatDelta>,
+  playerId: string | undefined,
+  teamId: string,
+  updates: Partial<Record<StatCounterField, number>>,
+): void {
+  if (!playerId) return;
+  const delta = deltas.get(playerId) ?? emptyPlayerStatDelta(playerId, teamId);
+  for (const field of STAT_COUNTER_FIELDS) delta[field] += updates[field] ?? 0;
+  deltas.set(playerId, delta);
+}
+
+function onPitch(player: StatMatchdayPlayer, minute: number, duration: number): boolean {
+  const normalizedMinute = Math.min(minute, duration - 1);
+  return player.enteredMinute <= normalizedMinute && player.exitedMinute > normalizedMinute;
+}
+
+function buildMatchStatDeltas(
+  result: MatchResult,
+  squads: Record<string, Player[]>,
+  globalWindowIdx: number,
+): Map<string, PlayerStatDelta> {
+  const deltas = new Map<string, PlayerStatDelta>();
+  const homeMatchday = resolveResultMatchday(result, 'home', squads[result.homeTeamId], globalWindowIdx);
+  const awayMatchday = resolveResultMatchday(result, 'away', squads[result.awayTeamId], globalWindowIdx);
+  const duration = result.homeMatchday?.durationMinutes ?? result.awayMatchday?.durationMinutes ?? (result.extraTime ? 120 : 90);
+
+  for (const [teamId, matchday, cleanSheet] of [
+    [result.homeTeamId, homeMatchday, result.awayGoals + (result.etAwayGoals ?? 0) === 0],
+    [result.awayTeamId, awayMatchday, result.homeGoals + (result.etHomeGoals ?? 0) === 0],
+  ] as const) {
+    for (const player of matchday) {
+      const isDefensivePosition = player.position === 'GK' || player.position === 'DF';
+      incrementDelta(deltas, player.uuid, teamId, {
+        appearances: 1,
+        starts: player.role === 'starter' ? 1 : 0,
+        substituteAppearances: player.role === 'bench' ? 1 : 0,
+        minutesPlayed: player.minutesPlayed,
+        cleanSheets: cleanSheet && isDefensivePosition && player.minutesPlayed >= 60 ? 1 : 0,
+        cleanSheetMinutes: cleanSheet && isDefensivePosition ? player.minutesPlayed : 0,
+      });
+    }
+  }
+
+  const matchdayByTeam = new Map<string, StatMatchdayPlayer[]>([
+    [result.homeTeamId, homeMatchday],
+    [result.awayTeamId, awayMatchday],
+  ]);
+  const opposingTeamId = (teamId: string) => teamId === result.homeTeamId ? result.awayTeamId : result.homeTeamId;
+
+  for (const event of result.events) {
+    if (event.type === 'penalty_goal' || event.type === 'penalty_miss' || event.minute > 120) continue;
+    if (event.type === 'goal' || event.type === 'own_goal') {
+      if (event.type === 'goal') {
+        incrementDelta(deltas, event.playerId, event.teamId, { goals: 1, bigChances: 1 });
+      }
+      const defendingTeamId = opposingTeamId(event.teamId);
+      for (const player of matchdayByTeam.get(defendingTeamId) ?? []) {
+        if ((player.position !== 'GK' && player.position !== 'DF') || !onPitch(player, event.minute, duration)) continue;
+        incrementDelta(deltas, player.uuid, defendingTeamId, {
+          goalsConcededWhileOnPitch: 1,
+          shotsOnTargetFaced: player.position === 'GK' ? 1 : 0,
+        });
+      }
+      continue;
+    }
+    if (event.type === 'assist') {
+      incrementDelta(deltas, event.playerId, event.teamId, { assists: 1, keyPasses: 1 });
+      continue;
+    }
+    if (event.type === 'save') {
+      incrementDelta(deltas, event.playerId, event.teamId, { routineSaves: 1, shotsOnTargetFaced: 1 });
+      continue;
+    }
+    if (event.type !== 'gk_save' && event.type !== 'df_block') continue;
+    incrementDelta(deltas, event.playerId, event.teamId, event.type === 'gk_save'
+      ? { saves: 1, shotsOnTargetFaced: 1 }
+      : { keyBlocks: 1 });
+    const attackingTeamId = opposingTeamId(event.teamId);
+    incrementDelta(deltas, event.deniedScorerId, attackingTeamId, { bigChances: 1 });
+    incrementDelta(deltas, event.deniedAssisterId, attackingTeamId, { keyPasses: 1 });
+  }
+
+  for (const contribution of Object.values(result.defensiveContributions ?? {})) {
+    const participant = (matchdayByTeam.get(contribution.teamId) ?? [])
+      .find(player => player.uuid === contribution.playerId && player.minutesPlayed > 0);
+    if (!participant) continue;
+    if (participant.position === 'DF') {
+      incrementDelta(deltas, contribution.playerId, contribution.teamId, {
+        interceptions: Math.max(0, Math.trunc(contribution.interceptions)),
+        clearances: Math.max(0, Math.trunc(contribution.clearances)),
+      });
+    } else if (participant.position === 'GK') {
+      const routineSaves = Math.max(0, Math.trunc(contribution.routineSaves ?? 0));
+      incrementDelta(deltas, contribution.playerId, contribution.teamId, {
+        routineSaves,
+        shotsOnTargetFaced: routineSaves,
+      });
+    }
+  }
+  return deltas;
+}
+
+function applyStatDelta(stat: PlayerSeasonStats, delta: PlayerStatDelta): PlayerSeasonStats {
+  const next = { ...stat };
+  for (const field of STAT_COUNTER_FIELDS) {
+    const current = Number(next[field] ?? 0);
+    (next[field] as number | undefined) = current + delta[field];
+  }
+  return next;
 }
 
 /**
@@ -182,86 +317,10 @@ export function updatePlayerStatSegmentsFromResults(
   const segments: Record<string, PlayerTeamSeasonStats> = { ...currentSegments };
 
   for (const result of results) {
-    const homeSquad = squads[result.homeTeamId];
-    const awaySquad = squads[result.awayTeamId];
-    const homeMatchday = resolveResultMatchday(result, 'home', homeSquad, globalWindowIdx);
-    const awayMatchday = resolveResultMatchday(result, 'away', awaySquad, globalWindowIdx);
-
-    for (const p of homeMatchday) {
-      const s = ensureSegment(segments, p.uuid, result.homeTeamId);
-      if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = addParticipation(s, p);
-    }
-    for (const p of awayMatchday) {
-      const s = ensureSegment(segments, p.uuid, result.awayTeamId);
-      if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = addParticipation(s, p);
-    }
-
-    const awayConceded = result.awayGoals + (result.etAwayGoals ?? 0);
-    const homeConceded = result.homeGoals + (result.etHomeGoals ?? 0);
-    if (awayConceded === 0) {
-      for (const p of homeMatchday) {
-        if (p.position !== 'DF' && p.position !== 'GK') continue;
-        const s = ensureSegment(segments, p.uuid, result.homeTeamId);
-        if (s) segments[playerTeamStatKey(p.uuid, result.homeTeamId)] = { ...s, cleanSheets: s.cleanSheets + 1 };
-      }
-    }
-    if (homeConceded === 0) {
-      for (const p of awayMatchday) {
-        if (p.position !== 'DF' && p.position !== 'GK') continue;
-        const s = ensureSegment(segments, p.uuid, result.awayTeamId);
-        if (s) segments[playerTeamStatKey(p.uuid, result.awayTeamId)] = { ...s, cleanSheets: s.cleanSheets + 1 };
-      }
-    }
-
-    for (const event of result.events) {
-      if (event.type === 'penalty_goal' || event.minute > 120) continue;
-      if (event.type === 'gk_save' || event.type === 'df_block') {
-        const defender = ensureSegment(segments, event.playerId, event.teamId);
-        if (defender) {
-          const key = playerTeamStatKey(defender.playerId, defender.teamId);
-          segments[key] = event.type === 'gk_save'
-            ? { ...defender, saves: defender.saves + 1 }
-            : { ...defender, keyBlocks: defender.keyBlocks + 1 };
-        }
-        const attackingTeamId = event.teamId === result.homeTeamId
-          ? result.awayTeamId
-          : result.homeTeamId;
-        const scorer = ensureSegment(segments, event.deniedScorerId, attackingTeamId);
-        if (scorer) {
-          segments[playerTeamStatKey(scorer.playerId, scorer.teamId)] = {
-            ...scorer,
-            bigChances: scorer.bigChances + 1,
-          };
-        }
-        const assister = ensureSegment(segments, event.deniedAssisterId, attackingTeamId);
-        if (assister) {
-          segments[playerTeamStatKey(assister.playerId, assister.teamId)] = {
-            ...assister,
-            keyPasses: assister.keyPasses + 1,
-          };
-        }
-        continue;
-      }
-
-      const segment = ensureSegment(segments, event.playerId, event.teamId);
+    for (const delta of buildMatchStatDeltas(result, squads, globalWindowIdx).values()) {
+      const segment = ensureSegment(segments, delta.playerId, delta.teamId);
       if (!segment) continue;
-      const key = playerTeamStatKey(segment.playerId, segment.teamId);
-      switch (event.type) {
-        case 'goal':
-          segments[key] = {
-            ...segment,
-            goals: segment.goals + 1,
-            bigChances: segment.bigChances + 1,
-          };
-          break;
-        case 'assist':
-          segments[key] = {
-            ...segment,
-            assists: segment.assists + 1,
-            keyPasses: segment.keyPasses + 1,
-          };
-          break;
-      }
+      segments[playerTeamStatKey(delta.playerId, delta.teamId)] = applyStatDelta(segment, delta);
     }
   }
 
@@ -285,123 +344,9 @@ export function updatePlayerStatsFromResults(
   const stats = { ...currentStats };
 
   for (const result of results) {
-    // Participation is derived from the persisted match snapshot. Unused
-    // bench players have zero minutes and never reach this list.
-    const homeSquad = squads[result.homeTeamId];
-    const awaySquad = squads[result.awayTeamId];
-
-    const homeMatchday = resolveResultMatchday(result, 'home', homeSquad, globalWindowIdx);
-    const awayMatchday = resolveResultMatchday(result, 'away', awaySquad, globalWindowIdx);
-
-    for (const p of homeMatchday) {
-      if (!stats[p.uuid]) continue;
-      stats[p.uuid] = addParticipation(stats[p.uuid], p);
-    }
-    for (const p of awayMatchday) {
-      if (!stats[p.uuid]) continue;
-      stats[p.uuid] = addParticipation(stats[p.uuid], p);
-    }
-
-    // v21 — credit clean sheets to DF/GK whenever the opposing side scored
-    // 0 goals in regulation + extra time. Penalty shootouts are excluded
-    // (shootout outcome doesn't count against the defence). Result fields
-    // already separate `homeGoals`/`awayGoals` (regulation) from
-    // `etHomeGoals`/`etAwayGoals` (extra time) and `penaltyHome`/`penaltyAway`
-    // (shootout), so summing the first two is the right number.
-    const awayConceded = result.awayGoals + (result.etAwayGoals ?? 0);
-    const homeConceded = result.homeGoals + (result.etHomeGoals ?? 0);
-    if (awayConceded === 0) {
-      for (const p of homeMatchday) {
-        if (!stats[p.uuid]) continue;
-        if (p.position === 'DF' || p.position === 'GK') {
-          stats[p.uuid] = { ...stats[p.uuid], cleanSheets: stats[p.uuid].cleanSheets + 1 };
-        }
-      }
-    }
-    if (homeConceded === 0) {
-      for (const p of awayMatchday) {
-        if (!stats[p.uuid]) continue;
-        if (p.position === 'DF' || p.position === 'GK') {
-          stats[p.uuid] = { ...stats[p.uuid], cleanSheets: stats[p.uuid].cleanSheets + 1 };
-        }
-      }
-    }
-
-    // Process events. The single source of truth — `goals` / `assists`
-    // ONLY increment on `goal` / `assist` events. The derived metrics
-    // (`bigChances`, `keyPasses`, `saves`, `keyBlocks`) are populated
-    // here too, but never write back to `goals` / `assists`.
-    //
-    // INVARIANT (load-bearing): sum of `goals` across a team's squad
-    // equals `result.homeGoals` (or `awayGoals`) at all times. Tested by
-    // `stats.invariant.test.ts`.
-    for (const event of result.events) {
-      // Penalty shootout kicks (after the 120th minute) are NEVER counted as
-      // regular goals — they decide the tie but do not inflate top-scorer
-      // tables, market value, or any keep-stat aggregate downstream. The
-      // shootout generator (engine/match/events.ts ~498) is the only emitter
-      // of `penalty_goal`; regulation/extra-time penalties go through the
-      // normal `goal` type. We belt-and-suspender both conditions so an
-      // accidental future emitter at minute > 120 is also excluded.
-      if (event.type === 'penalty_goal' || event.minute > 120) continue;
-
-      // ── v22 deny-pipeline credits ────────────────────────────────
-      // gk_save / df_block events carry `deniedScorerId` + optional
-      // `deniedAssisterId`. The save/block defender gets saves++ or
-      // keyBlocks++; the would-be scorer gets bigChances++; the would-be
-      // assister gets keyPasses++. None of these touch goals/assists.
-      if (event.type === 'gk_save' || event.type === 'df_block') {
-        // Credit the defender (event.playerId is the GK or DF).
-        if (event.playerId && stats[event.playerId]) {
-          const s = { ...stats[event.playerId] };
-          if (event.type === 'gk_save') s.saves++;
-          else s.keyBlocks++;
-          stats[event.playerId] = s;
-        }
-        // Credit the would-be scorer.
-        if (event.deniedScorerId && stats[event.deniedScorerId]) {
-          stats[event.deniedScorerId] = {
-            ...stats[event.deniedScorerId],
-            bigChances: stats[event.deniedScorerId].bigChances + 1,
-          };
-        }
-        // Credit the would-be assister (if the original goal had one).
-        if (event.deniedAssisterId && stats[event.deniedAssisterId]) {
-          stats[event.deniedAssisterId] = {
-            ...stats[event.deniedAssisterId],
-            keyPasses: stats[event.deniedAssisterId].keyPasses + 1,
-          };
-        }
-        continue;
-      }
-
-      // Standard goal / assist / card processing requires a playerId.
-      if (!event.playerId || !stats[event.playerId]) continue;
-      const s = { ...stats[event.playerId] };
-
-      switch (event.type) {
-        case 'goal':
-          s.goals++;
-          // v22 — bigChances is a SUPERSET of goals (= goals + denied
-          // attempts). Increment in lockstep here so an actual goal
-          // counts toward both.
-          s.bigChances++;
-          break;
-        case 'yellow_card':
-          // Phase G: yellow/red counters are folded by the injuries module
-          // (which also handles suspension reset). Skip them here to avoid
-          // double-counting.
-          break;
-        case 'red_card':
-          break;
-        case 'assist':
-          s.assists++;
-          // v22 — keyPasses superset of assists. Same rationale as above.
-          s.keyPasses++;
-          break;
-      }
-
-      stats[event.playerId] = s;
+    for (const delta of buildMatchStatDeltas(result, squads, globalWindowIdx).values()) {
+      if (!stats[delta.playerId]) continue;
+      stats[delta.playerId] = applyStatDelta(stats[delta.playerId], delta);
     }
   }
 

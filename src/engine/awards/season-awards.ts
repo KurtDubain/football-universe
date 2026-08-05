@@ -2,14 +2,15 @@ import { PlayerAward } from '../../types/award';
 import { PlayerSeasonStats, Player } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
+import { computePlayerPerformance } from '../players/player-performance';
 
 /**
  * Compute end-of-season player awards from final stats.
  *
  * - MVP: highest weighted score (goals×3 + assists×2 + team_rank_bonus)
  * - Golden Boot: most goals across all leagues
- * - Best Defender: defender from team with best goals-against (top league only),
- *   who appeared in 80%+ of league matches
+ * - Best Defender / Goalkeeper: highest individual position score among
+ *   top-league players who clear the 600-minute ranking threshold
  * - Young Player: top scorer from a low-OVR team (team OVR < 70)
  */
 export function computeSeasonAwards(
@@ -92,40 +93,40 @@ export function computeSeasonAwards(
     if (a) awards.push(a);
   }
 
-  // ── Best Defender (最佳后卫) ─────────────────────────────────
-  // From team with best goal difference among DF position with 80%+ appearances
-  // Filter to top-league teams
-  const sortedByDefense = [...league1Standings].sort(
-    (a, b) => a.goalsAgainst - b.goalsAgainst,
-  );
-  const bestDefenseTeam = sortedByDefense[0];
-  if (bestDefenseTeam && bestDefenseTeam.played > 0) {
-    const teamSquad = squads[bestDefenseTeam.teamId] ?? [];
-    const defenders = teamSquad.filter((p) => p.position === 'DF');
-    // Pick defender with most appearances; tiebreak: highest rating
-    let best: Player | null = null;
-    let bestApps = 0;
-    let bestRating = 0;
-    for (const d of defenders) {
-      const stat = playerStats[d.uuid];
-      if (!stat) continue;
-      const apps = stat.appearances;
-      if (apps > bestApps || (apps === bestApps && d.rating > bestRating)) {
-        best = d;
-        bestApps = apps;
-        bestRating = d.rating;
-      }
-    }
-    if (best && bestApps >= bestDefenseTeam.played * 0.6) {
-      const stat = playerStats[best.uuid];
-      const award = buildAward(
-        'best_defender',
-        stat,
-        bestDefenseTeam.goalsAgainst,
-        `球队仅失${bestDefenseTeam.goalsAgainst}球`,
-      );
-      if (award) awards.push(award);
-    }
+  const topLeagueTeamIds = new Set(league1Standings.map(row => row.teamId));
+  const rankedDefensivePlayer = (position: 'DF' | 'GK') => Object.values(squads)
+    .flat()
+    .filter(player => player.position === position && topLeagueTeamIds.has(player.teamId))
+    .map(player => ({
+      player,
+      stat: playerStats[player.uuid],
+      performance: computePlayerPerformance(position, playerStats[player.uuid], 1),
+    }))
+    .filter(entry => entry.stat && entry.performance.eligible)
+    .sort((a, b) => b.performance.score - a.performance.score
+      || (b.stat.minutesPlayed ?? 0) - (a.stat.minutesPlayed ?? 0)
+      || a.player.uuid.localeCompare(b.player.uuid))[0];
+
+  const bestDefender = rankedDefensivePlayer('DF');
+  if (bestDefender) {
+    const award = buildAward(
+      'best_defender',
+      bestDefender.stat,
+      bestDefender.performance.score,
+      `个人防守评分 ${bestDefender.performance.score.toFixed(1)}`,
+    );
+    if (award) awards.push(award);
+  }
+
+  const bestGoalkeeper = rankedDefensivePlayer('GK');
+  if (bestGoalkeeper) {
+    const award = buildAward(
+      'best_goalkeeper',
+      bestGoalkeeper.stat,
+      bestGoalkeeper.performance.score,
+      `门将评分 ${bestGoalkeeper.performance.score.toFixed(1)}`,
+    );
+    if (award) awards.push(award);
   }
 
   // ── Young Player (最佳新星) ──────────────────────────────────
@@ -164,5 +165,6 @@ export const AWARD_META: Record<
   mvp: { label: '金球奖', emoji: '🏅', color: 'text-amber-400' },
   golden_boot: { label: '金靴奖', emoji: '👟', color: 'text-yellow-400' },
   best_defender: { label: '最佳后卫', emoji: '🛡️', color: 'text-blue-400' },
+  best_goalkeeper: { label: '最佳门将', emoji: '🧤', color: 'text-cyan-300' },
   young_player: { label: '最佳新星', emoji: '🌟', color: 'text-emerald-400' },
 };

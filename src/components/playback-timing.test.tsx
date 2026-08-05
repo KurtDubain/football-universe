@@ -131,14 +131,13 @@ describe('MatchLive playback state machine', () => {
     render(<MatchLive result={makeResult('live-a', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
 
     expect(score('主队比分')).toBe('0');
-    act(() => button('1x').click());
-    advanceTicks(2, 280);
+    advanceTicks(2, 380);
 
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');
     expect(document.body.textContent).toContain('主队破门');
-    expect(document.body.textContent).toContain('进球了');
+    expect(document.body.textContent).toContain('主队取得领先');
   });
 
   it('uses the global preference and emits one goal cue from the live event cursor', () => {
@@ -150,8 +149,7 @@ describe('MatchLive playback state machine', () => {
     try {
       render(<MatchLive result={makeResult('live-sound', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
       expect(button('声音').getAttribute('aria-pressed')).toBe('true');
-      act(() => button('1x').click());
-      advanceTicks(2, 280);
+      advanceTicks(2, 380);
       expect(cues.filter(cue => cue === 'goal')).toHaveLength(1);
     } finally {
       window.removeEventListener('football-feedback-played', handleFeedback);
@@ -167,13 +165,14 @@ describe('MatchLive playback state machine', () => {
     expect(button('声音').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('defaults to highlights, crosses quiet periods quickly, and holds key events', () => {
+  it('defaults to live mode and lets highlights cross quiet periods quickly', () => {
     const events: MatchEvent[] = [
       { minute: 20, type: 'goal', teamId: 'home', playerId: 'p1', description: '关键进球' },
     ];
     render(<MatchLive result={makeResult('live-highlights', events)} teamBases={teamBases} onClose={() => undefined} />);
 
-    expect(button('精华').getAttribute('aria-pressed')).toBe('true');
+    expect(button('直播').getAttribute('aria-pressed')).toBe('true');
+    act(() => button('精华').click());
     advanceTicks(6, 120);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("20'");
     expect(score('主队比分')).toBe('1');
@@ -191,21 +190,20 @@ describe('MatchLive playback state machine', () => {
   it('pauses manually and resumes after the dedicated halftime delay', () => {
     render(<MatchLive result={makeResult('live-b')} teamBases={teamBases} onClose={() => undefined} />);
 
-    act(() => button('1x').click());
     act(() => button('暂停').click());
     advance(1000);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
     act(() => button('继续').click());
-    advance(280);
+    advance(380);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
 
-    advanceTicks(44, 280);
+    advanceTicks(44, 380);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
     expect(document.body.textContent).toContain('中场休息');
-    advance(1999);
+    advance(1799);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
     advance(1);
-    advance(280);
+    advance(380);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("46'");
   });
 
@@ -244,8 +242,7 @@ describe('MatchLive playback state machine', () => {
     });
     try {
       render(<MatchLive result={makeResult('live-hidden')} teamBases={teamBases} onClose={() => undefined} />);
-      act(() => button('1x').click());
-      advance(280);
+      advance(380);
       expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
 
       visibility = 'hidden';
@@ -255,7 +252,7 @@ describe('MatchLive playback state machine', () => {
 
       visibility = 'visible';
       act(() => document.dispatchEvent(new Event('visibilitychange')));
-      advance(280);
+      advance(380);
       expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
     } finally {
       if (descriptor) Object.defineProperty(document, 'visibilityState', descriptor);
@@ -280,21 +277,45 @@ describe('MatchLive playback state machine', () => {
       penaltyAway: 0,
     })} teamBases={teamBases} onClose={() => undefined} />);
 
-    act(() => button('3x').click());
-    advanceTicks(45, 280 / 3);
+    advanceTicks(45, 380);
     expect(document.body.textContent).toContain('中场休息');
-    advance(800);
-    advanceTicks(45, 280 / 3);
+    advance(1800);
+    advanceTicks(45, 380);
     expect(document.body.textContent).toContain('进入加时赛');
-    advance(800);
-    advanceTicks(30, 280 / 3);
+    advance(1800);
+    advanceTicks(5, 380);
+    advance(1200);
+    advanceTicks(25, 380);
     expect(document.body.textContent).toContain('点球大战即将开始');
-    advance(800);
-    advanceTicks(2, 280 / 3);
+    advance(1800);
+    advance(380);
+    advance(1200);
+    advance(380);
 
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');
-    expect(document.body.textContent).toContain('点球 1 - 0');
+    expect(document.body.textContent).toContain('点球大战 1 - 0');
+    expect(document.body.textContent).toContain('点1');
+  });
+
+  it('keeps newest-first feed follow at the top and reports unseen events while browsing history', () => {
+    const events: MatchEvent[] = [
+      { minute: 2, type: 'goal', teamId: 'home', description: '第一条战况' },
+      { minute: 5, type: 'miss', teamId: 'away', description: '第二条战况' },
+    ];
+    render(<MatchLive result={makeResult('live-feed', events)} teamBases={teamBases} onClose={() => undefined} />);
+
+    advanceTicks(2, 380);
+    const log = document.body.querySelector('[data-testid="live-event-log"]') as HTMLDivElement;
+    Object.defineProperty(log, 'scrollTop', { configurable: true, writable: true, value: 32 });
+    act(() => log.dispatchEvent(new Event('scroll', { bubbles: true })));
+    advance(1200);
+    advanceTicks(3, 380);
+
+    expect(document.body.textContent).toContain('第二条战况');
+    expect(button('1 条新战况')).toBeTruthy();
+    act(() => button('1 条新战况').click());
+    expect(document.body.querySelector('[data-testid="new-live-events"]')).toBeNull();
   });
 });
 

@@ -173,6 +173,31 @@ describe('simulateMatch', () => {
   });
 
   describe('structural sanity', () => {
+    it('reconciles ordinary saves, key saves, blocks, goals, and shots on target', () => {
+      for (let seed = 1; seed <= 40; seed++) {
+        const ctx = buildContext(seed);
+        ctx.homeSquad = makeDeepSquad('home');
+        ctx.awaySquad = makeDeepSquad('away');
+        const result = simulateMatch(ctx, makeFixture()).matchResult;
+        const homeGoals = result.homeGoals + (result.etHomeGoals ?? 0);
+        const awayGoals = result.awayGoals + (result.etAwayGoals ?? 0);
+        const awayRoutineSaves = Object.values(result.defensiveContributions ?? {})
+          .filter(contribution => contribution.teamId === 'away')
+          .reduce((sum, contribution) => sum + (contribution.routineSaves ?? 0), 0);
+        const homeRoutineSaves = Object.values(result.defensiveContributions ?? {})
+          .filter(contribution => contribution.teamId === 'home')
+          .reduce((sum, contribution) => sum + (contribution.routineSaves ?? 0), 0);
+        const stoppedByAway = awayRoutineSaves + result.events.filter(event =>
+          event.teamId === 'away' && (event.type === 'gk_save' || event.type === 'df_block')
+        ).length;
+        const stoppedByHome = homeRoutineSaves + result.events.filter(event =>
+          event.teamId === 'home' && (event.type === 'gk_save' || event.type === 'df_block')
+        ).length;
+        expect(result.stats.shotsOnTarget[0]).toBe(homeGoals + stoppedByAway);
+        expect(result.stats.shotsOnTarget[1]).toBe(awayGoals + stoppedByHome);
+      }
+    });
+
     it('returns a well-formed MatchResult (league)', () => {
       const r = simulateMatch(buildContext(7), makeFixture()).matchResult;
 
@@ -214,6 +239,35 @@ describe('simulateMatch', () => {
           }
         }
       }
+    });
+
+    it('keeps shootout events, scores, order, and first-five takers consistent', () => {
+      let shootoutCount = 0;
+      for (let seed = 1; seed <= 400 && shootoutCount < 20; seed++) {
+        const ctx = buildContext(seed, true);
+        ctx.homeTeam = makeTeam('home', 80);
+        ctx.awayTeam = makeTeam('away', 80);
+        ctx.homeSquad = makeDeepSquad('home');
+        ctx.awaySquad = makeDeepSquad('away');
+        const result = simulateMatch(ctx, makeFixture()).matchResult;
+        if (!result.penalties) continue;
+        shootoutCount++;
+
+        const kicks = result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
+        expect(kicks.filter(event => event.teamId === 'home' && event.type === 'penalty_goal')).toHaveLength(result.penaltyHome ?? 0);
+        expect(kicks.filter(event => event.teamId === 'away' && event.type === 'penalty_goal')).toHaveLength(result.penaltyAway ?? 0);
+        expect(kicks.every((event, index) => event.shootout?.kickNumber === index + 1)).toBe(true);
+        expect(kicks.every((event, index) => event.teamId === (index % 2 === 0 ? 'home' : 'away'))).toBe(true);
+        expect(kicks.every(event => !event.description.includes('[扳平比分！]'))).toBe(true);
+
+        for (const teamId of ['home', 'away']) {
+          const firstFiveIds = kicks
+            .filter(event => event.teamId === teamId && (event.shootout?.teamKickNumber ?? 0) <= 5)
+            .map(event => event.playerId);
+          expect(new Set(firstFiveIds).size).toBe(firstFiveIds.length);
+        }
+      }
+      expect(shootoutCount).toBe(20);
     });
 
     it('returns state changes that update morale / fatigue / momentum', () => {

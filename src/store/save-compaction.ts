@@ -34,6 +34,7 @@ export function archiveCompletedMatchDetails(world: GameWorld): StorageCleanupRe
       return {
         ...result,
         events: [],
+        defensiveContributions: undefined,
         homeMatchday: undefined,
         awayMatchday: undefined,
         detailsArchived: true,

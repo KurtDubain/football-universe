@@ -53,4 +53,22 @@ describe('event-directed pitch scenes', () => {
     expect(sequence.phases[0].kind).toBe('shot');
     expect(sequence.phases[0].sourceOverride).toEqual({ x: 0.88, y: 0.5 });
   });
+
+  it('renders a saved shootout kick as a goalkeeper save rather than a generic miss', () => {
+    const saved: MatchEvent = {
+      ...event('penalty_miss', 'HOME', 121),
+      playerId: 'home-taker',
+      shootout: {
+        kickNumber: 1,
+        round: 1,
+        teamKickNumber: 1,
+        suddenDeath: false,
+        outcome: 'saved',
+        goalkeeperId: 'away-keeper',
+      },
+    };
+
+    expect(sceneForEvent(saved, 'HOME')?.attackingHome).toBe(true);
+    expect(sceneForEvent(saved, 'HOME')?.outcome).toBe('save');
+  });
 });

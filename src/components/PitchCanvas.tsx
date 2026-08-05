@@ -35,8 +35,10 @@ interface Props {
   awayMatchday?: MatchdaySnapshot;
   finished: boolean;
   halftime: boolean;
+  breakLabel?: { label: string; sublabel: string };
   active: boolean;
   playbackMode: PlaybackMode;
+  shootout?: boolean;
 }
 
 interface PitchDebugState {
@@ -76,7 +78,7 @@ const FIXED_FRAME_MS = 1000 / 60;
 function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
-    homeMatchday, awayMatchday, halftime, finished, active, playbackMode,
+    homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -167,18 +169,18 @@ function PitchCanvas(props: Props) {
   // Live snapshot of props for the long-running rAF loop to read from.
   // Avoids restarting the rAF chain on every minute / flashEvent change.
   const liveRef = useRef({
-    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
-    eventScene, homeRoster, awayRoster, playbackMode,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
+    eventScene, homeRoster, awayRoster, playbackMode, shootout,
   });
   useEffect(() => {
     liveRef.current = {
-      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active, targetShift,
-      eventScene, homeRoster, awayRoster, playbackMode,
+      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
+      eventScene, homeRoster, awayRoster, playbackMode, shootout,
     };
     wakeRenderLoopRef.current();
   }, [
-    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, finished, active,
-    targetShift, eventScene, homeRoster, awayRoster, playbackMode,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
+    targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout,
   ]);
 
   useEffect(() => {
@@ -384,8 +386,8 @@ function PitchCanvas(props: Props) {
       // Read live props from ref (no closure capture → no rAF restart on prop change)
       const live = liveRef.current;
       const {
-        minute, maxMinute, homeColor, awayColor, halftime, targetShift,
-        eventScene, homeRoster, awayRoster, playbackMode: livePlaybackMode,
+        minute, maxMinute, homeColor, awayColor, halftime, breakLabel: liveBreakLabel, targetShift,
+        eventScene, homeRoster, awayRoster, playbackMode: livePlaybackMode, shootout: liveShootout,
       } = live;
 
       if (eventScene && activeSceneKeyRef.current !== eventScene.key) {
@@ -425,7 +427,7 @@ function PitchCanvas(props: Props) {
       drawPitch(ctx, W, H, P, fw, fh);
 
       if (halftime) {
-        drawHalftime(ctx, W, H);
+        drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel);
         ctx.restore();
         recordRenderDuration(performance.now() - renderStarted);
         return;
@@ -556,9 +558,11 @@ function PitchCanvas(props: Props) {
         shiftRef.current,
         (() => {
           if (!directedShotScene || (directedShotScene.outcome !== 'save' && directedShotScene.outcome !== 'block')) return undefined;
-          const eventPlayerId = directedShotScene.event.playerId;
+          const eventPlayerId = directedShotScene.event.shootout?.goalkeeperId ?? directedShotScene.event.playerId;
           if (!eventPlayerId) return undefined;
-          const defendingHome = directedShotScene.event.teamId === live.homeTeamId;
+          const defendingHome = directedShotScene.event.shootout
+            ? directedShotScene.event.teamId !== live.homeTeamId
+            : directedShotScene.event.teamId === live.homeTeamId;
           const roster = defendingHome ? homeRoster : awayRoster;
           const player = roster.find(entry => entry.playerId === eventPlayerId);
           if (!player) return undefined;
@@ -570,22 +574,34 @@ function PitchCanvas(props: Props) {
       );
 
       // ── Draw players ──
-      const visibleHome = activePitchPlayers(homeRoster, minute, maxMinute);
-      const visibleAway = activePitchPlayers(awayRoster, minute, maxMinute);
+      const visiblePlayerIds = liveShootout && directedShotScene?.event.shootout
+        ? new Set([
+          directedShotScene.event.playerId,
+          directedShotScene.event.shootout.goalkeeperId,
+        ].filter((playerId): playerId is string => Boolean(playerId)))
+        : null;
+      const visibleHome = activePitchPlayers(homeRoster, minute, maxMinute)
+        .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
+      const visibleAway = activePitchPlayers(awayRoster, minute, maxMinute)
+        .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
       for (const player of visibleHome) {
         const hasBall = isAttHome && player.slotIndex === ballHolderIdx;
-        const highlighted = eventScene?.event.playerId === player.playerId;
+        const isEventPlayer = eventScene?.event.playerId === player.playerId;
+        const highlighted = eventScene?.event.playerId === player.playerId
+          || eventScene?.event.shootout?.goalkeeperId === player.playerId;
         drawPlayer(
           ctx, playerPosRef.current[player.slotIndex], homeColor, player.playerNumber,
-          hasBall, P, fw, fh, f, highlighted, highlighted ? player.playerName : undefined,
+          hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
         );
       }
       for (const player of visibleAway) {
         const hasBall = !isAttHome && player.slotIndex === ballHolderIdx;
-        const highlighted = eventScene?.event.playerId === player.playerId;
+        const isEventPlayer = eventScene?.event.playerId === player.playerId;
+        const highlighted = eventScene?.event.playerId === player.playerId
+          || eventScene?.event.shootout?.goalkeeperId === player.playerId;
         drawPlayer(
           ctx, playerPosRef.current[11 + player.slotIndex], awayColor, player.playerNumber,
-          hasBall, P, fw, fh, f, highlighted, highlighted ? player.playerName : undefined,
+          hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
         );
       }
 
@@ -759,7 +775,7 @@ function PitchCanvas(props: Props) {
       height={LOGICAL_HEIGHT}
       data-testid="pitch-canvas"
       aria-label="比赛实时战术动画"
-      className="w-full aspect-[13/7] rounded-xl border border-emerald-900/30"
+      className="w-full aspect-[13/7] rounded-md border border-emerald-900/30"
     />
   );
 }
