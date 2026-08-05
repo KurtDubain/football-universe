@@ -21,6 +21,9 @@ interface VerificationResult {
     liveMinuteDelta: number;
     immersiveMinuteDelta: number;
     controlsOverflow: number;
+    commentaryCount: number;
+    commentaryScrollable: boolean;
+    commentaryScrollTop: number;
   };
   screenshot: string;
 }
@@ -214,6 +217,47 @@ async function verifyViewport(
       throw new Error(`${name}: completed canvas did not stop (${completedFramesAdded}, ${completedEnd.pauseReason})`);
     }
 
+    const commentaryLog = dialog.getByTestId('live-event-log');
+    const scrollRegion = dialog.getByTestId('live-scroll-region');
+    await scrollRegion.evaluate(element => {
+      element.scrollTop = element.scrollHeight - element.clientHeight;
+    });
+    await page.waitForTimeout(50);
+    const commentaryMetrics = await commentaryLog.evaluate(element => ({
+      count: element.querySelectorAll('[data-testid="live-commentary-entry"]').length,
+      scrollable: element.scrollHeight > element.clientHeight + 1,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    }));
+    const commentaryVisibleHeight = await page.evaluate(() => {
+      const log = document.querySelector('[data-testid="live-event-log"]');
+      const region = document.querySelector('[data-testid="live-scroll-region"]');
+      const controls = document.querySelector('[data-testid="live-controls"]');
+      if (!log || !region || !controls) return 0;
+      const logRect = log.getBoundingClientRect();
+      const regionRect = region.getBoundingClientRect();
+      const controlsRect = controls.getBoundingClientRect();
+      return Math.max(0, Math.min(logRect.bottom, regionRect.bottom, controlsRect.top) - Math.max(logRect.top, regionRect.top));
+    });
+    await commentaryLog.evaluate(element => {
+      element.scrollTop = Math.min(80, element.scrollHeight - element.clientHeight);
+      element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    await page.waitForTimeout(50);
+    const commentaryScrollTop = await commentaryLog.evaluate(element => element.scrollTop);
+    if (commentaryMetrics.count <= 10) {
+      throw new Error(`${name}: complete commentary retained only ${commentaryMetrics.count} entries`);
+    }
+    if (!commentaryMetrics.scrollable || commentaryScrollTop <= 0) {
+      throw new Error(`${name}: commentary log is not independently scrollable (${JSON.stringify({ ...commentaryMetrics, commentaryScrollTop })})`);
+    }
+    if (commentaryVisibleHeight < Math.min(80, commentaryMetrics.clientHeight)) {
+      throw new Error(`${name}: commentary log is obscured by the live layout (${commentaryVisibleHeight}px visible)`);
+    }
+    if (name.startsWith('mobile')) {
+      await page.screenshot({ path: `/tmp/football-match-live-${name}-commentary.png`, fullPage: false, animations: 'disabled' });
+    }
+
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
     return {
@@ -234,6 +278,9 @@ async function verifyViewport(
         liveMinuteDelta,
         immersiveMinuteDelta,
         controlsOverflow,
+        commentaryCount: commentaryMetrics.count,
+        commentaryScrollable: commentaryMetrics.scrollable,
+        commentaryScrollTop,
       },
       screenshot,
     };

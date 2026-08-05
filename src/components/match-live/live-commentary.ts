@@ -12,6 +12,22 @@ interface CommentaryContext {
   awayTeamName: string;
 }
 
+export interface LiveCommentaryEntry {
+  id: string;
+  minute: number;
+  label: string;
+  text: string;
+  event?: MatchEvent;
+}
+
+interface CommentaryHistoryContext {
+  events: MatchEvent[];
+  currentMinute: number;
+  homeTeamId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+}
+
 function scoringContext(context: CommentaryContext, teamName: string): string {
   const { homeScore, awayScore, minute } = context;
   if (homeScore === awayScore) return `${teamName}扳平了比分。`;
@@ -29,6 +45,8 @@ export function buildLiveCommentary(context: CommentaryContext): string {
   if (!event) {
     if (minute < 3) return '比赛开球，双方开始试探。';
     if (minute === 46) return '下半场开始，比赛重新进入节奏。';
+    if (minute === 91) return '加时赛开始，双方的每一次选择都更加谨慎。';
+    if (minute === 106) return '加时赛下半场开始，比赛进入最后的较量。';
     if (minute >= 85 && minute <= 90) return '比赛进入最后阶段，每一次攻防都可能决定结果。';
     if (minute < 30) return '双方正在争夺中场控制，进攻仍在寻找空间。';
     if (minute < 60) return '比赛节奏逐渐稳定，下一次推进可能形成机会。';
@@ -55,6 +73,71 @@ export function buildLiveCommentary(context: CommentaryContext): string {
   if (event.type === 'yellow_card') return event.description;
   if (event.type === 'substitution') return `${event.description}，球队尝试改变场上节奏。`;
   return event.description;
+}
+
+export function buildLiveCommentaryHistory({
+  events,
+  currentMinute,
+  homeTeamId,
+  homeTeamName,
+  awayTeamName,
+}: CommentaryHistoryContext): LiveCommentaryEntry[] {
+  let homeScore = 0;
+  let awayScore = 0;
+  let penaltyHomeScore = 0;
+  let penaltyAwayScore = 0;
+  const entries: LiveCommentaryEntry[] = [];
+  const commentaryBeats = [0, 3, 30, 46, 60, 85, 91, 106];
+
+  for (const minute of commentaryBeats) {
+    if (minute > currentMinute) continue;
+    entries.push({
+      id: `phase:${minute}`,
+      minute,
+      label: `${minute}'`,
+      text: buildLiveCommentary({
+        event: null,
+        minute,
+        homeScore,
+        awayScore,
+        penaltyHomeScore,
+        penaltyAwayScore,
+        homeTeamId,
+        homeTeamName,
+        awayTeamName,
+      }),
+    });
+  }
+
+  events.forEach((event, index) => {
+    if (event.type === 'goal' || event.type === 'own_goal') {
+      if (event.teamId === homeTeamId) homeScore++;
+      else awayScore++;
+    } else if (event.type === 'penalty_goal') {
+      if (event.teamId === homeTeamId) penaltyHomeScore++;
+      else penaltyAwayScore++;
+    }
+
+    entries.push({
+      id: `event:${index}:${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`,
+      minute: event.minute,
+      label: shootoutEventLabel(event),
+      text: buildLiveCommentary({
+        event,
+        minute: event.minute,
+        homeScore,
+        awayScore,
+        penaltyHomeScore,
+        penaltyAwayScore,
+        homeTeamId,
+        homeTeamName,
+        awayTeamName,
+      }),
+      event,
+    });
+  });
+
+  return entries.sort((a, b) => b.minute - a.minute || b.id.localeCompare(a.id));
 }
 
 export function shootoutEventLabel(event: MatchEvent): string {

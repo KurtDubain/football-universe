@@ -1,6 +1,5 @@
 import { useEffect, useReducer, useRef, useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSwipe } from '../utils/use-swipe';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
@@ -19,7 +18,11 @@ import {
 } from '../feedback/preferences';
 import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
 import { DecorativeImage } from './DecorativeImage';
-import { buildLiveCommentary, shootoutEventLabel } from './match-live/live-commentary';
+import {
+  buildLiveCommentary,
+  buildLiveCommentaryHistory,
+  shootoutEventLabel,
+} from './match-live/live-commentary';
 
 interface Props {
   result: MatchResult;
@@ -318,7 +321,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
   const [unseenEventCount, setUnseenEventCount] = useState(0);
   const logRef = useRef<HTMLDivElement>(null);
-  const previousEventCountRef = useRef(0);
+  const previousCommentaryCountRef = useRef<number | null>(null);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -456,10 +459,20 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     return () => clearTimeout(timer);
   }, [playback.goalFlash, playback.goalFlashVersion, reducedMotion]);
 
+  const commentaryEntries = useMemo(() => buildLiveCommentaryHistory({
+    events: shownEvents,
+    currentMinute: playback.minute,
+    homeTeamId: result.homeTeamId,
+    homeTeamName: ht?.name ?? '主队',
+    awayTeamName: at?.name ?? '客队',
+  }), [at?.name, ht?.name, playback.minute, result.homeTeamId, shownEvents]);
+
   useEffect(() => {
-    if (playback.consumedEventCount === 0) return;
-    const added = Math.max(0, playback.consumedEventCount - previousEventCountRef.current);
-    previousEventCountRef.current = playback.consumedEventCount;
+    const previousCount = previousCommentaryCountRef.current;
+    previousCommentaryCountRef.current = commentaryEntries.length;
+    if (previousCount === null) return;
+    const added = Math.max(0, commentaryEntries.length - previousCount);
+    if (added === 0) return;
     if (!followingLiveFeed) {
       setUnseenEventCount(count => count + added);
       return;
@@ -467,11 +480,11 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     const timer = window.setTimeout(() => {
       logRef.current?.scrollTo?.({
         top: 0,
-        behavior: reducedMotion ? 'auto' : 'smooth',
+        behavior: 'auto',
       });
     }, 100);
     return () => clearTimeout(timer);
-  }, [followingLiveFeed, playback.consumedEventCount, reducedMotion]);
+  }, [commentaryEntries.length, followingLiveFeed, reducedMotion]);
 
   const skip = useCallback(() => {
     dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
@@ -511,15 +524,8 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     shootoutBreak,
   ]);
 
-  // Mobile — swipe down on overlay or content to close
-  const swipeRef = useSwipe<HTMLDivElement>({
-    onSwipeDown: onClose,
-    threshold: 60,
-  });
-
   return createPortal(
     <div
-      ref={swipeRef}
       role="dialog"
       aria-modal="true"
       aria-label="比赛直播回放"
@@ -530,7 +536,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
 
-        <div className="min-h-0 overflow-y-auto">
+        <div data-testid="live-scroll-region" className="min-h-0 overflow-y-auto overscroll-y-contain">
 
         {/* Header bar */}
         <div className="bg-slate-800/80 px-4 py-2 flex items-center justify-between">
@@ -678,11 +684,15 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
 
           <aside className="min-w-0 border-t border-slate-800/70 lg:border-l lg:border-t-0">
             <div className="min-h-16 border-b border-slate-800/70 px-4 py-3">
-              <div className="mb-1 text-[9px] font-semibold text-slate-500">现场播报</div>
+              <div className="mb-1 text-[9px] font-semibold text-slate-500">当前播报</div>
               <p className="text-[12px] leading-5 text-emerald-300/90 animate-slide-up" key={commentary}>{commentary}</p>
             </div>
 
             <div className="relative">
+              <div className="flex h-8 items-center justify-between border-b border-slate-800/50 px-4 text-[9px] font-semibold text-slate-500">
+                <span>本场完整播报</span>
+                <span className="tabular-nums">{commentaryEntries.length} 条</span>
+              </div>
               {unseenEventCount > 0 && (
                 <button
                   type="button"
@@ -690,7 +700,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                   onClick={() => {
                     setFollowingLiveFeed(true);
                     setUnseenEventCount(0);
-                    logRef.current?.scrollTo?.({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+                    logRef.current?.scrollTo?.({ top: 0, behavior: 'auto' });
                   }}
                   className="absolute right-3 top-2 z-10 min-h-9 rounded-md border border-emerald-500/30 bg-emerald-950 px-2 text-[10px] text-emerald-300 shadow-lg"
                 >{unseenEventCount} 条新战况</button>
@@ -698,29 +708,33 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
               <div
                 ref={logRef}
                 data-testid="live-event-log"
+                onPointerDown={() => setFollowingLiveFeed(false)}
+                onTouchStart={() => setFollowingLiveFeed(false)}
+                onWheel={() => setFollowingLiveFeed(false)}
                 onScroll={event => {
                   const atTop = event.currentTarget.scrollTop <= 8;
                   setFollowingLiveFeed(atTop);
                   if (atTop) setUnseenEventCount(0);
                 }}
-                className="max-h-28 overflow-y-auto scroll-smooth px-4 py-2 lg:max-h-[260px]"
+                aria-label="本场完整播报"
+                className="h-36 touch-pan-y overflow-y-auto overscroll-y-contain px-4 py-2 lg:h-[228px]"
               >
-                {shownEvents.length === 0 && <p className="py-2 text-[11px] text-slate-600">等待第一条比赛战况</p>}
-                {[...shownEvents].reverse().filter(e =>
-                  e.type === 'goal' || e.type === 'penalty_goal' || e.type === 'own_goal'
-                  || e.type === 'yellow_card' || e.type === 'red_card'
-                  || e.type === 'save' || e.type === 'gk_save' || e.type === 'df_block'
-                  || e.type === 'miss' || e.type === 'penalty_miss' || e.type === 'substitution'
-                ).slice(0, 10).map((e, i) => (
-                  <div key={`${e.minute}:${e.type}:${e.teamId}:${e.playerId ?? ''}:${i}`} className={`flex min-h-8 items-start gap-2 py-1 text-[11px] ${i === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
-                    <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[10px]">{shootoutEventLabel(e)}</span>
+                {commentaryEntries.map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    data-testid="live-commentary-entry"
+                    className={`flex min-h-8 items-start gap-2 border-b border-slate-800/30 py-1.5 text-[11px] last:border-b-0 ${index === 0 ? 'text-slate-200' : 'text-slate-500'}`}
+                  >
+                    <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[10px]">{entry.label}</span>
                     <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sm">
-                      {EVENT_ICONS[e.type]
-                        ? <Icon name={EVENT_ICONS[e.type].name} size={14} accent={EVENT_ICONS[e.type].accent} />
-                        : <span>•</span>}
+                      {entry.event && EVENT_ICONS[entry.event.type]
+                        ? <Icon name={EVENT_ICONS[entry.event.type].name} size={14} accent={EVENT_ICONS[entry.event.type].accent} />
+                        : <span className="text-emerald-500/60">•</span>}
                     </span>
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: e.teamId === result.homeTeamId ? ht?.color : at?.color }} />
-                    <span className="min-w-0 leading-4" title={e.description}>{e.description}</span>
+                    {entry.event
+                      ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry.event.teamId === result.homeTeamId ? ht?.color : at?.color }} />
+                      : <span className="w-2 shrink-0" />}
+                    <span className="min-w-0 leading-4">{entry.text}</span>
                   </div>
                 ))}
               </div>

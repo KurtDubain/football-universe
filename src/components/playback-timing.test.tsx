@@ -313,9 +313,28 @@ describe('MatchLive playback state machine', () => {
     advanceTicks(3, 380);
 
     expect(document.body.textContent).toContain('第二条战况');
-    expect(button('1 条新战况')).toBeTruthy();
-    act(() => button('1 条新战况').click());
+    expect(document.body.querySelector('[data-testid="new-live-events"]')?.textContent).toMatch(/\d+ 条新战况/);
+    act(() => (document.body.querySelector('[data-testid="new-live-events"]') as HTMLButtonElement).click());
     expect(document.body.querySelector('[data-testid="new-live-events"]')).toBeNull();
+  });
+
+  it('keeps the complete commentary history without truncating ordinary broadcasts', () => {
+    const events: MatchEvent[] = Array.from({ length: 14 }, (_, index) => ({
+      minute: index + 1,
+      type: 'miss',
+      teamId: index % 2 === 0 ? 'home' : 'away',
+      description: `普通进攻播报 ${index + 1}`,
+    }));
+    render(<MatchLive result={makeResult('live-full-commentary', events)} teamBases={teamBases} onClose={() => undefined} />);
+
+    act(() => button('跳过').click());
+
+    const entries = document.body.querySelectorAll('[data-testid="live-commentary-entry"]');
+    expect(entries.length).toBeGreaterThan(14);
+    expect(document.body.textContent).toContain('普通进攻播报 1');
+    expect(document.body.textContent).toContain('普通进攻播报 14');
+    expect(document.body.textContent).toContain('比赛开球，双方开始试探');
+    expect(document.body.querySelector('[aria-label="本场完整播报"]')?.className).toContain('overflow-y-auto');
   });
 });
 
