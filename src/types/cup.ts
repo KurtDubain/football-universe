@@ -32,7 +32,7 @@ export interface ContinentalCupState extends CupState {
   groups: SuperCupGroup[];
   groupStageCompleted: boolean;
   participantIds: string[];
-  /** Qualification order, used as the deterministic final group tie-break. */
+  /** Coefficient seed order, used for draw pots and the final group tie-break. */
   qualificationOrder: string[];
 }
 

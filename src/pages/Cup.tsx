@@ -130,17 +130,22 @@ function LeagueCupView({ cup, tb, ts, onClick }: { cup: CupState; tb: Record<str
 // ══════════════════════════════════════════════════════════════
 
 function ContinentalCupView({ cup, tb, ts, onClick }: { cup: ContinentalCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
-  const teamCount = cup.region === '大陆' ? 8 : 4;
+  const teamCount = cup.participantIds.length;
+  const isLegacySelectiveFormat = cup.region === '大陆' ? teamCount === 8 : teamCount === 4;
   const identityType: CompetitionIdentityKey = cup.type;
   return (
     <>
       <CupHeader type={identityType} title={cup.name} description={`${cup.region}地区 · ${teamCount} 队 · 六年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
       <RulesCard lines={[
-        `参赛: ${cup.region}地区近五季俱乐部积分前 ${teamCount} 名`,
+        isLegacySelectiveFormat
+          ? `参赛: ${cup.region}地区旧赛制积分入围的 ${teamCount} 队（本届结束后启用全员赛制）`
+          : `参赛: ${cup.region}全部 ${teamCount} 支球队，俱乐部积分仅用于分档和同分排序`,
         '小组赛: 4队单循环3轮，全部为中立场',
-        cup.region === '大陆'
-          ? '晋级: 2组前2进入单回合四强与决赛'
-          : '晋级: 小组前2进入单回合决赛',
+        cup.groups.length >= 4
+          ? '晋级: 各组前2进入单回合八强、四强与决赛'
+          : cup.groups.length === 2
+            ? '晋级: 各组前2进入单回合四强与决赛'
+            : '晋级: 小组前2进入单回合决赛',
         '淘汰赛: 中立场，平局进入加时 + 点球',
         '第5赛季起每六个赛季举办一次（S5、S11、S17…）',
       ]} />

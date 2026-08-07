@@ -413,8 +413,9 @@ function validateContinentalCup(
   teamIds: Set<string>,
 ): void {
   if (value.type !== expectedType) throw new Error(`洲际杯类型无效：${expectedType}`);
-  const expectedTeams = expectedType === 'mainland_cup' ? 8 : 4;
-  const expectedGroups = expectedType === 'mainland_cup' ? 2 : 1;
+  const groups = requireArray(value, 'groups');
+  if (groups.length < 1 || groups.length > 8) throw new Error(`${expectedType}小组数量无效`);
+  const expectedTeams = groups.length * 4;
   const participantIds = requireArray(value, 'participantIds');
   const qualificationOrder = requireArray(value, 'qualificationOrder');
   if (
@@ -431,8 +432,6 @@ function validateContinentalCup(
   ) {
     throw new Error(`${expectedType}资格顺序无效`);
   }
-  const groups = requireArray(value, 'groups');
-  if (groups.length !== expectedGroups) throw new Error(`${expectedType}小组数量无效`);
   const grouped = groups.flatMap((group, index) =>
     validateNeutralGroup(
       group,
@@ -652,21 +651,24 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
   }
 
   let hasContinentalCup = false;
+  let expectedContinentalWindows = 0;
   for (const type of ['mainland_cup', 'southern_cup', 'eastern_cup'] as const) {
     const cup = continentalCups[type];
     if (cup === null) continue;
     if (!isRecord(cup)) throw new Error(`存档字段 ${type} 无效`);
     validateContinentalCup(cup, type, teamIds);
     hasContinentalCup = true;
+    const groupCount = requireArray(cup, 'groups').length;
+    const knockoutSize = 2 ** Math.floor(Math.log2(Math.max(2, groupCount * 2)));
+    expectedContinentalWindows = Math.max(expectedContinentalWindows, 3 + Math.log2(knockoutSize));
   }
   const continentalWindows = calendar.filter(entry => isRecord(entry) && entry.type === 'continental_cup');
   if (hasContinentalCup) {
     if (seasonNumber < 5 || (seasonNumber - 5) % 6 !== 0) {
       throw new Error('洲际杯状态出现在非洲际杯赛季');
     }
-    const expectedWindows = continentalCups.mainland_cup ? 5 : 4;
-    if (continentalWindows.length !== expectedWindows) {
-      throw new Error(`洲际杯赛程窗口数量无效：需要 ${expectedWindows} 个`);
+    if (continentalWindows.length !== expectedContinentalWindows) {
+      throw new Error(`洲际杯赛程窗口数量无效：需要 ${expectedContinentalWindows} 个`);
     }
   } else if (continentalWindows.length > 0) {
     throw new Error('非洲际杯赛季包含空洲际杯窗口');

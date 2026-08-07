@@ -107,11 +107,21 @@ export function drawPlayer(
   frame: number,
   highlighted = false,
   label?: string,
+  facingTarget?: { x: number; y: number },
+  action?: 'shot' | 'save' | 'block',
+  actionProgress = 0,
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
   const speed = Math.hypot(p.vx, p.vy);
   const isMoving = speed > 0.003;
+  const movementX = p.vx * fw;
+  const movementY = p.vy * fh;
+  const facingX = facingTarget ? facingTarget.x - px : movementX;
+  const facingY = facingTarget ? facingTarget.y - py : movementY;
+  const facingLength = Math.hypot(facingX, facingY);
+  const directionX = facingLength > 0.01 ? facingX / facingLength : 0;
+  const directionY = facingLength > 0.01 ? facingY / facingLength : 0;
 
   // Motion trail when sprinting
   if (isMoving && speed > 0.006) {
@@ -158,6 +168,21 @@ export function drawPlayer(
 
   ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(num), px, py + 2.2);
+
+  // A small facing marker makes the tactical dots read as footballers rather
+  // than pieces sliding sideways. Key actions extend the marker only briefly.
+  if (facingLength > 0.01 && (hasBall || highlighted || speed > 0.006)) {
+    const actionReach = action ? 2.5 * Math.sin(Math.min(1, actionProgress) * Math.PI) : 0;
+    const markerStart = 4.2;
+    const markerEnd = 7 + actionReach;
+    ctx.beginPath();
+    ctx.moveTo(px + directionX * markerStart, py + directionY * markerStart);
+    ctx.lineTo(px + directionX * markerEnd, py + directionY * markerEnd);
+    ctx.strokeStyle = action === 'save' ? '#93c5fd' : action === 'block' ? '#fde68a' : 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = action ? 1.8 : 1.1;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
 }
 
 /**

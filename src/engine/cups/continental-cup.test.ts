@@ -4,6 +4,7 @@ import type { MatchResult, MatchStats } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 import {
   advanceContinentalCup,
+  continentalCupWindowCount,
   getContinentalCupCurrentFixtures,
   initContinentalCup,
 } from './continental-cup';
@@ -61,17 +62,18 @@ function expectSingleRoundRobin(cup: ContinentalCupState): void {
   }
 }
 
-const TEAMS_8 = Array.from({ length: 8 }, (_, index) => `m${index + 1}`);
+const TEAMS_16 = Array.from({ length: 16 }, (_, index) => `m${index + 1}`);
+const TEAMS_8 = Array.from({ length: 8 }, (_, index) => `s${index + 1}`);
 const TEAMS_4 = Array.from({ length: 4 }, (_, index) => `s${index + 1}`);
 
 describe('initContinentalCup', () => {
-  it('rejects mismatched regional fields', () => {
-    expect(() => initContinentalCup('大陆', ['a', 'b'], 5, new SeededRNG(0))).toThrow(/8/);
-    expect(() => initContinentalCup('南洲', TEAMS_8, 5, new SeededRNG(0))).toThrow(/4/);
+  it('rejects regions that cannot form complete four-team groups', () => {
+    expect(() => initContinentalCup('大陆', ['a', 'b'], 5, new SeededRNG(0))).toThrow(/four-team groups/);
+    expect(() => initContinentalCup('南洲', [...TEAMS_4, 'extra'], 5, new SeededRNG(0))).toThrow(/four-team groups/);
   });
 
-  it('draws Mainland into two seeded neutral groups with one match per pair', () => {
-    const cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(11));
+  it('draws all 16 Mainland teams into four seeded neutral groups', () => {
+    const cup = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(11));
     expect(cup).toMatchObject({
       type: 'mainland_cup',
       region: '大陆',
@@ -80,44 +82,46 @@ describe('initContinentalCup', () => {
       groupStageCompleted: false,
       completed: false,
     });
-    expect(cup.groups).toHaveLength(2);
+    expect(cup.groups).toHaveLength(4);
     expect(cup.rounds).toHaveLength(0);
-    expect(new Set(cup.groups.flatMap(group => group.teamIds))).toEqual(new Set(TEAMS_8));
+    expect(new Set(cup.groups.flatMap(group => group.teamIds))).toEqual(new Set(TEAMS_16));
     expectSingleRoundRobin(cup);
 
     for (const group of cup.groups) {
-      expect(group.teamIds.filter(teamId => TEAMS_8.slice(0, 2).includes(teamId))).toHaveLength(1);
-      expect(group.teamIds.filter(teamId => TEAMS_8.slice(2, 4).includes(teamId))).toHaveLength(1);
-      expect(group.teamIds.filter(teamId => TEAMS_8.slice(4, 6).includes(teamId))).toHaveLength(1);
-      expect(group.teamIds.filter(teamId => TEAMS_8.slice(6, 8).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_16.slice(0, 4).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_16.slice(4, 8).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_16.slice(8, 12).includes(teamId))).toHaveLength(1);
+      expect(group.teamIds.filter(teamId => TEAMS_16.slice(12, 16).includes(teamId))).toHaveLength(1);
     }
+    expect(continentalCupWindowCount(cup)).toBe(6);
   });
 
   it.each([
     ['南洲', 'southern_cup'],
     ['东洲', 'eastern_cup'],
-  ] as const)('draws %s as one neutral group followed by a final', (region, type) => {
-    const cup = initContinentalCup(region, TEAMS_4, 5, new SeededRNG(22));
+  ] as const)('draws all eight %s teams into two neutral groups', (region, type) => {
+    const cup = initContinentalCup(region, TEAMS_8, 5, new SeededRNG(22));
     expect(cup.type).toBe(type);
-    expect(cup.groups).toHaveLength(1);
+    expect(cup.groups).toHaveLength(2);
     expectSingleRoundRobin(cup);
+    expect(continentalCupWindowCount(cup)).toBe(5);
   });
 
-  it('is deterministic for the same seed and qualification order', () => {
-    const first = initContinentalCup('大陆', TEAMS_8, 11, new SeededRNG(42));
-    const second = initContinentalCup('大陆', TEAMS_8, 11, new SeededRNG(42));
+  it('is deterministic for the same seed and coefficient order', () => {
+    const first = initContinentalCup('大陆', TEAMS_16, 11, new SeededRNG(42));
+    const second = initContinentalCup('大陆', TEAMS_16, 11, new SeededRNG(42));
     expect(first.groups.map(group => group.teamIds)).toEqual(second.groups.map(group => group.teamIds));
     expect(first.groups.flatMap(group => group.fixtures)).toEqual(second.groups.flatMap(group => group.fixtures));
   });
 });
 
 describe('advanceContinentalCup', () => {
-  it('runs Mainland through three group rounds, SF and Final', () => {
-    let cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(11));
+  it('runs Mainland through three group rounds, QF, SF and Final', () => {
+    let cup = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(11));
 
     for (let round = 1; round <= 3; round++) {
       const fixtures = getContinentalCupCurrentFixtures(cup);
-      expect(fixtures).toHaveLength(4);
+      expect(fixtures).toHaveLength(8);
       expect(new Set(fixtures.map(fixture => fixture.round))).toEqual(new Set([round]));
       cup = playCurrent(cup);
     }
@@ -125,29 +129,35 @@ describe('advanceContinentalCup', () => {
     expect(cup.groupStageCompleted).toBe(true);
     expect(cup.groups.every(group => group.standings.every(entry => entry.played === 3))).toBe(true);
     expect(cup.rounds).toHaveLength(1);
-    expect(cup.rounds[0].roundName).toBe('SF');
-    expect(cup.rounds[0].fixtures).toHaveLength(2);
+    expect(cup.rounds[0].roundName).toBe('QF');
+    expect(cup.rounds[0].fixtures).toHaveLength(4);
 
     cup = playCurrent(cup);
     expect(cup.rounds).toHaveLength(2);
-    expect(cup.rounds[1].roundName).toBe('Final');
-    expect(cup.rounds[1].fixtures).toHaveLength(1);
+    expect(cup.rounds[1].roundName).toBe('SF');
+    expect(cup.rounds[1].fixtures).toHaveLength(2);
 
-    const final = cup.rounds[1].fixtures[0];
+    cup = playCurrent(cup);
+    expect(cup.rounds).toHaveLength(3);
+    expect(cup.rounds[2].roundName).toBe('Final');
+    expect(cup.rounds[2].fixtures).toHaveLength(1);
+
+    const final = cup.rounds[2].fixtures[0];
     cup = playCurrent(cup);
     expect(cup.completed).toBe(true);
     expect(cup.winnerId).toBe(final.homeTeamId);
     expect(cup.rounds.flatMap(round => round.fixtures).every(fixture => fixture.isNeutralVenue)).toBe(true);
   });
 
-  it('runs Southern/Eastern through three group rounds and a final', () => {
-    let cup = initContinentalCup('南洲', TEAMS_4, 11, new SeededRNG(99));
+  it('runs Southern/Eastern through three group rounds, SF and Final', () => {
+    let cup = initContinentalCup('南洲', TEAMS_8, 11, new SeededRNG(99));
     cup = playCurrent(playCurrent(playCurrent(cup)));
     expect(cup.groupStageCompleted).toBe(true);
     expect(cup.rounds).toHaveLength(1);
-    expect(cup.rounds[0].roundName).toBe('Final');
+    expect(cup.rounds[0].roundName).toBe('SF');
 
-    const final = cup.rounds[0].fixtures[0];
+    cup = playCurrent(cup);
+    const final = cup.rounds[1].fixtures[0];
     cup = playCurrent(cup);
     expect(cup.completed).toBe(true);
     expect(cup.winnerId).toBe(final.homeTeamId);
@@ -201,7 +211,7 @@ describe('advanceContinentalCup', () => {
   });
 
   it('rejects a partial window and leaves the input state unchanged', () => {
-    const cup = initContinentalCup('大陆', TEAMS_8, 5, new SeededRNG(1));
+    const cup = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(1));
     const before = structuredClone(cup);
     const fixtures = getContinentalCupCurrentFixtures(cup);
     expect(() => advanceContinentalCup(cup, fixtures.slice(0, 2).map(homeWins))).toThrow(/Missing result/);

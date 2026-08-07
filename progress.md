@@ -1,5 +1,29 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-08 All-Region Continental Cups
+
+- User requested that every team in each continent participate instead of coefficient qualification excluding the lower half, then asked for the animation and competition work to be pushed together.
+- New S5/S11/S17 format: Mainland includes all 16 clubs in four groups and runs QF/SF/Final; Southern and Eastern include all eight clubs in two groups and run SF/Final. All regions retain three neutral single-round-robin group windows, neutral single-leg knockouts, and the six-season interval.
+- Rolling five-season club coefficient now controls four draw pots and the final group tie-break only. It never excludes a club. All three regions play in parallel, so the expanded format adds only one maximum calendar window.
+- Continental knockout generation now derives its bracket from group count and supports the earlier 8/4 selective format for an already active current-schema save. Save validation derives participant and window counts from the stored groups instead of rejecting that in-progress format.
+- The cup page and draw news state the all-region rule, dynamic team/group count, coefficient purpose, and expanded knockout path. New season integration asserts that all 32 clubs appear exactly once across the three continental competitions.
+- Browser workflow verification passed at 320x568, 390x844, and 1440x900. Each viewport reached S5 with six continental windows, showed all four Mainland groups and 32 coefficient rows without horizontal overflow, and retained the three-round neutral World Cup group format.
+- Final Node 22.22.2 verification passed 97 test files / 731 tests, ESLint, TypeScript/PWA production build, bundle budget (229,719-byte main; 627,280-byte initial load), changelog validation, and diff checks.
+
+## 2026-08-08 Match Motion Continuity Pass
+
+- User requested another realism pass after v4.32.0. Keep the existing lightweight top-down observer presentation and authoritative simulation facts.
+- Audit findings: receivers currently chase the in-flight ball instead of committing to its destination; passes use an accelerating-then-decelerating curve; possession holds are static; the next pass can restart from a formation slot; defensive depth and goalkeeper starting position do not scale enough with threat distance.
+- Planned scope: continuous carry-to-pass movement, destination-led receiving runs, football-like ball travel, layered defensive lines, goalkeeper angle/depth positioning, and short deterministic shot/reaction timing. No result, event, statistic, save, or competition changes.
+- Verification target: focused physics tests, fixed tactical and shootout fixtures, ordinary presentation, standard web-game client, desktop/mobile screenshot inspection, full tests/lint/build, and animation performance audit. Local browser hosting may be unavailable in the current restricted environment and must be reported if it remains blocked.
+- Implemented destination-led receiving runs, short role-scaled carries, real ball-position continuation into the next pass, fast-release/decelerating ground passes, near-linear lofted travel, and a four-frame shot wind-up. Directed final passes and shots now use longer, readable timing.
+- Defensive movement now forms threat-relative depth layers. The presser closes the receiving point, the cover remains goal-side, and the goalkeeper steps off the line only as the ball enters a dangerous distance. Credited saves/blocks begin their reaction after release rather than anticipating the shot.
+- Sequence endings now preserve match continuity: ordinary play resumes at the current ball, goals restart at midfield for the conceding team, misses restart as goal kicks, and saves/blocks restart with the defending side. Inactive preferred restart players fall back to the nearest actual player.
+- Players expose a restrained facing/action marker for carries and authoritative shot/save/block actors. Debug state stops reporting a completed directed event after its restart begins.
+- Final Node 22.22.2 verification passed 97 test files / 731 tests, ESLint, TypeScript/PWA production build, bundle budget (229,719-byte main; 627,280-byte initial load), changelog validation, and diff checks. The animation chunk increased by roughly 2.6 KB uncompressed and remains lazy.
+- Browser verification passed through the standard game client, ordinary live presentation, fixed tactical goal/save fixtures, and desktop plus 320/390 mobile shootout fixtures. Screenshots confirm a goal-side pressure gap and shooters holding their real release positions instead of chasing completed shots.
+- Animation performance passed at normal and 4x CPU profiles with average Canvas render costs of 0.340ms and 1.455ms. Hidden, covered, closed, rapidly reopened, and next-batch states all remained correct, and final scores still matched.
+
 ## 2026-08-07 Tactical Match Animation Pass
 
 - User approved a lightweight realism pass after reviewing the current event-directed Canvas. Preserve deterministic results, match statistics, save compatibility, the observer identity, and mobile render budgets.

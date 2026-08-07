@@ -1,7 +1,7 @@
 // Pure ball + player position math. No canvas, no refs.
 // Operates entirely in normalized (0-1) field coordinates.
 
-import { clamp, dist, easeInOutQuad, lerp, seededRand } from './math';
+import { clamp, dist, lerp, seededRand } from './math';
 import { BASE_FORMATION, type PassPhase, type PlayerState, type Role } from './types';
 
 /**
@@ -28,6 +28,8 @@ export interface BallComputeInput {
   source: { x: number; y: number };  // pixel coords of passer
   target: { x: number; y: number };  // pixel coords of target / holder spot
   frame: number;               // global frame counter (for hold micro-motion)
+  flightKind?: 'pass' | 'shot';
+  releaseDelayFrames?: number;
 }
 
 export interface BallComputeResult {
@@ -72,10 +74,17 @@ export function selectDefensiveRoles(
  * Pure: same input → same output. Caller accumulates spin onto its own ref.
  */
 export function computeBallPosition(input: BallComputeInput): BallComputeResult {
-  const { passing, phaseFrame, duration, arc, source, target, frame } = input;
+  const {
+    passing, phaseFrame, duration, arc, source, target, frame,
+    flightKind = 'pass', releaseDelayFrames = 0,
+  } = input;
   if (passing) {
-    const t = Math.min(1, phaseFrame / duration);
-    const eased = easeInOutQuad(t);
+    const flightDuration = Math.max(1, duration - releaseDelayFrames);
+    const t = clamp((phaseFrame - releaseDelayFrames) / flightDuration, 0, 1);
+    // Ground passes leave the foot crisply and lose a little pace. Lofted
+    // passes and shots keep a near-linear horizontal path.
+    const rollBias = flightKind === 'pass' ? 0.12 * (1 - arc) : 0;
+    const eased = clamp(t + Math.sin(t * Math.PI) * rollBias, 0, 1);
     const bx = lerp(source.x, target.x, eased);
     const by = lerp(source.y, target.y, eased);
     const arcLift = Math.sin(t * Math.PI) * arc * 22;
@@ -87,6 +96,20 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
   const bx = target.x + microJ;
   const by = target.y + Math.cos(frame * 0.18) * 0.3;
   return { bx, by, arcLift: 0, spinDelta: 0.05 };
+}
+
+export function computeCarryTarget(
+  baseTarget: { x: number; y: number },
+  attackingHome: boolean,
+  progress: number,
+  maxAdvance: number,
+): { x: number; y: number } {
+  const t = clamp(progress, 0, 1);
+  const eased = 1 - (1 - t) * (1 - t);
+  return {
+    x: clamp(baseTarget.x + (attackingHome ? 1 : -1) * maxAdvance * eased, 0.03, 0.97),
+    y: clamp(baseTarget.y, 0.05, 0.95),
+  };
 }
 
 /**
@@ -124,6 +147,7 @@ export function updatePlayerPositions(
   shift: number,
   defensiveAction?: { playerIndex: number; target: { x: number; y: number } },
   activePlayerIndices?: ReadonlySet<number>,
+  phaseProgress = 0,
 ): void {
   const isAttHome = currentPhase.attackingHome;
   const defensiveRoles = selectDefensiveRoles(playerPos, !isAttHome, ballNX, ballNY, activePlayerIndices);
@@ -143,8 +167,14 @@ export function updatePlayerPositions(
     // ── Tactical adjustments ──
     if (isHolder) {
       if (phaseState === 'holding') {
-        targetX_n = ballNX;
-        targetY_n = ballNY + 0.01;
+        if (currentPhase.kind === 'shot') {
+          const releasePoint = currentPhase.sourceOverride ?? slot;
+          targetX_n = releasePoint.x;
+          targetY_n = releasePoint.y;
+        } else {
+          targetX_n = ballNX;
+          targetY_n = ballNY + 0.01;
+        }
       } else if (currentPhase.sourceOverride) {
         // Once the pass or shot leaves the foot, the player stays near the
         // release point instead of unrealistically chasing the flying ball.
@@ -152,10 +182,13 @@ export function updatePlayerPositions(
         targetY_n = currentPhase.sourceOverride.y;
       }
     } else if (isReceiver) {
-      // Receiver runs to meet incoming pass — move toward where ball will be
-      const meetingT = 0.7;
-      targetX_n = lerp(slot.x, ballNX, meetingT);
-      targetY_n = lerp(slot.y, ballNY, meetingT);
+      // Commit to the destination instead of chasing the moving ball back
+      // toward the passer. Directed chances therefore produce a real run.
+      const destination = currentPhase.targetOverride
+        ?? getBaseSlot(currentPhase.receiverIdx, isHomeTeam, shift);
+      targetX_n = destination.x;
+      targetY_n = destination.y;
+      playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.7);
     } else if (teamHasBall) {
       // Team in possession: shift toward attacking direction
       const attackDir = isHomeTeam ? 1 : -1;
@@ -178,9 +211,15 @@ export function updatePlayerPositions(
     } else {
       // One player presses, a second protects the route to goal, and the
       // remaining block shifts together instead of swarming the ball.
+      const passDestination = currentPhase.targetOverride
+        ?? getBaseSlot(currentPhase.receiverIdx, isAttHome, shift);
+      const pressureX = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.x : ballNX;
+      const pressureY = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.y : ballNY;
       if (i === defensiveRoles.presserIndex) {
-        targetX_n = lerp(playerPos[i].x, ballNX, 0.72);
-        targetY_n = lerp(playerPos[i].y, ballNY, 0.72);
+        const ownGoalX = isHomeTeam ? 0.03 : 0.97;
+        const pressureGap = ownGoalX < pressureX ? -0.025 : 0.025;
+        targetX_n = lerp(playerPos[i].x, pressureX + pressureGap, 0.72);
+        targetY_n = lerp(playerPos[i].y, pressureY, 0.72);
         playerPos[i].sprintT = 1;
       } else if (i === defensiveRoles.coverIndex) {
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
@@ -190,15 +229,20 @@ export function updatePlayerPositions(
       } else if (slot.role !== 'GK') {
         const lateralPull = slot.role === 'DF' ? 0.16 : 0.12;
         targetY_n = lerp(slot.y, ballNY, lateralPull);
+        const ownGoalX = isHomeTeam ? 0.03 : 0.97;
+        const layer = slot.role === 'DF' ? 0.38 : slot.role === 'MF' ? 0.2 : 0.1;
+        const threatLineX = lerp(ballNX, ownGoalX, layer);
         const ownHalf = isHomeTeam ? ballNX < 0.5 : ballNX > 0.5;
-        if (ownHalf) {
-          const drop = isHomeTeam ? -0.035 : 0.035;
-          targetX_n = slot.x + drop;
-        }
+        targetX_n = lerp(slot.x, threatLineX, ownHalf ? 0.68 : 0.36);
       }
-      // GK tracks ball laterally, narrow range
+      // The goalkeeper narrows the angle as the ball enters the final third,
+      // while still protecting the goal line on distant possession.
       if (slot.role === 'GK') {
         targetY_n = clamp(0.5 + (ballNY - 0.5) * 0.3, 0.42, 0.58);
+        const ownGoalX = isHomeTeam ? 0.03 : 0.97;
+        const threatDistance = Math.abs(ballNX - ownGoalX);
+        const stepOut = clamp((0.42 - threatDistance) * 0.16, 0, 0.055);
+        targetX_n = slot.x + (isHomeTeam ? stepOut : -stepOut);
       }
     }
 
@@ -211,9 +255,11 @@ export function updatePlayerPositions(
     }
 
     if (defensiveAction?.playerIndex === i && overrideTarget && phaseState !== 'holding') {
-      targetX_n = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
-      targetY_n = defensiveAction.target.y;
-      playerPos[i].sprintT = 1;
+      const reaction = clamp((phaseProgress - 0.18) / 0.62, 0, 1);
+      const actionX = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
+      targetX_n = lerp(targetX_n, actionX, reaction);
+      targetY_n = lerp(targetY_n, defensiveAction.target.y, reaction);
+      playerPos[i].sprintT = Math.max(playerPos[i].sprintT, reaction);
     }
 
     targetX_n = clamp(targetX_n, 0.03, 0.97);

@@ -28,6 +28,23 @@ const REGION_TO_NAME: Record<CupRegion, string> = {
   '东洲': '东洲杯',
 };
 
+function knockoutSizeForGroupCount(groupCount: number): number {
+  const available = Math.max(2, groupCount * 2);
+  return 2 ** Math.floor(Math.log2(available));
+}
+
+function knockoutRoundName(teamCount: number): string {
+  if (teamCount === 2) return 'Final';
+  if (teamCount === 4) return 'SF';
+  if (teamCount === 8) return 'QF';
+  if (teamCount === 16) return 'R16';
+  return `R${teamCount}`;
+}
+
+export function continentalCupWindowCount(cup: ContinentalCupState): number {
+  return 3 + Math.log2(knockoutSizeForGroupCount(cup.groups.length));
+}
+
 function createEmptyStanding(teamId: string): StandingEntry {
   return {
     teamId,
@@ -171,13 +188,34 @@ function updateGroupStandings(
 
 function completeGroupStage(cup: ContinentalCupState): ContinentalCupState {
   const season = extractSeason(cup);
-  const pairings: [string, string][] = cup.region === '大陆'
-    ? [
-        [cup.groups[0].standings[0].teamId, cup.groups[1].standings[1].teamId],
-        [cup.groups[1].standings[0].teamId, cup.groups[0].standings[1].teamId],
-      ]
-    : [[cup.groups[0].standings[0].teamId, cup.groups[0].standings[1].teamId]];
-  const roundName = cup.region === '大陆' ? 'SF' : 'Final';
+  const seedRank = new Map(cup.qualificationOrder.map((teamId, index) => [teamId, index]));
+  const knockoutSize = knockoutSizeForGroupCount(cup.groups.length);
+  const qualifiers = cup.groups
+    .flatMap((group, groupIndex) => group.standings.slice(0, 2).map((standing, index) => ({
+      teamId: standing.teamId,
+      groupIndex,
+      position: index + 1,
+      points: standing.points,
+      goalDifference: standing.goalDifference,
+      goalsFor: standing.goalsFor,
+    })))
+    .sort((a, b) =>
+      a.position - b.position
+      || b.points - a.points
+      || b.goalDifference - a.goalDifference
+      || b.goalsFor - a.goalsFor
+      || (seedRank.get(a.teamId) ?? 999) - (seedRank.get(b.teamId) ?? 999),
+    )
+    .slice(0, knockoutSize);
+  const topSeeds = qualifiers.slice(0, knockoutSize / 2);
+  const lowerSeeds = qualifiers.slice(knockoutSize / 2).reverse();
+  const pairings: [string, string][] = topSeeds.map((topSeed) => {
+    const differentGroupIndex = lowerSeeds.findIndex(seed => seed.groupIndex !== topSeed.groupIndex);
+    const opponentIndex = differentGroupIndex >= 0 ? differentGroupIndex : 0;
+    const [opponent] = lowerSeeds.splice(opponentIndex, 1);
+    return [topSeed.teamId, opponent.teamId];
+  });
+  const roundName = knockoutRoundName(knockoutSize);
   const fixtures: CupFixture[] = pairings.map(([homeTeamId, awayTeamId], index) => ({
     id: `CC-${cup.type}-S${season}-${roundName}-M${index + 1}`,
     round: 1,
@@ -201,10 +239,8 @@ function completeGroupStage(cup: ContinentalCupState): ContinentalCupState {
 }
 
 /**
- * Initialize one coefficient-qualified continental cup.
- *
- * Mainland: two groups of four, then SF and Final.
- * Southern/Eastern: one group of four, then Final.
+ * Initialize one all-region continental cup. Coefficient order seeds the four
+ * pots and remains the final group tie-break; it never excludes a club.
  */
 export function initContinentalCup(
   region: CupRegion,
@@ -212,23 +248,17 @@ export function initContinentalCup(
   seasonNumber: number,
   rng: SeededRNG,
 ): ContinentalCupState {
-  const expectedSize = region === '大陆' ? 8 : 4;
-  if (teamIds.length !== expectedSize) {
+  if (teamIds.length < 4 || teamIds.length % 4 !== 0) {
     throw new Error(
-      `${REGION_TO_NAME[region]} requires exactly ${expectedSize} teams, got ${teamIds.length}`,
+      `${REGION_TO_NAME[region]} requires a positive number of four-team groups, got ${teamIds.length} teams`,
     );
   }
 
   const type = REGION_TO_TYPE[region];
-  const groupCount = region === '大陆' ? 2 : 1;
-  const pots = region === '大陆'
-    ? [
-        teamIds.slice(0, 2),
-        teamIds.slice(2, 4),
-        teamIds.slice(4, 6),
-        teamIds.slice(6, 8),
-      ]
-    : undefined;
+  const groupCount = teamIds.length / 4;
+  const pots = Array.from({ length: 4 }, (_, potIndex) =>
+    teamIds.slice(potIndex * groupCount, (potIndex + 1) * groupCount),
+  );
   const groupTeams = drawGroups(teamIds, groupCount, rng, pots);
   const groups: SuperCupGroup[] = groupTeams.map((groupTeamIds, index) => ({
     groupName: String.fromCharCode(65 + index),
@@ -317,7 +347,7 @@ export function advanceContinentalCup(
   });
   currentRound.completed = true;
 
-  if (currentRound.fixtures.length === 1) {
+  if (winners.length === 1) {
     return {
       ...cup,
       rounds,
@@ -326,18 +356,22 @@ export function advanceContinentalCup(
     };
   }
 
-  const finalFixture: CupFixture = {
-    id: `CC-${cup.type}-S${extractSeason(cup)}-Final-M1`,
-    round: currentRound.roundNumber + 1,
-    roundName: 'Final',
-    homeTeamId: winners[0],
-    awayTeamId: winners[1],
-    isNeutralVenue: true,
-  };
+  const nextRoundName = knockoutRoundName(winners.length);
+  const nextFixtures: CupFixture[] = [];
+  for (let index = 0; index < winners.length; index += 2) {
+    nextFixtures.push({
+      id: `CC-${cup.type}-S${extractSeason(cup)}-${nextRoundName}-M${index / 2 + 1}`,
+      round: currentRound.roundNumber + 1,
+      roundName: nextRoundName,
+      homeTeamId: winners[index],
+      awayTeamId: winners[index + 1],
+      isNeutralVenue: true,
+    });
+  }
   rounds.push({
     roundNumber: currentRound.roundNumber + 1,
-    roundName: 'Final',
-    fixtures: [finalFixture],
+    roundName: nextRoundName,
+    fixtures: nextFixtures,
     completed: false,
   });
 

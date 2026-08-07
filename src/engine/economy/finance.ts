@@ -374,11 +374,11 @@ export const CUP_PRIZE = {
   world_cup_semi: 15,
   world_cup_runner_up: 30,
   world_cup_winner: 60,
-  // 大陆杯 (8-team groups + SF/Final)
+  // 大陆杯 (all-region groups + QF/SF/Final)
   continental_cup_semi: 10,
   continental_cup_runner_up: 25,
   continental_cup_winner: 45,
-  // 南洲杯 / 东洲杯 (4-team group + Final)
+  // 南洲杯 / 东洲杯 (all-region groups + SF/Final)
   small_continental_cup_runner_up: 20,
   small_continental_cup_winner: 40,
 };

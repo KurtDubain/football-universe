@@ -979,9 +979,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
 
     // Continental cup result — pick the cup matching this team's continent.
-    // If no cup ran for the team's region this season, leave undefined so
-    // the UI shows '—' / '未参加'. If the team is from a region with a cup
-    // but didn't qualify for the top-N selection, mark them as 未参加.
+    // If no cup ran for the team's region this season, leave undefined. New
+    // tournaments include every regional club; the membership check remains
+    // for an in-progress cup loaded from the earlier selective format.
     {
       const teamRegion = world.teamBases[teamId]?.region?.split('+')[0];
       const cup = teamRegion === '大陆' ? continentalCups.mainland_cup

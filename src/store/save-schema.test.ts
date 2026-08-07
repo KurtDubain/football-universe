@@ -115,6 +115,34 @@ describe('current schema hydration boundary', () => {
     expect(getSaveRecoveryMessage()).toBeNull();
   });
 
+  it('keeps an in-progress selective continental cup save readable', () => {
+    const save = makeSeasonFiveSave();
+    const cups = save.state.world.continentalCups;
+    for (const [cup, groupCount] of [
+      [cups.mainland_cup, 2],
+      [cups.southern_cup, 1],
+      [cups.eastern_cup, 1],
+    ] as const) {
+      if (!cup) throw new Error('Expected active continental cup');
+      cup.groups = cup.groups.slice(0, groupCount);
+      cup.participantIds = cup.groups.flatMap(group => group.teamIds);
+      const participants = new Set(cup.participantIds);
+      cup.qualificationOrder = cup.qualificationOrder.filter(teamId => participants.has(teamId));
+    }
+    let continentalWindows = 0;
+    save.state.world.seasonState.calendar = save.state.world.seasonState.calendar.filter(window => {
+      if (window.type !== 'continental_cup') return true;
+      continentalWindows += 1;
+      return continentalWindows <= 5;
+    });
+
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(save));
+    __flushCompressedStorageForTests();
+
+    expect(currentSaveStorage.getItem(SAVE_STORAGE_KEY)).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+  });
+
   it.each([
     ['malformed JSON', '{not-json'],
     ['wrong version', JSON.stringify({ ...makeSave(), version: SAVE_SCHEMA_VERSION - 1 })],

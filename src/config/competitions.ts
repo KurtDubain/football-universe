@@ -61,8 +61,7 @@ export const worldCupConfig = {
 export const continentalCupConfig = {
   firstSeason: 5,
   interval: 6,
-  mainlandTeams: 8,
-  regionalTeams: 4,
+  teamsPerGroup: 4,
   groupRounds: 3,
 } as const;
 

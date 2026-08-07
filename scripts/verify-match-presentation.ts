@@ -169,7 +169,13 @@ async function verifyViewport(
     await dialog.getByRole('button', { name: '暂停', exact: true }).click();
     const liveStart = await readMinute();
     await dialog.getByRole('button', { name: '继续', exact: true }).click();
-    await page.waitForTimeout(850);
+    await page.waitForFunction(startMinute => {
+      const minute = Number.parseInt(
+        document.querySelector('[data-testid="live-minute"]')?.textContent ?? '0',
+        10,
+      );
+      return minute > startMinute;
+    }, liveStart, { timeout: 1800 });
     await dialog.getByRole('button', { name: '暂停', exact: true }).click();
     const liveMinuteDelta = await readMinute() - liveStart;
     await dialog.getByRole('button', { name: '沉浸', exact: true }).click();
@@ -182,7 +188,7 @@ async function verifyViewport(
     await dialog.getByRole('button', { name: '暂停', exact: true }).click();
     const immersiveMinuteDelta = await readMinute() - immersiveStart;
     if (liveMinuteDelta < 1 || liveMinuteDelta > (reducedMotion === 'reduce' ? 6 : 3)) {
-      throw new Error(`${name}: live advanced ${liveMinuteDelta} minutes in 850ms`);
+      throw new Error(`${name}: live advanced ${liveMinuteDelta} minutes after resume`);
     }
     if (immersiveMinuteDelta < 1 || immersiveMinuteDelta > (reducedMotion === 'reduce' ? 10 : 4)) {
       throw new Error(`${name}: immersive advanced ${immersiveMinuteDelta} minutes in 2000ms`);

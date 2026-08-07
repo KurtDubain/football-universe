@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBallPosition, selectDefensiveRoles, updatePlayerPositions } from './physics';
+import { computeBallPosition, computeCarryTarget, selectDefensiveRoles, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -33,6 +33,39 @@ describe('pitch player movement', () => {
     expect(ball.arcLift).toBeCloseTo(22);
   });
 
+  it('gives ground passes an early roll advantage while shots wait for the kicking motion', () => {
+    const groundPass = computeBallPosition({
+      passing: true,
+      phaseFrame: 30,
+      duration: 60,
+      arc: 0,
+      source: { x: 0, y: 0 },
+      target: { x: 100, y: 0 },
+      frame: 30,
+      flightKind: 'pass',
+    });
+    const windingUp = computeBallPosition({
+      passing: true,
+      phaseFrame: 3,
+      duration: 20,
+      arc: 0.1,
+      source: { x: 10, y: 20 },
+      target: { x: 100, y: 20 },
+      frame: 3,
+      flightKind: 'shot',
+      releaseDelayFrames: 4,
+    });
+
+    expect(groundPass.bx).toBeGreaterThan(50);
+    expect(windingUp.bx).toBe(10);
+    expect(windingUp.arcLift).toBe(0);
+  });
+
+  it('carries possession forward without leaving the pitch', () => {
+    expect(computeCarryTarget({ x: 0.5, y: 0.4 }, true, 1, 0.03)).toEqual({ x: 0.53, y: 0.4 });
+    expect(computeCarryTarget({ x: 0.04, y: 0.4 }, false, 1, 0.03).x).toBe(0.03);
+  });
+
   it('keeps the shooter near the release point and supporting forwards in separate lanes', () => {
     const players = initialPlayers();
     const shot: PassPhase = {
@@ -58,6 +91,28 @@ describe('pitch player movement', () => {
     expect(Math.abs(players[8].y - players[10].y)).toBeGreaterThan(0.04);
   });
 
+  it('does not let the shooter chase a completed shot into the goal', () => {
+    const players = initialPlayers();
+    const shot: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      duration: 20,
+      hold: 12,
+      arc: 0.1,
+      intercepted: false,
+      sourceOverride: { x: 0.82, y: 0.48 },
+    };
+
+    for (let frame = 0; frame < 20; frame++) {
+      updatePlayerPositions(players, 0.985, 0.5, 'home', 9, shot, 'holding', { x: 0.985, y: 0.5 }, 0.07);
+    }
+
+    expect(players[9].x).toBeGreaterThan(0.79);
+    expect(players[9].x).toBeLessThan(0.85);
+  });
+
   it('assigns one ball presser and a distinct goal-side cover defender', () => {
     const players = initialPlayers();
     const roles = selectDefensiveRoles(players, false, 0.72, 0.3);
@@ -80,7 +135,7 @@ describe('pitch player movement', () => {
     expect(roles.coverIndex).not.toBe(18);
   });
 
-  it('moves the presser toward the ball while the cover stays goal-side', () => {
+  it('moves the receiver and presser toward the pass destination while cover stays goal-side', () => {
     const players = initialPlayers();
     const phase: PassPhase = {
       passerIdx: 7,
@@ -91,15 +146,61 @@ describe('pitch player movement', () => {
       hold: 20,
       arc: 0.1,
       intercepted: false,
+      targetOverride: { x: 0.82, y: 0.3 },
     };
-    const before = selectDefensiveRoles(players, false, 0.72, 0.3);
+    const before = selectDefensiveRoles(players, false, 0.82, 0.3);
 
     for (let frame = 0; frame < 12; frame++) {
-      updatePlayerPositions(players, 0.72, 0.3, 'home', 7, phase, 'passing', null, 0.04);
+      updatePlayerPositions(players, 0.6, 0.45, 'home', 7, phase, 'passing', null, 0.04);
     }
 
-    expect(distToBall(players[before.presserIndex], 0.72, 0.3)).toBeLessThan(0.12);
-    expect(players[before.coverIndex].x).toBeGreaterThan(0.72);
+    expect(players[10].x).toBeGreaterThan(0.75);
+    expect(distToBall(players[before.presserIndex], 0.82, 0.3)).toBeLessThan(0.16);
+    expect(players[before.coverIndex].x).toBeGreaterThan(0.6);
+  });
+
+  it('steps the goalkeeper out to narrow a close-range angle', () => {
+    const players = initialPlayers();
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      duration: 20,
+      hold: 10,
+      arc: 0.1,
+      intercepted: false,
+    };
+
+    for (let frame = 0; frame < 12; frame++) {
+      updatePlayerPositions(players, 0.86, 0.35, 'home', 9, phase, 'shooting', { x: 0.985, y: 0.45 }, 0.04);
+    }
+
+    expect(players[11].x).toBeLessThan(0.925);
+    expect(players[11].y).toBeLessThan(0.5);
+  });
+
+  it('delays the credited goalkeeper reaction until after the shot leaves the foot', () => {
+    const beforeRelease = initialPlayers();
+    const afterRelease = initialPlayers();
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: false,
+      kind: 'shot',
+      duration: 20,
+      hold: 10,
+      arc: 0.1,
+      intercepted: false,
+    };
+    const action = { playerIndex: 0, target: { x: 0.015, y: 0.42 } };
+
+    for (let frame = 0; frame < 10; frame++) {
+      updatePlayerPositions(beforeRelease, 0.15, 0.42, 'away', 9, phase, 'shooting', { x: 0.015, y: 0.42 }, 0.04, action, undefined, 0.1);
+      updatePlayerPositions(afterRelease, 0.08, 0.42, 'away', 9, phase, 'shooting', { x: 0.015, y: 0.42 }, 0.04, action, undefined, 0.9);
+    }
+
+    expect(afterRelease[0].x).toBeLessThan(beforeRelease[0].x);
   });
 });
 

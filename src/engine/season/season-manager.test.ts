@@ -86,17 +86,20 @@ describe('initializeGameWorld', () => {
     }
 
     expect(world.seasonState.seasonNumber).toBe(5);
-    expect(world.continentalCups.mainland_cup?.groups).toHaveLength(2);
-    expect(world.continentalCups.southern_cup?.groups).toHaveLength(1);
-    expect(world.continentalCups.eastern_cup?.groups).toHaveLength(1);
-    expect(world.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(5);
+    expect(world.continentalCups.mainland_cup?.groups).toHaveLength(4);
+    expect(world.continentalCups.southern_cup?.groups).toHaveLength(2);
+    expect(world.continentalCups.eastern_cup?.groups).toHaveLength(2);
+    expect(world.seasonState.calendar.filter(window => window.type === 'continental_cup')).toHaveLength(6);
+    const continentalParticipants = Object.values(world.continentalCups)
+      .flatMap(cup => cup?.participantIds ?? []);
+    expect(new Set(continentalParticipants)).toEqual(new Set(Object.keys(world.teamBases)));
 
     let firstContinentalWindow = world;
     while (getCurrentWindow(firstContinentalWindow)?.type !== 'continental_cup') {
       firstContinentalWindow = executeCurrentWindow(firstContinentalWindow).world;
     }
     const continentalRound = executeCurrentWindow(firstContinentalWindow);
-    expect(continentalRound.results).toHaveLength(8);
+    expect(continentalRound.results).toHaveLength(16);
     expect(continentalRound.results.every(result => result.isNeutralVenue)).toBe(true);
     expect(continentalRound.results.every(result =>
       result.prediction?.factors?.every(factor => factor.source !== 'home_advantage'),
@@ -110,6 +113,28 @@ describe('initializeGameWorld', () => {
     });
     expect(seasonEleven.continentalCups.mainland_cup).not.toBeNull();
     expect(seasonEleven.seasonState.isWorldCupYear).toBe(false);
+  });
+
+  it('completes the all-region continental format before season settlement', () => {
+    const seasonOne = initializeGameWorld(20260808);
+    let world = initializeNewSeason({
+      ...seasonOne,
+      seasonState: { ...seasonOne.seasonState, seasonNumber: 4 },
+    });
+    let safety = 0;
+    while (getCurrentWindow(world)?.type !== 'season_end' && safety < 100) {
+      world = executeCurrentWindow(world).world;
+      safety += 1;
+    }
+
+    expect(safety).toBeLessThan(100);
+    expect(world.continentalCups.mainland_cup).toMatchObject({ completed: true });
+    expect(world.continentalCups.southern_cup).toMatchObject({ completed: true });
+    expect(world.continentalCups.eastern_cup).toMatchObject({ completed: true });
+    expect(world.continentalCups.mainland_cup?.rounds.map(round => round.roundName)).toEqual(['QF', 'SF', 'Final']);
+    expect(world.continentalCups.southern_cup?.rounds.map(round => round.roundName)).toEqual(['SF', 'Final']);
+    expect(world.continentalCups.eastern_cup?.rounds.map(round => round.roundName)).toEqual(['SF', 'Final']);
+    expect(validateWorldData(world).errors).toEqual([]);
   });
 
   it('does not reserve empty continental windows when custom regions have no eligible cup', () => {

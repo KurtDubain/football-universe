@@ -521,7 +521,7 @@ export function handleWorldCup(
  * across all three without conflict.
  *
  * All active cups play in parallel. Every region has three group windows;
- * Southern/Eastern then play a final while Mainland plays SF and Final.
+ * Southern/Eastern then play SF and Final while Mainland plays QF, SF, Final.
  */
 export function handleContinentalCup(
   world: GameWorld,

@@ -113,12 +113,14 @@ async function main(): Promise<void> {
       await page.screenshot({ path: `/tmp/football-squad-boost-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText('v4.24.0', { exact: true }).first().waitFor({ state: 'visible' });
-      await page.getByText('洲际荣誉更稀有，中立场不再偏向任何一边', { exact: true })
+      await page.getByText('v4.33.0', { exact: true }).first().waitFor({ state: 'visible' });
+      await page.getByText('比赛更加连贯，洲际舞台向所有球队开放', { exact: true }).first()
         .waitFor({ state: 'visible' });
-      await page.getByText(/洲际杯改为第5赛季起每6季举办一次/).waitFor({ state: 'visible' });
+      await page.getByText(/大陆杯扩展为大陆全部16队参加/).first().waitFor({ state: 'visible' });
+      await page.getByText(/近五季俱乐部积分改为分组分档和同分排序依据/).first()
+        .waitFor({ state: 'visible' });
       await assertNoOverflow(page, `${viewport.name} changelog`);
-      await page.getByText('洲际荣誉更稀有，中立场不再偏向任何一边', { exact: true })
+      await page.getByText('比赛更加连贯，洲际舞台向所有球队开放', { exact: true }).first()
         .scrollIntoViewIfNeeded();
       await page.screenshot({ path: `/tmp/football-changelog-${viewport.name}.png`, animations: 'disabled' });
 
@@ -201,11 +203,12 @@ async function main(): Promise<void> {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
         return store?.getState().world.seasonState.calendar.filter(window => window.type === 'continental_cup').length;
       });
-      if (cupWindows !== 5) throw new Error(`${viewport.name}: expected five continental windows, got ${cupWindows}`);
+      if (cupWindows !== 6) throw new Error(`${viewport.name}: expected six continental windows, got ${cupWindows}`);
       await page.goto(`${baseUrl}/cup/mainland_cup?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText(/大陆地区 · 8 队 · 六年一届/).waitFor({ state: 'visible' });
-      await page.getByText('A 组', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText('B 组', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText(/大陆地区 · 16 队 · 六年一届/).waitFor({ state: 'visible' });
+      for (const group of ['A 组', 'B 组', 'C 组', 'D 组']) {
+        await page.getByText(group, { exact: true }).waitFor({ state: 'visible' });
+      }
       await assertNoOverflow(page, `${viewport.name} continental cup`);
       await page.screenshot({ path: `/tmp/football-continental-${viewport.name}.png`, animations: 'disabled' });
 

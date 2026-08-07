@@ -94,10 +94,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       attackingHome: isHome,
       kind: 'pass',
       duration: options.forceShot
-        ? (longBall ? 11 + r(i + 10) * 4 : 8 + r(i + 11) * 4)
+        ? (longBall ? 24 + r(i + 10) * 8 : 18 + r(i + 11) * 6)
         : longBall ? 70 + r(i + 10) * 25 : 42 + r(i + 11) * 20,
       hold: options.forceShot
-        ? 2 + r(i + 12) * 2
+        ? 4 + r(i + 12) * 3
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
       arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
@@ -113,7 +113,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       receiverIdx: shooterIdx,
       attackingHome: isHome,
       kind: 'shot',
-      duration: options.forceShot ? 10 + r(31) * 4 : 26 + r(31) * 12,
+      duration: options.forceShot ? 18 + r(31) * 5 : 26 + r(31) * 12,
       hold: 12 + r(32) * 8,
       arc: 0.04 + r(33) * 0.16,
       intercepted: false,
