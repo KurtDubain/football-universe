@@ -37,6 +37,36 @@ export interface BallComputeResult {
   spinDelta: number;           // amount to add to ball spin this frame
 }
 
+export interface DefensiveRoles {
+  presserIndex: number;
+  coverIndex: number;
+}
+
+export function selectDefensiveRoles(
+  playerPos: PlayerState[],
+  defendingHome: boolean,
+  ballNX: number,
+  ballNY: number,
+  activePlayerIndices?: ReadonlySet<number>,
+): DefensiveRoles {
+  const offset = defendingHome ? 0 : 11;
+  const candidates = BASE_FORMATION
+    .map((slot, slotIndex) => ({ slot, index: offset + slotIndex }))
+    .filter(candidate => candidate.slot.role !== 'GK' && (!activePlayerIndices || activePlayerIndices.has(candidate.index)));
+  const byBall = [...candidates].sort((a, b) =>
+    dist(playerPos[a.index].x, playerPos[a.index].y, ballNX, ballNY)
+    - dist(playerPos[b.index].x, playerPos[b.index].y, ballNX, ballNY)
+  );
+  const presserIndex = byBall[0].index;
+  const ownGoalX = defendingHome ? 0.03 : 0.97;
+  const coverX = lerp(ballNX, ownGoalX, 0.22);
+  const cover = byBall.slice(1).sort((a, b) =>
+    dist(playerPos[a.index].x, playerPos[a.index].y, coverX, ballNY)
+    - dist(playerPos[b.index].x, playerPos[b.index].y, coverX, ballNY)
+  )[0];
+  return { presserIndex, coverIndex: cover.index };
+}
+
 /**
  * Compute ball pixel position + arc lift + spin delta for the current frame.
  * Pure: same input → same output. Caller accumulates spin onto its own ref.
@@ -47,9 +77,8 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
     const t = Math.min(1, phaseFrame / duration);
     const eased = easeInOutQuad(t);
     const bx = lerp(source.x, target.x, eased);
-    let by = lerp(source.y, target.y, eased);
+    const by = lerp(source.y, target.y, eased);
     const arcLift = Math.sin(t * Math.PI) * arc * 22;
-    by -= arcLift;
     const spinDelta = 0.4 + arc * 0.3;
     return { bx, by, arcLift, spinDelta };
   }
@@ -70,7 +99,7 @@ export function resolvePhasePoints(
   P: number, fw: number, fh: number,
 ): { source: { x: number; y: number }; dx: number; dy: number } {
   const passerSlot = getBaseSlot(phase.passerIdx, phase.attackingHome, shift);
-  const recvSlot = getBaseSlot(phase.receiverIdx, phase.attackingHome, shift);
+  const recvSlot = phase.targetOverride ?? getBaseSlot(phase.receiverIdx, phase.attackingHome, shift);
   const sourceSlot = phase.sourceOverride ?? passerSlot;
   const source = { x: P + sourceSlot.x * fw, y: P + sourceSlot.y * fh };
   return { source, dx: recvSlot.x - passerSlot.x, dy: recvSlot.y - passerSlot.y };
@@ -94,8 +123,10 @@ export function updatePlayerPositions(
   overrideTarget: { x: number; y: number } | null,
   shift: number,
   defensiveAction?: { playerIndex: number; target: { x: number; y: number } },
+  activePlayerIndices?: ReadonlySet<number>,
 ): void {
   const isAttHome = currentPhase.attackingHome;
+  const defensiveRoles = selectDefensiveRoles(playerPos, !isAttHome, ballNX, ballNY, activePlayerIndices);
   for (let i = 0; i < 22; i++) {
     const isHomeTeam = i < 11;
     const formIdx = i % 11;
@@ -111,9 +142,15 @@ export function updatePlayerPositions(
 
     // ── Tactical adjustments ──
     if (isHolder) {
-      // Ball holder moves slightly with ball
-      targetX_n = ballNX;
-      targetY_n = ballNY + 0.01;
+      if (phaseState === 'holding') {
+        targetX_n = ballNX;
+        targetY_n = ballNY + 0.01;
+      } else if (currentPhase.sourceOverride) {
+        // Once the pass or shot leaves the foot, the player stays near the
+        // release point instead of unrealistically chasing the flying ball.
+        targetX_n = currentPhase.sourceOverride.x;
+        targetY_n = currentPhase.sourceOverride.y;
+      }
     } else if (isReceiver) {
       // Receiver runs to meet incoming pass — move toward where ball will be
       const meetingT = 0.7;
@@ -124,6 +161,11 @@ export function updatePlayerPositions(
       const attackDir = isHomeTeam ? 1 : -1;
       const advance = 0.04 + (slot.role === 'FW' ? 0.05 : slot.role === 'MF' ? 0.03 : slot.role === 'DF' ? 0.015 : 0);
       targetX_n = slot.x + advance * attackDir;
+      if (slot.role === 'DF' && (formIdx === 1 || formIdx === 4)) {
+        const sameFlank = (slot.y < 0.5) === (ballNY < 0.5);
+        if (sameFlank) targetX_n += 0.035 * attackDir;
+      }
+      if (slot.role === 'MF') targetY_n = lerp(slot.y, ballNY, 0.1);
       // Wide players adjust based on ball lateral position
       if (Math.abs(slot.y - 0.5) > 0.25) {
         // Slight pinch toward middle if ball is central
@@ -134,22 +176,23 @@ export function updatePlayerPositions(
         }
       }
     } else {
-      // Defending team: closest 2 defenders pressure ball, others compress toward ball side
-      const defenderDist = dist(slot.x, slot.y, ballNX, ballNY);
-      if (defenderDist < 0.18 && slot.role !== 'GK') {
-        // Press ball — move toward holder
-        const pressT = 0.55;
-        targetX_n = lerp(slot.x, ballNX, pressT);
-        targetY_n = lerp(slot.y, ballNY, pressT);
+      // One player presses, a second protects the route to goal, and the
+      // remaining block shifts together instead of swarming the ball.
+      if (i === defensiveRoles.presserIndex) {
+        targetX_n = lerp(playerPos[i].x, ballNX, 0.72);
+        targetY_n = lerp(playerPos[i].y, ballNY, 0.72);
         playerPos[i].sprintT = 1;
+      } else if (i === defensiveRoles.coverIndex) {
+        const ownGoalX = isHomeTeam ? 0.03 : 0.97;
+        targetX_n = lerp(ballNX, ownGoalX, 0.2);
+        targetY_n = lerp(ballNY, 0.5, 0.12);
+        playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.55);
       } else if (slot.role !== 'GK') {
-        // Compress — drift slightly toward ball lateral position
-        const lateralPull = 0.08;
+        const lateralPull = slot.role === 'DF' ? 0.16 : 0.12;
         targetY_n = lerp(slot.y, ballNY, lateralPull);
-        // Defensive line drops if ball is in own half
         const ownHalf = isHomeTeam ? ballNX < 0.5 : ballNX > 0.5;
         if (ownHalf) {
-          const drop = isHomeTeam ? -0.025 : 0.025;
+          const drop = isHomeTeam ? -0.035 : 0.035;
           targetX_n = slot.x + drop;
         }
       }
@@ -185,6 +228,10 @@ export function updatePlayerPositions(
     p.vy = p.vy * 0.7 + ay;
     p.x += p.vx;
     p.y += p.vy;
+    if (isHolder && phaseState !== 'holding' && currentPhase.sourceOverride) {
+      p.x = clamp(p.x, currentPhase.sourceOverride.x - 0.025, currentPhase.sourceOverride.x + 0.025);
+      p.y = clamp(p.y, currentPhase.sourceOverride.y - 0.025, currentPhase.sourceOverride.y + 0.025);
+    }
     p.sprintT *= 0.95; // sprint decays
   }
 }

@@ -22,7 +22,13 @@ async function verifyViewport(name: string, width: number, height: number) {
     const minuteLabel = await dialog.getByTestId('live-minute').textContent();
     const state = await page.evaluate(() => JSON.parse(
       (window as typeof window & { render_game_to_text: () => string }).render_game_to_text(),
-    ) as { homeOnField: unknown[]; awayOnField: unknown[]; event: { outcome: string } | null });
+    ) as {
+      homeOnField: unknown[];
+      awayOnField: unknown[];
+      ballHolderId: string | null;
+      lastTouchPlayerId: string | null;
+      event: { outcome: string; attackerId?: string; defenderId?: string } | null;
+    });
     const controlsOverflow = await dialog.getByTestId('live-controls').evaluate(element => element.scrollWidth - element.clientWidth);
     const dialogBox = await dialog.locator(':scope > div').boundingBox();
     const undersizedButtons = width < 600
@@ -36,6 +42,10 @@ async function verifyViewport(name: string, width: number, height: number) {
 
     if (!minuteLabel?.startsWith('点')) throw new Error(`${name}: shootout is still displayed as a match minute (${minuteLabel})`);
     if (!state.event) throw new Error(`${name}: shootout event scene was not active`);
+    if (!state.event.attackerId || state.lastTouchPlayerId !== state.event.attackerId) {
+      throw new Error(`${name}: shootout last touch ${state.lastTouchPlayerId} does not match taker ${state.event.attackerId}`);
+    }
+    if (!state.event.defenderId) throw new Error(`${name}: shootout goalkeeper identity is missing`);
     if (state.homeOnField.length + state.awayOnField.length !== 2) {
       throw new Error(`${name}: shootout scene rendered ${state.homeOnField.length + state.awayOnField.length} players`);
     }
@@ -49,6 +59,8 @@ async function verifyViewport(name: string, width: number, height: number) {
       minuteLabel,
       visiblePlayers: state.homeOnField.length + state.awayOnField.length,
       shotOutcome: state.event.outcome,
+      taker: state.event.attackerId,
+      goalkeeper: state.event.defenderId,
       controlsOverflow,
       screenshot,
     };

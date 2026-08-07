@@ -45,6 +45,7 @@ export interface PassPhase {
   arc: number;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
+  targetOverride?: { x: number; y: number };
 }
 
 // Per-player live position (smoothed) — used by physics + renderer.

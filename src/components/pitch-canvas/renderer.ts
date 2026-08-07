@@ -161,7 +161,8 @@ export function drawPlayer(
 }
 
 /**
- * Ball at (bx, by): elongated arc-lift shadow + spinning panelled sphere.
+ * Ball at ground point (bx, by): fixed ground path, separated aerial lift,
+ * and a spinning panelled sphere.
  */
 export function drawBall(
   ctx: CanvasRenderingContext2D,
@@ -169,14 +170,13 @@ export function drawBall(
   ballArcLift: number,
   ballSpin: number,
 ): void {
-  const shadowOffset = ballArcLift * 0.5;
   const shadowSpread = 1 + ballArcLift * 0.05;
   ctx.beginPath();
-  ctx.ellipse(bx + shadowOffset * 0.3, by + 4 + ballArcLift * 0.6, 4 / shadowSpread, 1.5 / shadowSpread, 0, 0, Math.PI * 2);
+  ctx.ellipse(bx, by + 4, 4 / shadowSpread, 1.5 / shadowSpread, 0, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(0,0,0,${0.3 / shadowSpread})`; ctx.fill();
   // Ball with pentagon panel rotation
   ctx.save();
-  ctx.translate(bx, by);
+  ctx.translate(bx, by - ballArcLift);
   ctx.rotate(ballSpin * 0.15);
   ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
   ctx.fillStyle = '#fff'; ctx.fill();

@@ -43,9 +43,10 @@ function snapshot(prefix: string, dismissedSlot?: number, duration: 90 | 120 = 9
 
 const events: MatchEvent[] = [
   { minute: 25, type: 'miss', teamId: 'home', playerId: 'home-9', playerNumber: 9, playerName: 'HOME 9', description: '远射擦柱偏出' },
-  { minute: 30, type: 'gk_save', teamId: 'home', playerId: 'home-1', playerNumber: 1, playerName: 'HOME 1', description: '门将飞身将单刀拒之门外' },
-  { minute: 35, type: 'df_block', teamId: 'away', playerId: 'away-2', playerNumber: 2, playerName: 'AWAY 2', description: '后卫在门线上完成封堵' },
+  { minute: 30, type: 'gk_save', teamId: 'home', playerId: 'home-1', playerNumber: 1, playerName: 'HOME 1', deniedScorerId: 'away-9', deniedAssisterId: 'away-7', description: '门将飞身将单刀拒之门外' },
+  { minute: 35, type: 'df_block', teamId: 'away', playerId: 'away-2', playerNumber: 2, playerName: 'AWAY 2', deniedScorerId: 'home-10', deniedAssisterId: 'home-7', description: '后卫在门线上完成封堵' },
   { minute: 40, type: 'goal', teamId: 'home', playerId: 'home-10', playerNumber: 10, playerName: 'HOME 10', description: '禁区内低射破门' },
+  { minute: 40, type: 'assist', teamId: 'home', playerId: 'home-7', playerNumber: 7, playerName: 'HOME 7', description: 'HOME 7 送出助攻' },
   { minute: 45, type: 'red_card', teamId: 'away', playerId: 'away-2', playerNumber: 2, playerName: 'AWAY 2', description: '危险动作被直接罚下' },
   { minute: 48, type: 'substitution', teamId: 'home', playerInId: 'home-12', playerOutId: 'home-9', playerInName: 'HOME 12', playerOutName: 'HOME 9', description: 'HOME 12 换下 HOME 9' },
 ];

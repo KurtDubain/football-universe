@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchEvent } from '../../types/match';
-import { findEventScene, sceneForEvent } from './event-scene';
+import { actorsForEvent, findEventScene, sceneForEvent } from './event-scene';
 import { generateSequence } from './sequence';
 
 function event(type: MatchEvent['type'], teamId: string, minute = 30): MatchEvent {
@@ -36,6 +36,32 @@ describe('event-directed pitch scenes', () => {
     expect(sequence.phases.at(-1)?.kind).toBe('shot');
   });
 
+  it('uses the authoritative creator and shooter slots for a directed chance', () => {
+    const sequence = generateSequence(42, {
+      attackingHome: true,
+      forceShot: true,
+      creatorIdx: 7,
+      shooterIdx: 10,
+    });
+
+    expect(sequence.phases[0]).toMatchObject({ passerIdx: 7, receiverIdx: 10, kind: 'pass' });
+    expect(sequence.phases.at(-1)).toMatchObject({ passerIdx: 10, receiverIdx: 10, kind: 'shot' });
+    expect(sequence.phases[0].targetOverride?.x).toBeGreaterThanOrEqual(0.8);
+    expect(sequence.phases.at(-1)?.sourceOverride).toEqual(sequence.phases[0].targetOverride);
+  });
+
+  it('starts turnover possession with the interceptor at the interception point', () => {
+    const sequence = generateSequence(77, {
+      attackingHome: false,
+      startingPlayerIdx: 3,
+      sourceOverride: { x: 0.48, y: 0.22 },
+    });
+
+    expect(sequence.phases[0].attackingHome).toBe(false);
+    expect(sequence.phases[0].passerIdx).toBe(3);
+    expect(sequence.phases[0].sourceOverride).toEqual({ x: 0.48, y: 0.22 });
+  });
+
   it('lets misses cross the goal line and keeps repeated events distinct', () => {
     const firstEvent = event('miss', 'HOME', 62);
     const secondEvent = event('miss', 'HOME', 62);
@@ -47,10 +73,16 @@ describe('event-directed pitch scenes', () => {
   });
 
   it('uses a single-shot penalty sequence from the spot', () => {
-    const sequence = generateSequence(42, { attackingHome: true, forceShot: true, setPiece: 'penalty' });
+    const sequence = generateSequence(42, {
+      attackingHome: true,
+      forceShot: true,
+      setPiece: 'penalty',
+      shooterIdx: 6,
+    });
 
     expect(sequence.phases).toHaveLength(1);
     expect(sequence.phases[0].kind).toBe('shot');
+    expect(sequence.phases[0].passerIdx).toBe(6);
     expect(sequence.phases[0].sourceOverride).toEqual({ x: 0.88, y: 0.5 });
   });
 
@@ -70,5 +102,41 @@ describe('event-directed pitch scenes', () => {
 
     expect(sceneForEvent(saved, 'HOME')?.attackingHome).toBe(true);
     expect(sceneForEvent(saved, 'HOME')?.outcome).toBe('save');
+  });
+
+  it('resolves the real shooter, creator and defender from authoritative event ids', () => {
+    const goal: MatchEvent = {
+      ...event('goal', 'HOME', 44),
+      playerId: 'scorer',
+    };
+    const assist: MatchEvent = {
+      ...event('assist', 'HOME', 44),
+      playerId: 'creator',
+    };
+    expect(actorsForEvent(goal, [goal, assist])).toEqual({
+      attackerId: 'scorer',
+      creatorId: 'creator',
+      defenderId: undefined,
+    });
+
+    const denied: MatchEvent = {
+      ...event('df_block', 'AWAY', 62),
+      playerId: 'defender',
+      deniedScorerId: 'shooter',
+      deniedAssisterId: 'provider',
+    };
+    expect(actorsForEvent(denied, [denied])).toEqual({
+      attackerId: 'shooter',
+      creatorId: 'provider',
+      defenderId: 'defender',
+    });
+  });
+
+  it('does not borrow an assist from a later same-minute event', () => {
+    const goal: MatchEvent = { ...event('goal', 'HOME', 44), playerId: 'first-scorer' };
+    const intervening: MatchEvent = { ...event('yellow_card', 'AWAY', 44), playerId: 'booked-player' };
+    const laterAssist: MatchEvent = { ...event('assist', 'HOME', 44), playerId: 'later-creator' };
+
+    expect(actorsForEvent(goal, [goal, intervening, laterAssist]).creatorId).toBeUndefined();
   });
 });

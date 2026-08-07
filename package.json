@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.31.1",
+  "version": "4.32.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -28,6 +28,7 @@
     "audit:player-defense": "tsx scripts/audit-player-defense.ts",
     "verify:match": "tsx scripts/verify-match-presentation.ts",
     "verify:match-shootout": "tsx scripts/verify-match-shootout.ts",
+    "verify:match-tactics": "tsx scripts/verify-match-tactics.ts",
     "verify:match-explanation": "tsx scripts/verify-match-explanation.ts",
     "verify:floating-advance": "tsx scripts/verify-floating-advance.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",

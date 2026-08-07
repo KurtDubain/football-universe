@@ -12,6 +12,12 @@ export interface EventScene {
   seed: number;
 }
 
+export interface EventActors {
+  attackerId?: string;
+  creatorId?: string;
+  defenderId?: string;
+}
+
 const SHOT_EVENT_TYPES = new Set<MatchEvent['type']>([
   'goal', 'penalty_goal', 'own_goal',
   'save', 'gk_save', 'df_block',
@@ -82,4 +88,21 @@ export function findEventScene(
     .filter((scene): scene is EventScene => scene !== null)
     .sort((a, b) => a.event.minute - b.event.minute || a.key.localeCompare(b.key));
   return nearby[0] ?? null;
+}
+
+export function actorsForEvent(event: MatchEvent, events: MatchEvent[]): EventActors {
+  const eventIndex = events.indexOf(event);
+  const nextEvent = eventIndex >= 0 ? events[eventIndex + 1] : undefined;
+  const pairedAssist = nextEvent?.minute === event.minute
+    && nextEvent.teamId === event.teamId
+    && nextEvent.type === 'assist'
+    ? nextEvent
+    : undefined;
+  const defendingEvent = DEFENDING_TEAM_EVENT_TYPES.has(event.type);
+
+  return {
+    attackerId: defendingEvent ? event.deniedScorerId : event.playerId,
+    creatorId: defendingEvent ? event.deniedAssisterId : pairedAssist?.playerId,
+    defenderId: event.shootout?.goalkeeperId ?? (defendingEvent ? event.playerId : undefined),
+  };
 }

@@ -1,5 +1,21 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-07 Tactical Match Animation Pass
+
+- User approved a lightweight realism pass after reviewing the current event-directed Canvas. Preserve deterministic results, match statistics, save compatibility, the observer identity, and mobile render budgets.
+- Primary corrections: the authoritative event player must execute the shot or penalty, saves/blocks must use the real defender, interceptions must visibly transfer possession, and aerial height must not bend the top-down ground path.
+- Tactical presentation: improve ball-side pressure, second-defender cover, compact defensive lines, supporting lanes, and contextual possession without adding collision physics, 3D, body animation, or a parallel match engine.
+- Verification required: pure sequence/physics tests, actor identity assertions in `render_game_to_text`, fixed ordinary/goal/save/shootout scenes, the standard web-game client, desktop/mobile screenshots, full tests/lint/build, and animation performance audit.
+- Event actors now resolve entirely from existing facts: scorer/miss player, paired assist, denied scorer/creator, credited goalkeeper/defender, and shootout goalkeeper UUID. Directed sequences map those identities to their real on-field slots; no save field or simulation result changed.
+- Directed chances now deliver the final pass into a seeded attacking-third origin before the real shooter releases the shot. The reveal fast-forward atomically aligns ball, shooter, and release point instead of shooting from a stale midfield position.
+- Interceptions immediately transfer possession at the interception point to the nearest active opponent. Free sequences use the real match possession split as a bounded visual bias.
+- Aerial elevation is separate from the top-down ground path. One defender presses, another covers goal-side, the remaining block shifts laterally, same-side fullbacks overlap, and supporting attackers occupy separate lanes.
+- Focused desktop/mobile tactical verification passes for a real creator-shooter-goal chain and denied-scorer-goalkeeper-save chain. Shootout verification passes at 1440x900, 320x568, and 390x844 with the authoritative taker as the final touch and the real goalkeeper present.
+- Actual on-field indices now constrain pressure and cover selection, so dismissed players cannot remain as invisible defenders. Same-minute assist pairing is limited to the authoritative adjacent event and cannot leak across another incident.
+- The standard web-game client completed three deterministic animation iterations with no browser error artifact. Desktop/mobile tactical screenshots were inspected after the ball, shooter, creator, defender, and shot source assertions passed.
+- Final Node 22.22.2 verification passed 97 test files / 724 tests, ESLint, TypeScript/PWA production build, bundle and changelog budgets, ordinary-match presentation, shootout presentation, and tactical actor/path checks.
+- Animation performance passed at normal and 4x CPU profiles. Average Canvas render cost was 0.203ms and 0.575ms; hidden, covered, closed, rapidly reopened, and next-batch states all remained correct, and final scores still matched.
+
 ## 2026-08-05 Immersive Match Live Pass
 
 - User approved the recommended direction: replace numeric 3x playback with semantic highlight/live/immersive pacing, default to live, keep commentary text-led with lightweight feedback, and avoid interrupting ordinary simulation with automatic replays.

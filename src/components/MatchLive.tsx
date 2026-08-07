@@ -659,6 +659,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                 active={playback.phase === 'playing' && pageVisible}
                 playbackMode={playback.mode}
                 shootout={inShootout}
+                possession={result.stats.possession}
               />
             </div>
 

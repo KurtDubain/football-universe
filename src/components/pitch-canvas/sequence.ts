@@ -1,11 +1,25 @@
 // Pass-sequence generator. Pure: same seed → same output; no canvas / refs.
 import { seededRand } from './math';
-import type { PassPhase } from './types';
+import { BASE_FORMATION, type PassPhase } from './types';
 
 export interface SequenceOptions {
   attackingHome?: boolean;
   forceShot?: boolean;
   setPiece?: 'penalty';
+  shooterIdx?: number;
+  creatorIdx?: number;
+  startingPlayerIdx?: number;
+  sourceOverride?: { x: number; y: number };
+  homePossessionShare?: number;
+}
+
+function turnoverRoute(startingPlayerIdx: number, seedValue: number): number[] {
+  const role = BASE_FORMATION[startingPlayerIdx]?.role;
+  if (role === 'GK' || role === 'DF') {
+    return [startingPlayerIdx, 5 + Math.floor(seedValue * 3), 8 + Math.floor(seededRand(startingPlayerIdx + 91) * 3)];
+  }
+  if (role === 'MF') return [startingPlayerIdx, 8 + Math.floor(seedValue * 3)];
+  return [startingPlayerIdx, startingPlayerIdx === 9 ? 8 : 9];
 }
 
 /**
@@ -13,7 +27,8 @@ export interface SequenceOptions {
  */
 export function generateSequence(seed: number, options: SequenceOptions = {}): { phases: PassPhase[]; endsInShot: boolean } {
   const r = (n: number) => seededRand(seed * 7 + n);
-  const isHome = options.attackingHome ?? r(0) > 0.5;
+  const homePossessionShare = Math.min(0.75, Math.max(0.25, options.homePossessionShare ?? 0.5));
+  const isHome = options.attackingHome ?? r(0) < homePossessionShare;
   const playStyle = r(1);
   const endsInShot = options.forceShot ?? r(2) < 0.30;
   const willIntercept = !endsInShot && r(3) < 0.18; // pass gets stolen
@@ -22,8 +37,8 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     return {
       endsInShot: true,
       phases: [{
-        passerIdx: 9,
-        receiverIdx: 9,
+        passerIdx: options.shooterIdx ?? 9,
+        receiverIdx: options.shooterIdx ?? 9,
         attackingHome: isHome,
         kind: 'shot',
         duration: 24,
@@ -36,7 +51,21 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   }
 
   let route: number[];
-  if (options.forceShot) {
+  let directedShotOrigin: { x: number; y: number } | undefined;
+  if (options.startingPlayerIdx !== undefined) {
+    route = turnoverRoute(options.startingPlayerIdx, r(4));
+  } else if (options.forceShot && options.shooterIdx !== undefined) {
+    const defaultCreator = 5 + Math.floor(r(4) * 3);
+    const creator = options.creatorIdx !== undefined && options.creatorIdx !== options.shooterIdx
+      ? options.creatorIdx
+      : defaultCreator === options.shooterIdx ? (defaultCreator + 1) % 11 : defaultCreator;
+    route = creator === options.shooterIdx ? [options.shooterIdx] : [creator, options.shooterIdx];
+    const shooterY = BASE_FORMATION[options.shooterIdx]?.y ?? 0.5;
+    directedShotOrigin = {
+      x: isHome ? 0.8 + r(17) * 0.07 : 0.2 - r(17) * 0.07,
+      y: Math.min(0.78, Math.max(0.22, shooterY + (r(18) - 0.5) * 0.12)),
+    };
+  } else if (options.forceShot) {
     const directedRoutes = [[5, 8], [6, 9], [7, 10]];
     route = directedRoutes[Math.floor(r(4) * directedRoutes.length)];
   } else if (playStyle < 0.18) {
@@ -72,6 +101,8 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
       arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
+      ...(i === 0 && options.sourceOverride ? { sourceOverride: options.sourceOverride } : {}),
+      ...(isLastPass && directedShotOrigin ? { targetOverride: directedShotOrigin } : {}),
     });
   }
 
@@ -86,6 +117,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       hold: 12 + r(32) * 8,
       arc: 0.04 + r(33) * 0.16,
       intercepted: false,
+      ...(directedShotOrigin ? { sourceOverride: directedShotOrigin } : {}),
     });
   }
   return { phases, endsInShot };
