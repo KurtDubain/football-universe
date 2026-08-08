@@ -406,6 +406,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     squads,
     world.teamBases,
     world.league1Standings,
+    world.playerStatSegments ?? {},
+    world.seasonStartLevels ?? {},
   );
   for (const award of seasonAwards) {
     const meta = AWARD_META[award.type];

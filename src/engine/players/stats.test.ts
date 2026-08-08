@@ -104,9 +104,34 @@ describe('updatePlayerStatsFromResults — shootout exclusion', () => {
     expect(totals[starter.uuid]).toMatchObject({ appearances: 1, starts: 1, substituteAppearances: 0, minutesPlayed: 70, cleanSheets: 1, cleanSheetMinutes: 70 });
     expect(totals[substitute.uuid]).toMatchObject({ appearances: 1, starts: 0, substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 0, cleanSheetMinutes: 20 });
     expect(totals[unused.uuid]).toMatchObject({ appearances: 0, starts: 0, substituteAppearances: 0, minutesPlayed: 0, cleanSheets: 0 });
+    expect(totals[starter.uuid]).toMatchObject({ teamMatchesAllCompetitions: 1, missedMatches: 0 });
+    expect(totals[substitute.uuid]).toMatchObject({ teamMatchesAllCompetitions: 1, missedMatches: 0 });
+    expect(totals[unused.uuid]).toMatchObject({ teamMatchesAllCompetitions: 1, missedMatches: 1, injuryAbsenceMatches: 0 });
     expect(segments[playerTeamStatKey(starter.uuid, 'A')]).toMatchObject({ starts: 1, minutesPlayed: 70, cleanSheets: 1, cleanSheetMinutes: 70 });
     expect(segments[playerTeamStatKey(substitute.uuid, 'A')]).toMatchObject({ substituteAppearances: 1, minutesPlayed: 20, cleanSheets: 0, cleanSheetMinutes: 20 });
     expect(segments[playerTeamStatKey(unused.uuid, 'A')]).toMatchObject({ appearances: 0, minutesPlayed: 0, cleanSheets: 0 });
+  });
+
+  it('counts injury absences from the real match window for totals and club segments', () => {
+    const starter = mkPlayer('starter', 'A', 'MF');
+    const injured = { ...mkPlayer('injured', 'A', 'MF'), injuredUntilWindow: 9 };
+    const squads = { A: [starter, injured], B: [] };
+    const result: MatchResult = {
+      ...mkLeagueResult('A', 'B', 1, 0, []),
+      homeMatchday: {
+        durationMinutes: 90, emergencyFloor: true, availableCount: 1,
+        players: [{ playerId: starter.uuid, position: 'MF', role: 'starter', minutesPlayed: 90 }],
+      },
+      awayMatchday: { durationMinutes: 90, emergencyFloor: true, availableCount: 0, players: [] },
+    };
+    const totals = updatePlayerStatsFromResults(createInitialPlayerStats(squads), [result], squads, 6);
+    const segments = updatePlayerStatSegmentsFromResults(createInitialPlayerStatSegments(squads), [result], squads, 6);
+    expect(totals[injured.uuid]).toMatchObject({
+      appearances: 0, teamMatchesAllCompetitions: 1, missedMatches: 1, injuryAbsenceMatches: 1,
+    });
+    expect(segments[playerTeamStatKey(injured.uuid, 'A')]).toMatchObject({
+      teamMatchesAllCompetitions: 1, missedMatches: 1, injuryAbsenceMatches: 1,
+    });
   });
 
   it('uses persisted matchday snapshots instead of recomputing from the live squad', () => {

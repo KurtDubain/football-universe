@@ -4,19 +4,21 @@ import { useGameStore } from '../store/game-store';
 import {
   getCareerTopAssistRows,
   getCareerTopScorerRows,
+  getCurrentOverallRows,
   getCurrentCreatorRows,
   getCurrentDefenderRows,
   getCurrentDisciplineRows,
   getCurrentGoalkeeperRows,
   getCurrentTopAssistRows,
   getCurrentTopScorerRows,
+  getPlayerRowPerformance,
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
-import { computePlayerPerformance, PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
+import { PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 
-type Tab = 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
+type Tab = 'overall' | 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
 
 const positionLabel: Record<PlayerPosition, string> = {
   GK: '门将',
@@ -42,7 +44,12 @@ const rankBadge = (rank: number) => {
 export default function Players() {
   const world = useGameStore((s) => s.world);
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('scorers');
+  const [tab, setTab] = useState<Tab>('overall');
+
+  const topOverall = useMemo(
+    () => (world ? getCurrentOverallRows(world, 30) : []),
+    [world],
+  );
 
   const topScorers = useMemo(
     () => (world ? getCurrentTopScorerRows(world, 20) : []),
@@ -84,6 +91,7 @@ export default function Players() {
   const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: 'overall', label: '综合榜' },
     { key: 'scorers', label: '射手榜' },
     { key: 'assists', label: '助攻榜' },
     { key: 'careerScorers', label: '生涯射手' },
@@ -105,9 +113,7 @@ export default function Players() {
     const playerNumber = identity.playerNumber;
     const playerName = identity.playerName;
     const position = identity.position;
-    const performance = position
-      ? computePlayerPerformance(position, stat, world.seasonStartLevels?.[stat.teamId])
-      : null;
+    const performance = position ? getPlayerRowPerformance(world, stat) : null;
     const sourceLabel =
       identity.source === 'retired' ? '退役'
       : identity.source === 'history' ? '历史'
@@ -194,7 +200,23 @@ export default function Players() {
         </td>
 
         {/* Stats columns depend on mode */}
-        {mode === 'discipline' ? (
+        {mode === 'overall' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-base text-amber-300 font-black">{performance?.seasonScore.toFixed(1)}</span>
+              <span className="block text-[10px] text-slate-500">
+                {performance?.grade} · {performance?.confidenceLabel === 'high' ? '高可信' : performance?.confidenceLabel === 'medium' ? '中可信' : '低可信'}
+              </span>
+            </td>
+            <td className="px-2 py-2 text-center text-xs text-slate-300">
+              {(performance?.positionQuality ?? 0).toFixed(0)} / {(performance?.availabilityScore ?? 0).toFixed(0)}
+            </td>
+            <td className="px-2 py-2 text-center text-xs text-slate-400 hidden sm:table-cell">
+              <span className="block">{stat.appearances}/{performance?.metrics.teamMatchesAllCompetitions ?? stat.appearances} · {performance?.metrics.minutes ?? 0}分</span>
+              <span className="block text-[10px] text-slate-500">{world.seasonStartLevels?.[stat.teamId] ?? 1}级联赛</span>
+            </td>
+          </>
+        ) : mode === 'discipline' ? (
           <>
             <td className="px-2 py-2 text-center">
               <span className="text-sm text-yellow-400 font-semibold">
@@ -215,7 +237,7 @@ export default function Players() {
         ) : mode === 'defense' ? (
           <>
             <td className="px-2 py-2 text-center">
-              <span className="text-sm text-blue-300 font-semibold">{performance?.score.toFixed(1)}</span>
+              <span className="text-sm text-blue-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.interceptions ?? 0}/{stat.clearances ?? 0}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
@@ -225,7 +247,7 @@ export default function Players() {
         ) : mode === 'keepers' ? (
           <>
             <td className="px-2 py-2 text-center">
-              <span className="text-sm text-amber-300 font-semibold">{performance?.score.toFixed(1)}</span>
+              <span className="text-sm text-amber-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
             </td>
             <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.routineSaves ?? 0}/{stat.saves}</td>
             <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
@@ -276,7 +298,9 @@ export default function Players() {
   };
 
   const currentData =
-    tab === 'scorers'
+    tab === 'overall'
+      ? topOverall
+      : tab === 'scorers'
       ? topScorers
       : tab === 'assists'
         ? topAssists
@@ -324,7 +348,13 @@ export default function Players() {
                 <th className="px-2 py-2.5 text-center hidden sm:table-cell">
                   位置
                 </th>
-                {tab === 'discipline' ? (
+                {tab === 'overall' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>综合评分</th>
+                    <th className="px-2 py-2.5 text-center" title="固定位置标尺得分 / 当前赛季全赛事出勤可靠性">表现/出勤</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">出场/分钟 · 级别</th>
+                  </>
+                ) : tab === 'discipline' ? (
                   <>
                     <th className="px-2 py-2.5 text-center">黄牌</th>
                     <th className="px-2 py-2.5 text-center">红牌</th>

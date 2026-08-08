@@ -161,10 +161,62 @@ export function drawPlayer(
     }
   }
 
+  // Readable top-down body language for the decisive action. The preparation
+  // appears before release; goalkeeper and block shapes only open after their
+  // reaction begins, preserving the event timing.
+  if (action && facingLength > 0.01) {
+    const actionWave = action === 'shot'
+      ? Math.sin(Math.min(1, actionProgress) * Math.PI)
+      : Math.min(1, Math.max(0, (actionProgress - 0.15) / 0.55));
+    if (action === 'shot') {
+      const sideX = -directionY;
+      const sideY = directionX;
+      ctx.beginPath();
+      ctx.arc(
+        px - directionX * 3.8 + sideX * 2.5,
+        py - directionY * 3.8 + sideY * 2.5,
+        1.4 + actionWave * 0.5,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px - directionX * 2, py - directionY * 2);
+      ctx.quadraticCurveTo(
+        px - directionX * 7 - sideX * 3 * actionWave,
+        py - directionY * 7 - sideY * 3 * actionWave,
+        px + directionX * 7 * actionWave,
+        py + directionY * 7 * actionWave,
+      );
+      ctx.strokeStyle = `rgba(255,255,255,${0.3 + actionWave * 0.55})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    } else if (actionWave > 0.05) {
+      ctx.beginPath();
+      ctx.moveTo(px - directionX * 10 * actionWave, py - directionY * 10 * actionWave);
+      ctx.lineTo(px + directionX * 7 * actionWave, py + directionY * 7 * actionWave);
+      ctx.strokeStyle = action === 'save' ? 'rgba(147,197,253,0.7)' : 'rgba(253,230,138,0.75)';
+      ctx.lineWidth = action === 'save' ? 4 : 3;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+  }
+
   // Body
-  ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+  const actionWave = action === 'shot'
+    ? Math.sin(Math.min(1, actionProgress) * Math.PI)
+    : action
+      ? Math.min(1, Math.max(0, (actionProgress - 0.15) / 0.55))
+      : 0;
+  ctx.save();
+  ctx.translate(px, py);
+  if (action === 'save' && facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
+  ctx.beginPath();
+  ctx.ellipse(0, 0, action === 'save' ? 5.5 + actionWave * 2.5 : 5.5, action === 'save' ? 5.5 - actionWave * 1.4 : 5.5, 0, 0, Math.PI * 2);
   ctx.fillStyle = color; ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.restore();
 
   ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(num), px, py + 2.2);
@@ -316,6 +368,7 @@ export function drawShotOutcome(
   targetX: number,
   targetY: number,
   attackingHome: boolean,
+  canvasWidth: number,
 ): void {
   const progress = 1 - remainingFrames / SHOT_OUTCOME_MAX_FRAMES;
   const alpha = Math.max(0, 1 - progress);
@@ -360,7 +413,8 @@ export function drawShotOutcome(
   ctx.font = 'bold 9px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = outcome === 'save' ? '#bfdbfe' : outcome === 'block' ? '#fde68a' : '#e2e8f0';
-  ctx.fillText(label, targetX, Math.max(14, targetY - 13 - progress * 5));
+  const safeLabelX = Math.max(30, Math.min(canvasWidth - 30, targetX));
+  ctx.fillText(label, safeLabelX, Math.max(14, targetY - 13 - progress * 5));
   ctx.restore();
 }
 

@@ -160,6 +160,15 @@ const OPTIONAL_PLAYER_STAT_NUMBER_FIELDS = [
   'goalsConcededWhileOnPitch',
   'interceptions',
   'clearances',
+  'teamMatchesAllCompetitions',
+  'missedMatches',
+  'injuryAbsenceMatches',
+  'seasonScore',
+  'positionQuality',
+  'availabilityScore',
+  'leagueStrength',
+  'scoreConfidence',
+  'scoreVersion',
 ] as const;
 
 function validateOptionalNonNegativeNumbers(value: JsonRecord, context: string): void {
@@ -167,6 +176,28 @@ function validateOptionalNonNegativeNumbers(value: JsonRecord, context: string):
     if (value[key] === undefined) continue;
     const field = requireFiniteNumber(value, key, context);
     if (field < 0) throw new Error(`${context}字段 ${key} 不能为负数`);
+  }
+}
+
+function validatePlayerScoreFields(value: JsonRecord, context: string): void {
+  for (const key of ['seasonScore', 'positionQuality', 'availabilityScore', 'leagueStrength'] as const) {
+    const field = value[key];
+    if (field !== undefined && (typeof field !== 'number' || field < 0 || field > 100)) {
+      throw new Error(`${context}字段 ${key} 必须在 0 到 100 之间`);
+    }
+  }
+  const confidence = value.scoreConfidence;
+  if (confidence !== undefined && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
+    throw new Error(`${context}字段 scoreConfidence 必须在 0 到 1 之间`);
+  }
+  const matches = value.teamMatchesAllCompetitions;
+  const missed = value.missedMatches;
+  const injured = value.injuryAbsenceMatches;
+  if (typeof matches === 'number' && typeof missed === 'number' && missed > matches) {
+    throw new Error(`${context}缺席场次不能超过球队比赛场次`);
+  }
+  if (typeof missed === 'number' && typeof injured === 'number' && injured > missed) {
+    throw new Error(`${context}伤缺场次不能超过总缺席场次`);
   }
 }
 
@@ -601,6 +632,7 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
       }
       for (const key of PLAYER_STAT_NUMBER_FIELDS) requireFiniteNumber(stats, key, `球员 ${uuid} 统计 `);
       validateOptionalNonNegativeNumbers(stats, `球员 ${uuid} 统计 `);
+      validatePlayerScoreFields(stats, `球员 ${uuid} 统计 `);
     }
   }
 
@@ -613,6 +645,7 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
       if (!teamIds.has(teamId)) throw new Error(`球员球队分段 ${segmentKey} 引用了无效球队`);
       for (const key of PLAYER_STAT_NUMBER_FIELDS) requireFiniteNumber(segment, key, `球员球队分段 ${segmentKey} `);
       validateOptionalNonNegativeNumbers(segment, `球员球队分段 ${segmentKey} `);
+      validatePlayerScoreFields(segment, `球员球队分段 ${segmentKey} `);
     }
   }
 
@@ -622,6 +655,7 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     for (const [index, entry] of entries.entries()) {
       if (!isRecord(entry)) throw new Error(`球员 ${playerId} 历史统计第 ${index + 1} 行无效`);
       validateOptionalNonNegativeNumbers(entry, `球员 ${playerId} 历史统计第 ${index + 1} 行 `);
+      validatePlayerScoreFields(entry, `球员 ${playerId} 历史统计第 ${index + 1} 行 `);
     }
   }
 

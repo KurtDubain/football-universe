@@ -43,6 +43,8 @@ export interface PassPhase {
   duration: number;
   hold: number;
   arc: number;
+  /** Signed top-down bend applied during flight; visual only. */
+  swerve?: number;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };

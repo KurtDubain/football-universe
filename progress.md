@@ -1,5 +1,30 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-08 Shot And Second-Ball Motion Pass
+
+- User requested another match-animation improvement after confirming the current traceability and storage capability is sufficient.
+- Baseline inspection found that directed shots reached their result cleanly but still felt abrupt: the wind-up was too short, every flight was straight, and saves, blocks, and misses left the ball frozen at the impact point.
+- Directed shots now use a longer eight-frame preparation, a small deterministic curve, and slightly more readable travel time. The actual event, score, statistics, restart, and save data remain authoritative and unchanged.
+- Saves visibly spill a short second ball, blocks ricochet farther and wider, and misses continue beyond the post. These paths are seeded, bounded, and presentation-only.
+- Shooters, goalkeepers, and blockers receive restrained action silhouettes around release and impact. Outcome labels are clamped inside the canvas, including narrow mobile layouts.
+- Pure physics coverage asserts curved-flight endpoints and distinct save/block rebounds. The tactical browser fixture now freezes and verifies the post-impact ball as well as authoritative attacker, creator, and defender identities.
+- Standard game-client inspection completed three deterministic iterations without console errors. Ordinary live presentation, fixed goal/save scenes, and penalty shootouts passed desktop plus 320/390 mobile verification.
+- Animation performance passed at normal and 4x CPU profiles with average Canvas render costs of 0.268ms and 1.248ms. Covered, hidden, closed, rapidly reopened, and next-batch states remained correct, and final scores still matched.
+- Final Node 22.22.2 verification passed 97 test files / 740 tests, ESLint, TypeScript/PWA production build, bundle budget (229,711-byte main; 632,983-byte initial load), changelog validation, and diff checks.
+
+## 2026-08-08 Cross-Position Season Performance
+
+- User requested one 0-100 season score that can compare forwards, midfielders, defenders, and goalkeepers without mixing player ability with season output or attendance.
+- Position metrics now use fixed simulator-derived anchors plus a fixed composite calibration. The live universe never recalculates its own percentile scale, so identical performance remains comparable across saves and seasons.
+- Final score is 70% confidence-adjusted position quality, 20% all-competition availability, and 10% league strength (100/95/90). Confidence uses `minutes / (minutes + 900)` and replaces the old 600-minute eligibility cliff.
+- Team-match opportunities, missed matches, and injury absences are accumulated per real fixture in both player totals and `(playerId, teamId)` segments. Transfer-season quality and league strength are aggregated by actual segment minutes.
+- Historical rows freeze score components with `scoreVersion: 1`; older rows remain readable and display as legacy rather than receiving invented defensive or attendance data.
+- Players defaults to a cross-position overall table, Player Detail separates ability from season score and shows overall/position ranks, and Season Review records its top three complete-score performers.
+- The repeatable long audit completed 30 seeds x 20 seasons (600 seasons): high-confidence position medians span 2.1 points, P90 scores span 2.0 points, zero low-confidence players entered 12,000 sampled top-20 places, injured availability averaged 83.74 versus 92.00 when healthy, and no invalid score or attendance field appeared.
+- Dedicated browser verification passed the 30-row overall table and score detail at 390x844 and 1440x900 with no overflow or runtime errors. The existing player/team workflow also passed 320x568, 390x844, and 1440x900, including the new low-sample ranking plus confidence warning.
+- Mobile floating advance remains draggable and route-wide, but its default action is reduced from 56px to the repository's 48px touch minimum to obscure less content. The dedicated audit passed 27 routes at 320/390/430/1440 widths, including position restore, resize, hide/show, and tap behavior.
+- Final Node 22.22.2 verification passed 97 test files / 738 tests, ESLint, TypeScript/PWA production build, bundle budget (229,719-byte main; 632,991-byte initial load), changelog validation, and production dependency audit with no known vulnerabilities.
+
 ## 2026-08-08 All-Region Continental Cups
 
 - User requested that every team in each continent participate instead of coefficient qualification excluding the lower half, then asked for the animation and competition work to be pushed together.

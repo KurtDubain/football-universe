@@ -100,6 +100,9 @@ describe('current schema hydration boundary', () => {
       delete stat.goalsConcededWhileOnPitch;
       delete stat.interceptions;
       delete stat.clearances;
+      delete stat.teamMatchesAllCompetitions;
+      delete stat.missedMatches;
+      delete stat.injuryAbsenceMatches;
     }
     for (const stat of Object.values(save.state.world.playerStatSegments ?? {})) {
       delete stat.routineSaves;
@@ -108,6 +111,9 @@ describe('current schema hydration boundary', () => {
       delete stat.goalsConcededWhileOnPitch;
       delete stat.interceptions;
       delete stat.clearances;
+      delete stat.teamMatchesAllCompetitions;
+      delete stat.missedMatches;
+      delete stat.injuryAbsenceMatches;
     }
     compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(save));
     __flushCompressedStorageForTests();
@@ -167,6 +173,12 @@ describe('current schema hydration boundary', () => {
       ...makeSave(),
       state: { ...makeSave().state, observationThemePreference: 'score_boost' },
     })],
+    ['out-of-range player season score', (() => {
+      const save = makeSave();
+      const stat = Object.values(save.state.world.playerStats)[0] as typeof save.state.world.playerStats[string] & { seasonScore?: number };
+      stat.seasonScore = 101;
+      return JSON.stringify(save);
+    })()],
     ['invalid observer archive counters', (() => {
       const save = makeSave();
       const teamId = Object.keys(save.state.world.teamBases)[0];

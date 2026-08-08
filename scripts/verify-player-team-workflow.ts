@@ -115,15 +115,18 @@ async function main(): Promise<void> {
       const headlineGrid = page.getByTestId('position-headline-metrics');
       await headlineGrid.waitFor({ state: 'visible' });
       const headlineCount = await headlineGrid.locator(':scope > div').count();
-      const positionHeading = page.getByRole('heading', { name: /位置表现/ });
+      const positionHeading = page.getByRole('heading', { name: '当前赛季核心数据', exact: true });
       const efficiencyHeading = page.getByRole('heading', { name: '效率与球队贡献', exact: true });
       const positionBox = await positionHeading.boundingBox();
       const efficiencyBox = await efficiencyHeading.boundingBox();
       if (headlineCount !== 4 || !positionBox || !efficiencyBox || positionBox.y >= efficiencyBox.y) {
         throw new Error(`${viewport.name}: active Player Detail hierarchy is invalid`);
       }
-      if (await page.getByText(/本季同位置表现第/).count() !== 0) {
-        throw new Error(`${viewport.name}: ranking appeared before three appearances`);
+      if (
+        await page.getByText(/综合第\d+\/\d+/).count() !== 1
+        || await page.getByText(/低可信/).count() < 1
+      ) {
+        throw new Error(`${viewport.name}: low-sample ranking is missing its confidence warning`);
       }
       const playerDetailScreenshot = `/tmp/football-player-detail-${viewport.name}.png`;
       await page.screenshot({ path: playerDetailScreenshot, animations: 'disabled', fullPage: false });

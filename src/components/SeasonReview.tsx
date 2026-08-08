@@ -4,6 +4,8 @@ import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
 import { getTeamName, getTeamShortName } from '../utils/format';
 import {
+  getPlayerRowPerformance,
+  getSeasonOverallRows,
   getSeasonTopAssistRows,
   getSeasonTopScorerRows,
 } from '../engine/players/player-stat-selectors';
@@ -63,6 +65,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   const scorers = getSeasonTopScorerRows(world, seasonNumber, 5);
   const assisters = getSeasonTopAssistRows(world, seasonNumber, 3);
+  const overallPlayers = getSeasonOverallRows(world, seasonNumber, 3);
 
   // Season buffs for this season
   const buffs = world.seasonBuffsHistory?.find((entry) => entry.season === seasonNumber)?.buffs
@@ -280,6 +283,29 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       </div>
 
       {/* Player awards (颁奖典礼) */}
+      {overallPlayers.length > 0 && (
+        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+          <h3 className="text-sm font-bold text-slate-200 mb-3 flex items-center gap-1.5">
+            <Icon name="chart" size={15} /> 赛季综合表现
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {overallPlayers.map((row, index) => {
+              const performance = getPlayerRowPerformance(world, row);
+              return (
+                <Link key={row.playerId} to={`/player/${row.playerId}`} className="flex items-center gap-2 rounded border border-slate-700/50 bg-slate-900/35 p-2.5 hover:border-amber-600/50">
+                  <span className="w-6 text-center text-sm font-black text-slate-500">{index + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-100">{row.identity.playerName}</span>
+                    <span className="block truncate text-[10px] text-slate-500">{row.identity.teamShortName ?? row.identity.teamName} · {row.identity.position}</span>
+                  </span>
+                  <span className="text-lg font-black text-amber-300">{performance.seasonScore.toFixed(1)}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {(() => {
         const awards = (world.playerAwardsHistory ?? []).filter(a => a.season === seasonNumber);
         if (awards.length === 0) return null;

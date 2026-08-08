@@ -6,11 +6,13 @@ import { TAG_META } from '../engine/players/tags';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
-import { computePlayerPerformance, PLAYER_RANKING_MINUTES } from '../engine/players/player-performance';
 import {
+  getCurrentPlayerStatRow,
   getCurrentPlayerClubStatRows,
   getCurrentPlayerStatRows,
+  getCurrentOverallRows,
   getPlayerClubStatRow,
+  getPlayerRowPerformance,
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
@@ -70,29 +72,26 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   // early return above the hooks.
   const posRanking = useMemo(() => {
     if (!player) return { rank: 0, total: 0 };
-    const ownPerformance = computePlayerPerformance(
-      player.position,
-      world.playerStats[uuid],
-      world.seasonStartLevels?.[player.teamId],
-    );
+    const ownRow = getCurrentPlayerStatRow(world, uuid);
+    if (!ownRow) return { rank: 0, total: 0 };
+    const ownPerformance = getPlayerRowPerformance(world, ownRow);
     if (!ownPerformance.eligible) return { rank: 0, total: 0 };
     const allSamePos = getCurrentPlayerStatRows(world)
       .filter(row => row.identity.position === player.position)
-      .filter(row => computePlayerPerformance(
-        player.position,
-        row,
-        world.seasonStartLevels?.[row.teamId],
-      ).eligible);
-    const score = (s: typeof allSamePos[number]) => computePlayerPerformance(
-      player.position,
-      s,
-      world.seasonStartLevels?.[s.teamId],
-    ).score;
+      .filter(row => getPlayerRowPerformance(world, row).eligible);
+    const score = (s: typeof allSamePos[number]) => getPlayerRowPerformance(world, s).positionQuality;
     const sorted = [...allSamePos].sort((a, b) => {
       return score(b) - score(a);
     });
     const rank = sorted.findIndex(s => s.playerId === uuid) + 1;
     return { rank, total: sorted.length };
+  }, [world, player, uuid]);
+
+  const overallRanking = useMemo(() => {
+    if (!player) return { rank: 0, total: 0 };
+    const rows = getCurrentOverallRows(world, Number.MAX_SAFE_INTEGER);
+    const rank = rows.findIndex(row => row.playerId === uuid) + 1;
+    return { rank, total: rows.length };
   }, [world, player, uuid]);
 
   // Recent match highlights — only regulation/ET goals; shootout kicks excluded
@@ -236,7 +235,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
                   {TAG_META[player.tag].icon} {TAG_META[player.tag].label}
                 </span>
               )}
-              <span className="text-xs text-slate-500">能力 {player.rating}</span>
+              <span className="text-xs text-slate-500">基础能力 {player.rating}</span>
               {player.age !== undefined && (
                 <span className="text-xs text-slate-500">{player.age}岁</span>
               )}
@@ -248,6 +247,9 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
               )}
               {posRanking.rank > 0 && (
                 <span className="text-[10px] text-slate-500">本季同位置表现第{posRanking.rank}/{posRanking.total}</span>
+              )}
+              {overallRanking.rank > 0 && (
+                <span className="text-[10px] font-semibold text-amber-400">综合第{overallRanking.rank}/{overallRanking.total}</span>
               )}
             </div>
           </div>
@@ -489,53 +491,6 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   );
 }
 
-function computePositionScore(
-  player: Player,
-  stats: PlayerSeasonStats | undefined,
-  world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>,
-): {
-  score: number;
-  rating: string;
-  eligible: boolean;
-  minutes: number;
-  perGame?: number;
-  label: string;
-  /** Position-specific, current-season evidence shown below the score. */
-  detail?: string;
-} {
-  const apps = stats?.appearances ?? 0;
-  if (apps === 0) return { score: 0, rating: '—', eligible: false, minutes: 0, label: '本赛季未出场' };
-  const result = computePlayerPerformance(
-    player.position,
-    stats,
-    world.seasonStartLevels?.[player.teamId],
-  );
-  const metrics = result.metrics;
-  const label = result.eligible ? '当前赛季全赛事综合' : `样本不足 · 需 ${PLAYER_RANKING_MINUTES} 分钟`;
-  if (player.position === 'FW') {
-    return {
-      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.goalsPer90, label,
-      detail: `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外关键机会 ${metrics.extraBigChancesPer90.toFixed(2)}/90`,
-    };
-  }
-  if (player.position === 'MF') {
-    return {
-      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.assistsPer90, label,
-      detail: `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外创造机会 ${metrics.extraKeyPassesPer90.toFixed(2)}/90`,
-    };
-  }
-  if (player.position === 'GK') {
-    return {
-      score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.savePercentage, label,
-      detail: `普通扑救 ${stats?.routineSaves ?? 0} · 关键扑救 ${stats?.saves ?? 0} · 扑救率 ${(metrics.savePercentage * 100).toFixed(1)}% · 零封贡献 ${(metrics.cleanSheetContribution * 100).toFixed(0)}% · 失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`,
-    };
-  }
-  return {
-    score: result.score, rating: result.grade, eligible: result.eligible, minutes: metrics.minutes, perGame: metrics.cleanSheetContribution, label,
-    detail: `拦截 ${metrics.interceptionsPer90.toFixed(2)}/90 · 解围 ${metrics.clearancesPer90.toFixed(2)}/90 · 门线封堵 ${stats?.keyBlocks ?? 0} · 零封贡献 ${(metrics.cleanSheetContribution * 100).toFixed(0)}% · 在场失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`,
-  };
-}
-
 function PositionPerformanceCard({
   player,
   stats,
@@ -545,15 +500,28 @@ function PositionPerformanceCard({
   stats: PlayerSeasonStats | undefined;
   world: NonNullable<ReturnType<typeof useGameStore.getState>['world']>;
 }) {
-  const result = computePositionScore(player, stats, world);
-  if (result.score === 0 && result.label === '本赛季未出场') return null;
-  const barColor = !result.eligible ? 'bg-blue-500'
-    : result.score >= 70 ? 'bg-emerald-500'
+  const row = getCurrentPlayerStatRow(world, player.uuid);
+  const result = row ? getPlayerRowPerformance(world, row) : null;
+  if (!result?.eligible) return null;
+  const metrics = result.metrics;
+  const confidence = result.confidenceLabel === 'high' ? '高可信'
+    : result.confidenceLabel === 'medium' ? '中可信'
+    : '低可信';
+  const leagueLabel = result.leagueStrength >= 99 ? '顶级联赛'
+    : result.leagueStrength >= 94 ? '甲级联赛'
+    : '乙级联赛';
+  const detail = player.position === 'FW'
+    ? `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外关键机会 ${metrics.extraBigChancesPer90.toFixed(2)}/90`
+    : player.position === 'MF'
+      ? `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外创造 ${metrics.extraKeyPassesPer90.toFixed(2)}/90`
+      : player.position === 'GK'
+        ? `普通扑救 ${stats?.routineSaves ?? 0} · 关键扑救 ${stats?.saves ?? 0} · 扑救率 ${(metrics.savePercentage * 100).toFixed(1)}% · 失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`
+        : `拦截 ${metrics.interceptionsPer90.toFixed(2)}/90 · 解围 ${metrics.clearancesPer90.toFixed(2)}/90 · 门线封堵 ${stats?.keyBlocks ?? 0} · 在场失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`;
+  const barColor = result.score >= 70 ? 'bg-emerald-500'
     : result.score >= 50 ? 'bg-amber-500'
     : result.score >= 30 ? 'bg-orange-500'
     : 'bg-red-500';
-  const gradeColor = !result.eligible ? 'text-cyan-300'
-    : result.score >= 70 ? 'text-emerald-300'
+  const gradeColor = result.score >= 70 ? 'text-emerald-300'
     : result.score >= 50 ? 'text-amber-300'
     : result.score >= 30 ? 'text-orange-300'
     : 'text-red-300';
@@ -561,41 +529,30 @@ function PositionPerformanceCard({
     <div className="bg-gradient-to-br from-slate-800 to-slate-800/70 rounded-xl border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
-          <Icon name="chart" size={13} /> 位置表现 ({posLabel[player.position] ?? player.position})
+          <Icon name="chart" size={13} /> 赛季综合评分
         </h3>
-        <span className={`text-2xl font-black ${gradeColor}`}>{result.rating}</span>
+        <span className={`text-2xl font-black ${gradeColor}`}>{result.seasonScore.toFixed(0)} <span className="text-sm">{result.grade}</span></span>
       </div>
-      <div className="text-[11px] text-slate-500 mb-1">
-        {result.label}
-        {result.perGame !== undefined ? ` ${player.position === 'GK' || player.position === 'DF' ? (result.perGame * 100).toFixed(0) + '%' : result.perGame.toFixed(2)}` : ''}
+      <div className="grid grid-cols-3 gap-2 mb-2 text-center">
+        <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">位置表现</div><div className="font-bold text-slate-200">{result.positionQuality.toFixed(0)}</div></div>
+        <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">出勤可靠性</div><div className="font-bold text-slate-200">{result.availabilityScore.toFixed(0)}</div></div>
+        <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">赛事强度</div><div className="font-bold text-slate-200">{leagueLabel}</div></div>
       </div>
-      {(player.position === 'DF' || player.position === 'GK') && (
-        <div className="text-[10px] text-slate-500 mb-1">个人数据权重 75% · 零封与在场失球背景 25%</div>
-      )}
-      {result.detail && (
-        <div className="text-[10px] text-slate-400 mb-2">{result.detail}</div>
-      )}
+      <div className="text-[11px] text-slate-400 mb-1">出场 {metrics.appearances}/{metrics.teamMatchesAllCompetitions} · 首发 {metrics.starts} · {metrics.minutes} 分钟 · {confidence}</div>
+      {metrics.injuryAbsenceMatches > 0 && <div className="text-[10px] text-amber-400 mb-1">其中因伤缺席 {metrics.injuryAbsenceMatches} 场</div>}
+      <div className="text-[10px] text-slate-400 mb-2">{posLabel[player.position]} · {detail}</div>
       <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full ${barColor} transition-all`}
-          style={{ width: `${result.eligible
-            ? Math.min(100, result.score)
-            : Math.min(100, result.minutes / PLAYER_RANKING_MINUTES * 100)}%` }}
+          style={{ width: `${Math.min(100, result.score)}%` }}
         />
       </div>
       <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-        <span>{result.eligible ? `${result.score.toFixed(0)}/100` : `${result.minutes}/${PLAYER_RANKING_MINUTES}分钟`}</span>
-        <span>{result.eligible ? positionScoreHint(player.position) : '暂不排名'}</span>
+        <span>{result.score.toFixed(1)}/100</span>
+        <span>可信度 {Math.round(result.confidence * 100)}%</span>
       </div>
     </div>
   );
-}
-
-function positionScoreHint(pos: string): string {
-  if (pos === 'FW') return '进球/助攻/额外机会';
-  if (pos === 'MF') return '进球/助攻/额外创造';
-  if (pos === 'GK') return '扑救率/扑救/零封贡献';
-  return '拦截/解围/门线封堵';
 }
 
 /** Per-season career history table (v19). */
@@ -604,11 +561,28 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
   const history = (world.playerStatsHistory ?? {})[playerUuid] ?? [];
   if (history.length === 0) return null;
   const sorted = [...history].sort((a, b) => b.season - a.season);
+  const scored = sorted.filter(entry => entry.seasonScore !== undefined);
+  const recentThree = scored.slice(0, 3);
+  const recentAverage = recentThree.length > 0
+    ? recentThree.reduce((sum, entry) => sum + (entry.seasonScore ?? 0), 0) / recentThree.length
+    : null;
+  const scoredMinutes = scored.reduce((sum, entry) => sum + (entry.minutesPlayed ?? entry.appearances * 90), 0);
+  const careerAverage = scoredMinutes > 0
+    ? scored.reduce(
+        (sum, entry) => sum + (entry.seasonScore ?? 0) * (entry.minutesPlayed ?? entry.appearances * 90),
+        0,
+      ) / scoredMinutes
+    : null;
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
-      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
-        <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
-      </h3>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
+          <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
+        </h3>
+        {recentAverage !== null && careerAverage !== null && (
+          <span className="text-[10px] text-slate-500">近三季 {recentAverage.toFixed(1)} · 生涯 {careerAverage.toFixed(1)}</span>
+        )}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -618,6 +592,7 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
               <th className="text-right py-1">联赛</th>
               <th className="text-right py-1">出场(首/替)</th>
               <th className="text-right py-1">分钟</th>
+              <th className="text-right py-1">赛季评分</th>
               <th className="text-right py-1">进球</th>
               <th className="text-right py-1">助攻</th>
               <th className="text-right py-1">黄</th>
@@ -641,6 +616,9 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
                   <td className="py-1 text-right text-slate-400 tabular-nums">{rank}</td>
                   <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}({h.starts ?? h.appearances}/{h.substituteAppearances ?? 0})</td>
                   <td className="py-1 text-right text-slate-400 tabular-nums">{h.minutesPlayed ?? h.appearances * 90}</td>
+                  <td className="py-1 text-right text-amber-300 font-semibold tabular-nums" title={h.seasonScore === undefined ? '旧赛季缺少完整评分字段，不补造历史评分' : `位置表现 ${h.positionQuality?.toFixed(1)} · 出勤 ${h.availabilityScore?.toFixed(1)}`}>
+                    {h.seasonScore?.toFixed(1) ?? '旧口径'}
+                  </td>
                   <td className="py-1 text-right text-amber-300 tabular-nums">{h.goals}</td>
                   <td className="py-1 text-right text-blue-300 tabular-nums">{h.assists}</td>
                   <td className="py-1 text-right text-slate-500 tabular-nums">{h.yellowCards}</td>

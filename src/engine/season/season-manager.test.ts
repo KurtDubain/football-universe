@@ -185,6 +185,9 @@ describe('initializeGameWorld', () => {
         goals: 16,
         assists: 7,
         appearances: 24,
+        starts: 24,
+        minutesPlayed: 2160,
+        teamMatchesAllCompetitions: 24,
         yellowCards: 2,
         redCards: 0,
         bigChances: 20,
@@ -214,6 +217,12 @@ describe('initializeGameWorld', () => {
     expect(history?.rating).toBe(player.rating);
     expect(history?.age).toBe(player.age);
     expect(history?.goals).toBe(16);
+    expect(history?.seasonScore).toBeGreaterThan(0);
+    expect(history?.seasonScore).toBeLessThanOrEqual(100);
+    expect(history?.positionQuality).toBeGreaterThanOrEqual(0);
+    expect(history?.availabilityScore).toBeGreaterThanOrEqual(0);
+    expect(history?.scoreConfidence).toBeGreaterThan(0);
+    expect(history?.scoreVersion).toBe(1);
     expect(next.playerStats[player.uuid].goals).toBe(0);
   });
 

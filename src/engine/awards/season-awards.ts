@@ -1,16 +1,16 @@
 import { PlayerAward } from '../../types/award';
-import { PlayerSeasonStats, Player } from '../../types/player';
+import { PlayerSeasonStats, Player, PlayerTeamSeasonStats } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
-import { computePlayerPerformance } from '../players/player-performance';
+import { computePlayerPerformance, computeSegmentedPlayerPerformance } from '../players/player-performance';
 
 /**
  * Compute end-of-season player awards from final stats.
  *
- * - MVP: highest weighted score (goals×3 + assists×2 + team_rank_bonus)
+ * - MVP: highest attendance-aware cross-position season score
  * - Golden Boot: most goals across all leagues
  * - Best Defender / Goalkeeper: highest individual position score among
- *   top-league players who clear the 600-minute ranking threshold
+ *   top-league players with actual minutes
  * - Young Player: top scorer from a low-OVR team (team OVR < 70)
  */
 export function computeSeasonAwards(
@@ -19,6 +19,8 @@ export function computeSeasonAwards(
   squads: Record<string, Player[]>,
   teamBases: Record<string, TeamBase>,
   league1Standings: StandingEntry[],
+  playerStatSegments: Record<string, PlayerTeamSeasonStats> = {},
+  seasonStartLevels: Record<string, 1 | 2 | 3> = {},
 ): PlayerAward[] {
   const awards: PlayerAward[] = [];
   const allStats = Object.values(playerStats);
@@ -27,7 +29,15 @@ export function computeSeasonAwards(
   // playerId is a stable Player.uuid, not the legacy `${teamId}-${number}`
   // string. We still need the teamId to find the right squad to scan.
   const findPlayer = (playerUuid: string, teamId: string): Player | undefined =>
-    squads[teamId]?.find((p) => p.uuid === playerUuid);
+    squads[teamId]?.find((p) => p.uuid === playerUuid)
+    ?? Object.values(squads).flat().find((p) => p.uuid === playerUuid);
+
+  const performanceFor = (player: Player, stat: PlayerSeasonStats) => {
+    const segments = Object.values(playerStatSegments).filter(segment => segment.playerId === player.uuid);
+    return segments.length > 0
+      ? computeSegmentedPlayerPerformance(player.position, segments, seasonStartLevels, stat)
+      : computePlayerPerformance(player.position, stat, seasonStartLevels[stat.teamId]);
+  };
 
   const buildAward = (
     type: PlayerAward['type'],
@@ -51,31 +61,23 @@ export function computeSeasonAwards(
     };
   };
 
-  // Build a quick map: teamId → league rank (only top league for now)
-  const teamLeagueRank: Record<string, number> = {};
-  league1Standings.forEach((s, i) => {
-    teamLeagueRank[s.teamId] = i + 1;
-  });
-
   // ── MVP (金球奖) ─────────────────────────────────────────────
-  // weighted = goals*3 + assists*2 + (top-league bonus from rank)
-  // Only consider players with appearances >= 5
   let mvpScore = -1;
   let mvpStat: PlayerSeasonStats | null = null;
   let mvpScoreValue = 0;
   for (const s of allStats) {
     if (s.appearances < 5) continue;
-    const rank = teamLeagueRank[s.teamId];
-    const rankBonus = rank ? Math.max(0, 16 - rank) * 0.5 : 0; // top of L1 = +7.5
-    const score = s.goals * 3 + s.assists * 2 + rankBonus;
+    const player = findPlayer(s.playerId, s.teamId);
+    if (!player) continue;
+    const score = performanceFor(player, s).seasonScore;
     if (score > mvpScore) {
       mvpScore = score;
       mvpStat = s;
-      mvpScoreValue = Math.round(score);
+      mvpScoreValue = Math.round(score * 10) / 10;
     }
   }
   if (mvpStat) {
-    const a = buildAward('mvp', mvpStat, mvpScoreValue, `综合评分 ${mvpScoreValue}`);
+    const a = buildAward('mvp', mvpStat, mvpScoreValue, `赛季综合评分 ${mvpScoreValue.toFixed(1)}`);
     if (a) awards.push(a);
   }
 
@@ -100,7 +102,9 @@ export function computeSeasonAwards(
     .map(player => ({
       player,
       stat: playerStats[player.uuid],
-      performance: computePlayerPerformance(position, playerStats[player.uuid], 1),
+      performance: playerStats[player.uuid]
+        ? performanceFor(player, playerStats[player.uuid])
+        : computePlayerPerformance(position, undefined, 1),
     }))
     .filter(entry => entry.stat && entry.performance.eligible)
     .sort((a, b) => b.performance.score - a.performance.score
@@ -113,7 +117,7 @@ export function computeSeasonAwards(
       'best_defender',
       bestDefender.stat,
       bestDefender.performance.score,
-      `个人防守评分 ${bestDefender.performance.score.toFixed(1)}`,
+      `赛季综合评分 ${bestDefender.performance.score.toFixed(1)}`,
     );
     if (award) awards.push(award);
   }
@@ -124,7 +128,7 @@ export function computeSeasonAwards(
       'best_goalkeeper',
       bestGoalkeeper.stat,
       bestGoalkeeper.performance.score,
-      `门将评分 ${bestGoalkeeper.performance.score.toFixed(1)}`,
+      `赛季综合评分 ${bestGoalkeeper.performance.score.toFixed(1)}`,
     );
     if (award) awards.push(award);
   }

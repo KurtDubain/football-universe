@@ -8,7 +8,11 @@ import type {
 } from '../../types/player';
 import { emptyPlayerStat, playerTeamStatKey } from './stats';
 import { computePlayerCareerTotals } from './career-totals';
-import { computePlayerPerformance } from './player-performance';
+import {
+  computePlayerPerformance,
+  computeSegmentedPlayerPerformance,
+  type PlayerPerformanceResult,
+} from './player-performance';
 
 export type PlayerIdentitySource = 'active' | 'retired' | 'history' | 'stat';
 
@@ -31,7 +35,13 @@ export type PlayerStatRow = PlayerSeasonStats & {
   identity: PlayerStatIdentity;
   player?: Player;
   season?: number;
+  performanceSnapshot?: Pick<
+    PlayerPerformanceResult,
+    'seasonScore' | 'positionQuality' | 'availabilityScore' | 'leagueStrength' | 'confidence' | 'scoreVersion'
+  >;
 };
+
+const currentPerformanceCache = new WeakMap<GameWorld, Map<string, PlayerPerformanceResult>>();
 
 function indexActivePlayers(
   squads: GameWorld['squads'],
@@ -153,6 +163,16 @@ function rowFromStat(
     identity: resolved.identity,
     player: resolved.player,
     season: history?.season,
+    performanceSnapshot: history?.seasonScore !== undefined
+      ? {
+          seasonScore: history.seasonScore,
+          positionQuality: history.positionQuality ?? history.seasonScore,
+          availabilityScore: history.availabilityScore ?? 0,
+          leagueStrength: history.leagueStrength ?? 100,
+          confidence: history.scoreConfidence ?? 0,
+          scoreVersion: history.scoreVersion ?? 1,
+        }
+      : undefined,
   };
 }
 
@@ -179,6 +199,9 @@ function statFromHistory(playerId: string, history: PlayerSeasonStatsHistoryEntr
     goalsConcededWhileOnPitch: history.goalsConcededWhileOnPitch ?? 0,
     interceptions: history.interceptions ?? 0,
     clearances: history.clearances ?? 0,
+    teamMatchesAllCompetitions: history.teamMatchesAllCompetitions ?? history.teamMatches,
+    missedMatches: history.missedMatches ?? Math.max(0, history.teamMatches - history.appearances),
+    injuryAbsenceMatches: history.injuryAbsenceMatches ?? 0,
   };
 }
 
@@ -328,6 +351,45 @@ export function sortRowsByGoals(rows: PlayerStatRow[]): PlayerStatRow[] {
   return [...rows].sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.appearances - a.appearances);
 }
 
+export function getPlayerRowPerformance(world: GameWorld, row: PlayerStatRow): PlayerPerformanceResult {
+  const position = row.identity.position ?? 'MF';
+  const cache = row.season === undefined
+    ? currentPerformanceCache.get(world) ?? new Map<string, PlayerPerformanceResult>()
+    : null;
+  if (cache && !currentPerformanceCache.has(world)) currentPerformanceCache.set(world, cache);
+  const cached = cache?.get(row.playerId);
+  if (cached) return cached;
+  const segments = Object.values(world.playerStatSegments ?? {})
+    .filter(segment => segment.playerId === row.playerId);
+  const dynamic = row.season === undefined && segments.length > 0
+    ? computeSegmentedPlayerPerformance(position, segments, world.seasonStartLevels ?? {}, row)
+    : computePlayerPerformance(position, row, world.seasonStartLevels?.[row.teamId]);
+  const frozen = row.performanceSnapshot;
+  if (!frozen) {
+    cache?.set(row.playerId, dynamic);
+    return dynamic;
+  }
+  const result = {
+    ...dynamic,
+    score: frozen.seasonScore,
+    seasonScore: frozen.seasonScore,
+    positionQuality: frozen.positionQuality,
+    availabilityScore: frozen.availabilityScore,
+    leagueStrength: frozen.leagueStrength,
+    confidence: frozen.confidence,
+    scoreVersion: frozen.scoreVersion,
+  };
+  return result;
+}
+
+export function sortRowsByOverall(rows: PlayerStatRow[], world: GameWorld): PlayerStatRow[] {
+  return [...rows].sort((a, b) =>
+    getPlayerRowPerformance(world, b).seasonScore - getPlayerRowPerformance(world, a).seasonScore
+    || (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0)
+    || a.playerId.localeCompare(b.playerId),
+  );
+}
+
 export function sortRowsByAssists(rows: PlayerStatRow[]): PlayerStatRow[] {
   return [...rows].sort((a, b) => b.assists - a.assists || b.goals - a.goals || b.appearances - a.appearances);
 }
@@ -344,8 +406,8 @@ export function sortRowsByDiscipline(rows: PlayerStatRow[]): PlayerStatRow[] {
 export function sortRowsByDefense(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      computePlayerPerformance('DF', b, world?.seasonStartLevels?.[b.teamId]).score
-      - computePlayerPerformance('DF', a, world?.seasonStartLevels?.[a.teamId]).score ||
+      (world ? getPlayerRowPerformance(world, b).positionQuality : computePlayerPerformance('DF', b).positionQuality)
+      - (world ? getPlayerRowPerformance(world, a).positionQuality : computePlayerPerformance('DF', a).positionQuality) ||
       (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0) ||
       (b.identity.rating ?? 0) - (a.identity.rating ?? 0),
   );
@@ -354,8 +416,8 @@ export function sortRowsByDefense(rows: PlayerStatRow[], world?: GameWorld): Pla
 export function sortRowsByGoalkeeping(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      computePlayerPerformance('GK', b, world?.seasonStartLevels?.[b.teamId]).score
-      - computePlayerPerformance('GK', a, world?.seasonStartLevels?.[a.teamId]).score ||
+      (world ? getPlayerRowPerformance(world, b).positionQuality : computePlayerPerformance('GK', b).positionQuality)
+      - (world ? getPlayerRowPerformance(world, a).positionQuality : computePlayerPerformance('GK', a).positionQuality) ||
       (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0) ||
       (b.identity.rating ?? 0) - (a.identity.rating ?? 0),
   );
@@ -364,12 +426,12 @@ export function sortRowsByGoalkeeping(rows: PlayerStatRow[], world?: GameWorld):
 export function sortRowsByCreation(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
   return [...rows].sort(
     (a, b) =>
-      computePlayerPerformance(
-        b.identity.position === 'FW' ? 'FW' : 'MF', b, world?.seasonStartLevels?.[b.teamId],
-      ).score
-      - computePlayerPerformance(
-        a.identity.position === 'FW' ? 'FW' : 'MF', a, world?.seasonStartLevels?.[a.teamId],
-      ).score ||
+      (world
+        ? getPlayerRowPerformance(world, b).positionQuality
+        : computePlayerPerformance(b.identity.position === 'FW' ? 'FW' : 'MF', b).positionQuality)
+      - (world
+        ? getPlayerRowPerformance(world, a).positionQuality
+        : computePlayerPerformance(a.identity.position === 'FW' ? 'FW' : 'MF', a).positionQuality) ||
       b.assists - a.assists ||
       b.goals - a.goals ||
       b.appearances - a.appearances,
@@ -378,6 +440,22 @@ export function sortRowsByCreation(rows: PlayerStatRow[], world?: GameWorld): Pl
 
 export function getCurrentTopScorerRows(world: GameWorld, limit = 20): PlayerStatRow[] {
   return sortRowsByGoals(getCurrentPlayerStatRows(world).filter((row) => row.goals > 0)).slice(0, limit);
+}
+
+export function getCurrentOverallRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+  return sortRowsByOverall(
+    getCurrentPlayerStatRows(world).filter(row => getPlayerRowPerformance(world, row).eligible),
+    world,
+  ).slice(0, limit);
+}
+
+export function getSeasonOverallRows(world: GameWorld, seasonNumber: number, limit = 20): PlayerStatRow[] {
+  return sortRowsByOverall(
+    getSeasonPlayerStatRows(world, seasonNumber).filter(row =>
+      row.performanceSnapshot !== undefined && getPlayerRowPerformance(world, row).eligible
+    ),
+    world,
+  ).slice(0, limit);
 }
 
 export function getCurrentTopAssistRows(world: GameWorld, limit = 20): PlayerStatRow[] {

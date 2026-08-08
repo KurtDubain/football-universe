@@ -9,6 +9,7 @@ interface PitchState {
   ball: { x: number; y: number; elevation: number };
   event: {
     type: string;
+    outcome: string;
     attackerId?: string;
     creatorId?: string;
     defenderId?: string;
@@ -54,7 +55,10 @@ async function verifyViewport(name: string, width: number, height: number) {
         && (!expectedDefender || state.event.defenderId === expectedDefender)
         && (state.ballHolderId === expectedAttacker || state.lastTouchPlayerId === expectedAttacker)
         && state.action?.kind === 'shot'
+        && state.action.progress >= 0.99
+        && state.phase === 'holding'
         && state.action.sourceOverride !== undefined
+        && (expectedType !== 'gk_save' || state.ball.x > 0.018)
         && (() => {
           const attacker = [...state.homeOnField, ...state.awayOnField].find(player => player.id === expectedAttacker);
           if (!attacker) return false;
@@ -74,15 +78,27 @@ async function verifyViewport(name: string, width: number, height: number) {
     const dialog = page.getByRole('dialog', { name: '比赛直播回放' });
     await dialog.getByRole('button', { name: '精华', exact: true }).click();
 
-    const saveState = await waitForActors('gk_save', 'away-9', 'away-7', 'home-1');
+    await waitForActors('gk_save', 'away-9', 'away-7', 'home-1');
+    await dialog.getByRole('button', { name: '暂停', exact: true }).click();
+    await page.getByRole('button', { name: '继续', exact: true }).waitFor({ state: 'visible' });
+    await page.evaluate(() => (window as typeof window & { advanceTime?: (milliseconds: number) => void }).advanceTime?.(300));
+    const saveState = await readState();
     const saveScreenshot = `/tmp/football-match-tactics-save-${name}.png`;
     await page.screenshot({ path: saveScreenshot, animations: 'disabled' });
 
-    const goalState = await waitForActors('goal', 'home-10', 'home-7');
+    await dialog.getByRole('button', { name: '继续', exact: true }).click();
+    await waitForActors('goal', 'home-10', 'home-7');
+    await dialog.getByRole('button', { name: '暂停', exact: true }).click();
+    await page.getByRole('button', { name: '继续', exact: true }).waitFor({ state: 'visible' });
+    await page.evaluate(() => (window as typeof window & { advanceTime?: (milliseconds: number) => void }).advanceTime?.(250));
+    const goalState = await readState();
     const goalScreenshot = `/tmp/football-match-tactics-goal-${name}.png`;
     await page.screenshot({ path: goalScreenshot, animations: 'disabled' });
 
     if (saveState.attackingSide !== 'away') throw new Error(`${name}: save scene attacks from ${saveState.attackingSide}`);
+    if (saveState.event?.outcome !== 'save' || saveState.ball.x < 0.03 || saveState.ball.elevation <= 0) {
+      throw new Error(`${name}: saved shot did not produce a visible second ball`);
+    }
     if (goalState.attackingSide !== 'home') throw new Error(`${name}: goal scene attacks from ${goalState.attackingSide}`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors ${errors.join(' | ')}`);
 

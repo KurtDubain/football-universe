@@ -5,6 +5,7 @@ import {
   getCareerTopAssistRows,
   getCareerTopScorerRows,
   getCurrentPlayerClubStatRows,
+  getCurrentOverallRows,
   getCurrentCreatorRows,
   getCurrentDefenderRows,
   getCurrentGoalkeeperRows,
@@ -12,6 +13,8 @@ import {
   getCurrentTopScorerRows,
   getPlayerClubStatRow,
   getPlayerClubStatRowMap,
+  getPlayerRowPerformance,
+  getSeasonOverallRows,
   getSeasonTopScorerRows,
 } from './player-stat-selectors';
 import { executeSearch } from '../search/query-engine';
@@ -87,6 +90,12 @@ describe('player stat selectors', () => {
       keyBlocks: 2,
       bigChances: 24,
       keyPasses: 8,
+      seasonScore: 77.4,
+      positionQuality: 81.2,
+      availabilityScore: 74,
+      leagueStrength: 100,
+      scoreConfidence: 0.71,
+      scoreVersion: 1,
     };
     const patchedWorld = {
       ...world,
@@ -113,6 +122,31 @@ describe('player stat selectors', () => {
     expect(top.identity.playerName).toBe('冻结射手');
     expect(top.identity.playerNumber).toBe(99);
     expect(top.identity.teamName).toBe('冻结球队');
+    const overall = getSeasonOverallRows(patchedWorld, 1, 1)[0];
+    expect(overall.playerId).toBe(player.uuid);
+    expect(getPlayerRowPerformance(patchedWorld, overall).seasonScore).toBe(77.4);
+  });
+
+  it('creates a cross-position current ranking without a 600-minute cliff', () => {
+    const world = initializeGameWorld(2025);
+    const players = Object.values(world.squads).flat().slice(0, 2);
+    const patched = {
+      ...world,
+      playerStats: {
+        ...world.playerStats,
+        [players[0].uuid]: {
+          ...world.playerStats[players[0].uuid], appearances: 2, minutesPlayed: 180,
+          teamMatchesAllCompetitions: 2, goals: 2, bigChances: 3,
+        },
+        [players[1].uuid]: {
+          ...world.playerStats[players[1].uuid], appearances: 2, minutesPlayed: 180,
+          teamMatchesAllCompetitions: 2,
+        },
+      },
+    };
+    const rows = getCurrentOverallRows(patched, 10);
+    expect(rows.some(row => row.playerId === players[0].uuid)).toBe(true);
+    expect(rows.every(row => getPlayerRowPerformance(patched, row).seasonScore >= 0)).toBe(true);
   });
 
   it('builds career rows from retired and frozen historical identities', () => {

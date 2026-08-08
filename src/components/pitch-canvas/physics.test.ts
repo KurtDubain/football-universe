@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBallPosition, computeCarryTarget, selectDefensiveRoles, updatePlayerPositions } from './physics';
+import { computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -59,6 +59,47 @@ describe('pitch player movement', () => {
     expect(groundPass.bx).toBeGreaterThan(50);
     expect(windingUp.bx).toBe(10);
     expect(windingUp.arcLift).toBe(0);
+  });
+
+  it('adds a bounded visual bend to shots without changing their endpoints', () => {
+    const middle = computeBallPosition({
+      passing: true,
+      phaseFrame: 14,
+      duration: 28,
+      arc: 0.1,
+      source: { x: 100, y: 100 },
+      target: { x: 200, y: 100 },
+      frame: 14,
+      flightKind: 'shot',
+      swerve: 0.8,
+    });
+    const end = computeBallPosition({
+      passing: true,
+      phaseFrame: 28,
+      duration: 28,
+      arc: 0.1,
+      source: { x: 100, y: 100 },
+      target: { x: 200, y: 100 },
+      frame: 28,
+      flightKind: 'shot',
+      swerve: 0.8,
+    });
+
+    expect(middle.by).toBeGreaterThan(106);
+    expect(end.by).toBeCloseTo(100);
+  });
+
+  it('spills saves into play and sends blocks farther sideways', () => {
+    const save = computePostShotBallPosition({
+      outcome: 'save', target: { x: 500, y: 140 }, attackingHome: true, progress: 1, seed: 2,
+    });
+    const block = computePostShotBallPosition({
+      outcome: 'block', target: { x: 500, y: 140 }, attackingHome: true, progress: 1, seed: 2,
+    });
+
+    expect(save.bx).toBeLessThan(500);
+    expect(block.bx).toBeLessThan(save.bx);
+    expect(Math.abs(block.by - 140)).toBeGreaterThan(Math.abs(save.by - 140));
   });
 
   it('carries possession forward without leaving the pitch', () => {

@@ -48,6 +48,7 @@ describe('event-directed pitch scenes', () => {
     expect(sequence.phases.at(-1)).toMatchObject({ passerIdx: 10, receiverIdx: 10, kind: 'shot' });
     expect(sequence.phases[0].duration).toBeGreaterThanOrEqual(18);
     expect(sequence.phases.at(-1)?.duration).toBeGreaterThanOrEqual(18);
+    expect(Math.abs(sequence.phases.at(-1)?.swerve ?? 0)).toBeLessThanOrEqual(0.45);
     expect(sequence.phases[0].targetOverride?.x).toBeGreaterThanOrEqual(0.8);
     expect(sequence.phases.at(-1)?.sourceOverride).toEqual(sequence.phases[0].targetOverride);
   });

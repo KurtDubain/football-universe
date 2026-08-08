@@ -175,6 +175,12 @@ export interface PlayerSeasonStats {
   /** Match-derived defensive actions. DF only. */
   interceptions?: number;
   clearances?: number;
+  /** Team fixtures played in all competitions while this stat row was active. */
+  teamMatchesAllCompetitions?: number;
+  /** Team fixtures in which the player recorded no playing time. */
+  missedMatches?: number;
+  /** Missed team fixtures where an active injury made the player unavailable. */
+  injuryAbsenceMatches?: number;
 }
 
 /**
@@ -236,6 +242,16 @@ export interface PlayerSeasonStatsHistoryEntry {
   goalsConcededWhileOnPitch?: number;
   interceptions?: number;
   clearances?: number;
+  teamMatchesAllCompetitions?: number;
+  missedMatches?: number;
+  injuryAbsenceMatches?: number;
+  /** Frozen v1 cross-position season-performance result. */
+  seasonScore?: number;
+  positionQuality?: number;
+  availabilityScore?: number;
+  leagueStrength?: number;
+  scoreConfidence?: number;
+  scoreVersion?: number;
 }
 
 /**

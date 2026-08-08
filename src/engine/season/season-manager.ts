@@ -46,6 +46,7 @@ import {
 import { initTeamFinances } from '../economy/finance';
 import { rankClubCoefficients } from '../rankings/club-coefficient';
 import { advanceStorylines } from './storylines';
+import { computeSegmentedPlayerPerformance } from '../players/player-performance';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -362,6 +363,14 @@ function snapshotPlayerStatsHistory(
     if (!player && !retired) continue;
     const ctx = teamCtx[seasonTeamId] ?? { gc: 0, matches: 0 };
     const team = world.teamBases[seasonTeamId];
+    const performance = computeSegmentedPlayerPerformance(
+      player?.position ?? retired!.position,
+      clubSegments,
+      Object.fromEntries(
+        Object.entries(teamCtx).map(([teamId, context]) => [teamId, context.leagueLevel]),
+      ),
+      stat,
+    );
     const entry: import('../../types/player').PlayerSeasonStatsHistoryEntry = {
       season: seasonJustFinished,
       teamId: seasonTeamId,
@@ -398,6 +407,15 @@ function snapshotPlayerStatsHistory(
       goalsConcededWhileOnPitch: stat.goalsConcededWhileOnPitch ?? 0,
       interceptions: stat.interceptions ?? 0,
       clearances: stat.clearances ?? 0,
+      teamMatchesAllCompetitions: stat.teamMatchesAllCompetitions ?? stat.appearances,
+      missedMatches: stat.missedMatches ?? 0,
+      injuryAbsenceMatches: stat.injuryAbsenceMatches ?? 0,
+      seasonScore: performance.seasonScore,
+      positionQuality: performance.positionQuality,
+      availabilityScore: performance.availabilityScore,
+      leagueStrength: performance.leagueStrength,
+      scoreConfidence: performance.confidence,
+      scoreVersion: performance.scoreVersion,
     };
     const existing = next[uuid] ?? [];
     const existingIndex = existing.findIndex(e => e.season === seasonJustFinished && e.teamId === seasonTeamId);

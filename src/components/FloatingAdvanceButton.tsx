@@ -46,7 +46,7 @@ function getElementSize(element: HTMLElement | null): { width: number; height: n
   const rect = element?.getBoundingClientRect();
   if (rect?.width && rect.height) return { width: rect.width, height: rect.height };
   return window.innerWidth < 640
-    ? { width: 56, height: 56 }
+    ? { width: 48, height: 48 }
     : { width: 96, height: 48 };
 }
 
@@ -256,7 +256,7 @@ export default function FloatingAdvanceButton({
       aria-busy={isAdvancing}
       title={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位` : '赛季已完成'}
       disabled={disabled}
-      className={`fixed z-[100] flex h-14 w-14 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-12 sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
+      className={`fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
       style={position ? { left: position.x, top: position.y } : undefined}
       onClick={handleClick}
       onPointerDown={handlePointerDown}

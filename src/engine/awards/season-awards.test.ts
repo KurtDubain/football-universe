@@ -140,14 +140,12 @@ describe('computeSeasonAwards', () => {
     expect(gb?.statValue).toBe(30);
   });
 
-  it('MVP weighting (goals×3 + assists×2 + rank bonus) picks the right player', () => {
+  it('MVP uses the cross-position season score instead of an attacker-only total', () => {
     const teamA = makeTeam('teamA', 85);
     const squads = { teamA: [makePlayer('teamA', 9, 'FW'), makePlayer('teamA', 10, 'MF')] };
-    // Player A: 20*3 + 5*2 = 70 (+ rank bonus)
-    // Player B: 10*3 + 30*2 = 90 (+ rank bonus)
     const stats = {
       'teamA-9': makeStat('teamA-9', 'teamA', 20, 5),
-      'teamA-10': makeStat('teamA-10', 'teamA', 10, 30),
+      'teamA-10': { ...makeStat('teamA-10', 'teamA', 10, 30), keyPasses: 45, bigChances: 15 },
     };
     const standings = [makeStanding('teamA', 30, 20)];
     const awards = computeSeasonAwards(1, stats, squads, { teamA }, standings);
@@ -173,7 +171,7 @@ describe('computeSeasonAwards', () => {
     const awards = computeSeasonAwards(1, stats, squads, { teamA, teamB }, standings);
     const bd = awards.find((a) => a.type === 'best_defender');
     expect(bd?.teamId).toBe('teamB');
-    expect(bd?.statLabel).toContain('个人防守评分');
+    expect(bd?.statLabel).toContain('赛季综合评分');
   });
 
   it('Young Player only fires for a team with overall < 70 AND a player with 5+ goals', () => {

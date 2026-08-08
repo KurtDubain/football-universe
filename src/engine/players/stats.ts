@@ -51,6 +51,9 @@ export function createInitialPlayerStats(
         goalsConcededWhileOnPitch: 0,
         interceptions: 0,
         clearances: 0,
+        teamMatchesAllCompetitions: 0,
+        missedMatches: 0,
+        injuryAbsenceMatches: 0,
       };
     }
   }
@@ -84,6 +87,9 @@ export function emptyPlayerStat(playerId: string, teamId: string): PlayerSeasonS
     goalsConcededWhileOnPitch: 0,
     interceptions: 0,
     clearances: 0,
+    teamMatchesAllCompetitions: 0,
+    missedMatches: 0,
+    injuryAbsenceMatches: 0,
   };
 }
 
@@ -177,6 +183,7 @@ const STAT_COUNTER_FIELDS = [
   'substituteAppearances', 'minutesPlayed', 'cleanSheets', 'saves', 'keyBlocks',
   'bigChances', 'keyPasses', 'routineSaves', 'shotsOnTargetFaced',
   'cleanSheetMinutes', 'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
+  'teamMatchesAllCompetitions', 'missedMatches', 'injuryAbsenceMatches',
 ] as const;
 
 type StatCounterField = typeof STAT_COUNTER_FIELDS[number];
@@ -215,11 +222,24 @@ function buildMatchStatDeltas(
   const homeMatchday = resolveResultMatchday(result, 'home', squads[result.homeTeamId], globalWindowIdx);
   const awayMatchday = resolveResultMatchday(result, 'away', squads[result.awayTeamId], globalWindowIdx);
   const duration = result.homeMatchday?.durationMinutes ?? result.awayMatchday?.durationMinutes ?? (result.extraTime ? 120 : 90);
+  // The season manager passes the post-match counter for legacy stat
+  // fallback. Availability itself was evaluated at the preceding index.
+  const matchWindowIndex = Math.max(0, globalWindowIdx - 1);
 
   for (const [teamId, matchday, cleanSheet] of [
     [result.homeTeamId, homeMatchday, result.awayGoals + (result.etAwayGoals ?? 0) === 0],
     [result.awayTeamId, awayMatchday, result.homeGoals + (result.etHomeGoals ?? 0) === 0],
   ] as const) {
+    const appearedIds = new Set(matchday.map(player => player.uuid));
+    for (const player of squads[teamId] ?? []) {
+      const appeared = appearedIds.has(player.uuid);
+      const injuryAbsent = !appeared && (player.injuredUntilWindow ?? 0) > matchWindowIndex;
+      incrementDelta(deltas, player.uuid, teamId, {
+        teamMatchesAllCompetitions: 1,
+        missedMatches: appeared ? 0 : 1,
+        injuryAbsenceMatches: injuryAbsent ? 1 : 0,
+      });
+    }
     for (const player of matchday) {
       const isDefensivePosition = player.position === 'GK' || player.position === 'DF';
       incrementDelta(deltas, player.uuid, teamId, {
@@ -294,8 +314,12 @@ function buildMatchStatDeltas(
 
 function applyStatDelta(stat: PlayerSeasonStats, delta: PlayerStatDelta): PlayerSeasonStats {
   const next = { ...stat };
+  const legacyTeamMatches = stat.teamMatchesAllCompetitions ?? stat.appearances;
   for (const field of STAT_COUNTER_FIELDS) {
-    const current = Number(next[field] ?? 0);
+    const current = Number(
+      next[field]
+      ?? (field === 'teamMatchesAllCompetitions' ? legacyTeamMatches : 0),
+    );
     (next[field] as number | undefined) = current + delta[field];
   }
   return next;

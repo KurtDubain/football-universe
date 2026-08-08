@@ -8,7 +8,7 @@ import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import { computeCarryTarget, getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions } from './pitch-canvas/physics';
+import { computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions } from './pitch-canvas/physics';
 import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
   drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
@@ -149,6 +149,7 @@ function PitchCanvas(props: Props) {
   const shotOutcomeRef = useRef<Exclude<ShotOutcome, 'goal'>>('save');
   const shotOutcomeTargetRef = useRef({ x: 0, y: 0 });
   const shotOutcomeAttackingHomeRef = useRef(true);
+  const shotOutcomeSeedRef = useRef(0);
   const particlesRef = useRef<Particle[]>([]);
   const pendingImpactSceneRef = useRef<EventScene | null>(null);
   const triggeredImpactKeyRef = useRef<string | null>(null);
@@ -413,6 +414,7 @@ function PitchCanvas(props: Props) {
       shotOutcomeRef.current = scene.outcome;
       shotOutcomeTargetRef.current = { x: targetX, y: targetY };
       shotOutcomeAttackingHomeRef.current = scene.attackingHome;
+      shotOutcomeSeedRef.current = scene.seed;
       if (scene.outcome === 'save' || scene.outcome === 'block') {
         addParticles(spawnTackleSparks(targetX, targetY));
         cameraShakeRef.current = scene.outcome === 'block' ? 12 : 8;
@@ -673,7 +675,7 @@ function PitchCanvas(props: Props) {
         : baseBallTarget;
       const finalTargetX = P + ballTarget.x * fw;
       const finalTargetY = P + ballTarget.y * fh;
-      const releaseDelayFrames = currentPhase.kind === 'shot' ? 4 : 0;
+      const releaseDelayFrames = currentPhase.kind === 'shot' ? 8 : 0;
       const phaseProgress = phaseStateRef.current === 'holding'
         ? 1
         : clamp(
@@ -693,6 +695,7 @@ function PitchCanvas(props: Props) {
         frame: f,
         flightKind: currentPhase.kind,
         releaseDelayFrames,
+        swerve: currentPhase.swerve,
       });
       const bx = ballResult.bx;
       const by = ballResult.by;
@@ -712,9 +715,29 @@ function PitchCanvas(props: Props) {
         triggerShotImpact(pendingImpact, homeColor, awayColor);
       }
 
+      let displayBx = bx;
+      let displayBy = by;
+      let displayArcLift = ballArcLiftRef.current;
+      if (shotOutcomeFrameRef.current > 0) {
+        const rebound = computePostShotBallPosition({
+          outcome: shotOutcomeRef.current,
+          target: shotOutcomeTargetRef.current,
+          attackingHome: shotOutcomeAttackingHomeRef.current,
+          progress: 1 - shotOutcomeFrameRef.current / SHOT_OUTCOME_MAX_FRAMES,
+          seed: shotOutcomeSeedRef.current,
+        });
+        displayBx = rebound.bx;
+        displayBy = rebound.by;
+        displayArcLift = rebound.arcLift;
+        ballSpinRef.current += rebound.spinDelta;
+      }
+
       // Ball trail (motion blur)
       if (phaseStateRef.current !== 'holding' && f % 2 === 0) {
-        ballHistory.current.push({ x: bx, y: by - ballArcLiftRef.current });
+        ballHistory.current.push({ x: displayBx, y: displayBy - displayArcLift });
+        if (ballHistory.current.length > 10) ballHistory.current.shift();
+      } else if (shotOutcomeFrameRef.current > 0 && f % 3 === 0) {
+        ballHistory.current.push({ x: displayBx, y: displayBy - displayArcLift });
         if (ballHistory.current.length > 10) ballHistory.current.shift();
       } else if (ballHistory.current.length > 0 && f % 3 === 0) {
         ballHistory.current.shift();
@@ -765,6 +788,9 @@ function PitchCanvas(props: Props) {
         activePlayerIndices,
         phaseProgress,
       );
+      const attackerActionProgress = currentPhase.kind === 'shot'
+        ? clamp(phaseFrameRef.current / Math.max(1, currentPhase.duration), 0, 1)
+        : phaseProgress;
 
       // ── Draw players ──
       const visiblePlayerIds = liveShootout && directedShotScene?.event.shootout
@@ -792,7 +818,7 @@ function PitchCanvas(props: Props) {
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
               ? directedShotScene.outcome
               : undefined,
-          phaseProgress,
+          isAttacker ? attackerActionProgress : phaseProgress,
         );
       }
       for (const player of visibleAway) {
@@ -810,7 +836,7 @@ function PitchCanvas(props: Props) {
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
               ? directedShotScene.outcome
               : undefined,
-          phaseProgress,
+          isAttacker ? attackerActionProgress : phaseProgress,
         );
       }
 
@@ -823,7 +849,11 @@ function PitchCanvas(props: Props) {
         event: directedShotScene
           ? { type: directedShotScene.event.type, outcome: directedShotScene.outcome, ...directedActors }
           : null,
-        ball: { x: ballNX, y: ballNY, elevation: ballArcLiftRef.current },
+        ball: {
+          x: (displayBx - P) / fw,
+          y: (displayBy - P) / fh,
+          elevation: displayArcLift,
+        },
         ballHolderId,
         lastTouchPlayerId,
         action: {
@@ -895,11 +925,12 @@ function PitchCanvas(props: Props) {
           shotOutcomeTargetRef.current.x,
           shotOutcomeTargetRef.current.y,
           shotOutcomeAttackingHomeRef.current,
+          W,
         );
         shotOutcomeFrameRef.current--;
       }
 
-      drawBall(ctx, bx, by, ballArcLiftRef.current, ballSpinRef.current);
+      drawBall(ctx, displayBx, displayBy, displayArcLift, ballSpinRef.current);
 
       ctx.restore();
 

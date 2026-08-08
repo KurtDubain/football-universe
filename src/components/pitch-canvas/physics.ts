@@ -30,6 +30,7 @@ export interface BallComputeInput {
   frame: number;               // global frame counter (for hold micro-motion)
   flightKind?: 'pass' | 'shot';
   releaseDelayFrames?: number;
+  swerve?: number;
 }
 
 export interface BallComputeResult {
@@ -76,7 +77,7 @@ export function selectDefensiveRoles(
 export function computeBallPosition(input: BallComputeInput): BallComputeResult {
   const {
     passing, phaseFrame, duration, arc, source, target, frame,
-    flightKind = 'pass', releaseDelayFrames = 0,
+    flightKind = 'pass', releaseDelayFrames = 0, swerve = 0,
   } = input;
   if (passing) {
     const flightDuration = Math.max(1, duration - releaseDelayFrames);
@@ -86,7 +87,8 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
     const rollBias = flightKind === 'pass' ? 0.12 * (1 - arc) : 0;
     const eased = clamp(t + Math.sin(t * Math.PI) * rollBias, 0, 1);
     const bx = lerp(source.x, target.x, eased);
-    const by = lerp(source.y, target.y, eased);
+    const by = lerp(source.y, target.y, eased)
+      + (flightKind === 'shot' ? Math.sin(t * Math.PI) * swerve * 9 : 0);
     const arcLift = Math.sin(t * Math.PI) * arc * 22;
     const spinDelta = 0.4 + arc * 0.3;
     return { bx, by, arcLift, spinDelta };
@@ -96,6 +98,36 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
   const bx = target.x + microJ;
   const by = target.y + Math.cos(frame * 0.18) * 0.3;
   return { bx, by, arcLift: 0, spinDelta: 0.05 };
+}
+
+export interface PostShotBallInput {
+  outcome: 'save' | 'block' | 'miss';
+  target: { x: number; y: number };
+  attackingHome: boolean;
+  progress: number;
+  seed: number;
+}
+
+/**
+ * Visual-only second-ball motion after the authoritative shot result lands.
+ * Saves spill a short distance, blocks ricochet wider, and misses retain their
+ * momentum beyond the post. The match result and restart source stay unchanged.
+ */
+export function computePostShotBallPosition(input: PostShotBallInput): BallComputeResult {
+  const progress = clamp(input.progress, 0, 1);
+  const travel = 1 - (1 - progress) * (1 - progress);
+  const attackDirection = input.attackingHome ? 1 : -1;
+  const sideDirection = seededRand(input.seed + 211) < 0.5 ? -1 : 1;
+  const distance = input.outcome === 'block' ? 34 : input.outcome === 'save' ? 18 : 16;
+  const lateral = input.outcome === 'block' ? 24 : input.outcome === 'save' ? 8 : 13;
+  const fieldDirection = input.outcome === 'miss' ? attackDirection : -attackDirection;
+  const lift = input.outcome === 'block' ? 7 : input.outcome === 'save' ? 4 : 2;
+  return {
+    bx: input.target.x + fieldDirection * distance * travel,
+    by: input.target.y + sideDirection * lateral * travel,
+    arcLift: Math.sin(progress * Math.PI) * lift,
+    spinDelta: 0.5 + (1 - progress) * 0.35,
+  };
 }
 
 export function computeCarryTarget(
