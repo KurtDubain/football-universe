@@ -12,12 +12,15 @@ import {
   type PlaybackMode,
 } from './match-live/playback-mode';
 import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
+import { createMatchSoundscape, type MatchSoundscape } from '../feedback/match-soundscape';
 import {
   setFeedbackPreferences,
   useFeedbackPreferences,
 } from '../feedback/preferences';
 import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
+import keyMatchOpenerArtwork from '../assets/visual/key-match-opener-v1.webp';
 import { DecorativeImage } from './DecorativeImage';
+import TeamBadge from './TeamBadge';
 import {
   buildLiveCommentary,
   buildLiveCommentaryHistory,
@@ -28,6 +31,8 @@ interface Props {
   result: MatchResult;
   teamBases: Record<string, TeamBase>;
   onClose: () => void;
+  /** Opens with a spoiler-free broadcast slate before revealing the 0-0 clock. */
+  featured?: boolean;
 }
 
 const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
@@ -307,10 +312,10 @@ function ShootoutTracker({
 }
 
 export default function MatchLive(props: Props) {
-  return <MatchLiveSession key={playbackKey(props.result)} {...props} />;
+  return <MatchLiveSession key={`${playbackKey(props.result)}:${props.featured ? 'featured' : 'standard'}`} {...props} />;
 }
 
-function MatchLiveSession({ result, teamBases, onClose }: Props) {
+function MatchLiveSession({ result, teamBases, onClose, featured = false }: Props) {
   const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
   const [locallyMuted, setLocallyMuted] = useState(false);
   const feedbackPreferences = useFeedbackPreferences();
@@ -320,8 +325,12 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   );
   const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
   const [unseenEventCount, setUnseenEventCount] = useState(0);
+  const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
+  const [showOpener, setShowOpener] = useState(prestigeOpener);
   const logRef = useRef<HTMLDivElement>(null);
   const previousCommentaryCountRef = useRef<number | null>(null);
+  const soundscapeRef = useRef<MatchSoundscape | null>(null);
+  const previousPhaseRef = useRef<PlaybackPhase>(initialPlaybackState.phase);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -367,6 +376,55 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   const inShootout = Boolean(result.penalties && playback.minute > 120);
 
   useEffect(() => {
+    if (!showOpener) return;
+    const timer = window.setTimeout(
+      () => setShowOpener(false),
+      reducedMotion ? 650 : 2200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [reducedMotion, showOpener]);
+
+  useEffect(() => {
+    const soundscape = createMatchSoundscape({
+      result,
+      featured: prestigeOpener,
+      muted: !feedbackPreferences.soundEnabled || locallyMuted,
+    });
+    soundscapeRef.current = soundscape;
+    if (feedbackPreferences.soundEnabled && !locallyMuted) soundscape.start();
+    return () => {
+      soundscape.stop();
+      if (soundscapeRef.current === soundscape) soundscapeRef.current = null;
+    };
+    // Each MatchLiveSession is keyed by result and presentation, so this owns
+    // exactly one soundscape lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    soundscapeRef.current?.setMuted(!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible);
+  }, [feedbackPreferences.soundEnabled, locallyMuted, pageVisible]);
+
+  useEffect(() => {
+    soundscapeRef.current?.update({
+      minute: playback.minute,
+      maxMinute: timelineMax,
+      homeScore: playback.homeScore,
+      awayScore: playback.awayScore,
+      inShootout,
+      paused: playback.phase !== 'playing' || showOpener,
+    });
+  }, [
+    inShootout,
+    playback.awayScore,
+    playback.homeScore,
+    playback.minute,
+    playback.phase,
+    showOpener,
+    timelineMax,
+  ]);
+
+  useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -394,7 +452,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    if (playback.phase !== 'playing' || !pageVisible) return;
+    if (playback.phase !== 'playing' || !pageVisible || showOpener) return;
     const delay = playbackTickDelay(
       playback.mode,
       playback.minute,
@@ -414,6 +472,7 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
     playback.phase,
     reducedMotion,
     result.homeTeamId,
+    showOpener,
     timelineMax,
   ]);
 
@@ -428,16 +487,28 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
 
   useEffect(() => {
     if (!feedbackPreferences.soundEnabled || locallyMuted || !playback.flashEvent) return;
+    const soundscape = soundscapeRef.current;
+    soundscape?.playEvent(playback.flashEvent);
     const isGoal = playback.flashEvent.type === 'goal'
       || playback.flashEvent.type === 'own_goal'
       || playback.flashEvent.type === 'penalty_goal';
-    if (isGoal) playGameFeedback('goal');
+    if (isGoal && !soundscape?.started) playGameFeedback('goal');
   }, [
     feedbackPreferences.soundEnabled,
     locallyMuted,
     playback.flashEvent,
     playback.flashVersion,
   ]);
+
+  useEffect(() => {
+    const previous = previousPhaseRef.current;
+    previousPhaseRef.current = playback.phase;
+    if (previous === playback.phase || !feedbackPreferences.soundEnabled || locallyMuted) return;
+    if (playback.phase === 'halftime') soundscapeRef.current?.playStage('halftime');
+    else if (playback.phase === 'extra_time_break') soundscapeRef.current?.playStage('extra_time');
+    else if (playback.phase === 'shootout_break') soundscapeRef.current?.playStage('shootout');
+    else if (playback.phase === 'finished') soundscapeRef.current?.playStage('fulltime');
+  }, [feedbackPreferences.soundEnabled, locallyMuted, playback.phase]);
 
   useEffect(() => {
     if (!playback.flashEvent) return;
@@ -532,9 +603,64 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
       data-fixture-id={result.fixtureId}
       className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
-      <div className={`flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
+      <div className={`relative flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
+
+        {showOpener && (
+          <div
+            data-testid="key-match-opener"
+            className="absolute inset-0 z-30 flex min-h-0 flex-col justify-end overflow-hidden bg-slate-950"
+          >
+            <DecorativeImage
+              src={keyMatchOpenerArtwork}
+              testId="key-match-opener-art"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.1),rgba(2,6,23,0.42)_50%,rgba(2,6,23,0.96))]" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => setShowOpener(false)}
+              aria-label="跳过转播开场"
+              title="跳过转播开场"
+              className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md border border-white/15 bg-black/40 text-slate-200 hover:bg-black/65"
+            >
+              <Icon name="x" size={18} />
+            </button>
+            <div className="relative px-5 pb-8 pt-20 sm:px-10 sm:pb-10">
+              <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold text-amber-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-breathe motion-reduce:animate-none" />
+                {result.roundLabel === 'Final' || result.roundLabel === '决赛'
+                  ? '决赛现场 · 比分未揭晓'
+                  : '焦点观战 · 比分未揭晓'}
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-8">
+                <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+                  <div className="min-w-0">
+                    <div className="truncate text-xl font-black text-white sm:text-3xl" title={ht?.name ?? '主队'}>
+                      <span className="sm:hidden">{ht?.shortName ?? ht?.name ?? '主队'}</span>
+                      <span className="hidden sm:inline">{ht?.name ?? '主队'}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">{result.isNeutralVenue ? '中立场' : '主队'}</div>
+                  </div>
+                  {ht && <TeamBadge teamId={ht.id} shortName={ht.shortName} color={ht.color} size={34} />}
+                </div>
+                <div className="text-sm font-black text-slate-500 sm:text-lg">VS</div>
+                <div className="flex min-w-0 items-center gap-2">
+                  {at && <TeamBadge teamId={at.id} shortName={at.shortName} color={at.color} size={34} />}
+                  <div className="min-w-0">
+                    <div className="truncate text-xl font-black text-white sm:text-3xl" title={at?.name ?? '客队'}>
+                      <span className="sm:hidden">{at?.shortName ?? at?.name ?? '客队'}</span>
+                      <span className="hidden sm:inline">{at?.name ?? '客队'}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">{result.isNeutralVenue ? '中立场' : '客队'}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-center text-xs text-slate-300">{result.competitionName} · {result.roundLabel}</div>
+            </div>
+          </div>
+        )}
 
         <div data-testid="live-scroll-region" className="min-h-0 overflow-y-auto overscroll-y-contain">
 
@@ -795,6 +921,8 @@ function MatchLiveSession({ result, teamBases, onClose }: Props) {
                   setFeedbackPreferences({ soundEnabled: true });
                   setLocallyMuted(false);
                   unlockGameAudio();
+                  soundscapeRef.current?.start();
+                  soundscapeRef.current?.setMuted(false);
                   return;
                 }
                 setLocallyMuted(value => !value);

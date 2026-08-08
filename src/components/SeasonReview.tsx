@@ -22,6 +22,9 @@ import {
 } from '../engine/observation/season-archive';
 import { Icon, type IconName } from './Icon';
 import { StoryChapterMark } from './StoryChapterMark';
+import TeamBadge from './TeamBadge';
+import { DecorativeImage } from './DecorativeImage';
+import championCeremonyArtwork from '../assets/visual/champion-ceremony-v1.webp';
 
 interface Props {
   world: GameWorld;
@@ -82,83 +85,97 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   const seasonStorylines = (world.storylineHistory ?? [])
     .filter(storyline => storyline.seasonNumber === seasonNumber)
     .sort((a, b) => a.startedWindow - b.startedWindow || a.teamId.localeCompare(b.teamId));
+  const seasonNarrative = (() => {
+    if (l1Records.length === 0) return '';
+    const champ = getTeamName(honor.league1Champion, tb);
+    const runner = l1Records[1] ? getTeamName(l1Records[1].teamId, tb) : '';
+    const champRec = l1Records[0];
+    const runnerRec = l1Records[1];
+    const gap = champRec && runnerRec ? champRec.leaguePoints - runnerRec.leaguePoints : 0;
+    const scorer = scorers[0];
+    const scorerLabel = scorer
+      ? scorer.identity.playerNumber !== undefined
+        ? `${scorer.identity.playerNumber}号`
+        : scorer.identity.playerName
+      : '';
+    const scorerTeam = scorer ? scorer.identity.teamName : '';
+    const sentences: string[] = [];
+
+    if (gap >= 10) {
+      sentences.push(`本赛季毫无悬念，${champ}以${gap}分的断崖式优势横扫联赛，将所有对手远远甩在身后。`);
+    } else if (gap <= 3 && gap >= 0 && runner) {
+      sentences.push(`一个赛季的漫长征途最终在${champ}和${runner}之间的巅峰对决中走到终章。${champ}仅凭${gap}分的微弱优势惊险捧杯，过程跌宕起伏。`);
+    } else {
+      sentences.push(`经过${champRec?.leaguePlayed ?? 30}轮激烈角逐，${champ}以${champRec?.leaguePoints}分的成绩加冕赛季王者。`);
+    }
+
+    if (scorer && scorer.goals >= 15) {
+      sentences.push(`${scorerTeam}的${scorerLabel}以${scorer.goals}球的惊人数据独霸射手榜，成为万千球迷心中的英雄。`);
+    } else if (scorer && scorer.goals > 0) {
+      sentences.push(`射手榜上，${scorerTeam}${scorerLabel}以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
+    }
+
+    const championBuff = buffs.find(b => b.teamId === honor.league1Champion);
+    if (championBuff) {
+      const isPos = championBuff.effects.some(e => e.delta > 0);
+      sentences.push(isPos
+        ? `回望赛季初的「${championBuff.label}」剧情，似乎正是${champ}走向冠军的关键序章。`
+        : `而${champ}更是克服了赛季初「${championBuff.label}」的不利剧情，展现了真正的冠军底蕴。`);
+    }
+    if (bestDefense && bestDefense.leagueGA <= 15) {
+      sentences.push(`防守端，${getTeamName(bestDefense.teamId, tb)}铸就钢铁防线，全赛季仅失${bestDefense.leagueGA}球，令对手闻风丧胆。`);
+    }
+    if (honor.coachChanges.length >= 4) {
+      sentences.push(`教练席上风波不断，全赛季${honor.coachChanges.length}次换帅让人目不暇接。`);
+    }
+    const cupWins = [honor.leagueCupWinner, honor.superCupWinner, honor.worldCupWinner].filter(Boolean);
+    const uniqueCupTeams = new Set(cupWins);
+    if (uniqueCupTeams.size === 1 && cupWins.length >= 2 && cupWins[0] === honor.league1Champion) {
+      sentences.push(`${champ}不仅称霸联赛，更横扫杯赛赛场，成就令人艳羡的多冠伟业。`);
+    }
+    if (honor.promoted.length > 0) {
+      sentences.push(`${honor.promoted.map(p => getTeamName(p.teamId, tb)).join('和')}凭借出色表现成功升级，新的征程就此开启。`);
+    }
+    if (honor.relegated.length > 0) {
+      sentences.push(`而${honor.relegated.map(r => getTeamName(r.teamId, tb)).join('和')}则未能抵挡降级的命运，挥别了这个级别的舞台。`);
+    }
+    return sentences.slice(0, 4).join('');
+  })();
 
   return (
     <div className="space-y-4">
       {/* Narrative Header */}
-      <div className="py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30 px-4 sm:px-6">
-        <h2 className="text-2xl font-black text-slate-100 text-center">第{seasonNumber}赛季 回顾</h2>
-        <p className="text-xs text-slate-500 mt-1 text-center">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
-        {l1Records.length > 0 && (() => {
-          const champ = getTeamName(honor.league1Champion, tb);
-          const runner = l1Records[1] ? getTeamName(l1Records[1].teamId, tb) : '';
-          const champRec = l1Records[0];
-          const runnerRec = l1Records[1];
-          const gap = champRec && runnerRec ? champRec.leaguePoints - runnerRec.leaguePoints : 0;
-          const scorer = scorers[0];
-          const scorerLabel = scorer
-            ? scorer.identity.playerNumber !== undefined
-              ? `${scorer.identity.playerNumber}号`
-              : scorer.identity.playerName
-            : '';
-          const scorerTeam = scorer ? scorer.identity.teamName : '';
-
-          const sentences: string[] = [];
-
-          if (gap >= 10) {
-            sentences.push(`本赛季毫无悬念，${champ}以${gap}分的断崖式优势横扫联赛，将所有对手远远甩在身后。`);
-          } else if (gap <= 3 && gap >= 0 && runner) {
-            sentences.push(`一个赛季的漫长征途最终在${champ}和${runner}之间的巅峰对决中走到终章。${champ}仅凭${gap}分的微弱优势惊险捧杯，过程跌宕起伏。`);
-          } else {
-            sentences.push(`经过${champRec?.leaguePlayed ?? 30}轮激烈角逐，${champ}以${champRec?.leaguePoints}分的成绩加冕赛季王者。`);
-          }
-
-          if (scorer && scorer.goals >= 15) {
-            sentences.push(`${scorerTeam}的${scorerLabel}以${scorer.goals}球的惊人数据独霸射手榜，成为万千球迷心中的英雄。`);
-          } else if (scorer && scorer.goals > 0) {
-            sentences.push(`射手榜上，${scorerTeam}${scorerLabel}以${scorer.goals}球领跑，书写了属于自己的赛季篇章。`);
-          }
-
-          // Buff-driven storyline
-          const championBuff = buffs.find(b => b.teamId === honor.league1Champion);
-          if (championBuff) {
-            const isPos = championBuff.effects.some(e => e.delta > 0);
-            sentences.push(isPos
-              ? `回望赛季初的「${championBuff.label}」剧情，似乎正是${champ}走向冠军的关键序章。`
-              : `而${champ}更是克服了赛季初「${championBuff.label}」的不利剧情，展现了真正的冠军底蕴。`);
-          }
-
-          if (bestDefense && bestDefense.leagueGA <= 15) {
-            sentences.push(`防守端，${getTeamName(bestDefense.teamId, tb)}铸就钢铁防线，全赛季仅失${bestDefense.leagueGA}球，令对手闻风丧胆。`);
-          }
-
-          if (honor.coachChanges.length >= 4) {
-            sentences.push(`教练席上风波不断，全赛季${honor.coachChanges.length}次换帅让人目不暇接。`);
-          }
-
-          const cupWins = [honor.leagueCupWinner, honor.superCupWinner, honor.worldCupWinner].filter(Boolean);
-          const uniqueCupTeams = new Set(cupWins);
-          if (uniqueCupTeams.size === 1 && cupWins.length >= 2 && cupWins[0] === honor.league1Champion) {
-            sentences.push(`${champ}不仅称霸联赛，更横扫杯赛赛场，成就令人艳羡的多冠伟业。`);
-          }
-
-          if (honor.promoted.length > 0) {
-            const promoNames = honor.promoted.map(p => getTeamName(p.teamId, tb)).join('和');
-            sentences.push(`${promoNames}凭借出色表现成功升级，新的征程就此开启。`);
-          }
-
-          if (honor.relegated.length > 0) {
-            const relegNames = honor.relegated.map(r => getTeamName(r.teamId, tb)).join('和');
-            sentences.push(`而${relegNames}则未能抵挡降级的命运，挥别了这个级别的舞台。`);
-          }
-
-          return (
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mt-3 text-center max-w-2xl mx-auto italic">
-              {sentences.slice(0, 4).join('')}
-            </p>
-          );
-        })()}
+      <div data-testid="season-champion-hero" className="relative min-h-[220px] overflow-hidden rounded-lg border border-amber-700/30 bg-slate-900">
+        <DecorativeImage
+          src={championCeremonyArtwork}
+          testId="champion-ceremony-art"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.98)_0%,rgba(2,6,23,0.82)_48%,rgba(2,6,23,0.2)_100%)]" aria-hidden="true" />
+        <div className="relative flex min-h-[220px] max-w-2xl flex-col justify-end px-4 py-5 sm:px-7">
+          <div className="mb-3 flex items-center gap-2">
+            <TeamBadge
+              teamId={honor.league1Champion}
+              shortName={tb[honor.league1Champion]?.shortName ?? honor.league1Champion}
+              color={tb[honor.league1Champion]?.color ?? '#d7ad55'}
+              size={42}
+            />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold text-amber-300">第{seasonNumber}赛季 · 顶级联赛冠军</div>
+              <h2 className="truncate text-2xl font-black text-slate-50 sm:text-3xl" title={getTeamName(honor.league1Champion, tb)}>
+                {getTeamName(honor.league1Champion, tb)}
+              </h2>
+            </div>
+          </div>
+          <p className="text-xs text-slate-300">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
+        </div>
       </div>
+
+      {seasonNarrative && (
+        <p className="border-y border-slate-700/60 py-3 text-xs leading-relaxed text-slate-400 sm:text-sm">
+          {seasonNarrative}
+        </p>
+      )}
 
       {primaryTrajectory && primaryRecord && (
         <PrimaryTeamTrajectory

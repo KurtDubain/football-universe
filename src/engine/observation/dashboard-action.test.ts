@@ -15,12 +15,12 @@ describe('dashboard action vocabulary', () => {
     expect(describeDashboardAction({
       phase: 'matchday',
       hasStarredFocus: true,
-    }).label).toBe('观看焦点');
+    }).label).toBe('进入焦点直播');
     expect(describeDashboardAction({
       phase: 'matchday',
       hasPendingJudgment: true,
       hasStarredFocus: true,
-    }).label).toBe('观看并揭晓');
+    }).label).toBe('观战并揭晓');
   });
 
   it('uses one busy state regardless of the pending action', () => {

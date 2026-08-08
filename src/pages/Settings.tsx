@@ -144,13 +144,13 @@ function SettingsContent({ world }: { world: GameWorld }) {
         aria-labelledby="feedback-settings-title"
       >
         <h3 id="feedback-settings-title" className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          关键反馈
+          声音与触觉
         </h3>
         <div className="divide-y divide-slate-700/60">
           <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
             <span>
-              <span className="block text-sm font-medium text-slate-200">关键声音</span>
-              <span className="mt-0.5 block text-[11px] text-slate-500">只在开局、进球、重大爆冷、故事升级和赛季结束时播放</span>
+              <span className="block text-sm font-medium text-slate-200">现场与关键声音</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">直播使用动态球场氛围，开局、决赛与赛季终章使用短音乐</span>
             </span>
             <input
               type="checkbox"

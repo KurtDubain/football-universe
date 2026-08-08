@@ -55,6 +55,18 @@ describe('observer focus ordering', () => {
     expect(useGameStore.getState().observationThemePreference).toBe('disabled');
   });
 
+  it('keeps exactly one spoiler-free watch target per advance', () => {
+    useGameStore.setState({ starredFixtureIds: [] });
+    useGameStore.getState().toggleStarFixture('fixture-a');
+    expect(useGameStore.getState().starredFixtureIds).toEqual(['fixture-a']);
+
+    useGameStore.getState().toggleStarFixture('fixture-b');
+    expect(useGameStore.getState().starredFixtureIds).toEqual(['fixture-b']);
+
+    useGameStore.getState().toggleStarFixture('fixture-b');
+    expect(useGameStore.getState().starredFixtureIds).toEqual([]);
+  });
+
   it('continues the selected observation lens into the next season', async () => {
     useGameStore.getState().newGame(20260718);
     useGameStore.getState().setObservationThemePreference('player_growth');

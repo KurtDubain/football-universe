@@ -81,6 +81,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
   const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
   const [liveResult, setLiveResult] = useState<MatchResult | null>(null);
+  const [liveFeatured, setLiveFeatured] = useState(false);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const clearStarredFixtures = useGameStore((s) => s.clearStarredFixtures);
 
@@ -101,10 +102,12 @@ function DashboardContent({ world }: { world: GameWorld }) {
       r.roundLabel === 'Final' || r.roundLabel === '决赛'
     );
     if (starredHit) {
+      setLiveFeatured(true);
       setLiveResult(starredHit);
       // Clear starred (one-shot per advance)
       clearStarredFixtures();
     } else if (finalResult) {
+      setLiveFeatured(true);
       setLiveResult(finalResult);
     } else {
       setActiveTab('results');
@@ -339,7 +342,10 @@ function DashboardContent({ world }: { world: GameWorld }) {
             lastResults={lastResults}
             lastNews={lastNews}
             onResultClick={handleResultClick}
-            onLiveView={(r) => setLiveResult(r)}
+            onLiveView={(r) => {
+              setLiveFeatured(false);
+              setLiveResult(r);
+            }}
           />
         )}
 
@@ -358,8 +364,10 @@ function DashboardContent({ world }: { world: GameWorld }) {
         <MatchLive
           result={liveResult}
           teamBases={world.teamBases}
+          featured={liveFeatured}
           onClose={() => {
             setLiveResult(null);
+            setLiveFeatured(false);
             setActiveTab('results');
             setCelebrationType('trophy');
           }}
@@ -592,11 +600,14 @@ function MatchdayTab({
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-                        aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
-                        className={`-my-3 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center text-base transition-colors ${isStarred ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400'}`}
-                        title={isStarred ? '已加星 (推进时自动直播)' : '加星 — 推进时自动直播'}
+                        data-testid="focus-watch-toggle"
+                        aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
+                        aria-pressed={isStarred}
+                        className={`-my-2 inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors ${isStarred ? 'border-amber-500/50 bg-amber-950/60 text-amber-300' : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-amber-600/50 hover:text-amber-300'}`}
+                        title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
                       >
-                        {isStarred ? '★' : '☆'}
+                        <Icon name={isStarred ? 'lock' : 'eye'} size={14} />
+                        <span>{isStarred ? '已锁定' : '观战'}</span>
                       </button>
                     </div>
                     <div className="focus-fixture-details flex flex-wrap gap-1">
@@ -1361,14 +1372,15 @@ function FixtureCard({
       }`}
       style={hasGlow ? { color: '#f59e0b' } : undefined}
     >
-      {/* Star button — top-right corner */}
+      {/* Spoiler-free watch button — top-right corner */}
       <button
         onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-        aria-label={isStarred ? '取消关注比赛' : '关注比赛并在推进时自动直播'}
+        aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
+        aria-pressed={isStarred}
         className={`absolute top-0 right-0 w-11 h-11 inline-flex items-start pt-2 justify-center text-sm transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 sm:text-slate-700 hover:text-amber-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
-        title={isStarred ? '已加星' : '加星 — 推进时自动直播'}
+        title={isStarred ? '已锁定无剧透观战' : '推进后无剧透观战'}
       >
-        {isStarred ? '★' : '☆'}
+        <Icon name={isStarred ? 'lock' : 'eye'} size={16} />
       </button>
 
       {/* Tags */}

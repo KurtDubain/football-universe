@@ -156,6 +156,25 @@ describe('MatchLive playback state machine', () => {
     }
   });
 
+  it('holds a featured match behind a spoiler-free opener before starting the clock', () => {
+    render(<MatchLive
+      result={makeResult('featured-live', goalEvents)}
+      teamBases={teamBases}
+      onClose={() => undefined}
+      featured
+    />);
+
+    expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('比分未揭晓');
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
+    advance(2199);
+    expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
+    advance(1);
+    expect(document.body.querySelector('[data-testid="key-match-opener"]')).toBeNull();
+    advance(380);
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+  });
+
   it('can enable global sound from the live-local control', () => {
     setFeedbackPreferences({ soundEnabled: false });
     render(<MatchLive result={makeResult('live-muted')} teamBases={teamBases} onClose={() => undefined} />);

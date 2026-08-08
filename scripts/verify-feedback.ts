@@ -254,7 +254,7 @@ async function main(): Promise<void> {
         vibrations: probe.vibrations,
       };
     });
-    if (seasonDelivery.deliveries.length !== 1 || seasonDelivery.tones !== 3
+    if (seasonDelivery.deliveries.length !== 1 || seasonDelivery.tones !== 6
       || seasonDelivery.vibrations.length !== 1) {
       throw new Error(`Season feedback was not bounded: ${JSON.stringify(seasonDelivery)}`);
     }

@@ -1,5 +1,17 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-08 Broadcast Atmosphere And Focus Watch
+
+- User approved the complete P0/P1 audiovisual plan: stadium ambience, event and shootout sound, spoiler-free focus watching, key-match/champion art, and restrained short music without turning the observer game into a manager game.
+- The existing transient multi-star auto-live path is now a single explicit watch lock. Advancing opens the selected fixture behind a score-hidden broadcast slate and only then starts the authoritative 0-0 playback clock; replacing a target cannot leave multiple auto-live matches.
+- Match Live reuses the project's single gesture-unlocked AudioContext. A cached two-layer procedural crowd bed responds to competition prestige, match progress, close-score tension, pause state, and shootouts without reading or advancing simulation RNG.
+- Goals distinguish home, away, and neutral crowd reactions. Saves, blocks, misses, woodwork, cards, substitutions, halftime, extra time, shootout entry, and fulltime have separate original synthesized cues. Local/global mute, hidden pages, reduced feedback environments, missing Web Audio, and unmount all degrade or stop cleanly.
+- Start observation, featured/final broadcast openings, and season end now use short original musical motifs. Routine data browsing remains silent and no third-party audio file or license obligation was introduced.
+- Generated two original, brand-free visual assets with the built-in image tool: a 1440x630 night-stadium opener (70,358 bytes) and a 1200x600 champion ceremony (34,786 bytes). Team names, short names, badges, competition, venue, season, and statistics remain dynamic accessible text.
+- Season Review separates its champion image from the narrative paragraph so the trophy and club identity remain legible on mobile. The featured-match opener uses short names on mobile rather than ellipsizing long full names.
+- Dedicated browser verification passes at 390x844 and 1440x900 through lock, advance, hidden-score opener, real Canvas playback, a scheduled away-goal crowd reaction, fulltime sound, season rollover, and champion archive with no overflow or runtime error. Standard game-client screenshots and text state were inspected across three deterministic animation iterations.
+- Final Node 22.22.2 verification passed 98 test files / 746 tests, ESLint, TypeScript/PWA audit build, changelog and bundle budgets, production offline feedback, throttled visual assets, and the production focus-watch journey. The main entry is 229,840 bytes (71,459 gzip), initial load is 633,292 bytes (206,371 gzip), and the production dependency audit reports no known vulnerabilities.
+
 ## 2026-08-08 Shot And Second-Ball Motion Pass
 
 - User requested another match-animation improvement after confirming the current traceability and storage capability is sufficient.

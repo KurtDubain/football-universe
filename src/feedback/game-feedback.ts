@@ -59,6 +59,15 @@ export function unlockGameAudio(): boolean {
   }
 }
 
+/**
+ * Reuse the single gesture-unlocked context for optional long-form feedback
+ * such as the match soundscape. Callers must still degrade when Web Audio
+ * features are unavailable.
+ */
+export function getUnlockedGameAudioContext(): AudioContext | null {
+  return unlockGameAudio() ? audioContext : null;
+}
+
 export function suspendGameAudio(): void {
   if (audioContext?.state === 'running') {
     try {

@@ -1,7 +1,8 @@
 # Original Visual Asset Register
 
 All assets in this register are original project artwork generated with the
-built-in OpenAI image-generation tool on 2026-07-31. Dynamic team names,
+built-in OpenAI image-generation tool. The initial family was created on
+2026-07-31 and the broadcast additions on 2026-08-08. Dynamic team names,
 scores, season numbers, Chinese copy, and commands remain accessible live text.
 
 | Versioned asset | Use | Display source | Dimensions | File budget |
@@ -12,6 +13,8 @@ scores, season numbers, Chinese copy, and commands remain accessible live text.
 | `story-promoted-survival-v1.webp` | Promoted-survival chapter mark | `call_FLBlDE3ktbwkbQsuKmuJeLXt.png` | 192x192 | 4 KB |
 | `live-scoreboard-v1.webp` | Live-score material foundation | `call_1LOY5tUcAg8l0LNhykG8tt4F.png` | 1200x300 | 16 KB |
 | `season-archive-frame-v1.webp` | On-screen and exported season archive frame | `call_OBFi5qjUssqk1loZi022q65U.png` | 960x1200 | 72 KB |
+| `key-match-opener-v1.webp` | Spoiler-free featured-match broadcast opener | `exec-290c0734-4fa6-429b-85bc-2297e240c6fd.png` | 1440x630 | 70 KB / 96 KB budget |
+| `champion-ceremony-v1.webp` | Season-review champion ceremony | `exec-797ec9e8-6a10-4c8d-abe4-07384308ded4.png` | 1200x600 | 35 KB / 64 KB budget |
 
 The display sources are retained under the current Codex generated-image
 session. The project-consumed WebP files live in `src/assets/visual/`.
@@ -26,6 +29,10 @@ session. The project-consumed WebP files live in `src/assets/visual/`.
   and neutral team zones.
 - Archive: a portrait charcoal paper-and-metal frame with pitch-blueprint detail
   confined to the margins.
+- Key match: a high main-stand view over a packed original night stadium with
+  a clear pitch, restrained floodlight haze, and dark zones for dynamic clubs.
+- Champion ceremony: an original unbranded metallic football trophy on a low
+  pitch-side plinth with restrained gold confetti and calm dynamic-text zones.
 
 ## Delivery Rules
 

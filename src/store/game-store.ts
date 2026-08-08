@@ -65,7 +65,7 @@ interface GameStore {
   favoriteTeamIds: string[];
   /** Display-only lens for the current observer route. Never read by simulation. */
   observationThemePreference: ObservationThemePreference;
-  /** Transient set of fixtures the user starred for auto-live (cleared on advance). */
+  /** One transient fixture selected for spoiler-free auto-live (cleared on advance). */
   starredFixtureIds: string[];
   newAchievements: Achievement[];
 
@@ -645,9 +645,9 @@ export const useGameStore = create<GameStore>()(
       toggleStarFixture: (fixtureId: string) => {
         const cur = get().starredFixtureIds;
         if (cur.includes(fixtureId)) {
-          set({ starredFixtureIds: cur.filter((id) => id !== fixtureId) });
+          set({ starredFixtureIds: [] });
         } else {
-          set({ starredFixtureIds: [...cur, fixtureId] });
+          set({ starredFixtureIds: [fixtureId] });
         }
       },
 
