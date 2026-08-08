@@ -1,5 +1,18 @@
 Original prompt: 可以，那你来优化一下动画模块吧
 
+## 2026-08-08 Match Realism And World Moments
+
+- User approved the combined match-animation, event-image, and UI polish pass, with direct validation and push. The authoritative simulator, scores, events, statistics, saves, and observer-game positioning remain unchanged.
+- Open-play sequences now use bounded role-aware receiving points instead of fixed formation slots. Possession shapes add supporting triangles, width, and a ball-side fullback option; defending adds stable marking assignments, passing-lane cover, goal-side positioning, and presser inertia.
+- Shots, saves, and blocks retain their actual final ball position. Deterministic second-ball possession can continue from a spill or ricochet, while every next phase begins at the visible ball rather than snapping back to a nominal slot.
+- The broadcast camera now follows danger with restrained zoom and smoothing. Players expose lightweight shoulder, facing, and stride cues; labels, flashes, trails, and celebration effects were reduced or repositioned to keep the pitch readable on small screens.
+- Added five original, brand-free 1440x630 world-moment images for tournament stages, rises, falls, legacies, and transfers, plus three regenerated 256px story chapter marks. Art is limited to one authoritative narrative beat per response and routine match news remains text-led.
+- All generated images are versioned WebP assets with explicit byte budgets, fallback behavior, source identifiers, and prompt records in `docs/visual-assets.md`. Save-Data, high contrast, failed requests, throttled mobile loading, and offline PWA use all passed.
+- Dashboard watch actions now use a 44px icon control placed away from the draggable advance action, and Match Live scoreboards use real dynamic team badges. The 320px screenshot confirms that neither control overlaps and long team identities remain readable.
+- Browser verification passed ordinary match presentation at desktop, 320px, 390px, and reduced modes; tactical goal/save fixtures; penalty shootouts; focus watching across all routes; audiovisual delivery; and five world-moment variants without overflow or runtime errors.
+- Animation performance passed normal and 4x CPU profiles. Average Canvas render cost was 0.388ms and 1.583ms; hidden, covered, closed, rapidly reopened, and next-batch states remained correct, and final scores still matched.
+- Final Node 22.22.2 verification passed 100 test files / 753 tests, ESLint, TypeScript, production/PWA build, changelog, visual assets, floating action, bundle, and dependency audits. The main entry is 229,759 bytes (71,387 gzip), initial load is 633,040 bytes (206,200 gzip), and production dependencies report no known vulnerabilities.
+
 ## 2026-08-08 Broadcast Atmosphere And Focus Watch
 
 - User approved the complete P0/P1 audiovisual plan: stadium ambience, event and shootout sound, spoiler-free focus watching, key-match/champion art, and restrained short music without turning the observer game into a manager game.

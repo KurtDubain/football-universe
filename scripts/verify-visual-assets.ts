@@ -4,11 +4,18 @@ import { chromium, type BrowserContext, type ConsoleMessage, type Page } from 'p
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const assets = [
   { file: 'src/assets/visual/welcome-universe-v1.webp', maxBytes: 150 * 1024 },
-  { file: 'src/assets/visual/story-dark-horse-v1.webp', maxBytes: 8 * 1024 },
-  { file: 'src/assets/visual/story-giant-crisis-v1.webp', maxBytes: 8 * 1024 },
-  { file: 'src/assets/visual/story-promoted-survival-v1.webp', maxBytes: 8 * 1024 },
+  { file: 'src/assets/visual/story-dark-horse-v2.webp', maxBytes: 12 * 1024 },
+  { file: 'src/assets/visual/story-giant-crisis-v2.webp', maxBytes: 12 * 1024 },
+  { file: 'src/assets/visual/story-promoted-survival-v2.webp', maxBytes: 12 * 1024 },
   { file: 'src/assets/visual/live-scoreboard-v1.webp', maxBytes: 24 * 1024 },
   { file: 'src/assets/visual/season-archive-frame-v1.webp', maxBytes: 96 * 1024 },
+  { file: 'src/assets/visual/key-match-opener-v1.webp', maxBytes: 96 * 1024 },
+  { file: 'src/assets/visual/champion-ceremony-v1.webp', maxBytes: 64 * 1024 },
+  { file: 'src/assets/visual/world-moment-stage-v1.webp', maxBytes: 72 * 1024 },
+  { file: 'src/assets/visual/world-moment-rise-v1.webp', maxBytes: 72 * 1024 },
+  { file: 'src/assets/visual/world-moment-fall-v1.webp', maxBytes: 72 * 1024 },
+  { file: 'src/assets/visual/world-moment-legacy-v1.webp', maxBytes: 72 * 1024 },
+  { file: 'src/assets/visual/world-moment-transfer-v1.webp', maxBytes: 72 * 1024 },
 ] as const;
 
 type AuditState = {
@@ -24,7 +31,10 @@ type AuditState = {
 };
 
 type AuditWindow = Window & {
-  __gameStore?: { getState: () => AuditState };
+  __gameStore?: {
+    getState: () => AuditState;
+    setState: (state: Record<string, unknown>) => void;
+  };
   __visualMetrics?: { cls: number; longestTask: number };
 };
 
@@ -185,12 +195,88 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
     naturalWidth: (image as HTMLImageElement).naturalWidth,
     rect: image.getBoundingClientRect().toJSON(),
   })));
-  if (storyMetrics.length === 0 || storyMetrics.some(item => item.naturalWidth !== 192)) {
+  if (storyMetrics.length === 0 || storyMetrics.some(item => item.naturalWidth !== 256)) {
     throw new Error(`Story artwork did not decode ${JSON.stringify(storyMetrics)}`);
   }
   await signals.scrollIntoViewIfNeeded();
   const storyScreenshot = '/tmp/football-visual-story-mobile.png';
   await page.screenshot({ path: storyScreenshot, animations: 'disabled' });
+
+  const focusSection = page.getByTestId('focus-matches');
+  await focusSection.waitFor({ state: 'visible', timeout: 15_000 });
+  const focusButton = focusSection.getByTestId('focus-watch-toggle').first();
+  const focusButtonMetrics = await focusButton.evaluate(button => {
+    const rect = button.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      visibleText: button.textContent?.trim() ?? '',
+      label: button.getAttribute('aria-label'),
+    };
+  });
+  if (
+    focusButtonMetrics.width < 44
+    || focusButtonMetrics.height < 44
+    || focusButtonMetrics.visibleText !== ''
+    || !focusButtonMetrics.label?.includes('无剧透观战')
+  ) {
+    throw new Error(`Focus-watch control is not polished ${JSON.stringify(focusButtonMetrics)}`);
+  }
+  await focusSection.scrollIntoViewIfNeeded();
+  const focusScreenshot = '/tmp/football-focus-watch-mobile.png';
+  await page.screenshot({ path: focusScreenshot, animations: 'disabled' });
+
+  await page.getByRole('tab', { name: '战报' }).click();
+  const momentFixtures = [
+    { kind: 'stage', type: 'storyline', title: '洲际杯抽签之夜' },
+    { kind: 'rise', type: 'promotion', title: '小球队完成升级奇迹' },
+    { kind: 'fall', type: 'relegation', title: '传统劲旅跌入低谷' },
+    { kind: 'legacy', type: 'retirement', title: '一代传奇正式谢幕' },
+    { kind: 'transfer', type: 'rumor', title: '重磅谈判进入深夜' },
+  ] as const;
+  const momentMetrics: Array<Record<string, unknown>> = [];
+  for (const moment of momentFixtures) {
+    await page.evaluate((fixture) => {
+      const store = (window as AuditWindow).__gameStore;
+      if (!store) throw new Error('Audit store unavailable');
+      store.setState({
+        lastResults: [],
+        lastWorldResponse: null,
+        lastNews: [{
+          id: `visual-${fixture.kind}`,
+          seasonNumber: 4,
+          windowIndex: 3,
+          type: fixture.type,
+          importance: 'major',
+          title: fixture.title,
+          description: '这一刻将被写入足球宇宙的赛季记录。',
+        }],
+      });
+    }, moment);
+    const feature = page.getByTestId('world-moment-feature');
+    await feature.waitFor({ state: 'visible' });
+    const metric = await feature.evaluate((element, expectedKind) => {
+      const image = element.querySelector(`[data-testid="world-moment-art-${expectedKind}"]`) as HTMLImageElement | null;
+      return {
+        kind: element.getAttribute('data-moment-kind'),
+        naturalWidth: image?.naturalWidth ?? 0,
+        naturalHeight: image?.naturalHeight ?? 0,
+        overflow: element.scrollWidth - element.clientWidth,
+      };
+    }, moment.kind);
+    if (
+      metric.kind !== moment.kind
+      || metric.naturalWidth !== 1440
+      || metric.naturalHeight !== 630
+      || metric.overflow > 1
+    ) {
+      throw new Error(`World moment ${moment.kind} failed ${JSON.stringify(metric)}`);
+    }
+    await feature.scrollIntoViewIfNeeded();
+    const screenshot = `/tmp/football-world-moment-${moment.kind}-mobile.png`;
+    await page.screenshot({ path: screenshot, animations: 'disabled' });
+    momentMetrics.push({ ...metric, screenshot });
+  }
 
   await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
@@ -246,7 +332,15 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
   await page.keyboard.press('Escape');
   if (errors.length > 0) throw new Error(`Story/live runtime errors ${errors.join(' | ')}`);
   await page.close();
-  return { storyMetrics, liveMetrics, storyScreenshot, liveScreenshot };
+  return {
+    storyMetrics,
+    momentMetrics,
+    focusButtonMetrics,
+    liveMetrics,
+    storyScreenshot,
+    focusScreenshot,
+    liveScreenshot,
+  };
 }
 
 async function verifyArchive(context: BrowserContext): Promise<Record<string, unknown>> {

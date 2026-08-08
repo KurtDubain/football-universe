@@ -13,6 +13,7 @@ import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
   drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
   GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES, SHOT_OUTCOME_MAX_FRAMES,
+  type BroadcastCameraState,
 } from './pitch-canvas/renderer';
 import { BASE_FORMATION, type Particle, type PassPhase, type PlayerState } from './pitch-canvas/types';
 import {
@@ -50,6 +51,7 @@ interface PitchDebugState {
   attackingSide: 'home' | 'away';
   event: ({ type: MatchEvent['type']; outcome: ShotOutcome } & EventActors) | null;
   ball: { x: number; y: number; elevation: number };
+  camera: { focusX: number; focusY: number; zoom: number };
   ballHolderId: string | null;
   lastTouchPlayerId: string | null;
   action: {
@@ -139,6 +141,12 @@ function PitchCanvas(props: Props) {
   const frameRef = useRef(0);
   const ballPos = useRef({ x: 0.5, y: 0.5 });
   const ballHistory = useRef<{ x: number; y: number }[]>([]);
+  const postShotRestingBallRef = useRef<{ x: number; y: number } | null>(null);
+  const cameraRef = useRef<BroadcastCameraState>({
+    focusX: LOGICAL_WIDTH / 2,
+    focusY: LOGICAL_HEIGHT / 2,
+    zoom: 1,
+  });
   const goalCelebFrame = useRef(0);
   const goalCelebColor = useRef('#facc15'); // team color of most recent goal — for ring tinting
   const goalCelebRightSide = useRef(true); // which goal mouth the celebration is anchored to
@@ -190,6 +198,7 @@ function PitchCanvas(props: Props) {
     attackingSide: 'home',
     event: null,
     ball: { x: 0.5, y: 0.5, elevation: 0 },
+    camera: { focusX: 0.5, focusY: 0.5, zoom: 1 },
     ballHolderId: null,
     lastTouchPlayerId: null,
     action: null,
@@ -397,6 +406,7 @@ function PitchCanvas(props: Props) {
       const targetY = P + scene.target.y * fh;
       triggeredImpactKeyRef.current = scene.key;
       pendingImpactSceneRef.current = null;
+      postShotRestingBallRef.current = null;
 
       if (scene.outcome === 'goal') {
         goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
@@ -460,6 +470,7 @@ function PitchCanvas(props: Props) {
         shotOutcomeFrameRef.current = 0;
         goalCelebFrame.current = 0;
         flashWhiteRef.current = 0;
+        postShotRestingBallRef.current = null;
         const directed = generateSequence(
           eventScene.seed,
           sequenceOptionsForScene(eventScene, live.allEvents, homeRoster, awayRoster, homePossessionShare),
@@ -494,8 +505,25 @@ function PitchCanvas(props: Props) {
         }
       }
 
-      // Camera shake — saves ctx, translates, clears. Caller must restore() at end of frame.
-      applyCameraShake(ctx, cameraShakeRef, cameraShakeMax, W, H);
+      const cameraTargetX = clamp(ballPos.current.x, P + fw * 0.1, P + fw * 0.9);
+      const cameraTargetY = clamp(ballPos.current.y, P + fh * 0.1, P + fh * 0.9);
+      const dangerousMoment = livePhase?.kind === 'shot'
+        || shotOutcomeFrameRef.current > 0
+        || goalCelebFrame.current > 0;
+      const targetZoom = reducedMotion
+        ? 1
+        : dangerousMoment
+          ? 1.055
+          : livePhase?.arc && livePhase.arc > 0.45
+            ? 1.03
+            : 1.018;
+      cameraRef.current.focusX = lerp(cameraRef.current.focusX, cameraTargetX, 0.045);
+      cameraRef.current.focusY = lerp(cameraRef.current.focusY, cameraTargetY, 0.045);
+      cameraRef.current.zoom = lerp(cameraRef.current.zoom, targetZoom, dangerousMoment ? 0.06 : 0.025);
+
+      // Broadcast camera and restrained impact shake share one transform so
+      // the pitch never receives competing scale/translation operations.
+      applyCameraShake(ctx, cameraShakeRef, cameraShakeMax, W, H, cameraRef.current);
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
@@ -517,7 +545,11 @@ function PitchCanvas(props: Props) {
         const completedScene = sequenceSceneRef.current;
         let continuationOptions: SequenceOptions;
         if (completedScene) {
-          const restartingHome = !completedScene.attackingHome;
+          const attackingSecondBall = completedScene.outcome === 'block'
+            && seededRand(completedScene.seed + 401) < 0.36;
+          const restartingHome = attackingSecondBall
+            ? completedScene.attackingHome
+            : !completedScene.attackingHome;
           const restartingRoster = restartingHome ? homeRoster : awayRoster;
           const activeRestartingRoster = activePitchPlayers(restartingRoster, minute, maxMinute);
           const actors = actorsForEvent(completedScene.event, live.allEvents);
@@ -525,16 +557,25 @@ function PitchCanvas(props: Props) {
             ? 9
             : completedScene.outcome === 'miss'
               ? 0
-              : slotForPlayer(restartingRoster, actors.defenderId) ?? 0;
+              : attackingSecondBall
+                ? slotForPlayer(restartingRoster, actors.attackerId)
+                : slotForPlayer(restartingRoster, actors.defenderId) ?? 0;
+          const restingBall = postShotRestingBallRef.current;
           const restartSource = completedScene.outcome === 'goal'
             ? { x: 0.5, y: 0.5 }
             : completedScene.outcome === 'miss'
               ? { x: restartingHome ? 0.08 : 0.92, y: 0.5 }
+              : restingBall
+                ? {
+                  x: clamp((restingBall.x - P) / fw, 0.04, 0.96),
+                  y: clamp((restingBall.y - P) / fh, 0.08, 0.92),
+                }
               : {
                 x: clamp(completedScene.target.x, 0.04, 0.96),
                 y: clamp(completedScene.target.y, 0.08, 0.92),
               };
-          const restartSlot = activeRestartingRoster.some(player => player.slotIndex === preferredRestartSlot)
+          const restartSlot = preferredRestartSlot !== undefined
+            && activeRestartingRoster.some(player => player.slotIndex === preferredRestartSlot)
             ? preferredRestartSlot
             : nearestPlayerSlot(
               activeRestartingRoster,
@@ -549,6 +590,7 @@ function PitchCanvas(props: Props) {
             sourceOverride: restartSource,
             homePossessionShare,
           };
+          postShotRestingBallRef.current = null;
         } else {
           const probe = generateSequence(sequenceSeedRef.current, { homePossessionShare });
           const nextAttackingHome = probe.phases[0]?.attackingHome ?? true;
@@ -630,6 +672,12 @@ function PitchCanvas(props: Props) {
               phaseStateRef.current = newPhase.kind === 'shot' ? 'shooting' : 'passing';
               const resolved = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
               const source = newPhase.sourceOverride ? resolved.source : { ...ballPos.current };
+              if (!newPhase.sourceOverride) {
+                newPhase.sourceOverride = {
+                  x: clamp((source.x - P) / fw, 0.03, 0.97),
+                  y: clamp((source.y - P) / fh, 0.05, 0.95),
+                };
+              }
               ballSourceRef.current = source;
               const destination = newPhase.targetOverride
                 ?? getBaseSlot(newPhase.receiverIdx, newPhase.attackingHome, shiftRef.current);
@@ -663,7 +711,6 @@ function PitchCanvas(props: Props) {
       const maxCarry = receiverRole === 'GK' ? 0.006 : receiverRole === 'DF' ? 0.014 : receiverRole === 'MF' ? 0.022 : 0.026;
       const canCarry = phaseStateRef.current === 'holding'
         && currentPhase.kind === 'pass'
-        && !currentPhase.targetOverride
         && sequenceRef.current[phaseIdxRef.current + 1]?.kind !== 'shot';
       const ballTarget = canCarry
         ? computeCarryTarget(
@@ -729,6 +776,7 @@ function PitchCanvas(props: Props) {
         displayBx = rebound.bx;
         displayBy = rebound.by;
         displayArcLift = rebound.arcLift;
+        postShotRestingBallRef.current = { x: rebound.bx, y: rebound.by };
         ballSpinRef.current += rebound.spinDelta;
       }
 
@@ -853,6 +901,11 @@ function PitchCanvas(props: Props) {
           x: (displayBx - P) / fw,
           y: (displayBy - P) / fh,
           elevation: displayArcLift,
+        },
+        camera: {
+          focusX: cameraRef.current.focusX / W,
+          focusY: cameraRef.current.focusY / H,
+          zoom: cameraRef.current.zoom,
         },
         ballHolderId,
         lastTouchPlayerId,

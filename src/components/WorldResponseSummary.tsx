@@ -14,6 +14,8 @@ import type { MatchResult } from '../types/match';
 import { getTeamShortName } from '../utils/format';
 import { Icon } from './Icon';
 import ObservationSettlementSummary from './ObservationSettlementSummary';
+import { WorldMomentFeature } from './WorldMomentFeature';
+import { worldMomentKindForNews } from './world-moment';
 
 function scoreLabel(result: MatchResult): string {
   const home = result.homeGoals + (result.etHomeGoals ?? 0);
@@ -75,6 +77,8 @@ export default function WorldResponseSummary({
   const changes = [...response.storyUpdates, ...response.keyNews]
     .filter((item, index, all) => all.findIndex(entry => entry.id === item.id) === index)
     .slice(0, 3);
+  const worldMoment = changes.find(news => worldMomentKindForNews(news) !== null);
+  const secondaryChanges = changes.filter(news => news.id !== worldMoment?.id);
   const hiddenMatches = Math.max(0, response.completedMatches - response.featuredResults.length);
   const hiddenNews = Math.max(0, response.totalNews - changes.length);
   const primaryResult = response.featuredResults[0]?.result;
@@ -117,6 +121,12 @@ export default function WorldResponseSummary({
           )}
         </div>
       </div>
+
+      {worldMoment && (
+        <div className="mt-3">
+          <WorldMomentFeature news={worldMoment} />
+        </div>
+      )}
 
       {response.featuredResults.length > 0 && (
         <div className="mt-2">
@@ -170,9 +180,9 @@ export default function WorldResponseSummary({
         />
       </div>
 
-      {changes.length > 0 && (
+      {secondaryChanges.length > 0 && (
         <div className="mt-2" data-testid="world-response-changes">
-          {changes.map(news => <ChangeRow key={news.id} news={news} />)}
+          {secondaryChanges.map(news => <ChangeRow key={news.id} news={news} />)}
         </div>
       )}
 

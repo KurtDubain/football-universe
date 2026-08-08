@@ -710,7 +710,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   <span className="sm:hidden">{ht?.shortName ?? ht?.name ?? '主队'}</span>
                   <span className="hidden sm:inline">{ht?.name ?? '主队'}</span>
                 </span>
-                <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: ht?.color ?? '#666' }} />
+                {ht && <TeamBadge teamId={ht.id} shortName={ht.shortName} color={ht.color} size={26} />}
               </div>
             </div>
 
@@ -732,7 +732,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             {/* Away */}
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="w-4 h-4 rounded-full shrink-0 border border-white/20" style={{ backgroundColor: at?.color ?? '#666' }} />
+                {at && <TeamBadge teamId={at.id} shortName={at.shortName} color={at.color} size={26} />}
                 <span className="min-w-0 truncate text-sm font-bold text-slate-100 sm:text-lg" title={at?.name ?? '客队'}>
                   <span className="sm:hidden">{at?.shortName ?? at?.name ?? '客队'}</span>
                   <span className="hidden sm:inline">{at?.name ?? '客队'}</span>

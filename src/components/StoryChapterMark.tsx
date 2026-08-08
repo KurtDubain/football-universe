@@ -1,7 +1,7 @@
 import type { StorylineType } from '../engine/season/storylines';
-import darkHorseArtwork from '../assets/visual/story-dark-horse-v1.webp';
-import giantCrisisArtwork from '../assets/visual/story-giant-crisis-v1.webp';
-import promotedSurvivalArtwork from '../assets/visual/story-promoted-survival-v1.webp';
+import darkHorseArtwork from '../assets/visual/story-dark-horse-v2.webp';
+import giantCrisisArtwork from '../assets/visual/story-giant-crisis-v2.webp';
+import promotedSurvivalArtwork from '../assets/visual/story-promoted-survival-v2.webp';
 import { DecorativeImage } from './DecorativeImage';
 import { Icon, type IconName } from './Icon';
 
@@ -36,7 +36,7 @@ export function StoryChapterMark({
       </span>
       <DecorativeImage
         src={STORY_ARTWORK[type]}
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover brightness-110 contrast-110"
         testId={`story-art-${type}`}
       />
     </span>

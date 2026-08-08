@@ -45,6 +45,42 @@ export interface DefensiveRoles {
   coverIndex: number;
 }
 
+export function selectMarkingTarget(
+  playerPos: PlayerState[],
+  markerIndex: number,
+  defendingHome: boolean,
+  activePlayerIndices?: ReadonlySet<number>,
+): number | undefined {
+  const defendingOffset = defendingHome ? 0 : 11;
+  const attackingOffset = defendingHome ? 11 : 0;
+  const markerSlot = markerIndex - defendingOffset;
+  const markerRole = BASE_FORMATION[markerSlot]?.role;
+  if (markerRole !== 'DF' && markerRole !== 'MF') return undefined;
+
+  const markers = BASE_FORMATION
+    .map((slot, slotIndex) => ({ slot, index: defendingOffset + slotIndex }))
+    .filter(candidate => (
+      (candidate.slot.role === 'DF' || candidate.slot.role === 'MF')
+      && (!activePlayerIndices || activePlayerIndices.has(candidate.index))
+    ))
+    .sort((a, b) => a.slot.y - b.slot.y);
+  const threats = BASE_FORMATION
+    .map((slot, slotIndex) => ({ slot, index: attackingOffset + slotIndex }))
+    .filter(candidate => (
+      (candidate.slot.role === 'FW' || candidate.slot.role === 'MF')
+      && (!activePlayerIndices || activePlayerIndices.has(candidate.index))
+    ))
+    .sort((a, b) => playerPos[a.index].y - playerPos[b.index].y);
+  if (threats.length === 0) return undefined;
+
+  const markerRank = markers.findIndex(candidate => candidate.index === markerIndex);
+  if (markerRank < 0) return undefined;
+  const threatRank = markers.length <= 1
+    ? 0
+    : Math.round((markerRank / (markers.length - 1)) * (threats.length - 1));
+  return threats[threatRank]?.index;
+}
+
 export function selectDefensiveRoles(
   playerPos: PlayerState[],
   defendingHome: boolean,
@@ -57,8 +93,8 @@ export function selectDefensiveRoles(
     .map((slot, slotIndex) => ({ slot, index: offset + slotIndex }))
     .filter(candidate => candidate.slot.role !== 'GK' && (!activePlayerIndices || activePlayerIndices.has(candidate.index)));
   const byBall = [...candidates].sort((a, b) =>
-    dist(playerPos[a.index].x, playerPos[a.index].y, ballNX, ballNY)
-    - dist(playerPos[b.index].x, playerPos[b.index].y, ballNX, ballNY)
+    (dist(playerPos[a.index].x, playerPos[a.index].y, ballNX, ballNY) - playerPos[a.index].sprintT * 0.08)
+    - (dist(playerPos[b.index].x, playerPos[b.index].y, ballNX, ballNY) - playerPos[b.index].sprintT * 0.08)
   );
   const presserIndex = byBall[0].index;
   const ownGoalX = defendingHome ? 0.03 : 0.97;
@@ -222,22 +258,42 @@ export function updatePlayerPositions(
       targetY_n = destination.y;
       playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.7);
     } else if (teamHasBall) {
-      // Team in possession: shift toward attacking direction
+      // Possession shape: the ball-side full-back overlaps, midfielders form
+      // a support triangle, and the front line stretches depth and width.
       const attackDir = isHomeTeam ? 1 : -1;
-      const advance = 0.04 + (slot.role === 'FW' ? 0.05 : slot.role === 'MF' ? 0.03 : slot.role === 'DF' ? 0.015 : 0);
+      const attackProgress = isHomeTeam ? ballNX : 1 - ballNX;
+      const laneSide = slot.y < 0.5 ? -1 : slot.y > 0.5 ? 1 : 0;
+      const advance = 0.035 + (slot.role === 'FW' ? 0.06 : slot.role === 'MF' ? 0.035 : slot.role === 'DF' ? 0.015 : 0);
       targetX_n = slot.x + advance * attackDir;
       if (slot.role === 'DF' && (formIdx === 1 || formIdx === 4)) {
         const sameFlank = (slot.y < 0.5) === (ballNY < 0.5);
-        if (sameFlank) targetX_n += 0.035 * attackDir;
+        if (sameFlank) {
+          targetX_n += (0.025 + attackProgress * 0.045) * attackDir;
+          targetY_n = lerp(slot.y, ballNY, 0.18);
+        }
+      } else if (slot.role === 'MF') {
+        const supportDepth = formIdx === 6 ? 0.1 : 0.065;
+        const supportX = ballNX - attackDir * supportDepth;
+        const supportY = laneSide === 0
+          ? lerp(0.5, ballNY, 0.42)
+          : clamp(ballNY + laneSide * 0.13, 0.12, 0.88);
+        targetX_n = lerp(targetX_n, supportX, 0.44);
+        targetY_n = lerp(slot.y, supportY, 0.48);
+      } else if (slot.role === 'FW') {
+        const runDepth = formIdx === 9 ? 0.13 : 0.1;
+        const runX = ballNX + attackDir * (runDepth + attackProgress * 0.035);
+        const runY = formIdx === 9
+          ? lerp(0.5, ballNY, 0.3)
+          : clamp(ballNY + laneSide * 0.2, 0.1, 0.9);
+        targetX_n = lerp(targetX_n, runX, 0.58);
+        targetY_n = lerp(slot.y, runY, 0.48);
+        if (phaseState === 'passing') playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.35);
       }
-      if (slot.role === 'MF') targetY_n = lerp(slot.y, ballNY, 0.1);
-      // Wide players adjust based on ball lateral position
-      if (Math.abs(slot.y - 0.5) > 0.25) {
-        // Slight pinch toward middle if ball is central
+      if (Math.abs(slot.y - 0.5) > 0.25 && slot.role !== 'FW') {
         const ballSide = ballNY < 0.5 ? -1 : 1;
         const slotSide = slot.y < 0.5 ? -1 : 1;
         if (ballSide !== slotSide) {
-          targetY_n = slot.y + (0.5 - slot.y) * 0.15; // pinch in
+          targetY_n = slot.y + (0.5 - slot.y) * 0.15;
         }
       }
     } else {
@@ -266,6 +322,23 @@ export function updatePlayerPositions(
         const threatLineX = lerp(ballNX, ownGoalX, layer);
         const ownHalf = isHomeTeam ? ballNX < 0.5 : ballNX > 0.5;
         targetX_n = lerp(slot.x, threatLineX, ownHalf ? 0.68 : 0.36);
+
+        const markingTargetIndex = selectMarkingTarget(
+          playerPos,
+          i,
+          isHomeTeam,
+          activePlayerIndices,
+        );
+        const markingTarget = markingTargetIndex === undefined ? undefined : playerPos[markingTargetIndex];
+        const defendingDanger = isHomeTeam ? ballNX < 0.62 : ballNX > 0.38;
+        if (markingTarget && defendingDanger && (slot.role === 'DF' || slot.role === 'MF')) {
+          const goalSideGap = slot.role === 'DF' ? 0.038 : 0.06;
+          const markX = markingTarget.x + (isHomeTeam ? -goalSideGap : goalSideGap);
+          const markY = lerp(markingTarget.y, ballNY, slot.role === 'DF' ? 0.1 : 0.16);
+          const markingWeight = slot.role === 'DF' ? 0.7 : 0.48;
+          targetX_n = lerp(targetX_n, markX, markingWeight);
+          targetY_n = lerp(targetY_n, markY, markingWeight);
+        }
       }
       // The goalkeeper narrows the angle as the ball enters the final third,
       // while still protecting the goal line on distant possession.

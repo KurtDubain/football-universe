@@ -36,6 +36,8 @@ import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
 import { describeDashboardAction } from '../engine/observation/dashboard-action';
 import { SegmentedControl } from '../components/ui';
+import { WorldMomentFeature } from '../components/WorldMomentFeature';
+import { worldMomentKindForNews } from '../components/world-moment';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -591,6 +593,17 @@ function MatchdayTab({
                     }}
                   >
                     <div className="focus-fixture-main mb-1 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+                        data-testid="focus-watch-toggle"
+                        aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
+                        aria-pressed={isStarred}
+                        className={`-my-2 mr-0.5 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,box-shadow] ${isStarred ? 'border-amber-400/60 bg-amber-400/12 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]' : 'border-transparent bg-slate-950/25 text-slate-500 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-200'}`}
+                        title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
+                      >
+                        <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
+                      </button>
                       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
                         <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
                         <span className="truncate font-semibold text-slate-100" title={ht.name}>{ht.shortName}</span>
@@ -598,17 +611,6 @@ function MatchdayTab({
                         <span className="truncate font-semibold text-slate-100" title={at.name}>{at.shortName}</span>
                         <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
-                        data-testid="focus-watch-toggle"
-                        aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
-                        aria-pressed={isStarred}
-                        className={`-my-2 inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors ${isStarred ? 'border-amber-500/50 bg-amber-950/60 text-amber-300' : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-amber-600/50 hover:text-amber-300'}`}
-                        title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
-                      >
-                        <Icon name={isStarred ? 'lock' : 'eye'} size={14} />
-                        <span>{isStarred ? '已锁定' : '观战'}</span>
-                      </button>
                     </div>
                     <div className="focus-fixture-details flex flex-wrap gap-1">
                       {storylineLabel && (
@@ -898,6 +900,12 @@ function ResultsTab({
     lastNews.length > 0 ? lastNews : world.newsLog,
     { favoriteTeamNames, excludedFixtureIds: displayedFixtureIds, limit: 8 },
   );
+  const headlineMoment = lastWorldResponse
+    ? undefined
+    : curatedNews.find(news => (
+      getNewsTier(news, favoriteTeamNames) === 'headline'
+      && worldMomentKindForNews(news) !== null
+    ));
   const resultsAction = describeDashboardAction({ phase: 'results', isAdvancing });
 
   if (!lastWorldResponse && lastResults.length === 0 && curatedNews.length === 0) {
@@ -989,8 +997,13 @@ function ResultsTab({
                 <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" />
                 新闻动态
               </h3>
+              {headlineMoment && (
+                <div className="mb-2.5">
+                  <WorldMomentFeature news={headlineMoment} />
+                </div>
+              )}
               <div className="space-y-1.5">
-                {curatedNews.map(
+                {curatedNews.filter(news => news.id !== headlineMoment?.id).map(
                   (news) => (
                     <div
                       key={news.id}
@@ -1374,13 +1387,14 @@ function FixtureCard({
     >
       {/* Spoiler-free watch button — top-right corner */}
       <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
         aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
         aria-pressed={isStarred}
-        className={`absolute top-0 right-0 w-11 h-11 inline-flex items-start pt-2 justify-center text-sm transition-colors cursor-pointer ${isStarred ? 'text-amber-400' : 'text-slate-600 sm:text-slate-700 hover:text-amber-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
+        className={`absolute right-1 top-1 inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,opacity,box-shadow] ${isStarred ? 'border-amber-400/55 bg-amber-400/10 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.07)]' : 'border-transparent bg-slate-950/20 text-slate-500 hover:border-slate-600 hover:bg-slate-900/75 hover:text-slate-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
         title={isStarred ? '已锁定无剧透观战' : '推进后无剧透观战'}
       >
-        <Icon name={isStarred ? 'lock' : 'eye'} size={16} />
+        <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
       </button>
 
       {/* Tags */}

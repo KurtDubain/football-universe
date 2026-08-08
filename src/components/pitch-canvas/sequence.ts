@@ -22,6 +22,25 @@ function turnoverRoute(startingPlayerIdx: number, seedValue: number): number[] {
   return [startingPlayerIdx, startingPlayerIdx === 9 ? 8 : 9];
 }
 
+export function buildPassTarget(
+  receiverIdx: number,
+  attackingHome: boolean,
+  seedValue: number,
+  longBall: boolean,
+): { x: number; y: number } {
+  const slot = BASE_FORMATION[receiverIdx] ?? BASE_FORMATION[6];
+  const attackDirection = attackingHome ? 1 : -1;
+  const baseX = attackingHome ? slot.x : 1 - slot.x;
+  const roleAdvance = slot.role === 'FW' ? 0.045 : slot.role === 'MF' ? 0.026 : slot.role === 'DF' ? 0.012 : 0;
+  const forwardRun = roleAdvance + (longBall ? 0.022 : 0) + (seedValue - 0.5) * 0.018;
+  const lateralSeed = seededRand(receiverIdx * 193 + Math.round(seedValue * 10_000));
+  const lateralRange = slot.role === 'FW' ? 0.055 : slot.role === 'MF' ? 0.04 : 0.025;
+  return {
+    x: Math.min(0.94, Math.max(0.06, baseX + attackDirection * forwardRun)),
+    y: Math.min(0.91, Math.max(0.09, slot.y + (lateralSeed - 0.5) * lateralRange)),
+  };
+}
+
 /**
  * Generate a possession sequence with realistic flow and occasional interceptions.
  */
@@ -89,6 +108,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     const distance = Math.abs(route[i + 1] - route[i]);
     const longBall = distance >= 4 || r(i + 5) < 0.15;
     const isLastPass = i === route.length - 2;
+    const naturalTarget = buildPassTarget(route[i + 1], isHome, r(i + 41), longBall);
     phases.push({
       passerIdx: route[i],
       receiverIdx: route[i + 1],
@@ -103,7 +123,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
       ...(i === 0 && options.sourceOverride ? { sourceOverride: options.sourceOverride } : {}),
-      ...(isLastPass && directedShotOrigin ? { targetOverride: directedShotOrigin } : {}),
+      targetOverride: isLastPass && directedShotOrigin ? directedShotOrigin : naturalTarget,
     });
   }
 

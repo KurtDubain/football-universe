@@ -5,7 +5,7 @@
 // CAMERA_SHAKE_MAX_FRAMES) live here because the renderer is what
 // understands them; the orchestrator imports them when triggering effects.
 
-import { hexToRgbStr } from './math';
+import { clamp, hexToRgbStr } from './math';
 import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
 
@@ -14,9 +14,15 @@ import type { PlayerState } from './types';
 type MutNum = { current: number };
 
 export const GOAL_CELEB_MAX_FRAMES = 110;
-export const FLASH_MAX_FRAMES = 12;
-export const CAMERA_SHAKE_MAX_FRAMES = 28;
+export const FLASH_MAX_FRAMES = 8;
+export const CAMERA_SHAKE_MAX_FRAMES = 18;
 export const SHOT_OUTCOME_MAX_FRAMES = 72;
+
+export interface BroadcastCameraState {
+  focusX: number;
+  focusY: number;
+  zoom: number;
+}
 
 /**
  * Grass + stripes + lines + pa/ga boxes + corner arcs + vignette.
@@ -123,19 +129,21 @@ export function drawPlayer(
   const directionX = facingLength > 0.01 ? facingX / facingLength : 0;
   const directionY = facingLength > 0.01 ? facingY / facingLength : 0;
 
-  // Motion trail when sprinting
+  // Restrained stride marks preserve a sense of pace without the arcade-like
+  // after-images that previously followed fast players.
   if (isMoving && speed > 0.006) {
-    const dirX = p.vx / speed;
-    const dirY = p.vy / speed;
-    for (let t = 1; t <= 3; t++) {
-      const tx = px - dirX * t * 5 * fw * 0.012;
-      const ty = py - dirY * t * 5 * fh * 0.022;
-      ctx.beginPath(); ctx.arc(tx, ty, 5 - t * 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.18 - t * 0.04;
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    const sideX = -directionY;
+    const sideY = directionX;
+    const stride = Math.sin(frame * 0.5 + num) * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(px - directionX * 4 + sideX * stride, py - directionY * 4 + sideY * stride);
+    ctx.lineTo(px - directionX * 7 + sideX * stride, py - directionY * 7 + sideY * stride);
+    ctx.moveTo(px - directionX * 4 - sideX * stride, py - directionY * 4 - sideY * stride);
+    ctx.lineTo(px - directionX * 7 - sideX * stride, py - directionY * 7 - sideY * stride);
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 0.8;
+    ctx.lineCap = 'round';
+    ctx.stroke();
   }
 
   // Soft shadow
@@ -155,9 +163,13 @@ export function drawPlayer(
     ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.stroke();
     if (label) {
       ctx.font = 'bold 7px sans-serif';
+      const labelY = action === 'save' || action === 'block' ? py + 15 : Math.max(8, py - 11);
+      const labelWidth = ctx.measureText(label).width + 5;
+      ctx.fillStyle = 'rgba(2,6,23,0.72)';
+      ctx.fillRect(px - labelWidth / 2, labelY - 7, labelWidth, 9);
       ctx.fillStyle = '#fef3c7';
       ctx.textAlign = 'center';
-      ctx.fillText(label, px, Math.max(8, py - 11));
+      ctx.fillText(label, px, labelY);
     }
   }
 
@@ -220,6 +232,21 @@ export function drawPlayer(
 
   ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(num), px, py + 2.2);
+
+  if (facingLength > 0.01) {
+    const shoulderX = -directionY;
+    const shoulderY = directionX;
+    ctx.beginPath();
+    ctx.moveTo(px + shoulderX * 3.7, py + shoulderY * 3.7);
+    ctx.lineTo(px - shoulderX * 3.7, py - shoulderY * 3.7);
+    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px + directionX * 4.4, py + directionY * 4.4, 1.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fill();
+  }
 
   // A small facing marker makes the tactical dots read as footballers rather
   // than pieces sliding sideways. Key actions extend the marker only briefly.
@@ -301,12 +328,13 @@ export function drawGoalCelebration(
   // Use additive blend so rings glow brightly over the pitch
   ctx.globalCompositeOperation = 'lighter';
 
-  // Multi-ring expanding — alternate gold + team color
-  for (let k = 0; k < 3; k++) {
-    const ringT = (t + k * 0.18) % 1;
+  // Two restrained broadcast rings keep the impact readable without turning
+  // the finish into an arcade explosion.
+  for (let k = 0; k < 2; k++) {
+    const ringT = (t + k * 0.24) % 1;
     if (ringT > 0.95) continue;
-    const gr = 8 + ringT * 80;
-    const ga = (1 - ringT) * 0.55;
+    const gr = 8 + ringT * 56;
+    const ga = (1 - ringT) * 0.34;
     const ringRgb = k % 2 === 0 ? goldRgb : teamRgb;
     ctx.beginPath(); ctx.arc(ringX, ringY, gr, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(${ringRgb},${ga})`;
@@ -428,6 +456,7 @@ export function applyCameraShake(
   shakeRef: MutNum,
   shakeMaxRef: MutNum,
   W: number, H: number,
+  camera: BroadcastCameraState = { focusX: W / 2, focusY: H / 2, zoom: 1 },
 ): { offX: number; offY: number } {
   let offX = 0, offY = 0;
   let shaking = false;
@@ -436,18 +465,20 @@ export function applyCameraShake(
     const t = 1 - shakeRef.current / shakeMaxRef.current;
     const decay = Math.exp(-t * 3); // exponential falloff
     const phase = (shakeMaxRef.current - shakeRef.current) * 0.85;
-    offX = Math.sin(phase) * 5 * decay;
-    offY = Math.cos(phase * 1.3) * 3.2 * decay;
+    offX = Math.sin(phase) * 2.8 * decay;
+    offY = Math.cos(phase * 1.3) * 1.8 * decay;
     shakeRef.current--;
   }
   ctx.save();
   ctx.clearRect(0, 0, W, H);
-  if (shaking) {
-    // Slight overscan keeps translated pitch edges outside the viewport.
-    ctx.translate(W / 2 + offX, H / 2 + offY);
-    ctx.scale(1.04, 1.04);
-    ctx.translate(-W / 2, -H / 2);
-  }
+  const zoom = clamp(camera.zoom + (shaking ? 0.006 : 0), 1, 1.07);
+  const overscanX = Math.max(0, (zoom - 1) * W / 2 - 1);
+  const overscanY = Math.max(0, (zoom - 1) * H / 2 - 1);
+  const panX = clamp((W / 2 - camera.focusX) * 0.1, -overscanX, overscanX);
+  const panY = clamp((H / 2 - camera.focusY) * 0.08, -overscanY, overscanY);
+  ctx.translate(W / 2 + panX + offX, H / 2 + panY + offY);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-W / 2, -H / 2);
   return { offX, offY };
 }
 
@@ -461,7 +492,7 @@ export function applyWhiteFlash(
 ): void {
   if (flashRef.current > 0) {
     const fa = flashRef.current / FLASH_MAX_FRAMES;
-    ctx.fillStyle = `rgba(255,255,255,${fa * 0.45})`;
+    ctx.fillStyle = `rgba(255,255,255,${fa * 0.18})`;
     ctx.fillRect(0, 0, W, H);
     flashRef.current--;
   }

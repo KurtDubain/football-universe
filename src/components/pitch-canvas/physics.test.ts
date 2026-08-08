@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, updatePlayerPositions } from './physics';
+import { computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -174,6 +174,21 @@ describe('pitch player movement', () => {
 
     expect(roles.presserIndex).not.toBe(18);
     expect(roles.coverIndex).not.toBe(18);
+  });
+
+  it('pairs active defensive lanes with active midfield or forward threats', () => {
+    const players = initialPlayers();
+    const activePlayerIndices = new Set(Array.from({ length: 22 }, (_, index) => index));
+    const firstTarget = selectMarkingTarget(players, 1, true, activePlayerIndices);
+    const farTarget = selectMarkingTarget(players, 4, true, activePlayerIndices);
+
+    expect(firstTarget).toBeDefined();
+    expect(farTarget).toBeDefined();
+    expect(firstTarget).not.toBe(farTarget);
+    expect(firstTarget).toBeGreaterThanOrEqual(11);
+
+    activePlayerIndices.delete(firstTarget!);
+    expect(selectMarkingTarget(players, 1, true, activePlayerIndices)).not.toBe(firstTarget);
   });
 
   it('moves the receiver and presser toward the pass destination while cover stays goal-side', () => {

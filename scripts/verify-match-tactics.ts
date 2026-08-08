@@ -7,6 +7,7 @@ interface PitchState {
   attackingSide: 'home' | 'away';
   ballHolderId: string | null;
   ball: { x: number; y: number; elevation: number };
+  camera: { focusX: number; focusY: number; zoom: number };
   event: {
     type: string;
     outcome: string;
@@ -99,6 +100,9 @@ async function verifyViewport(name: string, width: number, height: number) {
     if (saveState.event?.outcome !== 'save' || saveState.ball.x < 0.03 || saveState.ball.elevation <= 0) {
       throw new Error(`${name}: saved shot did not produce a visible second ball`);
     }
+    if (saveState.camera.zoom <= 1 || saveState.camera.zoom > 1.07) {
+      throw new Error(`${name}: save camera did not enter a restrained danger focus (${saveState.camera.zoom})`);
+    }
     if (goalState.attackingSide !== 'home') throw new Error(`${name}: goal scene attacks from ${goalState.attackingSide}`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors ${errors.join(' | ')}`);
 
@@ -111,6 +115,7 @@ async function verifyViewport(name: string, width: number, height: number) {
         ballHolder: saveState.ballHolderId,
         attackerPosition: [...saveState.homeOnField, ...saveState.awayOnField].find(player => player.id === 'away-9'),
         ball: saveState.ball,
+        camera: saveState.camera,
         phase: saveState.phase,
         action: saveState.action,
         screenshot: saveScreenshot,
@@ -121,6 +126,7 @@ async function verifyViewport(name: string, width: number, height: number) {
         ballHolder: goalState.ballHolderId,
         attackerPosition: [...goalState.homeOnField, ...goalState.awayOnField].find(player => player.id === 'home-10'),
         ball: goalState.ball,
+        camera: goalState.camera,
         phase: goalState.phase,
         action: goalState.action,
         screenshot: goalScreenshot,
