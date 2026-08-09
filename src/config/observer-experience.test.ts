@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { defaultTeams } from './teams';
-import { getObserverLensOptions, OBSERVER_SEED_CANDIDATES } from './observer-experience';
+import { executeCurrentWindow, initializeGameWorld } from '../engine/season/season-manager';
+import {
+  getObserverLensOptions,
+  OBSERVER_SEED_CANDIDATES,
+  RECOMMENDED_EXPERIENCE_SEED,
+} from './observer-experience';
 
 describe('observer experience configuration', () => {
   it('keeps the seed audit bounded to twenty reproducible candidates', () => {
@@ -17,5 +22,21 @@ describe('observer experience configuration', () => {
     expect(new Set(options.slice(0, 3).map(option => option.teamId)).size).toBe(3);
     expect(options.at(-1)?.teamId).toBeNull();
     expect(defaultTeams).toEqual(snapshot);
+  });
+
+  it('gives every recommended lens a readable first match and the default lens late drama', () => {
+    const world = initializeGameWorld(RECOMMENDED_EXPERIENCE_SEED);
+    const result = executeCurrentWindow(world);
+    const lenses = getObserverLensOptions(Object.values(world.teamBases)).filter(option => option.teamId);
+    const focusResults = lenses.map(option => result.results.find(match => (
+      match.homeTeamId === option.teamId || match.awayTeamId === option.teamId
+    )));
+
+    expect(focusResults.every(Boolean)).toBe(true);
+    expect(focusResults.every(match => match && match.homeGoals + match.awayGoals >= 2)).toBe(true);
+    const challengerResult = focusResults[lenses.findIndex(option => option.id === 'challenger')];
+    expect(challengerResult?.events.some(event => (
+      (event.type === 'goal' || event.type === 'own_goal') && event.minute >= 75
+    ))).toBe(true);
   });
 });

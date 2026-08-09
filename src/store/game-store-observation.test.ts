@@ -85,6 +85,23 @@ describe('game store observation settlement paths', () => {
     });
   });
 
+  it('stops a fixed batch immediately after the season transition', async () => {
+    await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
+    expect(useGameStore.getState().getCurrentWindow()?.type).toBe('season_end');
+
+    await completeAdvance(useGameStore.getState().batchAdvance(10));
+
+    const state = useGameStore.getState();
+    expect(state.world?.seasonState).toMatchObject({ seasonNumber: 2, currentWindowIndex: 0 });
+    expect(state.getCurrentWindow()?.completed).toBe(false);
+    expect(state.lastWorldResponse).toMatchObject({
+      mode: 'batch',
+      advancedWindows: 1,
+      seasonChanged: true,
+      nextSeason: 2,
+    });
+  });
+
   it('allows only current-window fixtures and replaces the one pending judgment', () => {
     const world = useGameStore.getState().world!;
     const [first, second] = world.seasonState.calendar[0].fixtures;

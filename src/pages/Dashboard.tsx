@@ -348,6 +348,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
               setLiveFeatured(false);
               setLiveResult(r);
             }}
+            onSeasonReview={() => setActiveTab('review')}
           />
         )}
 
@@ -869,12 +870,14 @@ function ResultsTab({
   lastNews,
   onResultClick,
   onLiveView,
+  onSeasonReview,
 }: {
   world: GameWorld;
   lastResults: MatchResult[];
   lastNews: NewsItem[];
   onResultClick: (r: MatchResult) => void;
   onLiveView: (r: MatchResult) => void;
+  onSeasonReview: () => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
@@ -924,6 +927,7 @@ function ResultsTab({
             response={lastWorldResponse}
             world={world}
             onResultClick={onResultClick}
+            onSeasonReview={onSeasonReview}
           />
         </Suspense>
       ) : (

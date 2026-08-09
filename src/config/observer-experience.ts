@@ -5,8 +5,9 @@ export const OBSERVER_SEED_CANDIDATES = Array.from(
   (_, index) => 20260701 + index,
 );
 
-// Selected by scripts/audit-observer-seeds.ts from the candidates above.
-export const RECOMMENDED_EXPERIENCE_SEED = 20260709;
+// Selected by scripts/audit-observer-seeds.ts from the candidates above. The
+// audit balances six-window world variety with the first match of each lens.
+export const RECOMMENDED_EXPERIENCE_SEED = 20260715;
 
 export type ObserverLens = 'giant' | 'challenger' | 'underdog' | 'neutral';
 

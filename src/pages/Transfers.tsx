@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import type { TransferRecord } from '../types/transfer';
 import { EmptyState, PageHeader, PageShell, Panel, SectionHeader, SegmentedControl, StatusBadge } from '../components/ui';
+import TransferTeamLink from '../components/TransferTeamLink';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = {
@@ -172,14 +173,20 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
         {/* From → To */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 text-xs">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: fromColor }} />
-          <Link to={`/team/${record.fromTeamId}`} className="text-slate-400 hover:text-blue-300 whitespace-nowrap" title={record.fromTeamName}>
-            {fromTeam?.shortName ?? record.fromTeamName}
-          </Link>
+          <TransferTeamLink
+            teamId={record.fromTeamId}
+            teamName={record.fromTeamName}
+            shortName={fromTeam?.shortName}
+            className="whitespace-nowrap text-slate-400 hover:text-blue-300"
+          />
           <span className={`${arrowColor} font-bold shrink-0`} title={isSwap ? '互换交易' : undefined}>{arrow}</span>
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: toColor }} />
-          <Link to={`/team/${record.toTeamId}`} className="text-slate-200 hover:text-blue-300 whitespace-nowrap font-medium" title={record.toTeamName}>
-            {toTeam?.shortName ?? record.toTeamName}
-          </Link>
+          <TransferTeamLink
+            teamId={record.toTeamId}
+            teamName={record.toTeamName}
+            shortName={toTeam?.shortName}
+            className="whitespace-nowrap font-medium text-slate-200 hover:text-blue-300"
+          />
         </div>
 
         {/* Fee */}

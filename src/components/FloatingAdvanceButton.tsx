@@ -256,7 +256,7 @@ export default function FloatingAdvanceButton({
       aria-busy={isAdvancing}
       title={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位` : '赛季已完成'}
       disabled={disabled}
-      className={`fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
+      className={`fixed z-[100] hidden h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:flex sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
       style={position ? { left: position.x, top: position.y } : undefined}
       onClick={handleClick}
       onPointerDown={handlePointerDown}

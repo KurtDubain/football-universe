@@ -7,6 +7,7 @@ export interface Achievement {
 }
 
 interface SeasonRec {
+  leagueLevel: 1 | 2 | 3;
   leaguePlayed: number;
   leagueWon: number;
   leagueDrawn?: number;
@@ -23,6 +24,16 @@ interface SeasonRec {
   continentalCupResult?: string;
 }
 
+const MIN_RATE_SAMPLE = 10;
+
+function perMatch(value: number | undefined, record: SeasonRec): number {
+  return (value ?? 0) / Math.max(1, record.leaguePlayed);
+}
+
+function hasRateSample(record: SeasonRec): boolean {
+  return record.leaguePlayed >= MIN_RATE_SAMPLE;
+}
+
 function titleCount(record: SeasonRec): number {
   return Number(record.leaguePosition === 1)
     + Number(record.cupResult === '冠军')
@@ -35,11 +46,11 @@ const ACHIEVEMENT_DEFS = [
   // ──── Statistical (数据类) ────
   { id: 'unbeaten', title: '不败赛季', check: (s: SeasonRec) => s && s.leagueLost === 0 && (s.leaguePlayed ?? 0) >= 10, desc: (t: string) => `${t}以全赛季不败战绩完成联赛` },
   { id: 'dominant', title: '统治级表现', check: (s: SeasonRec) => s && (s.leagueWon ?? 0) >= (s.leaguePlayed ?? 1) * 0.8, desc: (t: string) => `${t}以超过80%的胜率统治联赛` },
-  { id: 'centurion', title: '百分赛季', check: (s: SeasonRec) => s && (s.leaguePoints ?? 0) >= 80, desc: (t: string) => `${t}联赛积分突破80大关` },
-  { id: 'goal_machine', title: '进球机器', check: (s: SeasonRec) => s && (s.leagueGF ?? 0) >= 60, desc: (t: string) => `${t}联赛进球突破60大关` },
-  { id: 'iron_wall', title: '钢铁防线', check: (s: SeasonRec) => s && (s.leagueGA ?? 999) <= 15 && s.leaguePlayed >= 10, desc: (t: string) => `${t}全赛季只丢极少进球，钢铁防线名不虚传` },
-  { id: 'avalanche', title: '进球如麻', check: (s: SeasonRec) => s && (s.leagueGF ?? 0) >= 90, desc: (t: string) => `${t}单赛季打入90+球，火力凶猛` },
-  { id: 'massacre', title: '大屠杀', check: (s: SeasonRec) => s && ((s.leagueGF ?? 0) - (s.leagueGA ?? 0)) >= 50, desc: (t: string) => `${t}净胜球突破+50大关` },
+  { id: 'centurion', title: '高分赛季', check: (s: SeasonRec) => hasRateSample(s) && perMatch(s.leaguePoints, s) >= 80 / 30, desc: (t: string) => `${t}以场均2.67分以上的节奏完成联赛` },
+  { id: 'goal_machine', title: '进球机器', check: (s: SeasonRec) => hasRateSample(s) && perMatch(s.leagueGF, s) >= 2, desc: (t: string) => `${t}联赛场均进球达到2球` },
+  { id: 'iron_wall', title: '钢铁防线', check: (s: SeasonRec) => hasRateSample(s) && perMatch(s.leagueGA, s) <= 0.5, desc: (t: string) => `${t}联赛场均失球不超过0.5球` },
+  { id: 'avalanche', title: '进球如麻', check: (s: SeasonRec) => hasRateSample(s) && perMatch(s.leagueGF, s) >= 3, desc: (t: string) => `${t}联赛场均攻入至少3球` },
+  { id: 'massacre', title: '净胜风暴', check: (s: SeasonRec) => hasRateSample(s) && perMatch((s.leagueGF ?? 0) - (s.leagueGA ?? 0), s) >= 50 / 30, desc: (t: string) => `${t}联赛场均净胜球达到1.67球` },
 
   // ──── First-time / Milestone (首次类) ────
   { id: 'promotion_streak', title: '连级跳', check: (_: SeasonRec, rec: SeasonRec[]) => { if (!rec || rec.length < 2) return false; const last2 = rec.slice(-2); return last2.length === 2 && last2[0]?.promoted && last2[1]?.promoted; }, desc: (t: string) => `${t}连续两个赛季升级` },
@@ -51,9 +62,9 @@ const ACHIEVEMENT_DEFS = [
   { id: 'first_world_cup', title: '首夺世界杯', check: (s: SeasonRec, rec: SeasonRec[]) => s.worldCupResult === '冠军' && rec.filter(r => r.worldCupResult === '冠军').length === 1, desc: (t: string) => `${t}首次问鼎环球冠军杯，登顶世界之巅` },
 
   // ──── Streak / Dynasty (王朝类) ────
-  { id: 'back_to_back', title: '蝉联霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 2) return false; const last2 = rec.slice(-2); return last2[0]?.leaguePosition === 1 && last2[1]?.leaguePosition === 1; }, desc: (t: string) => `${t}成功蝉联联赛冠军` },
-  { id: 'three_peat', title: '三连冠王朝', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const last3 = rec.slice(-3); return last3.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}成就联赛三连冠伟业` },
-  { id: 'five_peat', title: '王朝霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 5) return false; const last5 = rec.slice(-5); return last5.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}建立横跨五个赛季的王朝` },
+  { id: 'back_to_back', title: '蝉联霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 2) return false; const last2 = rec.slice(-2); return last2.every(r => r?.leagueLevel === 1 && r.leaguePosition === 1); }, desc: (t: string) => `${t}成功蝉联顶级联赛冠军` },
+  { id: 'three_peat', title: '三连冠王朝', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const last3 = rec.slice(-3); return last3.every(r => r?.leagueLevel === 1 && r.leaguePosition === 1); }, desc: (t: string) => `${t}成就顶级联赛三连冠伟业` },
+  { id: 'five_peat', title: '王朝霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 5) return false; const last5 = rec.slice(-5); return last5.every(r => r?.leagueLevel === 1 && r.leaguePosition === 1); }, desc: (t: string) => `${t}建立横跨五个赛季的顶级王朝` },
   { id: 'cup_dynasty', title: '杯赛之王', check: (_season: SeasonRec, rec: SeasonRec[]) => rec.filter(r => r.cupResult === '冠军').length >= 5, desc: (t: string) => `${t}5+次捧起联赛杯，杯赛专家` },
 
   // ──── Multi-crown (多冠类) ────
@@ -62,9 +73,9 @@ const ACHIEVEMENT_DEFS = [
   { id: 'quadruple', title: '四冠王', check: (s: SeasonRec) => titleCount(s) >= 4, desc: (t: string) => `${t}单赛季夺得四座冠军，写下传奇` },
 
   // ──── Underdog (黑马类) ────
-  { id: 'underdog_promo_to_top', title: '冲入顶级', check: (_: SeasonRec, rec: SeasonRec[]) => { const promos = rec.filter(r => r.promoted); return promos.length >= 1 && rec[rec.length - 1]?.leaguePosition !== undefined; }, desc: (t: string) => `${t}从底层杀入顶级联赛` },
+  { id: 'underdog_promo_to_top', title: '冲入顶级', check: (s: SeasonRec, rec: SeasonRec[]) => s.promoted && s.leagueLevel === 2 && rec.some(r => r.leagueLevel === 3), desc: (t: string) => `${t}从低级别征程中升入顶级联赛` },
   { id: 'rookie_champion', title: '升班马夺冠', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 2) return false; const prev = rec[rec.length - 2]; return prev?.promoted && s.leaguePosition === 1; }, desc: (t: string) => `${t}升班马赛季直接夺冠，神迹！` },
-  { id: 'comeback', title: '王者归来', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const recent = rec.slice(-3); return recent[0]?.relegated && s.leaguePosition === 1; }, desc: (t: string) => `${t}从降级谷底重返巅峰` },
+  { id: 'comeback', title: '王者归来', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const recent = rec.slice(-3); return recent[0]?.relegated && s.leagueLevel === 1 && s.leaguePosition === 1; }, desc: (t: string) => `${t}从降级谷底重返顶级联赛之巅` },
 
   // ──── Heartbreak (心碎类) ────
   { id: 'almost_perfect', title: '一步之遥', check: (s: SeasonRec) => s.leaguePosition === 2 && s.leaguePlayed >= 10, desc: (t: string) => `${t}惜居亚军，与冠军失之交臂` },
@@ -89,6 +100,26 @@ const ACHIEVEMENT_DEFS = [
   }, desc: (t: string) => `${t}累计15+奖杯，传奇地位无可撼动` },
 ];
 
+const ONE_TIME_ACHIEVEMENT_IDS = new Set([
+  'promotion_streak',
+  'first_promotion',
+  'first_relegation',
+  'first_league_title',
+  'first_cup',
+  'first_super_cup',
+  'first_world_cup',
+  'back_to_back',
+  'three_peat',
+  'five_peat',
+  'cup_dynasty',
+  'underdog_promo_to_top',
+  'rookie_champion',
+  'comeback',
+  'survivor_5',
+  'collector_3',
+  'legend_team',
+]);
+
 export function checkAchievements(
   teamId: string,
   teamName: string,
@@ -101,9 +132,7 @@ export function checkAchievements(
 
   for (const def of ACHIEVEMENT_DEFS) {
     const alreadyHas = existingAchievements.some(a => a.id === `${def.id}-${teamId}-S${seasonNumber}`);
-    // For dynasty achievements, also check if any past season had it (one-time only)
-    const isDynastyType = def.id === 'three_peat' || def.id === 'five_peat' || def.id === 'comeback' || def.id === 'rookie_champion' || def.id === 'first_promotion' || def.id === 'first_relegation' || def.id === 'first_league_title' || def.id === 'first_cup' || def.id === 'first_super_cup' || def.id === 'first_world_cup';
-    if (isDynastyType) {
+    if (ONE_TIME_ACHIEVEMENT_IDS.has(def.id)) {
       const hasAnyPast = existingAchievements.some(a => a.id.startsWith(`${def.id}-${teamId}-`));
       if (hasAnyPast) continue;
     }

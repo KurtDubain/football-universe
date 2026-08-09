@@ -747,3 +747,15 @@ Original prompt: 可以，那你来优化一下动画模块吧
 
 - Produce only the four bounded asset families already listed in the contest checklist: start-observation hero, three story chapter marks, live-score foundation, and season archive frame.
 - Keep all names, scores, season numbers, and Chinese copy as accessible live text; no functional command should become a bitmap.
+
+## 2026-08-09 Contest Truth And Season-Rhythm Follow-up
+
+- Current request: implement the audit's highest-value fixes, verify them end to end, then commit and push.
+- Mobile now relies on the existing Dashboard action or route header action; the draggable floating advance control remains a desktop shortcut and can no longer cover mobile story, table, or history content.
+- Achievement rules now use the season's actual league level, schedule-normalized per-match thresholds, top-flight-only dynasty semantics, and an explicit one-time milestone set. A 3-to-2 promotion no longer unlocks “冲入顶级”, while a real lower-league path ending in 2-to-1 does.
+- Free-market transfer endpoints now render through one shared non-interactive component in both transfer lists and player career histories, preventing `/team/__free_market__` dead links.
+- Fixed-step batches stop immediately after a real season-number transition, preserving the next season's opening window and the completed-season archive.
+- The recommended seed is now `20260715`, selected from the existing candidate pool using both six-window universe quality and each lens's actual first focus match. Giant, challenger, and underdog openings now all produce at least two goals; the default challenger opens with a 3-2 match and three late goals.
+- The season-boundary response now explains that the completed archive is ready and opens it directly. The free-market browser flow produced six real releases without a single `__free_market__` team link, and the mobile route header uses explicit 44px controls.
+- Final verification passed all 104 test files / 794 tests, ESLint, strict TypeScript, ordinary and audit PWA production builds, bundle/changelog budgets, production dependency audit, automatic PWA version detection, the mandatory standard web-game client, recommended onboarding, floating advance, world response, and the 82-check mobile route matrix.
+- The 10-season production-browser audit completed 500 advances with zero data errors, warnings, or runtime errors. Save round-trip, back navigation, deep-link refresh, offline revisit, 18 mobile routes, and 7 desktop routes all passed; ordinary production output contains no audit bridge markers.

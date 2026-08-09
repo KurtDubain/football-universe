@@ -1,4 +1,5 @@
 import { chromium, type ConsoleMessage } from 'playwright';
+import { FREE_MARKET_TEAM_ID } from '../src/engine/transfers/transfer-application';
 
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const viewports = [
@@ -8,11 +9,23 @@ const viewports = [
 
 type AuditStore = {
   getState: () => {
-    world: { teamBases: Record<string, unknown> };
-    lastWorldResponse: { id: string; mode: string; advancedWindows: number } | null;
+    world: {
+      teamBases: Record<string, unknown>;
+      seasonState: { seasonNumber: number; currentWindowIndex: number };
+      transferHistory: Array<{ fromTeamId: string; toTeamId: string }>;
+      transferWindow?: { status: string } | null;
+    };
+    lastWorldResponse: {
+      id: string;
+      mode: string;
+      advancedWindows: number;
+      seasonChanged: boolean;
+      nextSeason: number;
+    } | null;
     newGame: (seed: number) => void;
     setFavoriteTeams: (ids: string[]) => void;
     advanceWindow: () => Promise<boolean>;
+    batchAdvance: (count: number) => Promise<boolean>;
     advanceUntil: (type: 'season_end') => Promise<boolean>;
     closeTransferWindow: (autoResolveRest: boolean) => void;
   };
@@ -130,14 +143,65 @@ async function main(): Promise<void> {
       if (new URL(page.url()).pathname !== '/') {
         throw new Error(`${viewport.name}: season response was redirected away from Dashboard`);
       }
+      const beforeRollover = await page.evaluate(() => {
+        const world = (window as AuditWindow).__gameStore!.getState().world;
+        return {
+          seasonNumber: world.seasonState.seasonNumber,
+          currentWindowIndex: world.seasonState.currentWindowIndex,
+        };
+      });
       const rolloverAdvanced = await page.evaluate(() => (
         window as AuditWindow
-      ).__gameStore!.getState().advanceWindow());
+      ).__gameStore!.getState().batchAdvance(10));
       if (!rolloverAdvanced) throw new Error(`${viewport.name}: season rollover did not run`);
-      await page.getByRole('link', { name: '处理转会窗口' }).waitFor();
-      await page.evaluate(() => (
+      await page.waitForFunction(() => (
         window as AuditWindow
-      ).__gameStore!.getState().closeTransferWindow(false));
+      ).__gameStore?.getState().lastWorldResponse?.seasonChanged === true);
+      const afterRollover = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        return {
+          seasonNumber: state.world.seasonState.seasonNumber,
+          currentWindowIndex: state.world.seasonState.currentWindowIndex,
+          response: state.lastWorldResponse,
+        };
+      });
+      if (
+        afterRollover.seasonNumber !== beforeRollover.seasonNumber + 1
+        || afterRollover.currentWindowIndex !== 0
+        || afterRollover.response?.advancedWindows !== 1
+      ) {
+        throw new Error(`${viewport.name}: fixed batch crossed the season boundary ${JSON.stringify({ beforeRollover, afterRollover })}`);
+      }
+      await page.getByTestId('season-boundary-summary').waitFor();
+      const seasonBoundaryScreenshot = `/tmp/football-world-response-${viewport.name}-season-boundary.png`;
+      await page.screenshot({ path: seasonBoundaryScreenshot, animations: 'disabled', fullPage: false });
+      await page.getByTestId('open-season-review').click();
+      await page.getByTestId('season-champion-hero').waitFor();
+      const transferWindowOpen = await page.evaluate(() => (
+        window as AuditWindow
+      ).__gameStore!.getState().world.transferWindow?.status === 'open');
+      if (transferWindowOpen) {
+        await page.getByText(/第\d+赛季转会窗口/).waitFor();
+        await page.evaluate(() => (
+          window as AuditWindow
+        ).__gameStore!.getState().closeTransferWindow(false));
+      }
+
+      const freeMarketMoves = await page.evaluate((freeMarketId) => (
+        window as AuditWindow
+      ).__gameStore!.getState().world.transferHistory.filter(record => (
+        record.fromTeamId === freeMarketId || record.toTeamId === freeMarketId
+      )).length, FREE_MARKET_TEAM_ID);
+      if (freeMarketMoves === 0) throw new Error(`${viewport.name}: deterministic season produced no free-market move`);
+      await page.goto(`${baseUrl}/transfers?audit=1`, { waitUntil: 'networkidle' });
+      if (await page.getByTestId('free-market-endpoint').count() < freeMarketMoves) {
+        throw new Error(`${viewport.name}: free-market records did not render as endpoints`);
+      }
+      if (await page.locator(`a[href*="${FREE_MARKET_TEAM_ID}"]`).count() !== 0) {
+        throw new Error(`${viewport.name}: free market still renders as a team link`);
+      }
+      const transferScreenshot = `/tmp/football-world-response-${viewport.name}-transfers.png`;
+      await page.screenshot({ path: transferScreenshot, animations: 'disabled', fullPage: false });
 
       await page.goto(`${baseUrl}/teams?audit=1`, { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: '推进', exact: true }).click();
@@ -161,8 +225,13 @@ async function main(): Promise<void> {
           mode: batchState.mode,
           advancedWindows: batchState.advancedWindows,
         } : null,
+        seasonBoundary: afterRollover,
+        transferWindowOpen,
+        freeMarketMoves,
         featuredMatches: await page.getByTestId('world-response-match').count(),
         runtimeErrors: errors.length,
+        seasonBoundaryScreenshot,
+        transferScreenshot,
       });
       await context.close();
     }

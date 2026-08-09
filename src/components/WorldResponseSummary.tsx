@@ -69,10 +69,12 @@ export default function WorldResponseSummary({
   response,
   world,
   onResultClick,
+  onSeasonReview,
 }: {
   response: AdvanceWorldResponse;
   world: GameWorld;
   onResultClick: (result: MatchResult) => void;
+  onSeasonReview?: () => void;
 }) {
   const changes = [...response.storyUpdates, ...response.keyNews]
     .filter((item, index, all) => all.findIndex(entry => entry.id === item.id) === index)
@@ -121,6 +123,27 @@ export default function WorldResponseSummary({
           )}
         </div>
       </div>
+
+      {response.seasonChanged && (
+        <div data-testid="season-boundary-summary" className="mt-3 flex flex-wrap items-center gap-3 border-y border-amber-800/45 bg-amber-950/20 px-3 py-2.5">
+          <Icon name="trophy" size={18} className="shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-amber-200">已在赛季边界停下</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">S{response.fromSeason} 档案已经生成，S{response.nextSeason} 的首轮尚未推进。</p>
+          </div>
+          {onSeasonReview && (
+            <button
+              type="button"
+              data-testid="open-season-review"
+              onClick={onSeasonReview}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded border border-amber-700/55 px-3 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-900/35"
+            >
+              <Icon name="eye" size={14} />
+              查看 S{response.fromSeason} 档案
+            </button>
+          )}
+        </div>
+      )}
 
       {worldMoment && (
         <div className="mt-3">

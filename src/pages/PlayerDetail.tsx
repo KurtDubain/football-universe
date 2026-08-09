@@ -19,6 +19,7 @@ import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../
 import type { GameWorld } from '../engine/season/season-manager';
 import { EmptyState, Panel } from '../components/ui';
 import { getPositionHeadlineMetrics } from './player-detail-metrics';
+import TransferTeamLink from '../components/TransferTeamLink';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -698,13 +699,17 @@ function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeo
               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeChip.cls}`}>
                 {typeChip.text}
               </span>
-              <Link to={`/team/${t.fromTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]" title={t.fromTeamName}>
-                {t.fromTeamName}
-              </Link>
+              <TransferTeamLink
+                teamId={t.fromTeamId}
+                teamName={t.fromTeamName}
+                className="max-w-[100px] truncate text-slate-300 hover:text-blue-300"
+              />
               <span className="text-slate-500">→</span>
-              <Link to={`/team/${t.toTeamId}`} className="text-slate-300 hover:text-blue-300 truncate max-w-[100px]" title={t.toTeamName}>
-                {t.toTeamName}
-              </Link>
+              <TransferTeamLink
+                teamId={t.toTeamId}
+                teamName={t.toTeamName}
+                className="max-w-[100px] truncate text-slate-300 hover:text-blue-300"
+              />
               {t.fee && (
                 <span className="text-[10px] text-emerald-400 font-semibold ml-auto">€{t.fee}M</span>
               )}

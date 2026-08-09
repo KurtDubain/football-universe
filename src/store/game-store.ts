@@ -288,6 +288,7 @@ export const useGameStore = create<GameStore>()(
           let allNews: NewsItem[] = [];
           let observationSettlements: ObservationSettlement[] = [];
           const outcomes: AdvanceWindowOutcome[] = [];
+          const startingSeason = world.seasonState.seasonNumber;
           for (let i = 0; i < count; i++) {
             const cw = getCurrentWindow(world);
             if (!cw) break;
@@ -301,6 +302,9 @@ export const useGameStore = create<GameStore>()(
             allNews = [...allNews, ...result.news];
             observationSettlements = [...observationSettlements, ...result.observationSettlements];
             outcomes.push(result.outcome);
+            // A fixed batch may finish this season, but must not consume the
+            // next season's opening windows before its archive is seen.
+            if (world.seasonState.seasonNumber !== startingSeason) break;
           }
           if (outcomes.length === 0) {
             set({ isAdvancing: false });

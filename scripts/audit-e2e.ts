@@ -96,6 +96,8 @@ async function inspectRoute(
         .filter(element => primaryPattern.test((element.textContent ?? '').trim()))
         .filter(element => {
           const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') return false;
           return rect.width < 44 || rect.height < 44;
         })
         .map(element => (element.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80))

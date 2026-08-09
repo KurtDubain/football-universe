@@ -449,13 +449,13 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="app-shell-header h-12 bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
+        <header className="app-shell-header h-[48px] bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile hamburger */}
             <button
               onClick={() => setMobileNavOpen(true)}
               aria-label="打开导航菜单"
-              className="md:hidden w-11 h-11 flex items-center justify-center text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+              className="md:hidden h-[44px] w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd"/></svg>
             </button>
@@ -466,7 +466,7 @@ export default function Layout({ children }: LayoutProps) {
                 onClick={() => navigate(mobileReturnTarget.to)}
                 aria-label={`返回${mobileReturnTarget.label}`}
                 title={`返回${mobileReturnTarget.label}`}
-                className="md:hidden flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                className="md:hidden flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
               >
                 <span aria-hidden="true">←</span>
               </button>
@@ -497,15 +497,16 @@ export default function Layout({ children }: LayoutProps) {
               aria-pressed={feedbackPreferences.soundEnabled}
               title={feedbackPreferences.soundEnabled ? '关闭全局声音' : '开启全局声音'}
               onClick={toggleGlobalSound}
-              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 sm:h-8 sm:w-8"
+              className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 sm:h-8 sm:w-8"
             >
               <Icon name={feedbackPreferences.soundEnabled ? 'volume' : 'volume-off'} size={17} />
             </button>
             {location.pathname !== '/' && (
               <button
+                data-testid="header-advance"
                 onClick={handleWindowAdvance}
                 disabled={isAdvancing || !currentWindow}
-                className="h-11 rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
+                className="h-[44px] min-w-[44px] rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
               >
                 {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
               </button>
@@ -515,7 +516,7 @@ export default function Layout({ children }: LayoutProps) {
                 onClick={() => setShowFastMenu(!showFastMenu)}
                 disabled={isAdvancing}
                 aria-label="打开快进菜单"
-                className={`h-11 w-11 bg-[var(--action)] text-sm text-white transition-colors hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1.5 ${
+                className={`h-[44px] w-[44px] bg-[var(--action)] text-sm text-white transition-colors hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1.5 ${
                   location.pathname === '/' ? 'rounded-md' : 'rounded-r-md border-l border-white/20'
                 }`}
               >
@@ -577,7 +578,7 @@ export default function Layout({ children }: LayoutProps) {
                     : '固定步数会连续结算，不会在中途关键节点前自动停下。'}
                 </p>
                 <div className="border-t border-slate-700 my-0.5" />
-                <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="w-full min-h-11 px-3 py-2 text-xs text-slate-400 hover:bg-slate-700 text-left cursor-pointer">{showFloatingBtn ? '隐藏悬浮按钮' : '显示悬浮按钮'}</button>
+                <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="hidden min-h-11 w-full cursor-pointer px-3 py-2 text-left text-xs text-slate-400 hover:bg-slate-700 sm:block">{showFloatingBtn ? '隐藏桌面悬浮按钮' : '显示桌面悬浮按钮'}</button>
               </div>
             )}
           </div>
@@ -599,7 +600,7 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className={`app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'pb-20 sm:pb-20' : ''}`} key={location.pathname}>
+        <main className={`app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'sm:pb-20' : ''}`} key={location.pathname}>
           {children}
         </main>
       </div>
