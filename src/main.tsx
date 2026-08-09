@@ -17,3 +17,9 @@ createRoot(document.getElementById('root')!).render(
     </AppErrorBoundary>
   </StrictMode>,
 );
+
+if (import.meta.env.PROD) {
+  void import('./pwa/app-update').then(({ startAppUpdateMonitor }) => {
+    startAppUpdateMonitor();
+  });
+}

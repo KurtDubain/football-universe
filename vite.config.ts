@@ -1,17 +1,45 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const packageJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version: string }
+const buildId = process.env.VERCEL_GIT_COMMIT_SHA?.trim()
+  || process.env.GITHUB_SHA?.trim()
+  || packageJson.version
+
+function appVersionAsset(version: string, deploymentId: string): Plugin {
+  return {
+    name: 'football-app-version-asset',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: `${JSON.stringify({ version, buildId: deploymentId })}\n`,
+      })
+    },
+  }
+}
+
 export default defineConfig({
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(buildId),
+  },
   build: {
     manifest: true,
   },
   plugins: [
+    appVersionAsset(packageJson.version, buildId),
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'og-image.png'],
       manifest: {
         name: '足球联赛宇宙 Football Universe',
@@ -31,6 +59,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,webmanifest}'],
         globIgnores: [
           'assets/{AdvancedSearch,Calendar,Chronicle,CoachDetail,Coaches,Compare,Cup,History,League,Legends,Market,MemorableMatches,PlayerDetail,Players,Settings,TeamDetail,TeamEditor,Teams,Transfers}-*.js',
