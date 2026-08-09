@@ -1,12 +1,12 @@
 # Production Dependency Audit
 
-## React Router RSC Advisory
+Last reviewed: 2026-08-09
 
-`GHSA-qwww-vcr4-c8h2` is intentionally ignored for the current static build.
+## Current Status
 
-- The application uses `BrowserRouter`, `Routes`, and client-rendered route components.
-- It does not use React Server Components, SSR, route loaders/actions, or a React Router server runtime.
-- Vercel serves only generated static files and the SPA history fallback.
-- `react-router-dom` remains on the latest published 7.x release and should be upgraded when a compatible release patches the advisory.
+- `react-router-dom` is on `7.18.2`, the patched 7.x release for `GHSA-qwww-vcr4-c8h2`.
+- The former audit exception has been removed from `package.json`; `pnpm audit --prod` now runs without ignored advisories.
+- Production remains a static client-rendered Vercel deployment using `BrowserRouter` and SPA history fallback. It does not use React Server Components, SSR, route loaders/actions, or a React Router server runtime.
+- Ordinary production builds compile out `window.__gameStore` and `window.__gameAudit`. Those bridges exist only in an explicit `VITE_ENABLE_AUDIT=true` build opened with `?audit=1`.
 
-The ignore is limited to this GHSA. All other production dependency advisories remain CI failures.
+Any future production advisory is a CI failure until the dependency is patched or this document records a narrowly scoped, evidence-backed exception.

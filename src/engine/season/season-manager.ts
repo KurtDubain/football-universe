@@ -857,10 +857,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
   const squads = cloneSquadsForMutation(world.squads);
   resetDisciplineForNewSeason(squads, world.totalElapsedWindows ?? 0);
 
-  // v19 — snapshot just-finished season's player stats into history
-  // BEFORE the reset below. We pick up team's goals-conceded total so
-  // DF/GK display can compute defensive performance proxy without
-  // needing per-player CS / saves events.
+  // Snapshot the completed season before resetting current totals. Historical
+  // rows retain player-level defensive actions plus team goals-against context,
+  // which keeps archived position scores reproducible after the live state moves on.
   const playerStatsHistory = snapshotPlayerStatsHistory(world, prevSeason);
 
   return enforceStorageLimits({

@@ -2,6 +2,8 @@
 
 Created: 2026-07-08
 
+> Document status (reviewed 2026-08-09): archived implementation and verification ledger. Dated entries intentionally preserve the rules, terminology, versions, and measurements that were true when each phase shipped; they are not the current product specification. Use `README.md`, the in-game Settings guide, `src/config/changelog.ts`, and current tests as the authoritative behavior. Remaining unchecked boxes are historical review prompts unless a newer roadmap explicitly reactivates them.
+
 This document tracks the data-chain issues found during the initial project review. The goal is to keep a durable checklist for follow-up work, especially around player stats, team/player page consistency, season boundaries, transfers, and review pages.
 
 ## Progress Log

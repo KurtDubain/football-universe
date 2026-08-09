@@ -28,7 +28,7 @@
 
 ## English Summary
 
-A **pure-frontend, observer-style football simulator**. Unlike Football Manager or ZenGM where you control teams, here you just watch — 32 teams across 3 leagues + 4 cups simulate themselves. Press "Advance" and witness:
+A **pure-frontend, observer-style football simulator**. Unlike Football Manager or ZenGM where you control teams, here you just watch — 32 teams across 3 leagues and four cup systems (six named competitions) simulate themselves. Press "Advance" and witness:
 
 - 🏆 Dynasties rise and crumble across infinite seasons
 - 💥 Underdog cup runs and shocking upsets
@@ -85,7 +85,7 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 |------|------|------|
 | **联赛杯** | 32队中立场单回合淘汰 | 每赛季 |
 | **超级杯** | 16队主客场小组赛 + 两回合淘汰，决赛中立场 | 每赛季 |
-| **大陆/南洲/东洲杯** | 俱乐部积分资格，中立场3轮小组赛 + 单回合淘汰 | S5起每6赛季 |
+| **大陆/南洲/东洲杯** | 区域内全队参赛；俱乐部积分用于分档，中立场3轮小组赛 + 单回合淘汰 | S5起每6赛季 |
 | **环球冠军杯** | 32队、8组中立场3轮小组赛 + 单回合淘汰 | 每4赛季 |
 
 对称淘汰赛对阵树 · 客场进球规则 · 杯赛规则卡
@@ -105,11 +105,11 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 ### 👔 教练生态
 36 名教练 × 5 种风格 × 6 项 buff · 压力下课 + 合同到期 + 急流勇退 · 名帅殿堂排行榜 · 战术偏好分析
 
-### 📊 无限历史 + 编年史
-赛季回顾（含叙事文案）· 历史奖杯榜 · 趣味纪录 · **30+ 成就**（首次类/纪录类/数据类/王朝类/黑马类）· 编年史多赛季回顾 · 跨赛季交手记录
+### 📊 长期历史 + 编年史
+赛季回顾（含叙事文案）· 历史奖杯榜 · 趣味纪录 · **30+ 成就**（首次类/纪录类/数据类/王朝类/黑马类）· 编年史多赛季回顾 · 跨赛季交手记录。为控制浏览器存档体积，完整交手、球员赛季数据和球队赛季记录分别保留最近 3、25、40 个赛季，奖杯与核心荣誉继续长期累计。
 
 ### 🎲 互动元素
-赛季竞猜（猜冠军/降级队）· 上帝之手（每赛季 1 次球队 buff/debuff）· 手动解雇关注球队教练 · 虚拟币竞猜下注
+赛季预测（冠军/降级）· 每轮观察判断（胜平负/进球区间/爆冷）· 上帝之手（每赛季 1 次球队 buff/debuff）· 手动解雇关注球队教练。预测与判断不消耗资源，也不改变模拟结果。
 
 ### 🌍 大洲对抗系统
 3 大洲（大陆/南洲/东洲）跨洲赛事统计 · 三层德比体系（巅峰/焦点/地区，OVR动态判定）
@@ -169,9 +169,9 @@ pnpm verify:pwa-update         # 远端版本识别与自动更新
 
 ~52,000 production lines · 192 production source files · 102 test files · 33 browser/simulation audit commands
 
-生产依赖审计的定向豁免与适用边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
+生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 
-参赛前剩余工作的执行顺序、验收标准与明确延后范围记录在 [`docs/contest-final-polish-checklist.md`](docs/contest-final-polish-checklist.md)。
+参赛打磨的历史实施台账、仍需人工完成的投稿材料与最终发布门禁记录在 [`docs/contest-final-polish-checklist.md`](docs/contest-final-polish-checklist.md)。
 
 <details>
 <summary>📁 Project Structure</summary>
@@ -182,7 +182,7 @@ src/
 │   ├── match/        — RNG, Poisson sampling, simulator, events, prediction
 │   ├── season/       — Calendar builder, season manager, post-match, season-end
 │   ├── standings/    — League tables, schedules, promotion/relegation
-│   ├── cups/         — League Cup, Super Cup, World Cup
+│   ├── cups/         — League Cup, Super Cup, regional Continental Cups, World Cup
 │   ├── coaches/      — Coaching effects, pressure, hiring, contracts
 │   ├── players/      — Player generation, stats tracking
 │   ├── honors/       — Trophy tracking
@@ -211,7 +211,7 @@ src/
 - [x] 转会系统
 - [x] 球员成长 & 退役
 - [x] 俱乐部分段球员统计（转会前后贡献拆分）
-- [ ] 自动生成赛季回顾分享图
+- [x] 赛季观察档案 PNG 分享图
 
 ---
 

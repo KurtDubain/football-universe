@@ -1,107 +1,122 @@
-import { chromium } from 'playwright';
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import { chromium, type ConsoleMessage, type Page } from 'playwright';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const URL = 'https://football-universe-ebon.vercel.app/';
-const OUT_DIR = path.join(__dirname, '..', 'docs', 'screenshots');
+const baseUrl = (process.env.SCREENSHOT_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
+const outputDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots');
 
-if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+type ScreenshotAuditState = {
+  advanceWindow: () => Promise<boolean>;
+  advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
+};
 
-async function main() {
+type ScreenshotAuditWindow = Window & {
+  __gameStore?: { getState: () => ScreenshotAuditState };
+};
+
+function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
+  if (message.type() === 'error') errors.push(message.text());
+}
+
+async function openRoute(page: Page, route: string): Promise<void> {
+  await page.goto(`${baseUrl}${route}${route.includes('?') ? '&' : '?'}audit=1`, {
+    waitUntil: 'networkidle',
+  });
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    document.querySelector<HTMLElement>('main.app-route-content')?.scrollTo(0, 0);
+    document.querySelector<HTMLElement>('aside nav')?.scrollTo(0, 0);
+  });
+}
+
+async function capture(page: Page, fileName: string): Promise<void> {
+  await page.screenshot({
+    path: path.join(outputDirectory, fileName),
+    type: 'jpeg',
+    quality: 88,
+    animations: 'disabled',
+    fullPage: false,
+  });
+}
+
+async function main(): Promise<void> {
+  fs.mkdirSync(outputDirectory, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
+    deviceScaleFactor: 1,
   });
   const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('console', message => captureConsoleError(message, errors));
+  page.on('pageerror', error => errors.push(error.message));
 
-  console.log('Loading site...');
-  await page.goto(URL, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(2000);
+  try {
+    await openRoute(page, '/');
+    await page.getByRole('heading', { name: '开始观察' }).waitFor();
+    await capture(page, '01-welcome.jpg');
 
-  // 1. Welcome / Landing page
-  console.log('Capture: welcome');
-  await page.screenshot({ path: path.join(OUT_DIR, '01-welcome.png'), fullPage: false });
+    await page.getByRole('button', { name: '开始观察' }).click();
+    await page.getByTestId('dashboard').waitFor();
+    await capture(page, '02-dashboard-initial.jpg');
 
-  // Click 开始新游戏
-  const startBtn = page.getByRole('button', { name: /开始新游戏|🚀/ });
-  await startBtn.click();
-  await page.waitForTimeout(2500);
+    await page.evaluate(async () => {
+      const store = (window as ScreenshotAuditWindow).__gameStore;
+      if (!store) throw new Error('Screenshot audit store unavailable');
+      for (let index = 0; index < 10; index += 1) {
+        if (!await store.getState().advanceWindow()) break;
+      }
+    });
+    await page.getByTestId('dashboard').waitFor();
+    await capture(page, '03-dashboard-midseason.jpg');
 
-  // Now in Dashboard
-  console.log('Capture: dashboard initial');
-  await page.screenshot({ path: path.join(OUT_DIR, '02-dashboard-initial.png'), fullPage: false });
-
-  // Try clicking Advance many times to play a season
-  console.log('Advancing seasons...');
-  for (let i = 0; i < 60; i++) {
-    try {
-      const advance = page.getByRole('button', { name: /推进|Advance/ }).first();
-      const visible = await advance.isVisible().catch(() => false);
-      if (!visible) break;
-      await advance.click({ timeout: 1500 }).catch(() => {});
-      await page.waitForTimeout(80);
-    } catch {
-      break;
+    const midSeasonRoutes: Array<[string, string]> = [
+      ['/league/1', '04-league.jpg'],
+      ['/cup/league_cup', '05-cup-bracket.jpg'],
+      ['/cup/super_cup', '06-super-cup.jpg'],
+      ['/teams', '07-teams.jpg'],
+    ];
+    for (const [route, fileName] of midSeasonRoutes) {
+      await openRoute(page, route);
+      await capture(page, fileName);
     }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openRoute(page, '/');
+    await page.getByTestId('dashboard').waitFor();
+    await capture(page, '10-mobile.jpg');
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(async () => {
+      const store = (window as ScreenshotAuditWindow).__gameStore;
+      if (!store) throw new Error('Screenshot audit store unavailable');
+      if (!await store.getState().advanceUntil('season_end')) {
+        throw new Error('Could not reach the season-end screenshot state');
+      }
+      if (!await store.getState().advanceWindow()) {
+        throw new Error('Could not finalize the screenshot season');
+      }
+    });
+    for (const [route, fileName] of [
+      ['/history', '08-history.jpg'],
+      ['/chronicle', '09-chronicle.jpg'],
+    ] as const) {
+      await openRoute(page, route);
+      await capture(page, fileName);
+    }
+
+    if (errors.length > 0) {
+      throw new Error(`Screenshot run emitted runtime errors: ${errors.join(' | ')}`);
+    }
+    console.log(`Updated 10 documentation screenshots from ${baseUrl}`);
+  } finally {
+    await browser.close();
   }
-
-  await page.waitForTimeout(1500);
-
-  // 3. Dashboard mid-season
-  console.log('Capture: dashboard mid-season');
-  await page.screenshot({ path: path.join(OUT_DIR, '03-dashboard-midseason.png'), fullPage: false });
-
-  // 4. League standings — navigate to /league/1
-  console.log('Capture: league standings');
-  await page.goto(URL + 'league/1', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '04-league.png'), fullPage: false });
-
-  // 5. Cup bracket
-  console.log('Capture: league cup');
-  await page.goto(URL + 'cup/league_cup', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '05-cup-bracket.png'), fullPage: false });
-
-  // 6. Super cup
-  console.log('Capture: super cup');
-  await page.goto(URL + 'cup/super_cup', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '06-super-cup.png'), fullPage: false });
-
-  // 7. Teams page
-  console.log('Capture: teams center');
-  await page.goto(URL + 'teams', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '07-teams.png'), fullPage: false });
-
-  // 8. History / Honors
-  console.log('Capture: history');
-  await page.goto(URL + 'history', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '08-history.png'), fullPage: false });
-
-  // 9. Chronicle
-  console.log('Capture: chronicle');
-  await page.goto(URL + 'chronicle', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '09-chronicle.png'), fullPage: false });
-
-  // 10. Mobile screenshot of dashboard
-  console.log('Capture: mobile dashboard');
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(URL, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(OUT_DIR, '10-mobile.png'), fullPage: false });
-
-  await browser.close();
-  console.log('Done! Screenshots in', OUT_DIR);
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
 });

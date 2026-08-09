@@ -1,5 +1,16 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-09 Documentation And Comment Currency Audit
+
+- Audited active documentation, in-game guidance, source comments, archived checklists, release/security notes, and README screenshots against the v4.40 implementation. Historical release entries remain unchanged and the four long-running checklists now identify themselves as implementation ledgers instead of current specifications.
+- Corrected the current continental-cup contract everywhere players encounter it: all 16 Mainland and all 8 Southern/Eastern clubs participate, five-season coefficients only seed groups and break ties, S5 begins a six-season cycle, and World Cup groups remain three neutral rounds followed by single-match neutral knockouts.
+- Fixed the History coefficient page's obsolete four-season next-edition calculation and the Player Center's removed 600-minute hard-threshold copy. Updated the season snapshot comment to reflect current player-level defensive actions and archived team context.
+- Replaced README's inaccurate infinite-history, four-cup, and virtual-currency betting claims with explicit bounded storage windows, four cup systems/six named competitions, and the current resource-free prediction/judgment loop. The shipped season archive PNG is now marked complete and the project tree includes regional continental cups.
+- Confirmed React Router 7.18.2 patches `GHSA-qwww-vcr4-c8h2`, removed the obsolete pnpm audit exception, and rewrote the security note around the current zero-exception production audit and audit-build boundary.
+- Rebuilt the screenshot tool around a local `?audit=1` production build, deterministic current-season and completed-season states, actual README JPG paths, fixed scroll origins, runtime-error capture, and ten refreshed desktop/mobile screenshots. All ten images were visually inspected; History and Chronicle now show representative completed-season data.
+- Node 22.22.2 / pnpm 10.34.5 verification passed 102 test files / 780 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog and bundle budgets, zero-exception production dependency audit, automatic PWA update verification, shared UI checks, 82 mobile/desktop route checks, and focused 390px Settings/History behavior with zero overflow or runtime errors.
+- The default shell initially exposed Node 21.6.1 / pnpm 9.1.2, so its package-manager guard failures were treated as environment diagnostics; every recorded release result was rerun under the repository-pinned toolchain.
+
 ## 2026-08-09 Engineering Audit P1/P2 Closure
 
 - Closed the advancement-feedback inconsistency with a dedicated pure `advance-orchestration` module. Single, batch, until-target, and key-node actions now share one success commit for world state, results, news, observation settlements, response metadata, advance ticks, and achievement notifications.

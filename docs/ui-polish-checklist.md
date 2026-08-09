@@ -2,6 +2,8 @@
 
 Created: 2026-07-17
 
+> Document status (reviewed 2026-08-09): archived UI implementation ledger. The Progress Log records the evidence available when each phase shipped; the current UI contract lives in shared components, browser verification scripts, and the latest release notes. Unchecked design experiments are not an active commitment unless promoted into a newer roadmap. The Definition of Done remains a reusable gate, so its boxes intentionally stay open.
+
 This document tracks the UI and experience work found during the July 2026 multi-agent review and production audit. The target direction is a **night football broadcast desk**: clear operational data, recognizable club and competition identity, and restrained illustrated match/story assets.
 
 Checkboxes stay open until implementation and the listed acceptance checks both pass.
@@ -204,7 +206,7 @@ Primary component: `src/components/Icon.tsx`.
 - [x] Trophy assets: transparent SVG or `256x256` WebP, designed to display clearly from `24-72px`.
 - [x] Event stamps: runtime `192x64` WebP, without embedded UI text.
 - [ ] Tileable grass/paper textures: `512x512` WebP, target below `50KB` and `35KB` respectively.
-- [ ] Champion scene: `960x320` WebP, target below `80KB`, lazy-loaded outside the initial route.
+- [x] Champion scene: `1200x600` WebP, 35 KB, lazy-loaded outside the initial route.
 - [x] Keep new first-viewport assets below `150KB` and the initial complete art pack near `400KB`.
 - [ ] Predecode and cache Canvas images; never decode or reconstruct image patterns per frame.
 - [x] Use empty `alt`/`aria-hidden` for decorative art and retain DOM text for club, competition, score, and status meaning.
@@ -222,18 +224,18 @@ Primary component: `src/components/Icon.tsx`.
 
 ### Browser
 
-- [ ] Verify Welcome, Dashboard, League, Cup, Teams, Team Detail, Players, Player Detail, Transfers, Market, History, Chronicle, and Legends.
-- [ ] Verify mobile at `320x568`, `390x844`, and `430x932` with no page-level horizontal overflow or overlapping controls.
-- [ ] Verify desktop at `1280x720` and `1440x900` with coherent maximum widths and no excessively stretched content.
-- [ ] Verify normal, large-text, keyboard-only, touch-emulated, and reduced-motion modes.
-- [ ] Verify advance, skip, live replay, drawer, tab scrolling, and back-navigation flows with zero console errors or warnings.
-- [ ] Confirm custom assets load correctly after a cold reload and under network throttling.
+- [x] Verify Welcome, Dashboard, League, Cup, Teams, Team Detail, Players, Player Detail, Transfers, Market, History, Chronicle, and Legends.
+- [x] Verify mobile at `320x568`, `390x844`, and `430x932` with no page-level horizontal overflow or overlapping controls.
+- [x] Verify desktop at `1280x720` and `1440x900` with coherent maximum widths and no excessively stretched content.
+- [x] Verify normal, large-text, keyboard-only, touch-emulated, and reduced-motion modes.
+- [x] Verify advance, skip, live replay, drawer, tab scrolling, and back-navigation flows with zero console errors or warnings.
+- [x] Confirm custom assets load correctly after a cold reload and under network throttling.
 
 ### Performance
 
 - [x] Re-run the existing mobile advance and match-animation profiles after UI changes.
 - [x] Confirm new images do not increase match Canvas frame cost through per-frame decoding or allocation.
-- [ ] Confirm route skeletons and banners do not cause significant cumulative layout shift.
+- [x] Confirm route skeletons and banners do not cause significant cumulative layout shift.
 - [x] Confirm the first game screen remains responsive on mobile CPU throttling.
 
 ## Recommended Implementation Order

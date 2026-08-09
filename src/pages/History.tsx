@@ -16,6 +16,7 @@ import {
   type SeasonHistorySummary,
 } from '../engine/history/season-history-summary';
 import { Icon, type IconName } from '../components/Icon';
+import { continentalCupConfig } from '../config/competitions';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -63,6 +64,13 @@ function HistoryContent({ world }: { world: GameWorld }) {
     () => rankClubCoefficients(world.teamBases, world.teamSeasonRecords),
     [world.teamBases, world.teamSeasonRecords],
   );
+  const currentSeasonNumber = world.seasonState.seasonNumber;
+  const nextContinentalSeason = currentSeasonNumber <= continentalCupConfig.firstSeason
+    ? continentalCupConfig.firstSeason
+    : continentalCupConfig.firstSeason
+      + Math.ceil(
+        (currentSeasonNumber - continentalCupConfig.firstSeason) / continentalCupConfig.interval,
+      ) * continentalCupConfig.interval;
   const expandedSummary = useMemo(
     () => expandedSeason === null ? null : buildSeasonHistorySummary(world, expandedSeason),
     [expandedSeason, world],
@@ -407,11 +415,11 @@ function HistoryContent({ world }: { world: GameWorld }) {
               <div>
                 <h3 className="text-sm font-semibold text-slate-100">五赛季俱乐部积分</h3>
                 <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                  联赛与杯赛成绩计分，近季权重更高；洲际杯按区域积分排名取得资格。
+                  联赛与杯赛成绩计分，近季权重更高；洲际杯覆盖区域内全部球队，积分用于分档和同分排序。
                 </p>
               </div>
               <span className="text-[11px] text-slate-500">
-                {world.seasonState.seasonNumber % 4 === 2 ? '本届' : '下一届'}：S{world.seasonState.seasonNumber + ((2 - world.seasonState.seasonNumber) % 4 + 4) % 4}
+                {currentSeasonNumber === nextContinentalSeason ? '本届' : '下一届'}：S{nextContinentalSeason}
               </span>
             </div>
           </div>

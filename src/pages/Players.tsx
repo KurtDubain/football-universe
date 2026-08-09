@@ -420,7 +420,7 @@ export default function Players() {
                       ? '暂无生涯数据'
                       : hasCompletedMatches
                         ? tab === 'defense' || tab === 'keepers'
-                          ? '暂无达到 600 分钟排名门槛的球员'
+                          ? '暂无具备实际出场分钟的球员'
                           : '本赛季尚无符合该榜单的数据'
                         : '赛季尚未开始，完成首场比赛后生成当前赛季数据'}
                   </td>
