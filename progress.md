@@ -1,5 +1,46 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-09 Engineering Audit P1/P2 Closure
+
+- Closed the advancement-feedback inconsistency with a dedicated pure `advance-orchestration` module. Single, batch, until-target, and key-node actions now share one success commit for world state, results, news, observation settlements, response metadata, advance ticks, and achievement notifications.
+- Full world achievement history remains unchanged. Transient toasts now include only newly unlocked achievements for the currently followed teams; no-favorite simulation keeps all achievements without global toast spam. New-game and reset paths clear achievement, starred-fixture, favorite-team, advancing, and tick state.
+- Added end-to-end store coverage for single-versus-batch achievement parity, no-favorite behavior, and universe reset isolation. A fixed-seed browser probe produced 32 world achievements but only two relevant favorite-team notifications, advanced the queue exactly once on click, and left zero notifications after reset.
+- Reworked the achievement toast as a full-width mobile-safe, keyboard-operable notification below the persistent header/ticker. It exposes the remaining count, wraps long content, has zero horizontal overflow at 390px, and was visually inspected in the real Dashboard.
+- Made audit-feature checks compare `VITE_ENABLE_AUDIT` with the exact string `true`, preventing an environment value of `false` from exposing audit-only behavior. The ordinary production bundle contains no game, save, or update audit bridge.
+- Enabled TypeScript `strict`, `noUnusedLocals`, and `noUnusedParameters` in the committed app configuration and cleared all existing violations. Added `pnpm typecheck`, aligned `.nvmrc`, `.node-version`, and CI on Node 22.22.2, while retaining the documented Node 22.12 minimum.
+- CI now runs current-schema browser/data validation, automatic PWA update verification, production mobile advance performance, and tactical match presentation for every PR. Main pushes and the weekly run additionally cover set pieces, shootouts, and the complete animation performance lifecycle; failure artifacts include reports, logs, and screenshots.
+- Bundle governance now checks raw and gzip sizes. Final ordinary production output measured 230,633 bytes / 71,710 gzip for the entry and 638,429 bytes / 208,074 gzip for the initial graph, within 500,000/80,000 and 700,000/225,000 budgets.
+- Updated README scale and validation commands, ignored browser audit output, and released the combined PWA, coherent animation, and engineering closure as v4.40.0.
+- Final Node 22.22.2 verification passed 102 test files / 780 tests, strict TypeScript, ESLint, changelog consistency, ordinary and audit PWA builds, bundle budgets, and production dependency audit with no known vulnerabilities.
+- The ten-season production browser audit completed 500 advances with zero data errors or warnings; save round-trip, deep links, back navigation, all audited mobile/desktop routes, and offline revisit passed. Mobile advance p50/p95 was 20.6/26.3ms normally and 43.6/66.7ms at 4x CPU, with one accepted advance from 20 rapid inputs and exact reload recovery.
+- Tactical actor, corner, free-kick, and shootout audits passed desktop plus 320/390px mobile. Canvas rendering averaged about 0.24ms normally and 0.89ms at 4x CPU; hidden, covered, closed, reopened, next-batch, and authoritative final-score states all passed.
+
+### Follow-up Boundary
+
+- Dashboard, season manager, PitchCanvas, and MatchLive remain intentionally large domain orchestrators. Future feature work should extract one cohesive controller at a time, but no broad rewrite is justified while their strict build, focused unit suites, production browser matrix, performance budgets, and long-save invariants remain green.
+
+## 2026-08-09 Coherent Tactical Match Presentation
+
+- User reported that the current animation still felt disorganized and asked for a more realistic pass without replacing the lightweight top-down presentation or changing authoritative match results.
+- Ordinary possession now selects one deterministic tactical episode: build-up, wing overload, central combination, switch, counter, or recycle. Pass routes share that intent and stage, off-ball support follows role-specific lanes, and defensive pressure/cover/marking assignments stay stable across the episode.
+- Presentation-only possession can no longer invent a shot. Goals, saves, blocks, misses, and set-piece outcomes come from the existing authoritative event chain; score, player statistics, schedules, saves, and simulation RNG are unchanged.
+- Highlight scenes now enter five simulated minutes before a shot or set piece. The match clock yields at the event minute until the final pass, release, and readable outcome complete; dense event scenes queue in order instead of replacing the active save, block, or celebration.
+- The prior emergency jump to the final shot was removed. The credited goalkeeper or blocker reads the attack during the prelude, recovers into the shot lane, reacts after release, and holds the intervention position through the result. Browser audit reduced the credited goal-line blocker's result distance from roughly `0.16` to `0.02` normalized pitch units.
+- Defending players preserve a spaced box line after release instead of swarming the ball. Counters send only the front unit and nearby support forward while the remaining players hold rest defence; mobile and reduced-motion profiles retain a fixed camera.
+- The Canvas debug contract now reports tactical pattern/stage, event target, clock ownership, scene minute, queue depth, player identities, positions, and render health. Set-piece and shootout audits wait for the complete scene rather than assuming the commentary and Canvas enter on the same frame.
+- Browser verification passed ordinary presentation at `1440x900`, `320x568`, `390x844`, and reduced motion; tactical scorer/creator/goalkeeper/blocker identity; corners, direct free kicks, shootouts, complete broadcast history, and the standard web-game client with inspected screenshots and no runtime error artifacts.
+- Animation performance passed normal and 4x CPU profiles. Average Canvas render cost was about `0.25ms` and `0.57ms`; hidden, covered, paused, completed, closed, reopened, and next-batch states remained correct, and final scores matched.
+- Final Node 22.22.2 verification passed 102 test files / 777 tests, ESLint, TypeScript, ordinary and audit PWA builds, automatic-update verification, changelog and bundle budgets, and production dependency audit. The ordinary production package contains no audit bridge; the main entry is 230,149 bytes (71,561 gzip) and initial load is 637,359 bytes (207,805 gzip).
+
+## 2026-08-09 Automatic Deployment Updates
+
+- User requested automatic remote-version recognition so Vercel deployments reach an already-open game without repeated manual refreshes. Existing saves and simulation data remain untouched.
+- Added a build-generated, non-precache `version.json` carrying both the public app version and the deployment commit id, with explicit no-store Vercel headers for the probe and Service Worker.
+- Replaced implicit PWA registration with an explicit production update monitor. It checks at startup, focus, foreground restore, online restore, and every 15 minutes, then asks the registered Service Worker to update when the deployment id changes.
+- Service Worker activation now delegates to a tested safe-reload coordinator. Reload waits at least 500ms and is deferred while the page is hidden, a season window is advancing, or any modal/live dialog is open; duplicate notifications still reload only once.
+- The dedicated audit build served `version.json` outside the Service Worker precache, registered and controlled the page, detected a simulated new deployment id, and completed exactly one explicit registration update request. Mobile overflow and runtime errors were zero.
+- Final Node 22.22.2 verification passed 102 test files / 767 tests, ESLint, TypeScript, audit and ordinary PWA builds, changelog, bundle budget, production dependency audit, and the standard web-game client through a fresh start into Dashboard. The main entry is 230,149 bytes (71,570 gzip), initial load is 637,359 bytes (207,814 gzip), and no ordinary-production audit bridge remains.
+
 ## 2026-08-09 Stable Match Motion And Set Pieces
 
 - User approved option B: prioritize stable, maintainable football motion and allow a slower presentation in exchange for credible setup, transitions, corners, and free kicks.

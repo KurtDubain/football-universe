@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Browser and visual audit artifacts
+.playwright-mcp/
+.playwright-cli/
+playwright-report/
+test-results/
+output/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

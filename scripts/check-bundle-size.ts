@@ -4,6 +4,8 @@ import { gzipSync } from 'node:zlib';
 const manifestPath = 'dist/.vite/manifest.json';
 const mainBudgetBytes = Number(process.env.MAIN_JS_BUDGET_BYTES ?? 500_000);
 const initialBudgetBytes = Number(process.env.INITIAL_JS_BUDGET_BYTES ?? 700_000);
+const mainGzipBudgetBytes = Number(process.env.MAIN_JS_GZIP_BUDGET_BYTES ?? 80_000);
+const initialGzipBudgetBytes = Number(process.env.INITIAL_JS_GZIP_BUDGET_BYTES ?? 225_000);
 const reportPath = process.env.BUNDLE_REPORT;
 
 type ManifestChunk = {
@@ -40,11 +42,16 @@ const report = {
   entry: manifest[entryKey].src ?? entryKey,
   mainBudgetBytes,
   initialBudgetBytes,
+  mainGzipBudgetBytes,
+  initialGzipBudgetBytes,
   mainBytes: entryChunk.bytes,
   mainGzipBytes: entryChunk.gzipBytes,
   initialBytes,
   initialGzipBytes,
-  passed: entryChunk.bytes <= mainBudgetBytes && initialBytes <= initialBudgetBytes,
+  passed: entryChunk.bytes <= mainBudgetBytes
+    && initialBytes <= initialBudgetBytes
+    && entryChunk.gzipBytes <= mainGzipBudgetBytes
+    && initialGzipBytes <= initialGzipBudgetBytes,
   chunks,
 };
 
@@ -52,6 +59,6 @@ console.log(JSON.stringify(report, null, 2));
 if (reportPath) writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 if (!report.passed) {
   throw new Error(
-    `Bundle budget exceeded: main ${entryChunk.bytes}/${mainBudgetBytes} B, initial ${initialBytes}/${initialBudgetBytes} B`,
+    `Bundle budget exceeded: main ${entryChunk.bytes}/${mainBudgetBytes} B (${entryChunk.gzipBytes}/${mainGzipBudgetBytes} gzip), initial ${initialBytes}/${initialBudgetBytes} B (${initialGzipBytes}/${initialGzipBudgetBytes} gzip)`,
   );
 }

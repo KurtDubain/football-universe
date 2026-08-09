@@ -34,7 +34,7 @@ export default function App() {
   const initialized = useGameStore((s) => s.initialized);
   const location = useLocation();
 
-  if (import.meta.env.VITE_ENABLE_AUDIT && new URLSearchParams(location.search).get('auditError') === '1') {
+  if (import.meta.env.VITE_ENABLE_AUDIT === 'true' && new URLSearchParams(location.search).get('auditError') === '1') {
     throw new Error('移动路由审计：模拟页面资源加载失败');
   }
 

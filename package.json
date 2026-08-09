@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.37.0",
+  "version": "4.40.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "typecheck": "tsc -b",
     "audit:current": "tsx scripts/audit-e2e.ts",
     "audit:advance-performance": "tsx scripts/audit-advance-performance.ts",
     "audit:animation-performance": "tsx scripts/audit-animation-performance.ts",
@@ -37,6 +38,7 @@
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
     "verify:mobile-routes": "tsx scripts/verify-mobile-routes.ts",
     "verify:feedback": "tsx scripts/verify-feedback.ts",
+    "verify:pwa-update": "tsx scripts/verify-pwa-update.ts",
     "verify:visual-assets": "tsx scripts/verify-visual-assets.ts",
     "verify:history-summary": "tsx scripts/verify-history-summary.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",

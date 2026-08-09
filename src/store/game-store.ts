@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
 import { createCurrentSavePersistStorage, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-schema';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
-import { GameWorld, NewsItem, initializeGameWorld, executeCurrentWindow, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
+import { GameWorld, NewsItem, initializeGameWorld, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
@@ -22,7 +22,6 @@ import { enforceStorageLimits } from '../engine/season/storage-limits';
 import { archiveCompletedMatchDetails, boundWorldStorageMetadata, type StorageCleanupResult } from './save-compaction';
 import {
   isObservationSelectionValid,
-  settleObservationJudgment,
   type ObservationJudgmentKind,
   type ObservationSelection,
   type ObservationSettlement,
@@ -35,17 +34,16 @@ import {
   type AdvanceWorldResponse,
 } from '../engine/observation/world-response';
 import {
-  appendObserverSeasonTrajectory,
-  buildObserverSeasonTrajectory,
-} from '../engine/observation/season-trajectory';
-import {
   getCurrentKeyNodeGuard,
   planNextKeyNode,
 } from '../engine/observation/key-node';
 import {
-  buildObservationTheme,
   type ObservationThemePreference,
 } from '../engine/observation/observation-theme';
+import {
+  buildAdvanceCompletionState,
+  executeWindowWithObservationSettlement,
+} from './advance-orchestration';
 
 interface GameStore {
   world: GameWorld | null;
@@ -166,53 +164,6 @@ function yieldForAdvanceFeedback(): Promise<void> {
   });
 }
 
-function executeWindowWithObservationSettlement(
-  world: GameWorld,
-  favoriteTeamIds: string[],
-  observationThemePreference: ObservationThemePreference,
-) {
-  const currentWindow = getCurrentWindow(world);
-  if (!currentWindow) throw new Error('当前没有可推进的比赛窗口');
-  const seasonNumber = world.seasonState.seasonNumber;
-  const windowIndex = world.seasonState.currentWindowIndex;
-  const primaryTeamId = favoriteTeamIds[0];
-  const observationTheme = currentWindow.type === 'season_end' && primaryTeamId
-    ? buildObservationTheme(world, primaryTeamId, observationThemePreference)
-    : null;
-  const seasonTrajectory = currentWindow.type === 'season_end' && primaryTeamId
-    ? buildObserverSeasonTrajectory(world, primaryTeamId, observationTheme)
-    : null;
-  const result = executeCurrentWindow(world, { favoriteTeamIds });
-  const settlement = settleObservationJudgment(
-    result.world.observationRecord,
-    result.world.pendingObservationJudgment,
-    result.results,
-  );
-  const settlementChanged = settlement.settlements.length > 0;
-  const observationSettlements = settlement.settlements;
-  const outcome: AdvanceWindowOutcome = {
-    seasonNumber,
-    windowIndex,
-    windowLabel: currentWindow.label,
-    results: result.results,
-    news: result.news,
-    observationSettlements,
-  };
-  const settledWorld = settlementChanged
-    ? {
-        ...result.world,
-        pendingObservationJudgment: settlement.pending,
-        observationRecord: settlement.record,
-      }
-    : result.world;
-  return {
-    ...result,
-    observationSettlements,
-    outcome,
-    world: appendObserverSeasonTrajectory(settledWorld, seasonTrajectory),
-  };
-}
-
 function hashActionSeed(input: string): number {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -259,8 +210,14 @@ export const useGameStore = create<GameStore>()(
           lastNews: [],
           lastObservationSettlements: [],
           lastWorldResponse: null,
+          isAdvancing: false,
           advanceError: null,
+          advanceTick: 0,
+          favoriteTeamId: null,
+          favoriteTeamIds: [],
           observationThemePreference: 'auto',
+          starredFixtureIds: [],
+          newAchievements: [],
         });
       },
 
@@ -285,20 +242,15 @@ export const useGameStore = create<GameStore>()(
             get().favoriteTeamId,
           );
 
-          // Detect new achievements (compare against pre-advance state)
-          const oldAchIds = new Set((world.achievements ?? []).map(a => a.id));
-          const newAch = (updatedWorld.achievements ?? []).filter(a => !oldAchIds.has(a.id));
-
-          set({
+          set(state => buildAdvanceCompletionState(state, {
+            previousWorld: world,
             world: updatedWorld,
+            favoriteTeamIds,
             lastResults: result.results,
             lastNews: result.news,
             lastObservationSettlements: result.observationSettlements,
             lastWorldResponse: worldResponse,
-            isAdvancing: false,
-            advanceTick: get().advanceTick + 1,
-            newAchievements: [...get().newAchievements, ...newAch],
-          });
+          }));
           return true;
         } catch (e) {
           console.error('Error advancing window:', e);
@@ -310,6 +262,7 @@ export const useGameStore = create<GameStore>()(
       batchAdvance: async (count: number) => {
         let { world } = get();
         if (!world || get().isAdvancing) return false;
+        const previousWorld = world;
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
@@ -339,23 +292,23 @@ export const useGameStore = create<GameStore>()(
           }
           // Trim news to last 30
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          world = boundWorldStorageMetadata(enforceStorageLimits(world));
+          const updatedWorld = boundWorldStorageMetadata(enforceStorageLimits(world));
           const worldResponse = buildAdvanceWorldResponse(
             'batch',
             outcomes,
-            world,
+            updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
           );
-          set({
-            world,
+          set(state => buildAdvanceCompletionState(state, {
+            previousWorld,
+            world: updatedWorld,
+            favoriteTeamIds,
             lastResults: allResults,
             lastNews: allNews,
             lastObservationSettlements: observationSettlements,
             lastWorldResponse: worldResponse,
-            isAdvancing: false,
-            advanceTick: get().advanceTick + 1,
-          });
+          }));
           return true;
         } catch (e) {
           console.error('Error in batch advance:', e);
@@ -367,6 +320,7 @@ export const useGameStore = create<GameStore>()(
       advanceUntil: async (type: 'cup' | 'season_end') => {
         let { world } = get();
         if (!world || get().isAdvancing) return false;
+        const previousWorld = world;
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
@@ -400,23 +354,23 @@ export const useGameStore = create<GameStore>()(
             return false;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          world = boundWorldStorageMetadata(enforceStorageLimits(world));
+          const updatedWorld = boundWorldStorageMetadata(enforceStorageLimits(world));
           const worldResponse = buildAdvanceWorldResponse(
             type === 'cup' ? 'cup' : 'season_end',
             outcomes,
-            world,
+            updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
           );
-          set({
-            world,
+          set(state => buildAdvanceCompletionState(state, {
+            previousWorld,
+            world: updatedWorld,
+            favoriteTeamIds,
             lastResults,
             lastNews: allNews,
             lastObservationSettlements: observationSettlements,
             lastWorldResponse: worldResponse,
-            isAdvancing: false,
-            advanceTick: get().advanceTick + 1,
-          });
+          }));
           return true;
         } catch (e) {
           console.error('Error in advanceUntil:', e);
@@ -428,6 +382,7 @@ export const useGameStore = create<GameStore>()(
       advanceToNextKeyNode: async () => {
         let { world } = get();
         if (!world || get().isAdvancing) return false;
+        const previousWorld = world;
         const favoriteTeamIds = get().favoriteTeamIds;
         const observationThemePreference = get().observationThemePreference;
         const starredFixtureIds = get().starredFixtureIds;
@@ -478,23 +433,23 @@ export const useGameStore = create<GameStore>()(
             return false;
           }
           if (allNews.length > 30) allNews = allNews.slice(-30);
-          world = boundWorldStorageMetadata(enforceStorageLimits(world));
+          const updatedWorld = boundWorldStorageMetadata(enforceStorageLimits(world));
           const worldResponse = buildAdvanceWorldResponse(
             'key_node',
             outcomes,
-            world,
+            updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
           );
-          set({
-            world,
+          set(state => buildAdvanceCompletionState(state, {
+            previousWorld,
+            world: updatedWorld,
+            favoriteTeamIds,
             lastResults,
             lastNews: allNews,
             lastObservationSettlements: observationSettlements,
             lastWorldResponse: worldResponse,
-            isAdvancing: false,
-            advanceTick: get().advanceTick + 1,
-          });
+          }));
           return true;
         } catch (e) {
           console.error('Error advancing to key node:', e);
@@ -805,10 +760,14 @@ export const useGameStore = create<GameStore>()(
           lastNews: [],
           lastObservationSettlements: [],
           lastWorldResponse: null,
+          isAdvancing: false,
           advanceError: null,
+          advanceTick: 0,
           favoriteTeamId: null,
           favoriteTeamIds: [],
           observationThemePreference: 'auto',
+          starredFixtureIds: [],
+          newAchievements: [],
         });
         compressedStorage.removeItem(SAVE_STORAGE_KEY);
       },

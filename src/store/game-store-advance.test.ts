@@ -7,6 +7,14 @@ import { SAVE_STORAGE_KEY } from './save-schema';
 describe('game store advance scheduling', () => {
   let frames: FrameRequestCallback[];
 
+  async function completeAdvance(advance: Promise<boolean>): Promise<boolean> {
+    expect(frames).toHaveLength(1);
+    frames.shift()!(performance.now());
+    expect(frames).toHaveLength(1);
+    frames.shift()!(performance.now());
+    return advance;
+  }
+
   beforeEach(() => {
     frames = [];
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -82,5 +90,75 @@ describe('game store advance scheduling', () => {
     useGameStore.getState().dismissAdvanceError();
     expect(useGameStore.getState().advanceError).toBeNull();
     consoleError.mockRestore();
+  });
+
+  it('queues only favorite-team achievements and keeps batch advancement consistent', async () => {
+    const favoriteTeamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
+    useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
+
+    await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
+    expect(useGameStore.getState().getCurrentWindow()?.type).toBe('season_end');
+    await completeAdvance(useGameStore.getState().advanceWindow());
+
+    const singleNotifications = useGameStore.getState().newAchievements;
+    expect(useGameStore.getState().world!.achievements.length).toBeGreaterThan(singleNotifications.length);
+    expect(singleNotifications.length).toBeGreaterThan(0);
+    expect(singleNotifications.every(achievement => achievement.teamId === favoriteTeamId)).toBe(true);
+
+    useGameStore.getState().newGame(20260716);
+    useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
+    await completeAdvance(useGameStore.getState().batchAdvance(60));
+
+    const batchNotifications = useGameStore.getState().newAchievements;
+    expect(batchNotifications.map(achievement => achievement.id)).toEqual(
+      singleNotifications.map(achievement => achievement.id),
+    );
+    expect(batchNotifications.every(achievement => achievement.teamId === favoriteTeamId)).toBe(true);
+  });
+
+  it('keeps world achievements without global toast spam when no team is followed', async () => {
+    await completeAdvance(useGameStore.getState().batchAdvance(60));
+
+    expect(useGameStore.getState().world!.achievements.length).toBeGreaterThan(0);
+    expect(useGameStore.getState().newAchievements).toEqual([]);
+  });
+
+  it('clears transient universe state for a new game and a full reset', () => {
+    const achievement = {
+      id: 'test-achievement',
+      title: '测试成就',
+      description: '不应进入新宇宙',
+      seasonNumber: 1,
+    };
+    useGameStore.setState({
+      advanceTick: 8,
+      favoriteTeamId: 'old-team',
+      favoriteTeamIds: ['old-team'],
+      starredFixtureIds: ['old-fixture'],
+      newAchievements: [achievement],
+    });
+
+    useGameStore.getState().newGame(20260809);
+    expect(useGameStore.getState()).toMatchObject({
+      advanceTick: 0,
+      favoriteTeamId: null,
+      favoriteTeamIds: [],
+      starredFixtureIds: [],
+      newAchievements: [],
+    });
+
+    useGameStore.setState({
+      advanceTick: 3,
+      starredFixtureIds: ['another-fixture'],
+      newAchievements: [achievement],
+    });
+    useGameStore.getState().resetGame();
+    expect(useGameStore.getState()).toMatchObject({
+      world: null,
+      initialized: false,
+      advanceTick: 0,
+      starredFixtureIds: [],
+      newAchievements: [],
+    });
   });
 });

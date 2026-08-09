@@ -133,7 +133,7 @@ pnpm dev      # http://localhost:5173
 pnpm build    # 生产构建
 ```
 
-> 需要 Node.js 22.12+ 与 pnpm 10.34.5（仓库已通过 `packageManager` 固定）
+> 最低需要 Node.js 22.12，仓库通过 `.nvmrc`/`.node-version` 固定使用 22.22.2，并通过 `packageManager` 固定 pnpm 10.34.5。
 
 ---
 
@@ -144,9 +144,12 @@ pnpm test         # 跑一次（CI 用）
 pnpm test:watch   # 监听模式（开发用）
 pnpm test:ui      # Vitest UI（浏览器面板）
 pnpm lint         # ESLint
+pnpm typecheck    # TypeScript strict + 未使用代码检查
 pnpm build        # TypeScript + 生产/PWA 构建
 pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
+pnpm audit:advance-performance # 移动端推进、重复点击与存档恢复
+pnpm verify:pwa-update         # 远端版本识别与自动更新
 ```
 
 ---
@@ -164,7 +167,7 @@ pnpm audit:current # 生产预览的长期数据与浏览器审计
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-~45,000 production lines · 170 source files · 89 test files · 50 browser/simulation audit scripts
+~52,000 production lines · 192 production source files · 102 test files · 33 browser/simulation audit commands
 
 生产依赖审计的定向豁免与适用边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 

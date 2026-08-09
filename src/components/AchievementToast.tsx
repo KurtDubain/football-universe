@@ -4,6 +4,7 @@ import { Icon, IconName } from './Icon';
 
 interface Props {
   achievement: Achievement;
+  remainingCount?: number;
   onDismiss: () => void;
 }
 
@@ -47,7 +48,7 @@ const ACHIEVEMENT_ICON: Record<string, IconName> = {
   legend_team: 'star-glow',
 };
 
-export default function AchievementToast({ achievement, onDismiss }: Props) {
+export default function AchievementToast({ achievement, remainingCount = 0, onDismiss }: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -63,21 +64,29 @@ export default function AchievementToast({ achievement, onDismiss }: Props) {
 
   return (
     <div
-      className={`fixed top-20 left-1/2 -translate-x-1/2 z-[200] transition-all duration-500 ${
-        visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+      aria-live="polite"
+      className={`fixed top-[calc(env(safe-area-inset-top)+6rem)] left-3 right-3 sm:top-20 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[200] transition-all duration-500 ${
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
       }`}
-      onClick={onDismiss}
     >
-      <div className="bg-gradient-to-r from-amber-900/90 via-amber-800/90 to-amber-900/90 backdrop-blur-sm border border-amber-600/50 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 cursor-pointer animate-glow-pulse">
+      <button
+        type="button"
+        aria-label={`成就解锁：${achievement.title}，关闭提示`}
+        onClick={onDismiss}
+        className="w-full sm:w-[22rem] bg-slate-950/95 backdrop-blur-md border border-amber-500/60 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer animate-glow-pulse hover:border-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+      >
         <span className="shrink-0 text-amber-300">
           <Icon name={iconName} size={32} accent="#fbbf24" />
         </span>
-        <div>
-          <div className="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">成就解锁</div>
-          <div className="text-sm font-bold text-white">{achievement.title}</div>
-          <div className="text-xs text-amber-100/80 mt-0.5">{achievement.description}</div>
-        </div>
-      </div>
+        <span className="min-w-0">
+          <span className="block text-[10px] text-amber-300 font-semibold uppercase tracking-wider">成就解锁</span>
+          <span className="block text-sm font-bold text-white break-words">{achievement.title}</span>
+          <span className="block text-xs text-amber-100/80 mt-0.5 break-words">{achievement.description}</span>
+          {remainingCount > 0 && (
+            <span className="block text-[11px] text-amber-300 mt-1">另有 {remainingCount} 项，点击继续</span>
+          )}
+        </span>
+      </button>
     </div>
   );
 }

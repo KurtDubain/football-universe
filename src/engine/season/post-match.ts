@@ -50,8 +50,8 @@ export function runPostMatchProcessing(
   windowIndex: number,
   rng: SeededRNG,
   league1Standings: StandingEntry[],
-  league2Standings: StandingEntry[],
-  league3Standings: StandingEntry[],
+  _league2Standings: StandingEntry[],
+  _league3Standings: StandingEntry[],
   seasonState: SeasonState,
 ): PostMatchResult {
   const news: NewsItem[] = [];

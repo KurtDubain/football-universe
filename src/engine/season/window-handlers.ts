@@ -82,7 +82,7 @@ export function handleLeague(
   world: GameWorld,
   window: CalendarWindow,
   teamStates: Record<string, TeamState>,
-  seasonState: SeasonState,
+  _seasonState: SeasonState,
   rng: SeededRNG,
   league1Standings: StandingEntry[],
   league2Standings: StandingEntry[],
@@ -527,7 +527,7 @@ export function handleContinentalCup(
   world: GameWorld,
   window: CalendarWindow,
   teamStates: Record<string, TeamState>,
-  seasonState: SeasonState,
+  _seasonState: SeasonState,
   rng: SeededRNG,
   continentalCups: GameWorld['continentalCups'],
 ): WindowResult {

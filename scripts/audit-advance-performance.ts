@@ -1,9 +1,11 @@
 import { chromium, type CDPSession, type Page } from 'playwright';
+import { writeFileSync } from 'node:fs';
 
 const url = process.env.PERF_URL ?? 'http://127.0.0.1:4173/?audit';
 const samples = Number(process.env.PERF_SAMPLES ?? 5);
 const settleMs = Number(process.env.PERF_SETTLE_MS ?? 750);
 const seed = Number(process.env.PERF_SEED ?? 20260716);
+const reportPath = process.env.PERF_REPORT;
 
 interface AdvanceSample {
   actionMs: number;
@@ -224,6 +226,7 @@ try {
     },
   };
   console.log(JSON.stringify(result, null, 2));
+  if (reportPath) writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
 
   const allSamples = [...normal.samples, ...throttled.samples];
   const failures = [

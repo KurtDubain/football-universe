@@ -51,10 +51,10 @@ const ACHIEVEMENT_DEFS = [
   { id: 'first_world_cup', title: '首夺世界杯', check: (s: SeasonRec, rec: SeasonRec[]) => s.worldCupResult === '冠军' && rec.filter(r => r.worldCupResult === '冠军').length === 1, desc: (t: string) => `${t}首次问鼎环球冠军杯，登顶世界之巅` },
 
   // ──── Streak / Dynasty (王朝类) ────
-  { id: 'back_to_back', title: '蝉联霸主', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 2) return false; const last2 = rec.slice(-2); return last2[0]?.leaguePosition === 1 && last2[1]?.leaguePosition === 1; }, desc: (t: string) => `${t}成功蝉联联赛冠军` },
-  { id: 'three_peat', title: '三连冠王朝', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const last3 = rec.slice(-3); return last3.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}成就联赛三连冠伟业` },
-  { id: 'five_peat', title: '王朝霸主', check: (s: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 5) return false; const last5 = rec.slice(-5); return last5.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}建立横跨五个赛季的王朝` },
-  { id: 'cup_dynasty', title: '杯赛之王', check: (s: SeasonRec, rec: SeasonRec[]) => rec.filter(r => r.cupResult === '冠军').length >= 5, desc: (t: string) => `${t}5+次捧起联赛杯，杯赛专家` },
+  { id: 'back_to_back', title: '蝉联霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 2) return false; const last2 = rec.slice(-2); return last2[0]?.leaguePosition === 1 && last2[1]?.leaguePosition === 1; }, desc: (t: string) => `${t}成功蝉联联赛冠军` },
+  { id: 'three_peat', title: '三连冠王朝', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 3) return false; const last3 = rec.slice(-3); return last3.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}成就联赛三连冠伟业` },
+  { id: 'five_peat', title: '王朝霸主', check: (_season: SeasonRec, rec: SeasonRec[]) => { if (rec.length < 5) return false; const last5 = rec.slice(-5); return last5.every(r => r?.leaguePosition === 1); }, desc: (t: string) => `${t}建立横跨五个赛季的王朝` },
+  { id: 'cup_dynasty', title: '杯赛之王', check: (_season: SeasonRec, rec: SeasonRec[]) => rec.filter(r => r.cupResult === '冠军').length >= 5, desc: (t: string) => `${t}5+次捧起联赛杯，杯赛专家` },
 
   // ──── Multi-crown (多冠类) ────
   { id: 'double_crown', title: '双冠王', check: (s: SeasonRec) => titleCount(s) >= 2, desc: (t: string) => `${t}单赛季夺得双冠` },

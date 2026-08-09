@@ -644,5 +644,11 @@ function AchievementToastContainer() {
   const newAchievements = useGameStore(s => s.newAchievements);
   const dismissAchievement = useGameStore(s => s.dismissAchievement);
   if (newAchievements.length === 0) return null;
-  return <AchievementToast achievement={newAchievements[0]} onDismiss={dismissAchievement} />;
+  return (
+    <AchievementToast
+      achievement={newAchievements[0]}
+      remainingCount={newAchievements.length - 1}
+      onDismiss={dismissAchievement}
+    />
+  );
 }
