@@ -16,6 +16,21 @@ async function verifyViewport(name: string, width: number, height: number) {
     await dialog.getByRole('button', { name: '精华', exact: true }).click();
     const tracker = dialog.getByTestId('shootout-tracker');
     await tracker.waitFor({ state: 'visible', timeout: 20_000 });
+    await page.waitForFunction(() => {
+      const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
+      if (!render) return false;
+      const state = JSON.parse(render()) as {
+        homeOnField: unknown[];
+        awayOnField: unknown[];
+        lastTouchPlayerId: string | null;
+        event: { attackerId?: string } | null;
+      };
+      return Boolean(
+        state.event?.attackerId
+        && state.lastTouchPlayerId === state.event.attackerId
+        && state.homeOnField.length + state.awayOnField.length === 2,
+      );
+    }, undefined, { timeout: 20_000 });
     await dialog.getByRole('button', { name: '暂停', exact: true }).click();
     await page.waitForTimeout(150);
 

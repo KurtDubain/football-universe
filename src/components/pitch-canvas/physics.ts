@@ -3,7 +3,14 @@
 
 import { clamp, dist, lerp, seededRand } from './math';
 import { setPiecePlayerTarget } from './set-pieces';
-import { BASE_FORMATION, type PassPhase, type PlayerState, type Role } from './types';
+import {
+  BASE_FORMATION,
+  type PassPhase,
+  type PlayerState,
+  type PresentationPlayPattern,
+  type PresentationPlayStage,
+  type Role,
+} from './types';
 
 /**
  * Where a player should be standing in their formation slot, given the
@@ -49,6 +56,11 @@ export interface DefensiveRoles {
 export interface TacticalAssignments extends DefensiveRoles {
   defendingHome: boolean;
   markingTargets: Readonly<Record<number, number>>;
+}
+
+export interface DirectedDefensiveAction {
+  playerIndex: number;
+  target: { x: number; y: number };
 }
 
 export function selectMarkingTarget(
@@ -205,6 +217,164 @@ export function computeCarryTarget(
   };
 }
 
+export interface AttackingShapeInput {
+  formIdx: number;
+  isHomeTeam: boolean;
+  shift: number;
+  ballNX: number;
+  ballNY: number;
+  pattern: PresentationPlayPattern;
+  stage?: PresentationPlayStage;
+}
+
+export interface AttackingShapeTarget {
+  x: number;
+  y: number;
+  sprint: number;
+}
+
+/**
+ * Off-ball shape for one coherent possession episode. Each pattern names a
+ * small set of runners and leaves the rest of the team in supporting or
+ * rest-defence positions, avoiding whole-team movement toward every touch.
+ */
+export function computeAttackingShapeTarget(input: AttackingShapeInput): AttackingShapeTarget {
+  const { formIdx, isHomeTeam, shift, ballNX, ballNY, pattern, stage } = input;
+  const slot = getBaseSlot(formIdx, isHomeTeam, shift);
+  const attackDirection = isHomeTeam ? 1 : -1;
+  const ahead = (x: number, amount: number) => x + attackDirection * amount;
+  const behind = (x: number, amount: number) => x - attackDirection * amount;
+  const upperSide = ballNY < 0.5;
+  const slotUpper = slot.y < 0.5;
+  const sameFlank = slot.y !== 0.5 && slotUpper === upperSide;
+  const wideY = upperSide ? 0.13 : 0.87;
+  const farWideY = upperSide ? 0.87 : 0.13;
+  const isFullback = formIdx === 1 || formIdx === 4;
+  const isWideMidfielder = formIdx === 5 || formIdx === 7;
+  const isWinger = formIdx === 8 || formIdx === 10;
+  let x = slot.x;
+  let y = slot.y;
+  let sprint = 0;
+
+  if (slot.role === 'GK') {
+    return {
+      x: clamp(ahead(slot.x, 0.012), 0.03, 0.97),
+      y: clamp(0.5 + (ballNY - 0.5) * 0.12, 0.45, 0.55),
+      sprint: 0,
+    };
+  }
+
+  switch (pattern) {
+    case 'build_up':
+      if (slot.role === 'DF') {
+        x = ahead(slot.x, isFullback ? 0.035 : 0.008);
+        y = isFullback ? (slotUpper ? 0.11 : 0.89) : lerp(slot.y, 0.5, 0.08);
+      } else if (slot.role === 'MF') {
+        x = formIdx === 6 ? behind(ballNX, 0.11) : behind(ballNX, 0.04);
+        y = formIdx === 6 ? 0.5 : lerp(slot.y, ballNY, 0.22);
+      } else {
+        x = ahead(ballNX, formIdx === 9 ? 0.16 : 0.11);
+        y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
+      }
+      break;
+
+    case 'wing_overload':
+      if (isFullback && sameFlank) {
+        x = ahead(ballNX, 0.07);
+        y = wideY;
+        sprint = 0.78;
+      } else if (isWideMidfielder && sameFlank) {
+        x = behind(ballNX, 0.075);
+        y = lerp(wideY, 0.5, 0.34);
+      } else if (isWinger && sameFlank) {
+        x = ahead(ballNX, 0.11);
+        y = lerp(wideY, 0.5, 0.14);
+        sprint = 0.68;
+      } else if (formIdx === 9) {
+        x = ahead(ballNX, 0.13);
+        y = 0.5;
+        sprint = stage === 'create' ? 0.72 : 0.35;
+      } else if (isWinger) {
+        x = ahead(ballNX, 0.1);
+        y = farWideY;
+      } else if (slot.role === 'DF') {
+        x = behind(ballNX, 0.2);
+        y = lerp(slot.y, 0.5, 0.08);
+      }
+      break;
+
+    case 'central_combination':
+      if (isFullback) {
+        x = behind(ballNX, 0.02);
+        y = slotUpper ? 0.1 : 0.9;
+      } else if (slot.role === 'MF') {
+        const side = formIdx === 5 ? -1 : formIdx === 7 ? 1 : 0;
+        x = formIdx === 6 ? behind(ballNX, 0.11) : behind(ballNX, 0.035);
+        y = 0.5 + side * 0.13;
+      } else if (formIdx === 9) {
+        x = ahead(ballNX, 0.12);
+        y = 0.5;
+        sprint = stage === 'create' ? 0.72 : 0.38;
+      } else if (isWinger) {
+        x = ahead(ballNX, 0.07);
+        y = lerp(slot.y, 0.5, 0.14);
+      } else if (slot.role === 'DF') {
+        x = behind(ballNX, 0.22);
+      }
+      break;
+
+    case 'switch_play':
+      if ((isFullback || isWinger) && !sameFlank) {
+        x = ahead(ballNX, isWinger ? 0.12 : 0.045);
+        y = farWideY;
+        sprint = isWinger ? 0.62 : 0.34;
+      } else if (slot.role === 'MF') {
+        x = behind(ballNX, formIdx === 6 ? 0.12 : 0.045);
+        y = lerp(slot.y, farWideY, formIdx === 6 ? 0.18 : 0.3);
+      } else if (sameFlank && (isFullback || isWinger)) {
+        x = behind(ballNX, isFullback ? 0.12 : 0.04);
+        y = wideY;
+      } else if (slot.role === 'DF') {
+        x = behind(ballNX, 0.21);
+      }
+      break;
+
+    case 'counter':
+      if (slot.role === 'FW') {
+        x = ahead(ballNX, formIdx === 9 ? 0.16 : 0.13);
+        y = formIdx === 9 ? lerp(0.5, ballNY, 0.22) : lerp(slot.y, ballNY, 0.18);
+        sprint = 1;
+      } else if (slot.role === 'MF' && (formIdx === 6 || sameFlank)) {
+        x = behind(ballNX, formIdx === 6 ? 0.12 : 0.045);
+        y = lerp(slot.y, ballNY, 0.3);
+        sprint = formIdx === 6 ? 0.28 : 0.7;
+      } else {
+        x = slot.role === 'DF' ? slot.x : ahead(slot.x, 0.025);
+        y = lerp(slot.y, 0.5, 0.08);
+      }
+      break;
+
+    case 'recycle':
+      if (slot.role === 'DF') {
+        x = behind(ballNX, isFullback ? 0.13 : 0.2);
+        y = isFullback ? (slotUpper ? 0.1 : 0.9) : lerp(slot.y, 0.5, 0.06);
+      } else if (slot.role === 'MF') {
+        x = behind(ballNX, formIdx === 6 ? 0.13 : 0.06);
+        y = formIdx === 6 ? 0.5 : lerp(slot.y, farWideY, 0.2);
+      } else {
+        x = ahead(ballNX, formIdx === 9 ? 0.12 : 0.08);
+        y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
+      }
+      break;
+  }
+
+  return {
+    x: clamp(x, 0.03, 0.97),
+    y: clamp(y, 0.06, 0.94),
+    sprint,
+  };
+}
+
 /**
  * Resolve the pixel-coord source point + the receiver-direction unit-ish
  * vector for a phase. Used at every "new phase begins" transition.
@@ -238,7 +408,7 @@ export function updatePlayerPositions(
   phaseState: 'passing' | 'holding' | 'shooting',
   overrideTarget: { x: number; y: number } | null,
   shift: number,
-  defensiveAction?: { playerIndex: number; target: { x: number; y: number } },
+  defensiveAction?: DirectedDefensiveAction,
   activePlayerIndices?: ReadonlySet<number>,
   phaseProgress = 0,
   tacticalAssignments?: TacticalAssignments,
@@ -291,42 +461,31 @@ export function updatePlayerPositions(
       targetX_n = setPieceTarget.x;
       targetY_n = setPieceTarget.y;
     } else if (teamHasBall) {
-      // Possession shape: the ball-side full-back overlaps, midfielders form
-      // a support triangle, and the front line stretches depth and width.
-      const attackDir = isHomeTeam ? 1 : -1;
-      const attackProgress = isHomeTeam ? ballNX : 1 - ballNX;
-      const laneSide = slot.y < 0.5 ? -1 : slot.y > 0.5 ? 1 : 0;
-      const advance = 0.035 + (slot.role === 'FW' ? 0.06 : slot.role === 'MF' ? 0.035 : slot.role === 'DF' ? 0.015 : 0);
-      targetX_n = slot.x + advance * attackDir;
-      if (slot.role === 'DF' && (formIdx === 1 || formIdx === 4)) {
-        const sameFlank = (slot.y < 0.5) === (ballNY < 0.5);
-        if (sameFlank) {
-          targetX_n += (0.025 + attackProgress * 0.045) * attackDir;
-          targetY_n = lerp(slot.y, ballNY, 0.18);
-        }
-      } else if (slot.role === 'MF') {
-        const supportDepth = formIdx === 6 ? 0.1 : 0.065;
-        const supportX = ballNX - attackDir * supportDepth;
-        const supportY = laneSide === 0
-          ? lerp(0.5, ballNY, 0.42)
-          : clamp(ballNY + laneSide * 0.13, 0.12, 0.88);
-        targetX_n = lerp(targetX_n, supportX, 0.44);
-        targetY_n = lerp(slot.y, supportY, 0.48);
-      } else if (slot.role === 'FW') {
-        const runDepth = formIdx === 9 ? 0.13 : 0.1;
-        const runX = ballNX + attackDir * (runDepth + attackProgress * 0.035);
-        const runY = formIdx === 9
-          ? lerp(0.5, ballNY, 0.3)
-          : clamp(ballNY + laneSide * 0.2, 0.1, 0.9);
-        targetX_n = lerp(targetX_n, runX, 0.58);
-        targetY_n = lerp(slot.y, runY, 0.48);
-        if (phaseState === 'passing') playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.35);
-      }
-      if (Math.abs(slot.y - 0.5) > 0.25 && slot.role !== 'FW') {
-        const ballSide = ballNY < 0.5 ? -1 : 1;
-        const slotSide = slot.y < 0.5 ? -1 : 1;
-        if (ballSide !== slotSide) {
-          targetY_n = slot.y + (0.5 - slot.y) * 0.15;
+      if (currentPhase.pattern) {
+        const shape = computeAttackingShapeTarget({
+          formIdx,
+          isHomeTeam,
+          shift,
+          ballNX,
+          ballNY,
+          pattern: currentPhase.pattern,
+          stage: currentPhase.stage,
+        });
+        targetX_n = shape.x;
+        targetY_n = shape.y;
+        playerPos[i].sprintT = Math.max(playerPos[i].sprintT, shape.sprint);
+      } else {
+        const attackDir = isHomeTeam ? 1 : -1;
+        const laneSide = slot.y < 0.5 ? -1 : slot.y > 0.5 ? 1 : 0;
+        const advance = 0.035 + (slot.role === 'FW' ? 0.06 : slot.role === 'MF' ? 0.035 : slot.role === 'DF' ? 0.015 : 0);
+        targetX_n = slot.x + advance * attackDir;
+        if (slot.role === 'MF') {
+          const supportDepth = formIdx === 6 ? 0.1 : 0.065;
+          targetX_n = lerp(targetX_n, ballNX - attackDir * supportDepth, 0.44);
+          targetY_n = lerp(slot.y, laneSide === 0 ? 0.5 : ballNY + laneSide * 0.13, 0.48);
+        } else if (slot.role === 'FW') {
+          targetX_n = lerp(targetX_n, ballNX + attackDir * (formIdx === 9 ? 0.13 : 0.1), 0.58);
+          targetY_n = lerp(slot.y, formIdx === 9 ? 0.5 : ballNY + laneSide * 0.2, 0.48);
         }
       }
     } else {
@@ -336,7 +495,17 @@ export function updatePlayerPositions(
         ?? getBaseSlot(currentPhase.receiverIdx, isAttHome, shift);
       const pressureX = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.x : ballNX;
       const pressureY = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.y : ballNY;
-      if (i === defensiveRoles.presserIndex) {
+      const defendingReleasedShot = currentPhase.kind === 'shot' && phaseState !== 'holding' && slot.role !== 'GK';
+      if (defendingReleasedShot) {
+        const ownGoalX = isHomeTeam ? 0.03 : 0.97;
+        const lineDepth = slot.role === 'DF' ? 0.085 : slot.role === 'MF' ? 0.17 : 0.28;
+        targetX_n = ownGoalX + (isHomeTeam ? lineDepth : -lineDepth);
+        targetY_n = slot.role === 'DF'
+          ? 0.27 + (formIdx - 1) * 0.15
+          : slot.role === 'MF'
+            ? 0.33 + (formIdx - 5) * 0.17
+            : lerp(slot.y, 0.5, 0.16);
+      } else if (i === defensiveRoles.presserIndex) {
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
         const pressureGap = ownGoalX < pressureX ? -0.025 : 0.025;
         targetX_n = lerp(playerPos[i].x, pressureX + pressureGap, 0.72);
@@ -365,10 +534,12 @@ export function updatePlayerPositions(
           const goalSideGap = slot.role === 'DF' ? 0.038 : 0.06;
           const markX = markingTarget.x + (isHomeTeam ? -goalSideGap : goalSideGap);
           const markY = lerp(markingTarget.y, ballNY, slot.role === 'DF' ? 0.1 : 0.16);
-          const markingWeight = slot.role === 'DF' ? 0.7 : 0.48;
-          targetX_n = lerp(targetX_n, markX, markingWeight);
-          targetY_n = lerp(targetY_n, markY, markingWeight);
+          const xMarkingWeight = slot.role === 'DF' ? 0.38 : 0.32;
+          const yMarkingWeight = slot.role === 'DF' ? 0.52 : 0.4;
+          targetX_n = lerp(targetX_n, markX, xMarkingWeight);
+          targetY_n = lerp(targetY_n, markY, yMarkingWeight);
         }
+        targetY_n = lerp(targetY_n, slot.y, slot.role === 'DF' ? 0.2 : 0.1);
       }
       // The goalkeeper narrows the angle as the ball enters the final third,
       // while still protecting the goal line on distant possession.
@@ -389,12 +560,33 @@ export function updatePlayerPositions(
       targetY_n = overrideTarget.y + (seededRand(laneSeed + 1) - 0.5) * 0.18;
     }
 
-    if (defensiveAction?.playerIndex === i && overrideTarget && phaseState !== 'holding') {
-      const reaction = clamp((phaseProgress - 0.18) / 0.62, 0, 1);
-      const actionX = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
-      targetX_n = lerp(targetX_n, actionX, reaction);
-      targetY_n = lerp(targetY_n, defensiveAction.target.y, reaction);
-      playerPos[i].sprintT = Math.max(playerPos[i].sprintT, reaction);
+    if (defensiveAction?.playerIndex === i) {
+      if (currentPhase.kind === 'shot') {
+        const reaction = phaseState === 'holding'
+          ? 1
+          : clamp((phaseProgress - 0.08) / 0.7, 0, 1);
+        const actionX = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
+        targetX_n = lerp(targetX_n, actionX, reaction);
+        targetY_n = lerp(targetY_n, defensiveAction.target.y, reaction);
+        playerPos[i].sprintT = Math.max(playerPos[i].sprintT, reaction);
+      } else if (currentPhase.kind === 'pass') {
+        // Event actors read the attack before the final shot. Outfield
+        // blockers recover into the shooting lane, while goalkeepers only
+        // shade toward the likely corner and do not dive before release.
+        const preparation = currentPhase.stage === 'create'
+          ? 0.9
+          : currentPhase.stage === 'progress' || currentPhase.stage === 'transition'
+            ? 0.6
+            : 0.35;
+        if (slot.role === 'GK') {
+          targetY_n = lerp(targetY_n, defensiveAction.target.y, preparation * 0.32);
+        } else {
+          const blockingX = defensiveAction.target.x + (isHomeTeam ? 0.075 : -0.075);
+          targetX_n = lerp(targetX_n, blockingX, preparation);
+          targetY_n = lerp(targetY_n, defensiveAction.target.y, Math.min(1, preparation * 1.08));
+          playerPos[i].sprintT = Math.max(playerPos[i].sprintT, preparation * 0.8);
+        }
+      }
     }
 
     targetX_n = clamp(targetX_n, 0.03, 0.97);
@@ -407,11 +599,16 @@ export function updatePlayerPositions(
     const dy = targetY_n - p.y;
     const distance = Math.hypot(dx, dy);
     const sprintBoost = 1 + p.sprintT * 0.55;
-    const maxSpeed = (slot.role === 'GK' ? 0.0026 : 0.0036) * sprintBoost;
+    const directedRecoveryBoost = defensiveAction?.playerIndex === i && slot.role !== 'GK'
+      ? currentPhase.kind === 'pass' ? 1.7 : 1.3
+      : 1;
+    const maxSpeed = (slot.role === 'GK' ? 0.0026 : 0.0036) * sprintBoost * directedRecoveryBoost;
     const desiredSpeed = Math.min(maxSpeed, distance * 0.11);
     const desiredVx = distance > 0.0001 ? dx / distance * desiredSpeed : 0;
     const desiredVy = distance > 0.0001 ? dy / distance * desiredSpeed : 0;
-    const maxAcceleration = (slot.role === 'GK' ? 0.0003 : 0.00042) * sprintBoost;
+    const maxAcceleration = (slot.role === 'GK' ? 0.0003 : 0.00042)
+      * sprintBoost
+      * Math.min(1.4, directedRecoveryBoost);
     p.vx += clamp(desiredVx - p.vx, -maxAcceleration, maxAcceleration);
     p.vy += clamp(desiredVy - p.vy, -maxAcceleration, maxAcceleration);
     p.x += p.vx;

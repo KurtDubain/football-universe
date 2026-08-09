@@ -8,6 +8,8 @@ interface PitchState {
   event: { type: string; outcome: string } | null;
   ball: { x: number; y: number; elevation: number };
   camera: { zoom: number };
+  playback: { holdingClock: boolean; sceneMinute: number | null; queuedScenes: number };
+  rendering: { active: boolean; pauseReason: string; renderedFrames: number };
   action: {
     kind: 'pass' | 'shot';
     setPiece?: string;
@@ -33,12 +35,15 @@ async function verifyViewport(name: string, width: number, height: number) {
     (window as typeof window & { render_game_to_text: () => string }).render_game_to_text(),
   ) as PitchState);
   const waitForSetPiece = async (type: 'corner' | 'free_kick', setPiece: string): Promise<PitchState> => {
-    const deadline = Date.now() + 20_000;
+    // Highlight playback now preserves the complete approach and halftime
+    // rhythm, so later set pieces need room to arrive without treating the
+    // intentionally slower presentation as a stalled canvas.
+    const deadline = Date.now() + 45_000;
     const recentStates: string[] = [];
     const matchingStates: string[] = [];
     while (Date.now() < deadline) {
       const state = await readState();
-      const summary = `${state.minute}:${state.event?.type ?? '-'}:${state.phase}:${state.action?.setPiece ?? '-'}:${state.action?.progress.toFixed(2) ?? '-'}`;
+      const summary = `${state.minute}:${state.event?.type ?? '-'}:${state.phase}:${state.action?.setPiece ?? '-'}:${state.action?.progress.toFixed(2) ?? '-'}:hold=${state.playback.holdingClock}:scene=${state.playback.sceneMinute ?? '-'}:queue=${state.playback.queuedScenes}:render=${state.rendering.active}/${state.rendering.pauseReason}/${state.rendering.renderedFrames}`;
       if (recentStates.at(-1) !== summary) {
         recentStates.push(summary);
         if (recentStates.length > 24) recentStates.shift();
@@ -53,7 +58,7 @@ async function verifyViewport(name: string, width: number, height: number) {
       }
       await page.waitForTimeout(50);
     }
-    throw new Error(`${name}: timed out waiting for ${type}/${setPiece}; matching states: ${matchingStates.join(', ')}; recent states: ${recentStates.join(', ')}`);
+    throw new Error(`${name}: timed out waiting for ${type}/${setPiece}; runtime errors: ${errors.join(' | ') || 'none'}; matching states: ${matchingStates.join(', ')}; recent states: ${recentStates.join(', ')}`);
   };
 
   try {

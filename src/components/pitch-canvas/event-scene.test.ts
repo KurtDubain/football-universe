@@ -44,6 +44,15 @@ describe('event-directed pitch scenes', () => {
     expect(first?.target.x).toBeLessThan(0.05);
   });
 
+  it('prepares shot and set-piece scenes five minutes before the event', () => {
+    const goal = event('goal', 'AWAY', 40);
+    const corner = event('corner', 'HOME', 55);
+
+    expect(findEventScene([goal], 35, 'HOME')?.event).toBe(goal);
+    expect(findEventScene([goal], 34, 'HOME')).toBeNull();
+    expect(findEventScene([corner], 50, 'HOME')?.event).toBe(corner);
+  });
+
   it('generates a forced attacking sequence that ends in a shot', () => {
     const sequence = generateSequence(42, { attackingHome: false, forceShot: true });
 

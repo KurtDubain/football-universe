@@ -33,6 +33,17 @@ function isSetPieceHighlight(event: MatchEvent | null | undefined): boolean {
   ));
 }
 
+function isShotHighlight(event: MatchEvent | null | undefined): boolean {
+  return Boolean(event && (
+    event.type === 'goal'
+    || event.type === 'own_goal'
+    || event.type === 'penalty_goal'
+    || event.type === 'penalty_miss'
+    || event.type === 'gk_save'
+    || event.type === 'df_block'
+  ));
+}
+
 export function isHighlightEvent(event: MatchEvent | null): boolean {
   return Boolean(event && HIGHLIGHT_EVENT_TYPES.has(event.type));
 }
@@ -48,7 +59,11 @@ export function nextPlaybackStep(
   const nextHighlight = events.find(event =>
     event.minute > minute && HIGHLIGHT_EVENT_TYPES.has(event.type)
   );
-  const preludeMinutes = isSetPieceHighlight(nextHighlight) ? 4 : 2;
+  const preludeMinutes = isSetPieceHighlight(nextHighlight)
+    ? 5
+    : isShotHighlight(nextHighlight)
+      ? 5
+      : 2;
   const target = nextHighlight
     ? Math.max(minute + 1, nextHighlight.minute - preludeMinutes)
     : maxMinute;
@@ -63,27 +78,33 @@ export function playbackTickDelay(
   nextHighlight?: MatchEvent,
 ): number {
   const eventJustRevealed = flashEvent?.minute === minute;
+  const approachingShot = !flashEvent
+    && isShotHighlight(nextHighlight)
+    && nextHighlight!.minute - minute <= 5;
   if (mode === 'live') {
     if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 350 : 1200;
     if (eventJustRevealed) return reducedMotion ? 250 : 700;
+    if (approachingShot) return reducedMotion ? 200 : 480;
     return reducedMotion ? 180 : 380;
   }
   if (mode === 'immersive') {
     if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1800;
     if (eventJustRevealed) return reducedMotion ? 300 : 1050;
+    if (approachingShot) return reducedMotion ? 260 : 680;
     return reducedMotion ? 240 : 620;
   }
 
   if (!flashEvent
     && isSetPieceHighlight(nextHighlight)
-    && nextHighlight!.minute - minute <= 4) {
+    && nextHighlight!.minute - minute <= 5) {
     return reducedMotion ? 180 : 320;
   }
+  if (approachingShot) return reducedMotion ? 180 : 520;
   if (isSetPieceHighlight(flashEvent)) return reducedMotion ? 500 : 1800;
 
   const holdingHighlight = isHighlightEvent(flashEvent)
     && minute <= (flashEvent?.minute ?? -1) + 1;
-  if (holdingHighlight) return reducedMotion ? 300 : 900;
+  if (holdingHighlight) return reducedMotion ? 300 : 1200;
   return reducedMotion ? 90 : 120;
 }
 

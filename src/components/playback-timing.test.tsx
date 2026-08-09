@@ -131,7 +131,7 @@ describe('MatchLive playback state machine', () => {
     render(<MatchLive result={makeResult('live-a', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
 
     expect(score('主队比分')).toBe('0');
-    advanceTicks(2, 380);
+    advanceTicks(2, 480);
 
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("2'");
     expect(score('主队比分')).toBe('1');
@@ -149,7 +149,7 @@ describe('MatchLive playback state machine', () => {
     try {
       render(<MatchLive result={makeResult('live-sound', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
       expect(button('声音').getAttribute('aria-pressed')).toBe('true');
-      advanceTicks(2, 380);
+      advanceTicks(2, 480);
       expect(cues.filter(cue => cue === 'goal')).toHaveLength(1);
     } finally {
       window.removeEventListener('football-feedback-played', handleFeedback);
@@ -171,7 +171,7 @@ describe('MatchLive playback state machine', () => {
     expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
     advance(1);
     expect(document.body.querySelector('[data-testid="key-match-opener"]')).toBeNull();
-    advance(380);
+    advance(480);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
   });
 
@@ -192,11 +192,13 @@ describe('MatchLive playback state machine', () => {
 
     expect(button('直播').getAttribute('aria-pressed')).toBe('true');
     act(() => button('精华').click());
-    advanceTicks(6, 120);
+    advanceTicks(3, 120);
+    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("15'");
+    advanceTicks(5, 520);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("20'");
     expect(score('主队比分')).toBe('1');
 
-    advance(899);
+    advance(1199);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("20'");
     advance(1);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("25'");
@@ -302,14 +304,15 @@ describe('MatchLive playback state machine', () => {
     advanceTicks(45, 380);
     expect(document.body.textContent).toContain('进入加时赛');
     advance(1800);
-    advanceTicks(5, 380);
+    advanceTicks(5, 480);
     advance(1200);
-    advanceTicks(25, 380);
+    advanceTicks(20, 380);
+    advanceTicks(4, 480);
     expect(document.body.textContent).toContain('点球大战即将开始');
     advance(1800);
-    advance(380);
+    advance(480);
     advance(1200);
-    advance(380);
+    advance(480);
 
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');
@@ -324,12 +327,12 @@ describe('MatchLive playback state machine', () => {
     ];
     render(<MatchLive result={makeResult('live-feed', events)} teamBases={teamBases} onClose={() => undefined} />);
 
-    advanceTicks(2, 380);
+    advanceTicks(2, 480);
     const log = document.body.querySelector('[data-testid="live-event-log"]') as HTMLDivElement;
     Object.defineProperty(log, 'scrollTop', { configurable: true, writable: true, value: 32 });
     act(() => log.dispatchEvent(new Event('scroll', { bubbles: true })));
     advance(1200);
-    advanceTicks(3, 380);
+    advanceTicks(2, 380);
 
     expect(document.body.textContent).toContain('第二条战况');
     expect(document.body.querySelector('[data-testid="new-live-events"]')?.textContent).toMatch(/\d+ 条新战况/);

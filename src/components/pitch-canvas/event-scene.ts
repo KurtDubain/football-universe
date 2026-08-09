@@ -85,12 +85,7 @@ export function findEventScene(
   const nearby = events
     .filter(event => {
       const lead = event.minute - minute;
-      const setPiecePrelude = event.type === 'corner'
-        || event.type === 'free_kick'
-        || event.playOrigin === 'corner'
-        || event.playOrigin === 'direct_free_kick'
-        || event.playOrigin === 'crossed_free_kick';
-      return lead >= 0 && lead <= (setPiecePrelude ? 4 : 2);
+      return lead >= 0 && lead <= 5;
     })
     .map(event => sceneForEvent(event, homeTeamId, events.indexOf(event)))
     .filter((scene): scene is EventScene => scene !== null)

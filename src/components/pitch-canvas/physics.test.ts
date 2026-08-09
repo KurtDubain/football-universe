@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -107,6 +107,37 @@ describe('pitch player movement', () => {
     expect(computeCarryTarget({ x: 0.04, y: 0.4 }, false, 1, 0.03).x).toBe(0.03);
   });
 
+  it('sends only the ball-side unit into a wing overload', () => {
+    const nearFullback = computeAttackingShapeTarget({
+      formIdx: 1, isHomeTeam: true, shift: 0, ballNX: 0.62, ballNY: 0.2, pattern: 'wing_overload', stage: 'create',
+    });
+    const farFullback = computeAttackingShapeTarget({
+      formIdx: 4, isHomeTeam: true, shift: 0, ballNX: 0.62, ballNY: 0.2, pattern: 'wing_overload', stage: 'create',
+    });
+    const striker = computeAttackingShapeTarget({
+      formIdx: 9, isHomeTeam: true, shift: 0, ballNX: 0.62, ballNY: 0.2, pattern: 'wing_overload', stage: 'create',
+    });
+
+    expect(nearFullback.x).toBeGreaterThan(farFullback.x);
+    expect(nearFullback.y).toBeLessThan(0.2);
+    expect(nearFullback.sprint).toBeGreaterThan(0.7);
+    expect(striker.y).toBe(0.5);
+  });
+
+  it('keeps rest defence behind a counter while the front three sprint', () => {
+    const centerBack = computeAttackingShapeTarget({
+      formIdx: 2, isHomeTeam: true, shift: 0, ballNX: 0.55, ballNY: 0.3, pattern: 'counter', stage: 'transition',
+    });
+    const winger = computeAttackingShapeTarget({
+      formIdx: 8, isHomeTeam: true, shift: 0, ballNX: 0.55, ballNY: 0.3, pattern: 'counter', stage: 'transition',
+    });
+
+    expect(centerBack.x).toBeLessThan(0.3);
+    expect(centerBack.sprint).toBe(0);
+    expect(winger.x).toBeGreaterThan(0.65);
+    expect(winger.sprint).toBe(1);
+  });
+
   it('keeps the shooter near the release point and supporting forwards in separate lanes', () => {
     const players = initialPlayers();
     const shot: PassPhase = {
@@ -154,6 +185,32 @@ describe('pitch player movement', () => {
 
     expect(players[9].x).toBeGreaterThan(0.79);
     expect(players[9].x).toBeLessThan(0.85);
+  });
+
+  it('holds a spaced defensive box line after a shot is released', () => {
+    const players = initialPlayers();
+    const shot: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      pattern: 'central_combination',
+      stage: 'finish',
+      duration: 24,
+      hold: 12,
+      arc: 0.1,
+      intercepted: false,
+      sourceOverride: { x: 0.82, y: 0.5 },
+    };
+
+    for (let frame = 0; frame < 30; frame++) {
+      updatePlayerPositions(players, 0.96, 0.48, 'home', 9, shot, 'shooting', { x: 0.985, y: 0.48 }, 0.04);
+    }
+
+    const backLine = players.slice(12, 16);
+    const sortedY = backLine.map(player => player.y).sort((a, b) => a - b);
+    expect(backLine.every(player => player.x > 0.82 && player.x < 0.94)).toBe(true);
+    expect(sortedY.slice(1).every((value, index) => value - sortedY[index] > 0.08)).toBe(true);
   });
 
   it('assigns one ball presser and a distinct goal-side cover defender', () => {
@@ -276,6 +333,64 @@ describe('pitch player movement', () => {
     }
 
     expect(afterRelease[0].x).toBeLessThan(beforeRelease[0].x);
+  });
+
+  it('prepares the credited blocker in the shooting lane before the final shot', () => {
+    const players = initialPlayers();
+    const createPhase: PassPhase = {
+      passerIdx: 7,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'pass',
+      pattern: 'central_combination',
+      stage: 'create',
+      duration: 52,
+      hold: 18,
+      arc: 0.08,
+      intercepted: false,
+      targetOverride: { x: 0.82, y: 0.52 },
+    };
+    const action = { playerIndex: 13, target: { x: 0.985, y: 0.54 } };
+    const initialDistance = distToBall(players[13], 0.91, 0.54);
+
+    for (let frame = 0; frame < 90; frame++) {
+      updatePlayerPositions(
+        players, 0.72, 0.5, 'home', 7, createPhase, 'passing', null, 0.04,
+        action, undefined, frame / 90,
+      );
+    }
+
+    expect(distToBall(players[13], 0.91, 0.54)).toBeLessThan(Math.min(0.08, initialDistance * 0.4));
+    expect(players[13].x).toBeGreaterThan(0.85);
+  });
+
+  it('lets the credited goalkeeper shade across without diving before release', () => {
+    const players = initialPlayers();
+    const createPhase: PassPhase = {
+      passerIdx: 7,
+      receiverIdx: 9,
+      attackingHome: false,
+      kind: 'pass',
+      pattern: 'wing_overload',
+      stage: 'create',
+      duration: 52,
+      hold: 18,
+      arc: 0.08,
+      intercepted: false,
+      targetOverride: { x: 0.18, y: 0.32 },
+    };
+    const action = { playerIndex: 0, target: { x: 0.015, y: 0.4 } };
+
+    for (let frame = 0; frame < 60; frame++) {
+      updatePlayerPositions(
+        players, 0.24, 0.32, 'away', 7, createPhase, 'passing', null, 0.04,
+        action, undefined, frame / 60,
+      );
+    }
+
+    expect(players[0].y).toBeLessThan(0.5);
+    expect(players[0].y).toBeGreaterThan(0.42);
+    expect(players[0].x).toBeGreaterThanOrEqual(0.03);
   });
 });
 

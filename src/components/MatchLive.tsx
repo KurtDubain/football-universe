@@ -328,6 +328,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   );
   const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
   const [unseenEventCount, setUnseenEventCount] = useState(0);
+  const [presentationHolding, setPresentationHolding] = useState(false);
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const [showOpener, setShowOpener] = useState(prestigeOpener);
   const logRef = useRef<HTMLDivElement>(null);
@@ -455,7 +456,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, []);
 
   useEffect(() => {
-    if (playback.phase !== 'playing' || !pageVisible || showOpener) return;
+    if (playback.phase !== 'playing' || !pageVisible || showOpener || presentationHolding) return;
     const nextHighlight = allEvents.find(event =>
       event.minute > playback.minute && isHighlightEvent(event)
     );
@@ -477,6 +478,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     playback.minute,
     playback.mode,
     playback.phase,
+    presentationHolding,
     reducedMotion,
     result.homeTeamId,
     showOpener,
@@ -793,6 +795,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 playbackMode={playback.mode}
                 shootout={inShootout}
                 possession={result.stats.possession}
+                onPlaybackHoldChange={setPresentationHolding}
               />
             </div>
 

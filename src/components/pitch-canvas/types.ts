@@ -3,6 +3,14 @@
 
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
 export type PresentationSetPiece = 'corner' | 'direct_free_kick' | 'crossed_free_kick' | 'penalty';
+export type PresentationPlayPattern =
+  | 'build_up'
+  | 'wing_overload'
+  | 'central_combination'
+  | 'switch_play'
+  | 'counter'
+  | 'recycle';
+export type PresentationPlayStage = 'build' | 'progress' | 'create' | 'finish' | 'transition';
 
 // 4-3-3 formation positions (normalized 0-1, x is depth, y is width).
 // This matches the authoritative starter shape in match participation.
@@ -49,6 +57,8 @@ export interface PassPhase {
   /** Frames spent in a stable setup before the ball is released. */
   releaseDelayFrames?: number;
   setPiece?: PresentationSetPiece;
+  pattern?: PresentationPlayPattern;
+  stage?: PresentationPlayStage;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };

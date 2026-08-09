@@ -17,7 +17,7 @@ describe('match live playback modes', () => {
   it('skips quiet minutes but approaches every highlight one minute at a time', () => {
     expect(nextPlaybackStep(0, 90, events, 'highlights')).toBe(5);
     expect(nextPlaybackStep(10, 90, events, 'highlights')).toBe(1);
-    expect(nextPlaybackStep(15, 90, events, 'highlights')).toBe(3);
+    expect(nextPlaybackStep(15, 90, events, 'highlights')).toBe(1);
     expect(nextPlaybackStep(18, 90, events, 'highlights')).toBe(1);
     expect(nextPlaybackStep(19, 90, events, 'highlights')).toBe(1);
     expect(nextPlaybackStep(20, 90, events, 'highlights')).toBe(5);
@@ -29,7 +29,7 @@ describe('match live playback modes', () => {
   });
 
   it('holds important events in highlights and shortens nonessential motion when requested', () => {
-    expect(playbackTickDelay('highlights', 20, events[2], false)).toBe(900);
+    expect(playbackTickDelay('highlights', 20, events[2], false)).toBe(1200);
     expect(playbackTickDelay('highlights', 20, events[2], true)).toBe(300);
     expect(playbackTickDelay('highlights', 20, events[0], false)).toBe(120);
     expect(playbackTickDelay('highlights', 16, events[1], false)).toBe(1800);
@@ -41,7 +41,15 @@ describe('match live playback modes', () => {
 
   it('slows the highlights timeline while a set piece is being prepared', () => {
     expect(playbackTickDelay('highlights', 10, null, false, events[1])).toBe(320);
-    expect(playbackTickDelay('highlights', 5, null, false, events[1])).toBe(120);
+    expect(playbackTickDelay('highlights', 9, null, false, events[1])).toBe(320);
+    expect(playbackTickDelay('highlights', 8, null, false, events[1])).toBe(120);
+  });
+
+  it('reserves enough real time for an open-play chance to reach its shot', () => {
+    expect(playbackTickDelay('highlights', 15, null, false, events[2])).toBe(520);
+    expect(playbackTickDelay('highlights', 17, null, false, events[2])).toBe(520);
+    expect(playbackTickDelay('live', 18, null, false, events[2])).toBe(480);
+    expect(playbackTickDelay('immersive', 19, null, false, events[2])).toBe(680);
   });
 
   it('uses mode-aware breaks and the shortest reduced-motion break', () => {
