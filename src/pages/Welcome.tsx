@@ -30,8 +30,6 @@ const LENS_ICONS: Record<ObserverLens, IconName> = {
 export default function Welcome() {
   const navigate = useNavigate();
   const newGame = useGameStore(state => state.newGame);
-  const setFavoriteTeam = useGameStore(state => state.setFavoriteTeam);
-  const setObservationThemePreference = useGameStore(state => state.setObservationThemePreference);
   const lensOptions = useMemo(() => getObserverLensOptions(defaultTeams), []);
   const [startPath, setStartPath] = useState<StartPath>('recommended');
   const [lens, setLens] = useState<ObserverLens>('challenger');
@@ -57,17 +55,17 @@ export default function Welcome() {
       ? RECOMMENDED_EXPERIENCE_SEED
       : seed.trim() ? Number.parseInt(seed.trim(), 10) : undefined;
 
-    setFavoriteTeam(selectedTeamId);
-    newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
-      gameMode: startPath === 'recommended' ? 'free' : mode,
-    });
     const recommendedTheme: Record<ObserverLens, ObservationThemePreference> = {
       giant: 'giant_defense',
       challenger: 'dark_horse_challenge',
       underdog: 'promotion_survival',
       neutral: 'pure_observation',
     };
-    setObservationThemePreference(startPath === 'recommended' ? recommendedTheme[lens] : 'auto');
+    newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
+      gameMode: startPath === 'recommended' ? 'free' : mode,
+      favoriteTeamIds: selectedTeamId ? [selectedTeamId] : [],
+      observationThemePreference: startPath === 'recommended' ? recommendedTheme[lens] : 'auto',
+    });
     navigate('/');
   }
 

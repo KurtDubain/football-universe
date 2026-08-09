@@ -19,7 +19,6 @@ import {
   useFeedbackPreferences,
 } from '../feedback/preferences';
 import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
-import keyMatchOpenerArtwork from '../assets/visual/key-match-opener-v1.webp';
 import { DecorativeImage } from './DecorativeImage';
 import TeamBadge from './TeamBadge';
 import {
@@ -27,6 +26,11 @@ import {
   buildLiveCommentaryHistory,
   shootoutEventLabel,
 } from './match-live/live-commentary';
+import {
+  matchOpenerArtworkForCompetition,
+  matchOpenerKindForCompetition,
+  matchOpenerLabel,
+} from './match-live/match-opener-artwork';
 
 interface Props {
   result: MatchResult;
@@ -330,6 +334,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const [unseenEventCount, setUnseenEventCount] = useState(0);
   const [presentationHolding, setPresentationHolding] = useState(false);
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
+  const openerFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
+  const openerKind = matchOpenerKindForCompetition(result.competitionType);
+  const openerArtwork = matchOpenerArtworkForCompetition(result.competitionType);
   const [showOpener, setShowOpener] = useState(prestigeOpener);
   const logRef = useRef<HTMLDivElement>(null);
   const previousCommentaryCountRef = useRef<number | null>(null);
@@ -393,6 +400,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       result,
       featured: prestigeOpener,
       muted: !feedbackPreferences.soundEnabled || locallyMuted,
+      profile: feedbackPreferences.soundProfile,
     });
     soundscapeRef.current = soundscape;
     if (feedbackPreferences.soundEnabled && !locallyMuted) soundscape.start();
@@ -408,6 +416,10 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   useEffect(() => {
     soundscapeRef.current?.setMuted(!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible);
   }, [feedbackPreferences.soundEnabled, locallyMuted, pageVisible]);
+
+  useEffect(() => {
+    soundscapeRef.current?.setProfile(feedbackPreferences.soundProfile);
+  }, [feedbackPreferences.soundProfile]);
 
   useEffect(() => {
     soundscapeRef.current?.update({
@@ -619,10 +631,11 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {showOpener && (
           <div
             data-testid="key-match-opener"
+            data-opener-kind={openerKind}
             className="absolute inset-0 z-30 flex min-h-0 flex-col justify-end overflow-hidden bg-slate-950"
           >
             <DecorativeImage
-              src={keyMatchOpenerArtwork}
+              src={openerArtwork}
               testId="key-match-opener-art"
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -639,9 +652,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             <div className="relative px-5 pb-8 pt-20 sm:px-10 sm:pb-10">
               <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold text-amber-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-breathe motion-reduce:animate-none" />
-                {result.roundLabel === 'Final' || result.roundLabel === '决赛'
-                  ? '决赛现场 · 比分未揭晓'
-                  : '焦点观战 · 比分未揭晓'}
+                {matchOpenerLabel(result.competitionType, openerFinal)}
               </div>
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-8">
                 <div className="flex min-w-0 items-center justify-end gap-2 text-right">

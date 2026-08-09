@@ -271,11 +271,13 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     })();
     const shotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
     const sourceProgress = isHome ? source.x : 1 - source.x;
-    pattern = Math.abs(directedShotOrigin.y - 0.5) > 0.16
-      ? 'wing_overload'
-      : shotProgress - sourceProgress > 0.35
-        ? 'counter'
-        : 'central_combination';
+    pattern = options.transition
+      ? 'counter'
+      : Math.abs(directedShotOrigin.y - 0.5) > 0.16
+        ? 'wing_overload'
+        : shotProgress - sourceProgress > 0.35
+          ? 'counter'
+          : 'central_combination';
     passTargets = route.slice(1).map((receiverIdx, index) => {
       const t = (index + 1) / Math.max(1, route.length - 1);
       if (index === route.length - 2) return directedShotOrigin!;
@@ -319,14 +321,16 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       pattern,
       stage: stageForPass(pattern, i, route.length - 1),
       duration: options.forceShot
-        ? (longBall ? 24 + r(i + 10) * 8 : 18 + r(i + 11) * 6)
+        ? (longBall ? 30 + r(i + 10) * 6 : 24 + r(i + 11) * 6)
         : longBall ? 70 + r(i + 10) * 25 : 42 + r(i + 11) * 20,
       hold: options.forceShot
-        ? 4 + r(i + 12) * 3
+        ? 7 + r(i + 12) * 4
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
       arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
-      ...(i === 0 && options.startingPlayerIdx !== undefined && { releaseDelayFrames: 10 }),
+      ...(i === 0 && options.startingPlayerIdx !== undefined && {
+        releaseDelayFrames: options.transition ? 18 : 12,
+      }),
       ...(i === 0 && options.sourceOverride ? { sourceOverride: options.sourceOverride } : {}),
       targetOverride: target,
     });
@@ -341,11 +345,12 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       kind: 'shot',
       pattern,
       stage: 'finish',
-      duration: options.forceShot ? 24 + r(31) * 6 : 28 + r(31) * 12,
-      hold: 12 + r(32) * 8,
+      duration: options.forceShot ? 30 + r(31) * 8 : 32 + r(31) * 12,
+      hold: options.forceShot ? 20 + r(32) * 8 : 16 + r(32) * 8,
       arc: 0.04 + r(33) * 0.16,
       swerve: (r(34) - 0.5) * (options.forceShot ? 0.9 : 0.65),
       intercepted: false,
+      releaseDelayFrames: options.forceShot ? 14 : 10,
       ...(directedShotOrigin ? { sourceOverride: directedShotOrigin } : {}),
     });
   }

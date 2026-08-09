@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -105,6 +105,21 @@ describe('pitch player movement', () => {
   it('carries possession forward without leaving the pitch', () => {
     expect(computeCarryTarget({ x: 0.5, y: 0.4 }, true, 1, 0.03)).toEqual({ x: 0.53, y: 0.4 });
     expect(computeCarryTarget({ x: 0.04, y: 0.4 }, false, 1, 0.03).x).toBe(0.03);
+  });
+
+  it('separates crowded active silhouettes while keeping the ball actor fixed', () => {
+    const players = initialPlayers();
+    players[8].x = players[9].x = players[10].x = 0.84;
+    players[8].y = players[9].y = players[10].y = 0.5;
+    const pinned = new Set([9]);
+
+    separateActivePlayers(players, new Set([8, 9, 10]), pinned);
+
+    expect(players[9]).toMatchObject({ x: 0.84, y: 0.5 });
+    expect(Math.hypot(players[8].x - players[9].x, (players[8].y - players[9].y) * 0.52)).toBeGreaterThan(0.018);
+    expect(Math.hypot(players[10].x - players[9].x, (players[10].y - players[9].y) * 0.52)).toBeGreaterThan(0.018);
+    expect(players.every(player => player.x >= 0.03 && player.x <= 0.97)).toBe(true);
+    expect(players.every(player => player.y >= 0.05 && player.y <= 0.95)).toBe(true);
   });
 
   it('sends only the ball-side unit into a wing overload', () => {

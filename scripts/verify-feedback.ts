@@ -170,6 +170,15 @@ async function main(): Promise<void> {
 
     await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
     await page.getByTestId('sound-preference').check();
+    const stadiumProfile = page.getByTestId('sound-profile-stadium');
+    const profileBox = await stadiumProfile.boundingBox();
+    if (!profileBox || profileBox.height < 44) {
+      throw new Error(`Sound profile target is undersized: ${JSON.stringify(profileBox)}`);
+    }
+    await stadiumProfile.click();
+    if (await stadiumProfile.getAttribute('aria-pressed') !== 'true') {
+      throw new Error('Stadium sound profile did not activate');
+    }
     await page.getByTestId('haptics-preference').check();
     await page.waitForTimeout(200);
     await page.waitForFunction(() => Boolean((
@@ -278,6 +287,7 @@ async function main(): Promise<void> {
       }
     });
     await page.getByTestId('global-sound-toggle').click();
+    await page.waitForTimeout(150);
     const reducedDelivery = await page.evaluate(() => (
       window as typeof window & {
         __feedbackProbe?: {
@@ -287,9 +297,9 @@ async function main(): Promise<void> {
         };
       }
     ).__feedbackProbe);
-    if (!reducedDelivery?.deliveries.some(item => item.cue === 'start' && !item.audioPlayed)
-      || reducedDelivery.starts.length !== 0 || reducedDelivery.vibrations.length !== 0) {
-      throw new Error(`Reduced-motion feedback was not suppressed: ${JSON.stringify(reducedDelivery)}`);
+    if (!reducedDelivery?.deliveries.some(item => item.cue === 'start' && item.audioPlayed)
+      || reducedDelivery.starts.length === 0 || reducedDelivery.vibrations.length !== 0) {
+      throw new Error(`Reduced-motion audio/haptic semantics are wrong: ${JSON.stringify(reducedDelivery)}`);
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' });
 
@@ -311,8 +321,10 @@ async function main(): Promise<void> {
       passed: true,
       beforeGesture,
       target: toggleBox,
+      soundProfileTarget: profileBox,
       seasonDelivery,
-      reducedMotionSuppressed: true,
+      reducedMotionAudioPreserved: true,
+      reducedMotionHapticsSuppressed: true,
       offlineRevisit: true,
       overflow,
       runtimeErrors: errors,

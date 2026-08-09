@@ -69,6 +69,32 @@ describe('pitch possession sequences', () => {
     expect(sequence.phases.every(phase => phase.pattern === 'counter')).toBe(true);
   });
 
+  it('stages an authoritative chance after a visible turnover before releasing the shot', () => {
+    const source = { x: 0.44, y: 0.32 };
+    const sequence = generateSequence(92, {
+      attackingHome: false,
+      forceShot: true,
+      startingPlayerIdx: 6,
+      creatorIdx: 8,
+      shooterIdx: 9,
+      sourceOverride: source,
+      transition: true,
+    });
+    const passes = sequence.phases.filter(phase => phase.kind === 'pass');
+    const shot = sequence.phases.at(-1)!;
+
+    expect(passes[0]).toMatchObject({
+      passerIdx: 6,
+      pattern: 'counter',
+      stage: 'transition',
+      sourceOverride: source,
+      releaseDelayFrames: 18,
+    });
+    expect(shot).toMatchObject({ kind: 'shot', pattern: 'counter', stage: 'finish', releaseDelayFrames: 14 });
+    expect(shot.duration).toBeGreaterThanOrEqual(30);
+    expect(shot.hold).toBeGreaterThanOrEqual(20);
+  });
+
   it('progresses toward goal unless the episode explicitly recycles possession', () => {
     for (let seed = 1; seed <= 80; seed++) {
       const sequence = generateSequence(seed, { attackingHome: true });

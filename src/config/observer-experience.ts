@@ -6,7 +6,7 @@ export const OBSERVER_SEED_CANDIDATES = Array.from(
 );
 
 // Selected by scripts/audit-observer-seeds.ts from the candidates above.
-export const RECOMMENDED_EXPERIENCE_SEED = 20260718;
+export const RECOMMENDED_EXPERIENCE_SEED = 20260709;
 
 export type ObserverLens = 'giant' | 'challenger' | 'underdog' | 'neutral';
 

@@ -170,6 +170,40 @@ function SettingsContent({ world }: { world: GameWorld }) {
               className="h-5 w-5 shrink-0 accent-emerald-500"
             />
           </label>
+          <div className="py-3" data-testid="sound-profile-setting">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-200">球场声场</span>
+              <span className="text-[10px] text-slate-500">动作始终清晰，调整观众氛围强度</span>
+            </div>
+            <div className="grid grid-cols-3 overflow-hidden rounded-md border border-slate-700 bg-slate-900/45" role="group" aria-label="球场声场强度">
+              {([
+                ['quiet', '安静'],
+                ['balanced', '均衡'],
+                ['stadium', '球场'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  data-testid={`sound-profile-${value}`}
+                  aria-pressed={feedbackPreferences.soundProfile === value}
+                  onClick={() => {
+                    setFeedbackPreferences({ soundProfile: value });
+                    if (feedbackPreferences.soundEnabled) {
+                      unlockGameAudio();
+                      playGameFeedback('start');
+                    }
+                  }}
+                  className={`min-h-11 border-r border-slate-700 px-2 text-xs last:border-r-0 ${
+                    feedbackPreferences.soundProfile === value
+                      ? 'bg-emerald-600 text-white'
+                      : 'cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
             <span>
               <span className="block text-sm font-medium text-slate-200">重大时刻触觉</span>

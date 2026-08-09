@@ -257,7 +257,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
 
             const isPrimary = tid === favoriteTeamId;
             return (
-              <div key={tid} className={`rounded-lg border px-3 py-2 ${isPrimary ? 'border-blue-600/50 bg-blue-950/25' : 'border-slate-700/40 bg-slate-800/60'}`}>
+              <div key={tid} className={`rounded-lg border px-3 ${isPrimary ? 'py-2 border-blue-600/50 bg-blue-950/25' : 'py-1.5 sm:py-2 border-slate-700/40 bg-slate-800/60'}`}>
                 {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
                 <div className="flex items-center gap-2 sm:gap-3 text-xs">
                   <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
@@ -278,7 +278,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
                   </div>
                 </div>
                 {/* Row 2 — cash / coach / next fixture. Always visible (no horizontal scroll). */}
-                <div className="flex items-center gap-2 sm:gap-3 mt-1.5 text-[11px] sm:text-xs flex-wrap pl-8">
+                <div className={`${isPrimary ? 'flex' : 'hidden sm:flex'} items-center gap-2 sm:gap-3 mt-1.5 text-[11px] sm:text-xs flex-wrap pl-8`}>
                   <span className={`inline-flex items-center gap-0.5 ${cashTone}`} title="球队现金 (Phase H 经济)">
                     <Icon name="money" size={12} /> {formatMoneyChip(cash)}
                   </span>

@@ -69,7 +69,12 @@ interface GameStore {
 
   dismissAchievement: () => void;
 
-  newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => void;
+  newGame: (seed?: number, options?: {
+    gameMode?: import('../types/game-mode').GameMode;
+    customTeams?: import('../types/team').TeamBase[];
+    favoriteTeamIds?: string[];
+    observationThemePreference?: ObservationThemePreference;
+  }) => void;
   advanceWindow: () => Promise<boolean>;
   batchAdvance: (count: number) => Promise<boolean>;
   advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
@@ -200,9 +205,20 @@ export const useGameStore = create<GameStore>()(
         set(s => ({ newAchievements: s.newAchievements.slice(1) }));
       },
 
-      newGame: (seed?: number, options?: { gameMode?: import('../types/game-mode').GameMode; customTeams?: import('../types/team').TeamBase[] }) => {
+      newGame: (seed?: number, options?: {
+        gameMode?: import('../types/game-mode').GameMode;
+        customTeams?: import('../types/team').TeamBase[];
+        favoriteTeamIds?: string[];
+        observationThemePreference?: ObservationThemePreference;
+      }) => {
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
-        const world = initializeGameWorld(actualSeed, options);
+        const world = initializeGameWorld(actualSeed, {
+          ...(options?.gameMode ? { gameMode: options.gameMode } : {}),
+          ...(options?.customTeams ? { customTeams: options.customTeams } : {}),
+        });
+        const favoriteTeamIds = [...new Set(options?.favoriteTeamIds ?? [])]
+          .filter(teamId => Boolean(world.teamBases[teamId]))
+          .slice(0, 3);
         set({
           world,
           initialized: true,
@@ -213,9 +229,9 @@ export const useGameStore = create<GameStore>()(
           isAdvancing: false,
           advanceError: null,
           advanceTick: 0,
-          favoriteTeamId: null,
-          favoriteTeamIds: [],
-          observationThemePreference: 'auto',
+          favoriteTeamId: favoriteTeamIds[0] ?? null,
+          favoriteTeamIds,
+          observationThemePreference: options?.observationThemePreference ?? 'auto',
           starredFixtureIds: [],
           newAchievements: [],
         });

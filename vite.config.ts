@@ -64,6 +64,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,webmanifest}'],
         globIgnores: [
           'assets/{AdvancedSearch,Calendar,Chronicle,CoachDetail,Coaches,Compare,Cup,History,League,Legends,Market,MemorableMatches,PlayerDetail,Players,Settings,TeamDetail,TeamEditor,Teams,Transfers}-*.js',
+          'assets/match-opener-domestic-cup-v1-*.webp',
+          'assets/match-opener-continental-v1-*.webp',
+          'assets/match-opener-world-v1-*.webp',
         ],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
@@ -73,6 +76,14 @@ export default defineConfig({
             options: {
               cacheName: 'football-route-chunks',
               expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            urlPattern: /\/assets\/match-opener-.*\.webp$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'football-match-openers',
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
           {

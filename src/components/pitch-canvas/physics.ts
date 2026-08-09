@@ -63,6 +63,52 @@ export interface DirectedDefensiveAction {
   target: { x: number; y: number };
 }
 
+/**
+ * Resolve only presentation-level overlaps after tactical movement. Pinned
+ * actors keep their authoritative ball/event positions while nearby players
+ * yield just enough space for the top-down silhouettes to remain legible.
+ */
+export function separateActivePlayers(
+  playerPos: PlayerState[],
+  activePlayerIndices: ReadonlySet<number>,
+  pinnedPlayerIndices: ReadonlySet<number> = new Set<number>(),
+  minimumScreenDistance = 0.022,
+): void {
+  const indices = [...activePlayerIndices].filter(index => playerPos[index] !== undefined);
+  const pitchAspect = 0.52;
+
+  for (let iteration = 0; iteration < 2; iteration++) {
+    for (let firstIndex = 0; firstIndex < indices.length; firstIndex++) {
+      for (let secondIndex = firstIndex + 1; secondIndex < indices.length; secondIndex++) {
+        const aIndex = indices[firstIndex];
+        const bIndex = indices[secondIndex];
+        const a = playerPos[aIndex];
+        const b = playerPos[bIndex];
+        const aPinned = pinnedPlayerIndices.has(aIndex);
+        const bPinned = pinnedPlayerIndices.has(bIndex);
+        if (aPinned && bPinned) continue;
+
+        const dx = b.x - a.x;
+        const scaledDy = (b.y - a.y) * pitchAspect;
+        const distance = Math.hypot(dx, scaledDy);
+        if (distance >= minimumScreenDistance) continue;
+
+        const fallbackAngle = ((aIndex * 37 + bIndex * 53) % 360) * Math.PI / 180;
+        const directionX = distance > 0.00001 ? dx / distance : Math.cos(fallbackAngle);
+        const directionY = distance > 0.00001 ? scaledDy / distance : Math.sin(fallbackAngle);
+        const overlap = minimumScreenDistance - distance;
+        const aShare = aPinned ? 0 : bPinned ? 1 : 0.5;
+        const bShare = bPinned ? 0 : aPinned ? 1 : 0.5;
+
+        a.x = clamp(a.x - directionX * overlap * aShare, 0.03, 0.97);
+        a.y = clamp(a.y - directionY * overlap * aShare / pitchAspect, 0.05, 0.95);
+        b.x = clamp(b.x + directionX * overlap * bShare, 0.03, 0.97);
+        b.y = clamp(b.y + directionY * overlap * bShare / pitchAspect, 0.05, 0.95);
+      }
+    }
+  }
+}
+
 export function selectMarkingTarget(
   playerPos: PlayerState[],
   markerIndex: number,

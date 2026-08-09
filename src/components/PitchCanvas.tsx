@@ -9,7 +9,7 @@ import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
+import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
 import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
   drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
@@ -127,7 +127,7 @@ function sequenceOptionsForScene(
   homeRoster: PitchRosterPlayer[],
   awayRoster: PitchRosterPlayer[],
   homePossessionShare: number,
-  continuity?: { source: { x: number; y: number }; startingPlayerIdx: number },
+  continuity?: { source: { x: number; y: number }; startingPlayerIdx: number; transition?: boolean },
 ): SequenceOptions {
   const actors = actorsForEvent(scene.event, events);
   const attackingRoster = scene.attackingHome ? homeRoster : awayRoster;
@@ -147,6 +147,7 @@ function sequenceOptionsForScene(
     ...(!setPiece && continuity ? {
       sourceOverride: continuity.source,
       startingPlayerIdx: continuity.startingPlayerIdx,
+      transition: continuity.transition,
     } : {}),
     homePossessionShare,
   };
@@ -550,6 +551,12 @@ function PitchCanvas(props: Props) {
         const ballY = clamp((ballPos.current.y - P) / fh, 0.05, 0.95);
         const attackingRoster = activePitchPlayers(sceneToStart.attackingHome ? homeRoster : awayRoster, minute, maxMinute);
         const attackingOffset = sceneToStart.attackingHome ? 0 : 11;
+        const previousPhase = sequenceRef.current[phaseIdxRef.current]
+          ?? sequenceRef.current[sequenceRef.current.length - 1];
+        const possessionTurnover = !isSetPieceOrigin(playOriginForEvent(sceneToStart.event))
+          && previousPhase !== undefined
+          && previousPhase.attackingHome !== sceneToStart.attackingHome;
+        if (possessionTurnover) addParticles(spawnTackleSparks(ballPos.current.x, ballPos.current.y));
         const continuity = {
           source: { x: ballX, y: ballY },
           startingPlayerIdx: nearestPlayerSlot(
@@ -559,6 +566,7 @@ function PitchCanvas(props: Props) {
             ballX,
             ballY,
           ),
+          transition: possessionTurnover,
         };
         const directed = generateSequence(
           sceneToStart.seed,
@@ -959,6 +967,19 @@ function PitchCanvas(props: Props) {
         phaseProgress,
         tacticalAssignmentsRef.current ?? undefined,
       );
+      const pinnedPlayerIndices = new Set<number>();
+      const holderOffset = isAttHome ? 0 : 11;
+      pinnedPlayerIndices.add(holderOffset + ballHolderIdx);
+      const eventAttacker = (isAttHome ? homeRoster : awayRoster)
+        .find(player => player.playerId === directedActors.attackerId);
+      if (eventAttacker) pinnedPlayerIndices.add(holderOffset + eventAttacker.slotIndex);
+      if (directedActors.defenderId) {
+        const defendingHome = !isAttHome;
+        const defendingRoster = defendingHome ? homeRoster : awayRoster;
+        const eventDefender = defendingRoster.find(player => player.playerId === directedActors.defenderId);
+        if (eventDefender) pinnedPlayerIndices.add((defendingHome ? 0 : 11) + eventDefender.slotIndex);
+      }
+      separateActivePlayers(playerPosRef.current, activePlayerIndices, pinnedPlayerIndices);
       const attackerActionProgress = currentPhase.kind === 'shot'
         ? clamp(phaseFrameRef.current / Math.max(1, currentPhase.duration), 0, 1)
         : phaseProgress;
@@ -1141,6 +1162,7 @@ function PitchCanvas(props: Props) {
     let lastTimestamp = performance.now();
     let accumulator = renderBudget.frameStepMs;
     let raf = 0;
+    let lastPauseReason: PitchDebugState['rendering']['pauseReason'] = 'none';
 
     function getPauseReason(): PitchDebugState['rendering']['pauseReason'] {
       if (!pageVisible) return 'hidden';
@@ -1165,10 +1187,16 @@ function PitchCanvas(props: Props) {
       raf = 0;
       const pauseReason = getPauseReason();
       if (pauseReason !== 'none') {
-        if (pauseReason !== 'hidden' && pauseReason !== 'covered') renderFrame();
+        if (
+          pauseReason !== lastPauseReason
+          && pauseReason !== 'hidden'
+          && pauseReason !== 'covered'
+        ) renderFrame();
+        lastPauseReason = pauseReason;
         updateRenderingDebug(false, pauseReason);
         return;
       }
+      lastPauseReason = 'none';
       const elapsed = Math.min(100, Math.max(0, timestamp - lastTimestamp));
       lastTimestamp = timestamp;
       accumulator += elapsed;

@@ -141,9 +141,16 @@ const shootoutResult = {
   awayMatchday: snapshot('away', undefined, 120),
 } satisfies MatchResult;
 
-const result = new URLSearchParams(window.location.search).has('shootout')
-  ? shootoutResult
-  : regularResult;
+const params = new URLSearchParams(window.location.search);
+const competition = params.get('competition');
+const competitionResult = competition === 'world'
+  ? { ...regularResult, competitionType: 'world_cup' as const, competitionName: '环球冠军杯', roundLabel: '小组赛第 2 轮', isNeutralVenue: true }
+  : competition === 'continental'
+    ? { ...regularResult, competitionType: 'continental_cup' as const, competitionName: '洲际杯', roundLabel: '半决赛', isNeutralVenue: true }
+    : competition === 'domestic'
+      ? { ...regularResult, competitionType: 'league_cup' as const, competitionName: '联赛杯', roundLabel: '1/4 决赛', isNeutralVenue: true }
+      : regularResult;
+const result = params.has('shootout') ? shootoutResult : competitionResult;
 
 const teamBases = {
   home: { id: 'home', name: '赤焰竞技', shortName: '赤焰', color: '#ef4444' } as TeamBase,
@@ -152,6 +159,6 @@ const teamBases = {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MatchLive result={result} teamBases={teamBases} onClose={() => undefined} />
+    <MatchLive result={result} teamBases={teamBases} onClose={() => undefined} featured={params.has('featured')} />
   </StrictMode>,
 );

@@ -3,6 +3,7 @@ import type { MatchEvent } from '../types/match';
 import {
   classifyMatchSoundEvent,
   computeCrowdIntensity,
+  MATCH_SOUND_PROFILE_MIX,
   matchPrestige,
 } from './match-soundscape';
 
@@ -31,8 +32,14 @@ describe('match soundscape semantics', () => {
   });
 
   it('gives noteworthy corners and free kicks a restrained setup cue', () => {
-    expect(classifyMatchSoundEvent(event('corner'), 'home', false)).toBe('set_piece');
-    expect(classifyMatchSoundEvent(event('free_kick'), 'home', false)).toBe('set_piece');
+    expect(classifyMatchSoundEvent(event('corner'), 'home', false)).toBe('corner');
+    expect(classifyMatchSoundEvent(event('free_kick'), 'home', false)).toBe('free_kick');
+  });
+
+  it('raises crowd presence by profile without hiding action cues in quiet mode', () => {
+    expect(MATCH_SOUND_PROFILE_MIX.quiet.crowd).toBeLessThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
+    expect(MATCH_SOUND_PROFILE_MIX.stadium.crowd).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
+    expect(MATCH_SOUND_PROFILE_MIX.quiet.action).toBeGreaterThanOrEqual(MATCH_SOUND_PROFILE_MIX.balanced.action);
   });
 
   it('raises tension late in a close match and for shootouts', () => {

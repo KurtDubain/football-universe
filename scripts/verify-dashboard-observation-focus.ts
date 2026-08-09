@@ -140,10 +140,10 @@ async function main(): Promise<void> {
       await page.getByRole('dialog').waitFor();
       await page.getByRole('button', { name: '关闭比赛详情' }).click();
 
-      const star = focus.locator('button[aria-label="关注比赛并在推进时自动直播"]').first();
+      const star = focus.locator('button[aria-label="锁定本场并在推进后无剧透观战"]').first();
       await star.click();
-      await runway.getByRole('button', { name: '观看已关注的焦点比赛' }).waitFor();
-      await focus.locator('button[aria-label="取消关注比赛"]').click();
+      await runway.getByRole('button', { name: '推进本轮并无剧透观看已锁定的焦点比赛' }).waitFor();
+      await focus.locator('button[aria-label="取消锁定焦点观战"]').click();
       await runway.getByRole('button', { name: '揭晓本轮比赛结果' }).waitFor();
 
       await judgment.click();
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
       await runway.getByRole('button', { name: /本轮已判断：主胜/ }).waitFor();
       await runway.getByRole('button', { name: '揭晓本轮观察判断' }).waitFor();
       await star.click();
-      await runway.getByRole('button', { name: '观看焦点比赛并揭晓判断' }).waitFor();
+      await runway.getByRole('button', { name: '推进本轮并无剧透观看焦点比赛，同时揭晓判断' }).waitFor();
 
       await advance.click();
       const liveDialog = page.getByRole('dialog', { name: '比赛直播回放' });

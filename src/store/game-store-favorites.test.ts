@@ -55,6 +55,17 @@ describe('observer focus ordering', () => {
     expect(useGameStore.getState().observationThemePreference).toBe('disabled');
   });
 
+  it('initializes the observer focus and lens atomically with a new universe', () => {
+    useGameStore.getState().newGame(20260709, {
+      favoriteTeamIds: ['gz_hengda', 'missing-team', 'shimazu'],
+      observationThemePreference: 'dark_horse_challenge',
+    });
+
+    expect(useGameStore.getState().favoriteTeamIds).toEqual(['gz_hengda', 'shimazu']);
+    expect(useGameStore.getState().favoriteTeamId).toBe('gz_hengda');
+    expect(useGameStore.getState().observationThemePreference).toBe('dark_horse_challenge');
+  });
+
   it('keeps exactly one spoiler-free watch target per advance', () => {
     useGameStore.setState({ starredFixtureIds: [] });
     useGameStore.getState().toggleStarFixture('fixture-a');

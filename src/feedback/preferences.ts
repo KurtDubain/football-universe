@@ -1,15 +1,23 @@
 import { useSyncExternalStore } from 'react';
 
+export type SoundProfile = 'quiet' | 'balanced' | 'stadium';
+
 export interface FeedbackPreferences {
   soundEnabled: boolean;
+  soundProfile: SoundProfile;
   hapticsEnabled: boolean;
 }
 
 export const FEEDBACK_PREFERENCES_KEY = 'football-feedback-preferences-v1';
 export const DEFAULT_FEEDBACK_PREFERENCES: FeedbackPreferences = {
   soundEnabled: true,
+  soundProfile: 'balanced',
   hapticsEnabled: false,
 };
+
+function isSoundProfile(value: unknown): value is SoundProfile {
+  return value === 'quiet' || value === 'balanced' || value === 'stadium';
+}
 
 const listeners = new Set<() => void>();
 
@@ -21,6 +29,9 @@ export function parseFeedbackPreferences(raw: string | null): FeedbackPreference
       soundEnabled: typeof parsed.soundEnabled === 'boolean'
         ? parsed.soundEnabled
         : DEFAULT_FEEDBACK_PREFERENCES.soundEnabled,
+      soundProfile: isSoundProfile(parsed.soundProfile)
+        ? parsed.soundProfile
+        : DEFAULT_FEEDBACK_PREFERENCES.soundProfile,
       hapticsEnabled: typeof parsed.hapticsEnabled === 'boolean'
         ? parsed.hapticsEnabled
         : DEFAULT_FEEDBACK_PREFERENCES.hapticsEnabled,
