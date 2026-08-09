@@ -20,6 +20,7 @@ interface PitchState {
     kind: 'pass' | 'shot';
     passerIdx: number;
     sourceOverride?: { x: number; y: number };
+    progress: number;
   } | null;
   homeOnField: Array<{ id: string; x: number; y: number }>;
   awayOnField: Array<{ id: string; x: number; y: number }>;
@@ -46,32 +47,34 @@ async function verifyViewport(name: string, width: number, height: number) {
     creatorId: string,
     defenderId?: string,
   ): Promise<PitchState> => {
-    await page.waitForFunction(({ expectedType, expectedAttacker, expectedCreator, expectedDefender }) => {
-      const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
-      if (!render) return false;
-      const state = JSON.parse(render()) as PitchState;
-      return state.event?.type === expectedType
-        && state.event.attackerId === expectedAttacker
-        && state.event.creatorId === expectedCreator
-        && (!expectedDefender || state.event.defenderId === expectedDefender)
-        && (state.ballHolderId === expectedAttacker || state.lastTouchPlayerId === expectedAttacker)
+    const deadline = Date.now() + 20_000;
+    const matchingStates: string[] = [];
+    while (Date.now() < deadline) {
+      const state = await readState();
+      if (state.event?.type === type) {
+        const attacker = [...state.homeOnField, ...state.awayOnField].find(player => player.id === attackerId);
+        const summary = `${state.phase}:${state.action?.kind ?? '-'}:${state.action?.passerIdx ?? '-'}:${state.action?.progress.toFixed(2) ?? '-'}:${state.event.attackerId ?? '-'}:${state.event.creatorId ?? '-'}:${state.lastTouchPlayerId ?? '-'}:${attacker?.x.toFixed(2) ?? '-'}`;
+        if (matchingStates.at(-1) !== summary) matchingStates.push(summary);
+      }
+      const attacker = [...state.homeOnField, ...state.awayOnField].find(player => player.id === attackerId);
+      const attackerInFinalThird = attacker
+        && (attackerId.startsWith('home-') ? attacker.x > 0.7 : attacker.x < 0.3);
+      if (state.event?.type === type
+        && state.event.attackerId === attackerId
+        && state.event.creatorId === creatorId
+        && (!defenderId || state.event.defenderId === defenderId)
+        && (state.ballHolderId === attackerId || state.lastTouchPlayerId === attackerId)
         && state.action?.kind === 'shot'
         && state.action.progress >= 0.99
         && state.phase === 'holding'
         && state.action.sourceOverride !== undefined
-        && (expectedType !== 'gk_save' || state.ball.x > 0.018)
-        && (() => {
-          const attacker = [...state.homeOnField, ...state.awayOnField].find(player => player.id === expectedAttacker);
-          if (!attacker) return false;
-          return expectedAttacker.startsWith('home-') ? attacker.x > 0.7 : attacker.x < 0.3;
-        })();
-    }, {
-      expectedType: type,
-      expectedAttacker: attackerId,
-      expectedCreator: creatorId,
-      expectedDefender: defenderId,
-    }, { timeout: 20_000 });
-    return readState();
+        && (type !== 'gk_save' || state.ball.x > 0.018)
+        && attackerInFinalThird) {
+        return state;
+      }
+      await page.waitForTimeout(50);
+    }
+    throw new Error(`${name}: timed out waiting for ${type}; matching states: ${matchingStates.join(', ')}`);
   };
 
   try {
@@ -100,8 +103,11 @@ async function verifyViewport(name: string, width: number, height: number) {
     if (saveState.event?.outcome !== 'save' || saveState.ball.x < 0.03 || saveState.ball.elevation <= 0) {
       throw new Error(`${name}: saved shot did not produce a visible second ball`);
     }
-    if (saveState.camera.zoom <= 1 || saveState.camera.zoom > 1.07) {
-      throw new Error(`${name}: save camera did not enter a restrained danger focus (${saveState.camera.zoom})`);
+    if (width < 600 && Math.abs(saveState.camera.zoom - 1) > 0.002) {
+      throw new Error(`${name}: mobile danger camera should remain fixed (${saveState.camera.zoom})`);
+    }
+    if (width >= 600 && (saveState.camera.zoom <= 1 || saveState.camera.zoom > 1.04)) {
+      throw new Error(`${name}: desktop save camera did not enter a restrained danger focus (${saveState.camera.zoom})`);
     }
     if (goalState.attackingSide !== 'home') throw new Error(`${name}: goal scene attacks from ${goalState.attackingSide}`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors ${errors.join(' | ')}`);

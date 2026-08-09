@@ -18,6 +18,22 @@ describe('event-directed pitch scenes', () => {
     expect(sceneForEvent(event('df_block', 'AWAY'), 'HOME')?.attackingHome).toBe(true);
   });
 
+  it('maps structured corner and free-kick events to delivery scenes', () => {
+    const corner: MatchEvent = {
+      ...event('corner', 'HOME'),
+      playOrigin: 'corner',
+      setPiece: { side: 'left', delivery: 'near_post', resolution: 'cleared' },
+    };
+    const freeKick: MatchEvent = {
+      ...event('free_kick', 'AWAY'),
+      playOrigin: 'crossed_free_kick',
+      setPiece: { side: 'right', delivery: 'far_post', resolution: 'retained' },
+    };
+
+    expect(sceneForEvent(corner, 'HOME')).toMatchObject({ attackingHome: true, outcome: 'delivery' });
+    expect(sceneForEvent(freeKick, 'HOME')).toMatchObject({ attackingHome: false, outcome: 'delivery' });
+  });
+
   it('selects an upcoming shot scene and keeps its target deterministic', () => {
     const events = [event('yellow_card', 'HOME', 39), event('goal', 'AWAY', 40)];
     const first = findEventScene(events, 38, 'HOME');
@@ -51,6 +67,24 @@ describe('event-directed pitch scenes', () => {
     expect(Math.abs(sequence.phases.at(-1)?.swerve ?? 0)).toBeLessThanOrEqual(0.45);
     expect(sequence.phases[0].targetOverride?.x).toBeGreaterThanOrEqual(0.8);
     expect(sequence.phases.at(-1)?.sourceOverride).toEqual(sequence.phases[0].targetOverride);
+  });
+
+  it('keeps the authoritative shooter after a one-two that starts at the shooter', () => {
+    const sequence = generateSequence(42, {
+      attackingHome: true,
+      forceShot: true,
+      startingPlayerIdx: 9,
+      creatorIdx: 6,
+      shooterIdx: 9,
+      sourceOverride: { x: 0.78, y: 0.5 },
+    });
+
+    expect(sequence.phases.map(phase => [phase.passerIdx, phase.receiverIdx])).toEqual([
+      [9, 6],
+      [6, 9],
+      [9, 9],
+    ]);
+    expect(sequence.phases.at(-1)).toMatchObject({ kind: 'shot', passerIdx: 9 });
   });
 
   it('starts turnover possession with the interceptor at the interception point', () => {

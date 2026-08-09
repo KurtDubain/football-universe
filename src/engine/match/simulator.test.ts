@@ -6,6 +6,7 @@ import { CoachBase } from '../../types/coach';
 import { MatchFixture } from '../../types/match';
 import type { Player, PlayerPosition } from '../../types/player';
 import { pickMatchday } from '../players/injuries';
+import { attackingTeamIdForEvent, isSetPieceOrigin, playOriginForEvent } from './event-taxonomy';
 
 function eventPlayerWasOnField(result: ReturnType<typeof simulateMatch>['matchResult'], event: typeof result.events[number]): boolean {
   if (!event.playerId || event.type === 'own_goal') return true;
@@ -173,6 +174,41 @@ describe('simulateMatch', () => {
   });
 
   describe('structural sanity', () => {
+    it('keeps structured set pieces consistent with score, corners, and actual participants', () => {
+      let standaloneSetPieces = 0;
+      let structuredShots = 0;
+      for (let seed = 1; seed <= 80; seed++) {
+        const result = simulateMatch({
+          ...buildContext(seed),
+          homeSquad: makeDeepSquad('home'),
+          awaySquad: makeDeepSquad('away'),
+          globalWindowIdx: 0,
+        }, makeFixture()).matchResult;
+        const cornerCounts: [number, number] = [0, 0];
+
+        for (const event of result.events) {
+          const origin = playOriginForEvent(event);
+          if (event.type === 'corner' || event.type === 'free_kick') {
+            standaloneSetPieces++;
+            expect(event.setPiece).toBeDefined();
+            expect(isSetPieceOrigin(origin)).toBe(true);
+            expect(eventPlayerWasOnField(result, event)).toBe(true);
+          }
+          if (event.setPiece && event.type !== 'corner' && event.type !== 'free_kick') structuredShots++;
+          if (origin !== 'corner') continue;
+          const teamId = attackingTeamIdForEvent(event, result.homeTeamId, result.awayTeamId);
+          cornerCounts[teamId === result.homeTeamId ? 0 : 1]++;
+        }
+
+        expect(cornerCounts[0]).toBeLessThanOrEqual(result.stats.corners[0]);
+        expect(cornerCounts[1]).toBeLessThanOrEqual(result.stats.corners[1]);
+        expect(result.events.filter(event => event.type === 'goal' && event.teamId === 'home')).toHaveLength(result.homeGoals);
+        expect(result.events.filter(event => event.type === 'goal' && event.teamId === 'away')).toHaveLength(result.awayGoals);
+      }
+      expect(standaloneSetPieces).toBeGreaterThanOrEqual(80);
+      expect(structuredShots).toBeGreaterThan(0);
+    });
+
     it('reconciles ordinary saves, key saves, blocks, goals, and shots on target', () => {
       for (let seed = 1; seed <= 40; seed++) {
         const ctx = buildContext(seed);

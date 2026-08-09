@@ -30,6 +30,11 @@ describe('match soundscape semantics', () => {
     expect(classifyMatchSoundEvent(saved, 'home', true)).toBe('save');
   });
 
+  it('gives noteworthy corners and free kicks a restrained setup cue', () => {
+    expect(classifyMatchSoundEvent(event('corner'), 'home', false)).toBe('set_piece');
+    expect(classifyMatchSoundEvent(event('free_kick'), 'home', false)).toBe('set_piece');
+  });
+
   it('raises tension late in a close match and for shootouts', () => {
     const early = computeCrowdIntensity({
       minute: 10, maxMinute: 90, homeScore: 0, awayScore: 0, inShootout: false, paused: false,

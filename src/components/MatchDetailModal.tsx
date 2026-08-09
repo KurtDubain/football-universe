@@ -923,6 +923,10 @@ function getEventIcon(type: MatchEvent['type']): string {
       return '\uD83C\uDFA5';
     case 'substitution':
       return '\u21C4';
+    case 'corner':
+      return '\u2691';
+    case 'free_kick':
+      return '\u25CE';
     default:
       return '\u2022';
   }

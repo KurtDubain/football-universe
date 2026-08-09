@@ -8,6 +8,7 @@ import {
 
 const events: MatchEvent[] = [
   { minute: 8, type: 'yellow_card', teamId: 'home', description: '黄牌' },
+  { minute: 14, type: 'corner', teamId: 'away', description: '角球' },
   { minute: 20, type: 'goal', teamId: 'home', description: '进球' },
   { minute: 34, type: 'gk_save', teamId: 'away', description: '扑救' },
 ];
@@ -15,6 +16,7 @@ const events: MatchEvent[] = [
 describe('match live playback modes', () => {
   it('skips quiet minutes but approaches every highlight one minute at a time', () => {
     expect(nextPlaybackStep(0, 90, events, 'highlights')).toBe(5);
+    expect(nextPlaybackStep(10, 90, events, 'highlights')).toBe(1);
     expect(nextPlaybackStep(15, 90, events, 'highlights')).toBe(3);
     expect(nextPlaybackStep(18, 90, events, 'highlights')).toBe(1);
     expect(nextPlaybackStep(19, 90, events, 'highlights')).toBe(1);
@@ -27,13 +29,19 @@ describe('match live playback modes', () => {
   });
 
   it('holds important events in highlights and shortens nonessential motion when requested', () => {
-    expect(playbackTickDelay('highlights', 20, events[1], false)).toBe(900);
-    expect(playbackTickDelay('highlights', 20, events[1], true)).toBe(300);
+    expect(playbackTickDelay('highlights', 20, events[2], false)).toBe(900);
+    expect(playbackTickDelay('highlights', 20, events[2], true)).toBe(300);
     expect(playbackTickDelay('highlights', 20, events[0], false)).toBe(120);
-    expect(playbackTickDelay('live', 20, events[1], false)).toBe(1200);
-    expect(playbackTickDelay('live', 21, events[1], false)).toBe(380);
-    expect(playbackTickDelay('immersive', 20, events[1], false)).toBe(1800);
-    expect(playbackTickDelay('immersive', 21, events[1], false)).toBe(620);
+    expect(playbackTickDelay('highlights', 16, events[1], false)).toBe(1800);
+    expect(playbackTickDelay('live', 20, events[2], false)).toBe(1200);
+    expect(playbackTickDelay('live', 21, events[2], false)).toBe(380);
+    expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(1800);
+    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(620);
+  });
+
+  it('slows the highlights timeline while a set piece is being prepared', () => {
+    expect(playbackTickDelay('highlights', 10, null, false, events[1])).toBe(320);
+    expect(playbackTickDelay('highlights', 5, null, false, events[1])).toBe(120);
   });
 
   it('uses mode-aware breaks and the shortest reduced-motion break', () => {

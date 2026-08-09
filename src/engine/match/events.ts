@@ -1,4 +1,11 @@
-import { MatchEvent, CompetitionType, PenaltyShootoutKick } from '../../types';
+import {
+  MatchEvent,
+  CompetitionType,
+  PenaltyShootoutKick,
+  type MatchPlayOrigin,
+  type MatchSetPieceContext,
+  type MatchStats,
+} from '../../types';
 import { Player } from '../../types/player';
 import { SeededRNG } from './rng';
 
@@ -27,13 +34,51 @@ const OPEN_PLAY_GOALS = [
   '胸部停球后凌空抽射',
 ];
 
-const SET_PIECE_GOALS = [
+const FREE_KICK_GOALS = [
   '任意球绕过人墙直入球门',
+  '任意球传入禁区后头球破门',
+];
+
+const CORNER_GOALS = [
   '角球头球攻门得手',
   '战术角球后远射破门',
   '定位球头球力压防守球员破门',
   '角球引发混战后补射入网',
 ];
+
+const CORNER_MISSES = [
+  '角球开向前点，甩头攻门偏出',
+  '后点接到角球凌空抽射打高',
+  '战术角球传中，门前包抄差了一步',
+];
+
+const FREE_KICK_MISSES = [
+  '任意球越过人墙稍稍高出横梁',
+  '定位球传入禁区，头球攻门偏出',
+  '任意球直奔远角，擦着立柱偏出',
+];
+
+const STANDALONE_CORNERS = {
+  cleared: [
+    '角球开向禁区，第一点被防守球员解围',
+    '角球寻找后点，门将出击将球击出',
+  ],
+  retained: [
+    '战术角球拉开宽度，进攻方继续控制球权',
+    '角球被顶出禁区，进攻方拿到第二点',
+  ],
+};
+
+const STANDALONE_FREE_KICKS = {
+  cleared: [
+    '任意球传入禁区，防线保持住位置完成解围',
+    '定位球越过人墙，门将稳稳将球摘下',
+  ],
+  retained: [
+    '任意球被挡出后，进攻方在外围重新组织',
+    '战术任意球短传开出，进攻继续推进',
+  ],
+};
 
 const PENALTY_GOALS = [
   '点球命中，骗过门将方向',
@@ -189,6 +234,41 @@ function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
   );
 }
 
+function pickSetPieceTaker(squad: Player[], rng: SeededRNG): Player {
+  return pickPlayer(
+    squad,
+    { MF: 10, FW: 6, DF: 3, GK: 0.05 },
+    rng,
+    false,
+  );
+}
+
+function setPieceContext(
+  origin: MatchPlayOrigin,
+  rng: SeededRNG,
+  resolution?: MatchSetPieceContext['resolution'],
+): MatchSetPieceContext | undefined {
+  if (origin === 'corner') {
+    return {
+      side: rng.next() < 0.5 ? 'left' : 'right',
+      delivery: rng.pick(['near_post', 'far_post', 'central', 'cutback'] as const),
+      ...(resolution && { resolution }),
+    };
+  }
+  if (origin === 'direct_free_kick') {
+    return { side: 'central', delivery: 'direct', ...(resolution && { resolution }) };
+  }
+  if (origin === 'crossed_free_kick') {
+    return {
+      side: rng.next() < 0.5 ? 'left' : 'right',
+      delivery: rng.pick(['near_post', 'far_post', 'central'] as const),
+      ...(resolution && { resolution }),
+    };
+  }
+  if (origin === 'penalty') return { side: 'central', delivery: 'direct' };
+  return undefined;
+}
+
 function buildPenaltyTakerOrder(squad: Player[] | undefined, rng: SeededRNG): Player[] {
   const remaining = (squad ?? []).filter(player => player.position !== 'GK');
   const order: Player[] = [];
@@ -331,13 +411,20 @@ export function generateMatchEvents(
       const roll = rng.next();
       let description: string;
       let isPenalty = false;
+      let playOrigin: MatchPlayOrigin = 'open_play';
+      let setPiece: MatchSetPieceContext | undefined;
       if (roll < 0.08) {
         description = rng.pick(PENALTY_GOALS);
         isPenalty = true;
+        playOrigin = 'penalty';
+        setPiece = setPieceContext(playOrigin, rng);
       } else if (roll < 0.18) {
-        description = rng.pick(SET_PIECE_GOALS);
+        playOrigin = rng.next() < 0.62 ? 'corner' : rng.next() < 0.45 ? 'direct_free_kick' : 'crossed_free_kick';
+        description = playOrigin === 'corner' ? rng.pick(CORNER_GOALS) : rng.pick(FREE_KICK_GOALS);
+        setPiece = setPieceContext(playOrigin, rng);
       } else {
         description = rng.pick(OPEN_PLAY_GOALS);
+        if (rng.next() < 0.14) playOrigin = 'counter';
       }
 
       // Pick a scorer if squad is available
@@ -359,6 +446,8 @@ export function generateMatchEvents(
         playerNumber,
         playerName,
         description: formatDescription(description, playerNumber, playerName),
+        playOrigin,
+        ...(setPiece && { setPiece }),
       });
 
       // ~70% of non-penalty goals have an assist
@@ -372,6 +461,8 @@ export function generateMatchEvents(
           playerNumber: assister.number,
           playerName: assister.name,
           description: `${assister.name ?? assister.number + '号'} 送出助攻`,
+          playOrigin,
+          ...(setPiece && { setPiece }),
         });
       }
     }
@@ -423,7 +514,18 @@ export function generateMatchEvents(
   for (let i = 0; i < totalMisses; i++) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
     const minute = randomMinuteInRange(1, maxMinute, rng);
-    const description = rng.pick(MISS_DESCRIPTIONS);
+    const originRoll = rng.next();
+    const playOrigin: MatchPlayOrigin = originRoll < 0.1
+      ? 'corner'
+      : originRoll < 0.17
+        ? (rng.next() < 0.45 ? 'direct_free_kick' : 'crossed_free_kick')
+        : 'open_play';
+    const description = playOrigin === 'corner'
+      ? rng.pick(CORNER_MISSES)
+      : playOrigin === 'direct_free_kick' || playOrigin === 'crossed_free_kick'
+        ? rng.pick(FREE_KICK_MISSES)
+        : rng.pick(MISS_DESCRIPTIONS);
+    const setPiece = setPieceContext(playOrigin, rng);
     const squad = getSquad(teamId, minute);
 
     let playerId: string | undefined;
@@ -444,6 +546,8 @@ export function generateMatchEvents(
       playerNumber,
       playerName,
       description: formatDescription(description, playerNumber, playerName),
+      playOrigin,
+      ...(setPiece && { setPiece }),
     });
   }
 
@@ -521,6 +625,98 @@ export function generateMatchEvents(
   }
 
   return events;
+}
+
+function eventAttackingTeamId(event: MatchEvent, homeTeamId: string, awayTeamId: string): string {
+  if (event.type === 'save' || event.type === 'gk_save' || event.type === 'df_block') {
+    return event.teamId === homeTeamId ? awayTeamId : homeTeamId;
+  }
+  return event.teamId;
+}
+
+function chooseQuietMinute(events: MatchEvent[], maxMinute: number, rng: SeededRNG): number {
+  const occupied = events.map(event => event.minute);
+  let candidate = rng.nextInt(8, Math.max(9, maxMinute - 5));
+  for (let attempt = 0; attempt < 16; attempt++) {
+    if (occupied.every(minute => Math.abs(minute - candidate) > 2)) return candidate;
+    candidate = rng.nextInt(8, Math.max(9, maxMinute - 5));
+  }
+  return candidate;
+}
+
+/**
+ * Add only the set pieces worth showing in a live timeline. Full corner volume
+ * remains in MatchStats, keeping long saves compact while making presentation
+ * events authoritative rather than animation-only decoration.
+ */
+export function addNotableSetPieceEvents(
+  events: MatchEvent[],
+  stats: MatchStats,
+  homeTeamId: string,
+  awayTeamId: string,
+  maxMinute: number,
+  rng: SeededRNG,
+  homePlayersAtMinute?: (minute: number) => Player[],
+  awayPlayersAtMinute?: (minute: number) => Player[],
+): MatchEvent[] {
+  const next = [...events];
+  const existingCorners = [homeTeamId, awayTeamId].map(teamId => next.filter(event => (
+    event.playOrigin === 'corner'
+    && eventAttackingTeamId(event, homeTeamId, awayTeamId) === teamId
+  )).length);
+  const remainingCorners = [
+    Math.max(0, stats.corners[0] - existingCorners[0]),
+    Math.max(0, stats.corners[1] - existingCorners[1]),
+  ];
+  const totalRemainingCorners = remainingCorners[0] + remainingCorners[1];
+
+  if (totalRemainingCorners > 0) {
+    const roll = rng.next() * totalRemainingCorners;
+    const homeAttack = roll < remainingCorners[0];
+    const teamId = homeAttack ? homeTeamId : awayTeamId;
+    const minute = chooseQuietMinute(next, maxMinute, rng);
+    const squad = homeAttack ? homePlayersAtMinute?.(minute) : awayPlayersAtMinute?.(minute);
+    const taker = squad?.length ? pickSetPieceTaker(squad, rng) : undefined;
+    const resolution = rng.next() < 0.7 ? 'cleared' : 'retained';
+    const context = setPieceContext('corner', rng, resolution)!;
+    next.push({
+      minute,
+      type: 'corner',
+      teamId,
+      playerId: taker?.uuid,
+      playerNumber: taker?.number,
+      playerName: taker?.name,
+      description: formatDescription(rng.pick(STANDALONE_CORNERS[resolution]), taker?.number, taker?.name),
+      playOrigin: 'corner',
+      setPiece: context,
+    });
+  }
+
+  const totalFouls = stats.fouls[0] + stats.fouls[1];
+  if (totalFouls >= 16 && rng.next() < 0.62) {
+    const homeAttack = rng.next() * totalFouls < stats.fouls[1];
+    const teamId = homeAttack ? homeTeamId : awayTeamId;
+    const minute = chooseQuietMinute(next, maxMinute, rng);
+    const squad = homeAttack ? homePlayersAtMinute?.(minute) : awayPlayersAtMinute?.(minute);
+    const taker = squad?.length ? pickSetPieceTaker(squad, rng) : undefined;
+    const crossed = rng.next() < 0.58;
+    const origin: MatchPlayOrigin = crossed ? 'crossed_free_kick' : 'direct_free_kick';
+    const resolution = rng.next() < 0.74 ? 'cleared' : 'retained';
+    const context = setPieceContext(origin, rng, resolution)!;
+    next.push({
+      minute,
+      type: 'free_kick',
+      teamId,
+      playerId: taker?.uuid,
+      playerNumber: taker?.number,
+      playerName: taker?.name,
+      description: formatDescription(rng.pick(STANDALONE_FREE_KICKS[resolution]), taker?.number, taker?.name),
+      playOrigin: origin,
+      setPiece: context,
+    });
+  }
+
+  return next.sort((a, b) => a.minute - b.minute);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -695,6 +891,8 @@ export function applyDenyPipeline(
         : rng.pick(DF_BLOCK_DESCRIPTIONS),
       deniedScorerId: ev.playerId,
       ...(assisterId !== undefined && { deniedAssisterId: assisterId }),
+      ...(ev.playOrigin && { playOrigin: ev.playOrigin }),
+      ...(ev.setPiece && { setPiece: ev.setPiece }),
     });
     // Advance past the goal (and assist, if consumed).
     i += consumeAssist ? 2 : 1;

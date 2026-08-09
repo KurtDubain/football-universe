@@ -2,6 +2,7 @@
 // Operates entirely in normalized (0-1) field coordinates.
 
 import { clamp, dist, lerp, seededRand } from './math';
+import { setPiecePlayerTarget } from './set-pieces';
 import { BASE_FORMATION, type PassPhase, type PlayerState, type Role } from './types';
 
 /**
@@ -43,6 +44,11 @@ export interface BallComputeResult {
 export interface DefensiveRoles {
   presserIndex: number;
   coverIndex: number;
+}
+
+export interface TacticalAssignments extends DefensiveRoles {
+  defendingHome: boolean;
+  markingTargets: Readonly<Record<number, number>>;
 }
 
 export function selectMarkingTarget(
@@ -104,6 +110,25 @@ export function selectDefensiveRoles(
     - dist(playerPos[b.index].x, playerPos[b.index].y, coverX, ballNY)
   )[0];
   return { presserIndex, coverIndex: cover.index };
+}
+
+export function buildTacticalAssignments(
+  playerPos: PlayerState[],
+  defendingHome: boolean,
+  pressureX: number,
+  pressureY: number,
+  activePlayerIndices?: ReadonlySet<number>,
+): TacticalAssignments {
+  const roles = selectDefensiveRoles(playerPos, defendingHome, pressureX, pressureY, activePlayerIndices);
+  const offset = defendingHome ? 0 : 11;
+  const markingTargets: Record<number, number> = {};
+  for (let slotIndex = 1; slotIndex <= 7; slotIndex++) {
+    const playerIndex = offset + slotIndex;
+    if (activePlayerIndices && !activePlayerIndices.has(playerIndex)) continue;
+    const target = selectMarkingTarget(playerPos, playerIndex, defendingHome, activePlayerIndices);
+    if (target !== undefined) markingTargets[playerIndex] = target;
+  }
+  return { ...roles, defendingHome, markingTargets };
 }
 
 /**
@@ -216,9 +241,13 @@ export function updatePlayerPositions(
   defensiveAction?: { playerIndex: number; target: { x: number; y: number } },
   activePlayerIndices?: ReadonlySet<number>,
   phaseProgress = 0,
+  tacticalAssignments?: TacticalAssignments,
 ): void {
   const isAttHome = currentPhase.attackingHome;
-  const defensiveRoles = selectDefensiveRoles(playerPos, !isAttHome, ballNX, ballNY, activePlayerIndices);
+  const defendingHome = !isAttHome;
+  const defensiveRoles = tacticalAssignments?.defendingHome === defendingHome
+    ? tacticalAssignments
+    : buildTacticalAssignments(playerPos, defendingHome, ballNX, ballNY, activePlayerIndices);
   for (let i = 0; i < 22; i++) {
     const isHomeTeam = i < 11;
     const formIdx = i % 11;
@@ -231,6 +260,7 @@ export function updatePlayerPositions(
     const slot = getBaseSlot(formIdx, isHomeTeam, shift);
     let targetX_n = slot.x;
     let targetY_n = slot.y;
+    const setPieceTarget = setPiecePlayerTarget(i, isHomeTeam, slot.role, currentPhase);
 
     // ── Tactical adjustments ──
     if (isHolder) {
@@ -257,6 +287,9 @@ export function updatePlayerPositions(
       targetX_n = destination.x;
       targetY_n = destination.y;
       playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.7);
+    } else if (setPieceTarget) {
+      targetX_n = setPieceTarget.x;
+      targetY_n = setPieceTarget.y;
     } else if (teamHasBall) {
       // Possession shape: the ball-side full-back overlaps, midfielders form
       // a support triangle, and the front line stretches depth and width.
@@ -323,12 +356,9 @@ export function updatePlayerPositions(
         const ownHalf = isHomeTeam ? ballNX < 0.5 : ballNX > 0.5;
         targetX_n = lerp(slot.x, threatLineX, ownHalf ? 0.68 : 0.36);
 
-        const markingTargetIndex = selectMarkingTarget(
-          playerPos,
-          i,
-          isHomeTeam,
-          activePlayerIndices,
-        );
+        const markingTargetIndex = tacticalAssignments?.defendingHome === isHomeTeam
+          ? tacticalAssignments.markingTargets[i]
+          : selectMarkingTarget(playerPos, i, isHomeTeam, activePlayerIndices);
         const markingTarget = markingTargetIndex === undefined ? undefined : playerPos[markingTargetIndex];
         const defendingDanger = isHomeTeam ? ballNX < 0.62 : ballNX > 0.38;
         if (markingTarget && defendingDanger && (slot.role === 'DF' || slot.role === 'MF')) {
@@ -370,15 +400,28 @@ export function updatePlayerPositions(
     targetX_n = clamp(targetX_n, 0.03, 0.97);
     targetY_n = clamp(targetY_n, 0.05, 0.95);
 
-    // Smooth approach — sprinters accelerate faster
+    // Critically damped pursuit with speed and acceleration caps. Target
+    // changes no longer produce overshoot or whole-team direction snapping.
     const p = playerPos[i];
-    const sprintBoost = 1 + p.sprintT * 0.6;
-    const ax = (targetX_n - p.x) * 0.06 * sprintBoost;
-    const ay = (targetY_n - p.y) * 0.06 * sprintBoost;
-    p.vx = p.vx * 0.7 + ax;
-    p.vy = p.vy * 0.7 + ay;
+    const dx = targetX_n - p.x;
+    const dy = targetY_n - p.y;
+    const distance = Math.hypot(dx, dy);
+    const sprintBoost = 1 + p.sprintT * 0.55;
+    const maxSpeed = (slot.role === 'GK' ? 0.0026 : 0.0036) * sprintBoost;
+    const desiredSpeed = Math.min(maxSpeed, distance * 0.11);
+    const desiredVx = distance > 0.0001 ? dx / distance * desiredSpeed : 0;
+    const desiredVy = distance > 0.0001 ? dy / distance * desiredSpeed : 0;
+    const maxAcceleration = (slot.role === 'GK' ? 0.0003 : 0.00042) * sprintBoost;
+    p.vx += clamp(desiredVx - p.vx, -maxAcceleration, maxAcceleration);
+    p.vy += clamp(desiredVy - p.vy, -maxAcceleration, maxAcceleration);
     p.x += p.vx;
     p.y += p.vy;
+    if (distance < 0.0015 && Math.hypot(p.vx, p.vy) < 0.0008) {
+      p.x = targetX_n;
+      p.y = targetY_n;
+      p.vx = 0;
+      p.vy = 0;
+    }
     if (isHolder && phaseState !== 'holding' && currentPhase.sourceOverride) {
       p.x = clamp(p.x, currentPhase.sourceOverride.x - 0.025, currentPhase.sourceOverride.x + 0.025);
       p.y = clamp(p.y, currentPhase.sourceOverride.y - 0.025, currentPhase.sourceOverride.y + 0.025);

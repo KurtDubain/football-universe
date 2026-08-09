@@ -19,7 +19,19 @@ const HIGHLIGHT_EVENT_TYPES = new Set<MatchEvent['type']>([
   'red_card',
   'gk_save',
   'df_block',
+  'corner',
+  'free_kick',
 ]);
+
+function isSetPieceHighlight(event: MatchEvent | null | undefined): boolean {
+  return Boolean(event && (
+    event.type === 'corner'
+    || event.type === 'free_kick'
+    || event.playOrigin === 'corner'
+    || event.playOrigin === 'direct_free_kick'
+    || event.playOrigin === 'crossed_free_kick'
+  ));
+}
 
 export function isHighlightEvent(event: MatchEvent | null): boolean {
   return Boolean(event && HIGHLIGHT_EVENT_TYPES.has(event.type));
@@ -36,8 +48,9 @@ export function nextPlaybackStep(
   const nextHighlight = events.find(event =>
     event.minute > minute && HIGHLIGHT_EVENT_TYPES.has(event.type)
   );
+  const preludeMinutes = isSetPieceHighlight(nextHighlight) ? 4 : 2;
   const target = nextHighlight
-    ? Math.max(minute + 1, nextHighlight.minute - 2)
+    ? Math.max(minute + 1, nextHighlight.minute - preludeMinutes)
     : maxMinute;
   return Math.max(1, Math.min(5, target - minute, maxMinute - minute));
 }
@@ -47,6 +60,7 @@ export function playbackTickDelay(
   minute: number,
   flashEvent: MatchEvent | null,
   reducedMotion: boolean,
+  nextHighlight?: MatchEvent,
 ): number {
   const eventJustRevealed = flashEvent?.minute === minute;
   if (mode === 'live') {
@@ -59,6 +73,13 @@ export function playbackTickDelay(
     if (eventJustRevealed) return reducedMotion ? 300 : 1050;
     return reducedMotion ? 240 : 620;
   }
+
+  if (!flashEvent
+    && isSetPieceHighlight(nextHighlight)
+    && nextHighlight!.minute - minute <= 4) {
+    return reducedMotion ? 180 : 320;
+  }
+  if (isSetPieceHighlight(flashEvent)) return reducedMotion ? 500 : 1800;
 
   const holdingHighlight = isHighlightEvent(flashEvent)
     && minute <= (flashEvent?.minute ?? -1) + 1;

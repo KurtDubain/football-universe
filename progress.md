@@ -1,3 +1,20 @@
+Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
+
+## 2026-08-09 Stable Match Motion And Set Pieces
+
+- User approved option B: prioritize stable, maintainable football motion and allow a slower presentation in exchange for credible setup, transitions, corners, and free kicks.
+- Match events now expose optional `playOrigin` and `setPiece` context for open play, counters, corners, direct/crossed free kicks, and penalties. Old events remain readable as open play; no save migration or historical reset is required.
+- The simulator keeps scores and existing MatchStats authoritative, reconciles structured corner origins against recorded corner totals, and adds at most one notable standalone corner plus one optional free kick from actual on-field participants. Eighty deterministic seeds passed score, corner, metadata, and lineup consistency assertions.
+- Corners, direct free kicks, crossed free kicks, and penalties use pure deterministic sequence generators. Static preparation lets the taker, box runners, defenders, goalkeeper, and red-card-aware wall settle before the ball is released; deliveries can be cleared or retained without inventing a score.
+- Player motion now uses capped desired velocity and acceleration. Marking and pressure assignments remain fixed for a phase, generic possession stays with the same attacking side until an explicit turnover, and event attacks bridge from the visible ball instead of jumping to a fresh random formation.
+- Desktop camera following uses a dead zone with restrained `1.006-1.026` zoom; impact shake is sub-pixel and limited to full-quality goals. Mobile, constrained, and reduced-motion profiles stay at fixed `1.0` zoom.
+- Highlights approach set pieces four minutes early, slow through the setup, and hold the event minute long enough to complete the action. Commentary history, match details, icons, and original Web Audio whistle/crowd cues now distinguish corner and free-kick events.
+- Browser audits passed structured corners and free kicks at `1440x900` and `390x844`: six attackers reached the corner threat area, the red-card-aware three-man wall remained goal-side with visible spacing, and mobile camera zoom stayed exactly `1.0`. Ordinary live presentation, authoritative scorer/creator/defender tactics, and shootouts also passed desktop plus `320/390px` mobile checks.
+- The tactical audit uncovered and fixed a real one-two edge case where route deduplication could let the creator take the registered scorer's shot. A dedicated regression test now preserves the final shooter even when the sequence starts with that same player.
+- Animation performance passed normal and 4x CPU profiles at about `0.47ms` and `1.97ms` average Canvas render cost. Hidden, covered, closed, reopened, and next-batch states remained correct; final scores matched.
+- The S150 long-save audit completed 7,609 advances with zero rollover errors, data errors, or warnings. Browser storage reached `2,169,054 B` against the `4,194,304 B` budget; S1/S50/S100/S150 reload and next-advance digests matched, and archival removed 7,513 event rows plus 892 matchday snapshots normally.
+- Final Node 22.22.2 verification passed 101 test files / 763 tests, ESLint, TypeScript, production/PWA build, bundle budget, and production dependency audit. The main entry is 229,759 bytes (71,390 gzip), initial load is 636,855 bytes (207,499 gzip), and production dependencies report no known vulnerabilities.
+
 Original prompt: 可以，那你来优化一下动画模块吧
 
 ## 2026-08-08 Match Realism And World Moments

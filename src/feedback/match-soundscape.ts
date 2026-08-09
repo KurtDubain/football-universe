@@ -12,6 +12,7 @@ export type MatchSoundCue =
   | 'card'
   | 'red_card'
   | 'substitution'
+  | 'set_piece'
   | 'none';
 
 export interface MatchAtmosphereSnapshot {
@@ -109,6 +110,7 @@ export function classifyMatchSoundEvent(
   if (event.type === 'red_card') return 'red_card';
   if (event.type === 'yellow_card') return 'card';
   if (event.type === 'substitution') return 'substitution';
+  if (event.type === 'corner' || event.type === 'free_kick') return 'set_piece';
   return 'none';
 }
 
@@ -328,6 +330,11 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     }
     if (cue === 'substitution') {
       scheduleNoiseBurst(context, output, noise, 0.028, 0.34, 1120);
+      return;
+    }
+    if (cue === 'set_piece') {
+      scheduleWhistle(context, output, 0.02);
+      scheduleNoiseBurst(context, output, noise, 0.032, 0.5, 920, 0.08);
     }
   }
 

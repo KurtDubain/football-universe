@@ -36,6 +36,28 @@ describe('live commentary', () => {
     expect(shootoutEventLabel(event)).toBe('点4');
   });
 
+  it('explains whether a noteworthy set piece was cleared or retained', () => {
+    const corner: MatchEvent = {
+      minute: 28,
+      type: 'corner',
+      teamId: 'home',
+      description: '角球被顶出禁区',
+      playOrigin: 'corner',
+      setPiece: { side: 'left', delivery: 'near_post', resolution: 'retained' },
+    };
+    const freeKick: MatchEvent = {
+      minute: 64,
+      type: 'free_kick',
+      teamId: 'away',
+      description: '任意球传入禁区后被解围',
+      playOrigin: 'crossed_free_kick',
+      setPiece: { side: 'right', delivery: 'far_post', resolution: 'cleared' },
+    };
+
+    expect(buildLiveCommentary({ ...base, event: corner })).toContain('仍在前场组织');
+    expect(buildLiveCommentary({ ...base, event: freeKick })).toContain('化解了这次定位球');
+  });
+
   it('retains phase narration and every revealed event in newest-first order', () => {
     const events: MatchEvent[] = [
       { minute: 12, type: 'miss', teamId: 'away', description: '客队远射稍稍偏出' },

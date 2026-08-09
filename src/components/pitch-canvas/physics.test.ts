@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -145,6 +145,8 @@ describe('pitch player movement', () => {
       intercepted: false,
       sourceOverride: { x: 0.82, y: 0.48 },
     };
+    players[9].x = 0.82;
+    players[9].y = 0.48;
 
     for (let frame = 0; frame < 20; frame++) {
       updatePlayerPositions(players, 0.985, 0.5, 'home', 9, shot, 'holding', { x: 0.985, y: 0.5 }, 0.07);
@@ -205,14 +207,31 @@ describe('pitch player movement', () => {
       targetOverride: { x: 0.82, y: 0.3 },
     };
     const before = selectDefensiveRoles(players, false, 0.82, 0.3);
+    const assignments = buildTacticalAssignments(players, false, 0.82, 0.3);
+    const receiverDistanceBefore = distToBall(players[10], 0.82, 0.3);
 
     for (let frame = 0; frame < 12; frame++) {
-      updatePlayerPositions(players, 0.6, 0.45, 'home', 7, phase, 'passing', null, 0.04);
+      updatePlayerPositions(players, 0.6, 0.45, 'home', 7, phase, 'passing', null, 0.04, undefined, undefined, 0, assignments);
     }
 
-    expect(players[10].x).toBeGreaterThan(0.75);
-    expect(distToBall(players[before.presserIndex], 0.82, 0.3)).toBeLessThan(0.16);
+    expect(distToBall(players[10], 0.82, 0.3)).toBeLessThan(receiverDistanceBefore);
+    expect(distToBall(players[before.presserIndex], 0.82, 0.3)).toBeLessThan(0.22);
     expect(players[before.coverIndex].x).toBeGreaterThan(0.6);
+  });
+
+  it('keeps defensive responsibilities stable for a complete phase', () => {
+    const players = initialPlayers();
+    const assignments = buildTacticalAssignments(players, false, 0.72, 0.3);
+    const originalPresser = assignments.presserIndex;
+    const originalMark = assignments.markingTargets[12];
+
+    players[17].x = 0.72;
+    players[17].y = 0.3;
+    players[originalPresser].x = 0.95;
+    players[originalPresser].y = 0.9;
+
+    expect(assignments.presserIndex).toBe(originalPresser);
+    expect(assignments.markingTargets[12]).toBe(originalMark);
   });
 
   it('steps the goalkeeper out to narrow a close-range angle', () => {

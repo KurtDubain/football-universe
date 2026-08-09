@@ -2,6 +2,7 @@
 // No logic — only data shapes shared across the pitch-canvas modules.
 
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
+export type PresentationSetPiece = 'corner' | 'direct_free_kick' | 'crossed_free_kick' | 'penalty';
 
 // 4-3-3 formation positions (normalized 0-1, x is depth, y is width).
 // This matches the authoritative starter shape in match participation.
@@ -45,6 +46,9 @@ export interface PassPhase {
   arc: number;
   /** Signed top-down bend applied during flight; visual only. */
   swerve?: number;
+  /** Frames spent in a stable setup before the ball is released. */
+  releaseDelayFrames?: number;
+  setPiece?: PresentationSetPiece;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };

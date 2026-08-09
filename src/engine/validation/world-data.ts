@@ -5,6 +5,7 @@ import type { TransferRecord } from '../../types/transfer';
 import { playerTeamStatKey } from '../players/stats';
 import { selectMatchday } from '../players/injuries';
 import { isNeutralVenueFixture } from '../competitions/venue-policy';
+import { attackingTeamIdForEvent, isSetPieceOrigin, playOriginForEvent } from '../match/event-taxonomy';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -1162,6 +1163,29 @@ function validateEventSemantics(
     }
   }
 
+  const playOrigin = playOriginForEvent(event);
+  if (event.setPiece && !isSetPieceOrigin(playOrigin)) {
+    pushIssue(issues, {
+      severity: 'error', code: 'set_piece_metadata_on_open_play_event',
+      message: `Event ${event.type} carries set-piece metadata with origin ${playOrigin}.`,
+      teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+    });
+  }
+  if (event.type === 'corner' && playOrigin !== 'corner') {
+    pushIssue(issues, {
+      severity: 'error', code: 'corner_event_origin_mismatch',
+      message: `Corner event at ${event.minute}' does not carry corner origin metadata.`,
+      teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+    });
+  }
+  if (event.type === 'free_kick' && playOrigin !== 'direct_free_kick' && playOrigin !== 'crossed_free_kick') {
+    pushIssue(issues, {
+      severity: 'error', code: 'free_kick_event_origin_mismatch',
+      message: `Free-kick event at ${event.minute}' has invalid origin ${playOrigin}.`,
+      teamId: event.teamId, playerId: event.playerId, fixtureId: result.fixtureId,
+    });
+  }
+
   if (
     event.playerId
     && event.type !== 'own_goal'
@@ -1448,6 +1472,28 @@ function validateResult(
       message: `Fixture ${result.fixtureId} scoreline is ${expectedHome}-${expectedAway}, but countable goal events are ${counted.home}-${counted.away}.`,
       fixtureId: result.fixtureId,
     });
+  }
+
+
+  if (!result.detailsArchived) {
+    const structuredCorners: [number, number] = [0, 0];
+    for (const event of result.events ?? []) {
+      if (playOriginForEvent(event) !== 'corner') continue;
+      const attackingTeamId = attackingTeamIdForEvent(
+        event,
+        result.homeTeamId,
+        result.awayTeamId,
+      );
+      if (attackingTeamId === result.homeTeamId) structuredCorners[0]++;
+      else if (attackingTeamId === result.awayTeamId) structuredCorners[1]++;
+    }
+    if (structuredCorners[0] > result.stats.corners[0] || structuredCorners[1] > result.stats.corners[1]) {
+      pushIssue(issues, {
+        severity: 'error', code: 'structured_corner_count_exceeds_stats',
+        message: `Fixture ${result.fixtureId} stores ${structuredCorners.join('-')} corner events but stats report ${result.stats.corners.join('-')}.`,
+        fixtureId: result.fixtureId,
+      });
+    }
   }
 
   for (const event of result.events ?? []) {

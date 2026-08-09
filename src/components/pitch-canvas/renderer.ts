@@ -459,19 +459,17 @@ export function applyCameraShake(
   camera: BroadcastCameraState = { focusX: W / 2, focusY: H / 2, zoom: 1 },
 ): { offX: number; offY: number } {
   let offX = 0, offY = 0;
-  let shaking = false;
   if (shakeRef.current > 0) {
-    shaking = true;
     const t = 1 - shakeRef.current / shakeMaxRef.current;
     const decay = Math.exp(-t * 3); // exponential falloff
     const phase = (shakeMaxRef.current - shakeRef.current) * 0.85;
-    offX = Math.sin(phase) * 2.8 * decay;
-    offY = Math.cos(phase * 1.3) * 1.8 * decay;
+    offX = Math.sin(phase) * 0.9 * decay;
+    offY = Math.cos(phase * 1.3) * 0.55 * decay;
     shakeRef.current--;
   }
   ctx.save();
   ctx.clearRect(0, 0, W, H);
-  const zoom = clamp(camera.zoom + (shaking ? 0.006 : 0), 1, 1.07);
+  const zoom = clamp(camera.zoom, 1, 1.04);
   const overscanX = Math.max(0, (zoom - 1) * W / 2 - 1);
   const overscanY = Math.max(0, (zoom - 1) * H / 2 - 1);
   const panX = clamp((W / 2 - camera.focusX) * 0.1, -overscanX, overscanX);

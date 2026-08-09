@@ -1,5 +1,20 @@
 export type CompetitionType = 'league' | 'league_cup' | 'super_cup' | 'super_cup_group' | 'world_cup' | 'world_cup_group' | 'continental_cup' | 'relegation_playoff';
 
+export type MatchPlayOrigin =
+  | 'open_play'
+  | 'counter'
+  | 'corner'
+  | 'direct_free_kick'
+  | 'crossed_free_kick'
+  | 'penalty';
+
+export interface MatchSetPieceContext {
+  side: 'left' | 'right' | 'central';
+  delivery: 'near_post' | 'far_post' | 'central' | 'cutback' | 'direct';
+  /** Only standalone set-piece events need an explicit non-shot resolution. */
+  resolution?: 'cleared' | 'retained';
+}
+
 export type MatchFactorSource =
   | 'team_strength'
   | 'available_squad'
@@ -63,13 +78,21 @@ export interface MatchEvent {
     /** v22 — would-be goal blocked on the line by a defender. */
     | 'df_block'
     /** One player leaves and another enters at this minute. */
-    | 'substitution';
+    | 'substitution'
+    /** A noteworthy corner; MatchStats.corners remains the full-match total. */
+    | 'corner'
+    /** A noteworthy direct or crossed free kick. */
+    | 'free_kick';
   teamId: string;
   /** Holds a Player.uuid value (stable across transfers). */
   playerId?: string;
   playerNumber?: number;
   playerName?: string; // assigned player name for display
   description: string;
+  /** Structured attack origin. Missing on legacy events means open play. */
+  playOrigin?: MatchPlayOrigin;
+  /** Presentation detail for corner/free-kick/penalty scenes. */
+  setPiece?: MatchSetPieceContext;
   /**
    * v22 — for `gk_save` / `df_block` events only. Points to the would-be
    * scorer (and would-be assister, if the original goal had one) so the

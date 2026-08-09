@@ -5,6 +5,7 @@ import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
 import { Icon, IconName } from './Icon';
 import {
+  isHighlightEvent,
   nextPlaybackStep,
   playbackBreakDelay,
   playbackTickDelay,
@@ -48,6 +49,8 @@ const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
   df_block:     { name: 'shield', accent: '#3b82f6' },
   assist:       { name: 'sparkle', accent: '#a78bfa' },
   substitution: { name: 'refresh', accent: '#38bdf8' },
+  corner:       { name: 'flag', accent: '#fbbf24' },
+  free_kick:    { name: 'whistle', accent: '#7dd3fc' },
 };
 
 type PlaybackPhase = 'playing' | 'paused' | 'halftime' | 'extra_time_break' | 'shootout_break' | 'finished';
@@ -453,11 +456,15 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
   useEffect(() => {
     if (playback.phase !== 'playing' || !pageVisible || showOpener) return;
+    const nextHighlight = allEvents.find(event =>
+      event.minute > playback.minute && isHighlightEvent(event)
+    );
     const delay = playbackTickDelay(
       playback.mode,
       playback.minute,
       playback.flashEvent,
       reducedMotion,
+      nextHighlight,
     );
     const timer = window.setTimeout(() => {
       dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });

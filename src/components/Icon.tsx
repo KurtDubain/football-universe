@@ -36,7 +36,7 @@ export type IconName =
   | 'money'    | 'gloves'      | 'boot'    | 'play'
   | 'sparkle'  | 'handshake'   | 'eye'     | 'lock'
   | 'gem'      | 'leaf'        | 'mortarboard'
-  | 'volume'   | 'volume-off';
+  | 'volume'   | 'volume-off'  | 'flag'      | 'whistle';
 
 interface IconProps {
   name: IconName;
@@ -447,6 +447,21 @@ function renderIcon(name: IconName, accent?: string): ReactElement {
         <>
           <path d="M4 10v4h4l5 4V6L8 10H4z" fill={accent ?? 'none'} fillOpacity="0.3" />
           <path d="M16 10l5 5M21 10l-5 5" />
+        </>
+      );
+    case 'flag':
+      return (
+        <>
+          <path d="M6 21V4" />
+          <path d="M7 5h10l-2.2 3L17 11H7V5z" fill={accent ?? 'none'} fillOpacity="0.25" />
+        </>
+      );
+    case 'whistle':
+      return (
+        <>
+          <path d="M5 10h8l5-4v5a5 5 0 1 1-5-5" />
+          <circle cx="10" cy="15" r="2" />
+          <path d="M18 8h3" />
         </>
       );
     case 'gem':

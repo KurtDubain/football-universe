@@ -66,6 +66,16 @@ export function buildLiveCommentary(context: CommentaryContext): string {
     const detail = scoringContext(context, teamName);
     return `${event.description}。${detail}`;
   }
+  if (event.type === 'corner') {
+    return event.setPiece?.resolution === 'retained'
+      ? `${event.description}，${teamName}仍在前场组织。`
+      : `${event.description}，这次角球攻势暂时结束。`;
+  }
+  if (event.type === 'free_kick') {
+    return event.setPiece?.resolution === 'retained'
+      ? `${event.description}，${teamName}继续掌握球权。`
+      : `${event.description}，防线化解了这次定位球。`;
+  }
   if (event.type === 'save' || event.type === 'gk_save') return `${event.description}，比分没有改变。`;
   if (event.type === 'df_block') return `${event.description}，这次防守保住了当前比分。`;
   if (event.type === 'miss') return `${event.description}，${teamName}错过了改写比分的机会。`;

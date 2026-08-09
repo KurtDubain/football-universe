@@ -1,13 +1,15 @@
 import type { MatchEvent } from '../../types/match';
+import { eventAttacksForHome, isDefendingShotEvent, isShotEvent } from '../../engine/match/event-taxonomy';
 import { seededRand } from './math';
 
 export type ShotOutcome = 'goal' | 'save' | 'block' | 'miss';
+export type SceneOutcome = ShotOutcome | 'delivery';
 
 export interface EventScene {
   key: string;
   event: MatchEvent;
   attackingHome: boolean;
-  outcome: ShotOutcome;
+  outcome: SceneOutcome;
   target: { x: number; y: number };
   seed: number;
 }
@@ -18,14 +20,6 @@ export interface EventActors {
   defenderId?: string;
 }
 
-const SHOT_EVENT_TYPES = new Set<MatchEvent['type']>([
-  'goal', 'penalty_goal', 'own_goal',
-  'save', 'gk_save', 'df_block',
-  'miss', 'penalty_miss',
-]);
-
-const DEFENDING_TEAM_EVENT_TYPES = new Set<MatchEvent['type']>(['save', 'gk_save', 'df_block']);
-
 function hashText(text: string): number {
   let hash = 2166136261;
   for (let index = 0; index < text.length; index++) {
@@ -35,7 +29,8 @@ function hashText(text: string): number {
   return hash >>> 0;
 }
 
-function outcomeFor(event: MatchEvent): ShotOutcome {
+function outcomeFor(event: MatchEvent): SceneOutcome {
+  if (event.type === 'corner' || event.type === 'free_kick') return 'delivery';
   if (event.type === 'goal' || event.type === 'penalty_goal' || event.type === 'own_goal') return 'goal';
   if (event.type === 'penalty_miss' && event.shootout?.outcome === 'saved') return 'save';
   if (event.type === 'df_block') return 'block';
@@ -44,19 +39,24 @@ function outcomeFor(event: MatchEvent): ShotOutcome {
 }
 
 export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: number): EventScene | null {
-  if (!SHOT_EVENT_TYPES.has(event.type)) return null;
+  if (!isShotEvent(event) && event.type !== 'corner' && event.type !== 'free_kick') return null;
 
-  const eventBelongsToHome = event.teamId === homeTeamId;
-  const attackingHome = DEFENDING_TEAM_EVENT_TYPES.has(event.type)
-    ? !eventBelongsToHome
-    : eventBelongsToHome;
+  const attackingHome = eventAttacksForHome(event, homeTeamId);
   const outcome = outcomeFor(event);
   const key = `${ordinal ?? 'direct'}:${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`;
   const seed = hashText(key);
-  const attackGoalX = outcome === 'miss'
+  const attackGoalX = outcome === 'delivery'
+    ? (attackingHome ? 0.89 : 0.11)
+    : outcome === 'miss'
     ? (attackingHome ? 1.015 : -0.015)
     : (attackingHome ? 0.985 : 0.015);
-  const targetY = outcome === 'miss'
+  const targetY = outcome === 'delivery'
+    ? event.setPiece?.delivery === 'near_post'
+      ? (event.setPiece.side === 'left' ? 0.39 : 0.61)
+      : event.setPiece?.delivery === 'far_post'
+        ? (event.setPiece.side === 'left' ? 0.62 : 0.38)
+        : 0.46 + seededRand(seed + 4) * 0.08
+    : outcome === 'miss'
     ? (seededRand(seed + 1) > 0.5 ? 0.34 : 0.66)
     : outcome === 'block'
       ? 0.46 + seededRand(seed + 2) * 0.08
@@ -83,7 +83,15 @@ export function findEventScene(
   if (flashScene) return flashScene;
 
   const nearby = events
-    .filter(event => event.minute - minute >= 0 && event.minute - minute <= 2)
+    .filter(event => {
+      const lead = event.minute - minute;
+      const setPiecePrelude = event.type === 'corner'
+        || event.type === 'free_kick'
+        || event.playOrigin === 'corner'
+        || event.playOrigin === 'direct_free_kick'
+        || event.playOrigin === 'crossed_free_kick';
+      return lead >= 0 && lead <= (setPiecePrelude ? 4 : 2);
+    })
     .map(event => sceneForEvent(event, homeTeamId, events.indexOf(event)))
     .filter((scene): scene is EventScene => scene !== null)
     .sort((a, b) => a.event.minute - b.event.minute || a.key.localeCompare(b.key));
@@ -98,7 +106,7 @@ export function actorsForEvent(event: MatchEvent, events: MatchEvent[]): EventAc
     && nextEvent.type === 'assist'
     ? nextEvent
     : undefined;
-  const defendingEvent = DEFENDING_TEAM_EVENT_TYPES.has(event.type);
+  const defendingEvent = isDefendingShotEvent(event);
 
   return {
     attackerId: defendingEvent ? event.deniedScorerId : event.playerId,

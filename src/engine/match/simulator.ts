@@ -14,7 +14,7 @@ import { SeededRNG } from './rng';
 import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
-import { generateMatchEvents, applyDenyPipeline } from './events';
+import { addNotableSetPieceEvents, generateMatchEvents, applyDenyPipeline } from './events';
 import { selectMatchday } from '../players/injuries';
 import {
   buildMatchParticipation,
@@ -502,7 +502,7 @@ export function simulateMatch(
   // with a knockout match that's "missing" ET or has a shootout that
   // shouldn't have happened. League / group-stage matches don't have
   // this problem (ties are valid outcomes) so deny is safe there.
-  const events = ctx.isKnockout
+  let events = ctx.isKnockout
     ? rawEvents
     : applyDenyPipeline(
         rawEvents,
@@ -538,6 +538,30 @@ export function simulateMatch(
     homeGoals,
     awayGoals,
     rng.fork(),
+  );
+
+  const attackingTeamForEvent = (event: MatchEvent): string => (
+    event.type === 'save' || event.type === 'gk_save' || event.type === 'df_block'
+      ? event.teamId === homeTeam.id ? awayTeam.id : homeTeam.id
+      : event.teamId
+  );
+  const structuredCornerCounts: [number, number] = [
+    events.filter(event => event.playOrigin === 'corner' && attackingTeamForEvent(event) === homeTeam.id).length,
+    events.filter(event => event.playOrigin === 'corner' && attackingTeamForEvent(event) === awayTeam.id).length,
+  ];
+  stats.corners = [
+    Math.max(stats.corners[0], structuredCornerCounts[0]),
+    Math.max(stats.corners[1], structuredCornerCounts[1]),
+  ];
+  events = addNotableSetPieceEvents(
+    events,
+    stats,
+    homeTeam.id,
+    awayTeam.id,
+    durationMinutes,
+    rng.fork(),
+    homePlayersAtMinute,
+    awayPlayersAtMinute,
   );
 
   const homeKeySaves = events.filter(event => event.type === 'gk_save' && event.teamId === homeTeam.id).length;

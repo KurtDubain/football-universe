@@ -1,14 +1,15 @@
 import { memo, useEffect, useRef, useMemo } from 'react';
 import type { MatchdaySnapshot, MatchEvent } from '../types/match';
+import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxonomy';
 import { clamp, lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence';
-import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type ShotOutcome } from './pitch-canvas/event-scene';
+import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
 import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import { computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions } from './pitch-canvas/physics';
+import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
 import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
   drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
@@ -49,13 +50,14 @@ interface PitchDebugState {
   playbackMode: PlaybackMode;
   phase: 'passing' | 'holding' | 'shooting';
   attackingSide: 'home' | 'away';
-  event: ({ type: MatchEvent['type']; outcome: ShotOutcome } & EventActors) | null;
+  event: ({ type: MatchEvent['type']; outcome: SceneOutcome } & EventActors) | null;
   ball: { x: number; y: number; elevation: number };
   camera: { focusX: number; focusY: number; zoom: number };
   ballHolderId: string | null;
   lastTouchPlayerId: string | null;
   action: {
     kind: PassPhase['kind'];
+    setPiece?: PassPhase['setPiece'];
     passerIdx: number;
     receiverIdx: number;
     sourceOverride?: { x: number; y: number };
@@ -113,15 +115,27 @@ function sequenceOptionsForScene(
   homeRoster: PitchRosterPlayer[],
   awayRoster: PitchRosterPlayer[],
   homePossessionShare: number,
+  continuity?: { source: { x: number; y: number }; startingPlayerIdx: number },
 ): SequenceOptions {
   const actors = actorsForEvent(scene.event, events);
   const attackingRoster = scene.attackingHome ? homeRoster : awayRoster;
+  const origin = playOriginForEvent(scene.event);
+  const setPiece = isSetPieceOrigin(origin) ? origin : undefined;
+  const eventActorSlot = slotForPlayer(attackingRoster, actors.attackerId);
   return {
     attackingHome: scene.attackingHome,
-    forceShot: true,
-    setPiece: scene.event.type === 'penalty_goal' || scene.event.type === 'penalty_miss' ? 'penalty' : undefined,
-    shooterIdx: slotForPlayer(attackingRoster, actors.attackerId),
-    creatorIdx: slotForPlayer(attackingRoster, actors.creatorId),
+    forceShot: scene.outcome !== 'delivery',
+    setPiece,
+    setPieceSide: scene.event.setPiece?.side,
+    setPieceDelivery: scene.event.setPiece?.delivery,
+    shooterIdx: scene.outcome === 'delivery' ? undefined : eventActorSlot,
+    creatorIdx: scene.outcome === 'delivery'
+      ? eventActorSlot
+      : slotForPlayer(attackingRoster, actors.creatorId),
+    ...(!setPiece && continuity ? {
+      sourceOverride: continuity.source,
+      startingPlayerIdx: continuity.startingPlayerIdx,
+    } : {}),
     homePossessionShare,
   };
 }
@@ -189,6 +203,8 @@ function PitchCanvas(props: Props) {
   const ballSourceRef = useRef({ x: 0.5, y: 0.5 });
   const ballArcLiftRef = useRef(0);
   const interceptedRef = useRef(false);
+  const tacticalAssignmentsRef = useRef<TacticalAssignments | null>(null);
+  const tacticalAssignmentKeyRef = useRef('');
   const ballSpinRef = useRef(0);
   const debugStateRef = useRef<PitchDebugState>({
     coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
@@ -227,9 +243,9 @@ function PitchCanvas(props: Props) {
   const awayRoster = useMemo(() => buildPitchRoster(awayMatchday), [awayMatchday]);
 
   const targetShift = useMemo(() => {
-    if (eventScene) return eventScene.attackingHome ? 0.07 : -0.07;
-    return seededRand(minute * 31) > 0.45 ? 0.04 : -0.04;
-  }, [eventScene, minute]);
+    if (eventScene) return eventScene.attackingHome ? 0.055 : -0.055;
+    return clamp((possession[0] - 50) / 50 * 0.025, -0.025, 0.025);
+  }, [eventScene, possession]);
 
   const shiftRef = useRef(0);
 
@@ -265,7 +281,7 @@ function PitchCanvas(props: Props) {
     if (!flashEvent) return;
     const eventIndex = allEvents.indexOf(flashEvent);
     const scene = sceneForEvent(flashEvent, homeTeamId, eventIndex >= 0 ? eventIndex : undefined);
-    if (!scene || triggeredImpactKeyRef.current === scene.key) return;
+    if (!scene || scene.outcome === 'delivery' || triggeredImpactKeyRef.current === scene.key) return;
     pendingImpactSceneRef.current = scene;
   }, [allEvents, flashEvent, homeTeamId]);
 
@@ -394,14 +410,25 @@ function PitchCanvas(props: Props) {
       phaseFrameRef.current = 0;
       phaseStateRef.current = phases[0]?.kind === 'shot' ? 'shooting' : 'passing';
       interceptedRef.current = false;
+      tacticalAssignmentKeyRef.current = '';
+      tacticalAssignmentsRef.current = null;
       const firstPhase = phases[0];
       if (!firstPhase) return;
       const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
+      if (firstPhase.setPiece && firstPhase.sourceOverride) {
+        const takerOffset = firstPhase.attackingHome ? 0 : 11;
+        const taker = playerPosRef.current[takerOffset + firstPhase.passerIdx];
+        taker.x = firstPhase.sourceOverride.x;
+        taker.y = firstPhase.sourceOverride.y;
+        taker.vx = 0;
+        taker.vy = 0;
+      }
     }
 
     function triggerShotImpact(scene: EventScene, currentHomeColor: string, currentAwayColor: string): void {
+      if (scene.outcome === 'delivery') return;
       const targetX = P + scene.target.x * fw;
       const targetY = P + scene.target.y * fh;
       triggeredImpactKeyRef.current = scene.key;
@@ -410,8 +437,9 @@ function PitchCanvas(props: Props) {
 
       if (scene.outcome === 'goal') {
         goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
-        cameraShakeRef.current = CAMERA_SHAKE_MAX_FRAMES;
-        cameraShakeMax.current = CAMERA_SHAKE_MAX_FRAMES;
+        const allowGoalImpulse = renderBudget.quality === 'full' && !reducedMotion;
+        cameraShakeRef.current = allowGoalImpulse ? CAMERA_SHAKE_MAX_FRAMES : 0;
+        cameraShakeMax.current = allowGoalImpulse ? CAMERA_SHAKE_MAX_FRAMES : 1;
         flashWhiteRef.current = FLASH_MAX_FRAMES;
         const goalColor = scene.attackingHome ? currentHomeColor : currentAwayColor;
         goalCelebColor.current = goalColor;
@@ -427,8 +455,6 @@ function PitchCanvas(props: Props) {
       shotOutcomeSeedRef.current = scene.seed;
       if (scene.outcome === 'save' || scene.outcome === 'block') {
         addParticles(spawnTackleSparks(targetX, targetY));
-        cameraShakeRef.current = scene.outcome === 'block' ? 12 : 8;
-        cameraShakeMax.current = cameraShakeRef.current;
       }
     }
 
@@ -471,9 +497,23 @@ function PitchCanvas(props: Props) {
         goalCelebFrame.current = 0;
         flashWhiteRef.current = 0;
         postShotRestingBallRef.current = null;
+        const ballX = clamp((ballPos.current.x - P) / fw, 0.03, 0.97);
+        const ballY = clamp((ballPos.current.y - P) / fh, 0.05, 0.95);
+        const attackingRoster = activePitchPlayers(eventScene.attackingHome ? homeRoster : awayRoster, minute, maxMinute);
+        const attackingOffset = eventScene.attackingHome ? 0 : 11;
+        const continuity = {
+          source: { x: ballX, y: ballY },
+          startingPlayerIdx: nearestPlayerSlot(
+            attackingRoster,
+            playerPosRef.current,
+            attackingOffset,
+            ballX,
+            ballY,
+          ),
+        };
         const directed = generateSequence(
           eventScene.seed,
-          sequenceOptionsForScene(eventScene, live.allEvents, homeRoster, awayRoster, homePossessionShare),
+          sequenceOptionsForScene(eventScene, live.allEvents, homeRoster, awayRoster, homePossessionShare, continuity),
         );
         loadSequence(directed.phases, eventScene.seed);
         activeSceneKeyRef.current = eventScene.key;
@@ -484,7 +524,10 @@ function PitchCanvas(props: Props) {
 
       const queuedImpact = pendingImpactSceneRef.current;
       const livePhase = sequenceRef.current[phaseIdxRef.current];
-      if (queuedImpact && sequenceSceneRef.current?.key === queuedImpact.key && livePhase?.kind !== 'shot') {
+      if (queuedImpact
+        && sequenceSceneRef.current?.key === queuedImpact.key
+        && livePhase?.kind !== 'shot'
+        && !livePhase?.setPiece) {
         const shotIndex = sequenceRef.current.findIndex(phase => phase.kind === 'shot');
         if (shotIndex >= 0) {
           const shotPhase = sequenceRef.current[shotIndex];
@@ -510,16 +553,27 @@ function PitchCanvas(props: Props) {
       const dangerousMoment = livePhase?.kind === 'shot'
         || shotOutcomeFrameRef.current > 0
         || goalCelebFrame.current > 0;
-      const targetZoom = reducedMotion
+      const cameraEnabled = renderBudget.quality === 'full' && !reducedMotion;
+      const targetZoom = !cameraEnabled
         ? 1
         : dangerousMoment
-          ? 1.055
+          ? 1.026
           : livePhase?.arc && livePhase.arc > 0.45
-            ? 1.03
-            : 1.018;
-      cameraRef.current.focusX = lerp(cameraRef.current.focusX, cameraTargetX, 0.045);
-      cameraRef.current.focusY = lerp(cameraRef.current.focusY, cameraTargetY, 0.045);
-      cameraRef.current.zoom = lerp(cameraRef.current.zoom, targetZoom, dangerousMoment ? 0.06 : 0.025);
+            ? 1.012
+            : 1.006;
+      const deadZoneX = fw * 0.13;
+      const deadZoneY = fh * 0.16;
+      const focusDeltaX = cameraTargetX - cameraRef.current.focusX;
+      const focusDeltaY = cameraTargetY - cameraRef.current.focusY;
+      const desiredFocusX = cameraEnabled && Math.abs(focusDeltaX) > deadZoneX
+        ? cameraTargetX - Math.sign(focusDeltaX) * deadZoneX
+        : cameraRef.current.focusX;
+      const desiredFocusY = cameraEnabled && Math.abs(focusDeltaY) > deadZoneY
+        ? cameraTargetY - Math.sign(focusDeltaY) * deadZoneY
+        : cameraRef.current.focusY;
+      cameraRef.current.focusX = lerp(cameraRef.current.focusX, desiredFocusX, 0.018);
+      cameraRef.current.focusY = lerp(cameraRef.current.focusY, desiredFocusY, 0.018);
+      cameraRef.current.zoom = lerp(cameraRef.current.zoom, targetZoom, dangerousMoment ? 0.032 : 0.016);
 
       // Broadcast camera and restrained impact shake share one transform so
       // the pitch never receives competing scale/translation operations.
@@ -547,13 +601,21 @@ function PitchCanvas(props: Props) {
         if (completedScene) {
           const attackingSecondBall = completedScene.outcome === 'block'
             && seededRand(completedScene.seed + 401) < 0.36;
-          const restartingHome = attackingSecondBall
-            ? completedScene.attackingHome
-            : !completedScene.attackingHome;
+          const retainedDelivery = completedScene.outcome === 'delivery'
+            && completedScene.event.setPiece?.resolution === 'retained';
+          const restartingHome = completedScene.outcome === 'delivery'
+            ? retainedDelivery ? completedScene.attackingHome : !completedScene.attackingHome
+            : attackingSecondBall
+              ? completedScene.attackingHome
+              : !completedScene.attackingHome;
           const restartingRoster = restartingHome ? homeRoster : awayRoster;
           const activeRestartingRoster = activePitchPlayers(restartingRoster, minute, maxMinute);
           const actors = actorsForEvent(completedScene.event, live.allEvents);
-          const preferredRestartSlot = completedScene.outcome === 'goal'
+          const preferredRestartSlot = completedScene.outcome === 'delivery'
+            ? retainedDelivery
+              ? slotForPlayer(restartingRoster, actors.attackerId)
+              : undefined
+            : completedScene.outcome === 'goal'
             ? 9
             : completedScene.outcome === 'miss'
               ? 0
@@ -592,8 +654,8 @@ function PitchCanvas(props: Props) {
           };
           postShotRestingBallRef.current = null;
         } else {
-          const probe = generateSequence(sequenceSeedRef.current, { homePossessionShare });
-          const nextAttackingHome = probe.phases[0]?.attackingHome ?? true;
+          const completedPhase = sequenceRef.current[sequenceRef.current.length - 1];
+          const nextAttackingHome = completedPhase?.attackingHome ?? true;
           const nextRoster = activePitchPlayers(nextAttackingHome ? homeRoster : awayRoster, minute, maxMinute);
           const nextOffset = nextAttackingHome ? 0 : 11;
           const ballX = clamp((ballPos.current.x - P) / fw, 0.03, 0.97);
@@ -605,7 +667,7 @@ function PitchCanvas(props: Props) {
             homePossessionShare,
           };
         }
-        const gen = generateSequence(sequenceSeedRef.current, continuationOptions);
+          const gen = generateSequence(sequenceSeedRef.current, continuationOptions);
         loadSequence(gen.phases, sequenceSeedRef.current);
         sequenceSceneRef.current = null;
       } else {
@@ -616,11 +678,6 @@ function PitchCanvas(props: Props) {
           if (phase.kind === 'pass' && phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
             interceptedRef.current = true;
             addParticles(spawnTackleSparks(ballPos.current.x, ballPos.current.y));
-            cameraShakeRef.current = Math.max(cameraShakeRef.current, 8);
-            // Keep `cameraShakeMax` in sync so the attenuated sine still has
-            // proper amplitude — otherwise a tackle right after a goal
-            // (max=28) would barely register due to exp(-2.13) decay.
-            cameraShakeMax.current = Math.max(cameraShakeMax.current, cameraShakeRef.current);
             const turnoverHome = !phase.attackingHome;
             const turnoverOffset = turnoverHome ? 0 : 11;
             const turnoverRoster = activePitchPlayers(turnoverHome ? homeRoster : awayRoster, minute, maxMinute)
@@ -661,7 +718,7 @@ function PitchCanvas(props: Props) {
             && scene
             && minute <= scene.event.minute
             && pendingImpactSceneRef.current?.key !== scene.key;
-          const holdingEventResult = phase.kind === 'shot' && eventScene;
+          const holdingEventResult = (phase.kind === 'shot' || scene?.outcome === 'delivery') && eventScene;
 
           if (waitingForEvent || holdingEventResult) {
             phaseFrameRef.current = phase.hold;
@@ -722,7 +779,7 @@ function PitchCanvas(props: Props) {
         : baseBallTarget;
       const finalTargetX = P + ballTarget.x * fw;
       const finalTargetY = P + ballTarget.y * fh;
-      const releaseDelayFrames = currentPhase.kind === 'shot' ? 8 : 0;
+      const releaseDelayFrames = currentPhase.releaseDelayFrames ?? (currentPhase.kind === 'shot' ? 8 : 0);
       const phaseProgress = phaseStateRef.current === 'holding'
         ? 1
         : clamp(
@@ -809,6 +866,20 @@ function PitchCanvas(props: Props) {
       // Normalize ball + override to 0-1 for AI calcs
       const ballNX = (bx - P) / fw;
       const ballNY = (by - P) / fh;
+      const pressureTarget = currentPhase.kind === 'pass' && phaseStateRef.current === 'passing'
+        ? receiverSlot
+        : { x: ballNX, y: ballNY };
+      const assignmentKey = `${sequenceSeedRef.current}:${phaseIdxRef.current}:${isAttHome ? 'H' : 'A'}:${activeHome.length}:${activeAway.length}`;
+      if (tacticalAssignmentKeyRef.current !== assignmentKey) {
+        tacticalAssignmentKeyRef.current = assignmentKey;
+        tacticalAssignmentsRef.current = buildTacticalAssignments(
+          playerPosRef.current,
+          !isAttHome,
+          pressureTarget.x,
+          pressureTarget.y,
+          activePlayerIndices,
+        );
+      }
       updatePlayerPositions(
         playerPosRef.current,
         ballNX, ballNY,
@@ -835,6 +906,7 @@ function PitchCanvas(props: Props) {
         })(),
         activePlayerIndices,
         phaseProgress,
+        tacticalAssignmentsRef.current ?? undefined,
       );
       const attackerActionProgress = currentPhase.kind === 'shot'
         ? clamp(phaseFrameRef.current / Math.max(1, currentPhase.duration), 0, 1)
@@ -911,6 +983,7 @@ function PitchCanvas(props: Props) {
         lastTouchPlayerId,
         action: {
           kind: currentPhase.kind,
+          setPiece: currentPhase.setPiece,
           passerIdx: currentPhase.passerIdx,
           receiverIdx: currentPhase.receiverIdx,
           sourceOverride: currentPhase.sourceOverride,

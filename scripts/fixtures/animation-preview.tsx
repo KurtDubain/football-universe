@@ -42,6 +42,11 @@ function snapshot(prefix: string, dismissedSlot?: number, duration: 90 | 120 = 9
 }
 
 const events: MatchEvent[] = [
+  {
+    minute: 12, type: 'corner', teamId: 'away', playerId: 'away-7', playerNumber: 7, playerName: 'AWAY 7',
+    description: 'AWAY 7 角球开向前点，防守球员抢先解围', playOrigin: 'corner',
+    setPiece: { side: 'left', delivery: 'near_post', resolution: 'cleared' },
+  },
   { minute: 25, type: 'miss', teamId: 'home', playerId: 'home-9', playerNumber: 9, playerName: 'HOME 9', description: '远射擦柱偏出' },
   { minute: 30, type: 'gk_save', teamId: 'home', playerId: 'home-1', playerNumber: 1, playerName: 'HOME 1', deniedScorerId: 'away-9', deniedAssisterId: 'away-7', description: '门将飞身将单刀拒之门外' },
   { minute: 35, type: 'df_block', teamId: 'away', playerId: 'away-2', playerNumber: 2, playerName: 'AWAY 2', deniedScorerId: 'home-10', deniedAssisterId: 'home-7', description: '后卫在门线上完成封堵' },
@@ -49,6 +54,11 @@ const events: MatchEvent[] = [
   { minute: 40, type: 'assist', teamId: 'home', playerId: 'home-7', playerNumber: 7, playerName: 'HOME 7', description: 'HOME 7 送出助攻' },
   { minute: 45, type: 'red_card', teamId: 'away', playerId: 'away-2', playerNumber: 2, playerName: 'AWAY 2', description: '危险动作被直接罚下' },
   { minute: 48, type: 'substitution', teamId: 'home', playerInId: 'home-12', playerOutId: 'home-9', playerInName: 'HOME 12', playerOutName: 'HOME 9', description: 'HOME 12 换下 HOME 9' },
+  {
+    minute: 58, type: 'free_kick', teamId: 'home', playerId: 'home-7', playerNumber: 7, playerName: 'HOME 7',
+    description: 'HOME 7 直接任意球被人墙挡出', playOrigin: 'direct_free_kick',
+    setPiece: { side: 'central', delivery: 'direct', resolution: 'cleared' },
+  },
 ];
 
 const regularResult = {
