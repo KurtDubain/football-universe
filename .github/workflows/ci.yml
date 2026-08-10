@@ -43,6 +43,9 @@ jobs:
           CHANGELOG_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
         run: pnpm changelog:check
 
+      - name: Script portability
+        run: pnpm scripts:check
+
       - name: Test
         run: pnpm test
 
@@ -83,59 +86,13 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Build production audit app
-        run: pnpm build:audit
+      - name: Run browser smoke suite
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        run: pnpm verify:smoke
 
-      - name: Start preview
-        run: |
-          pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/football-preview.log 2>&1 &
-          for attempt in {1..30}; do
-            if curl --fail --silent "$AUDIT_URL" > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat /tmp/football-preview.log
-          exit 1
-
-      - name: Run current-version browser audit
-        run: pnpm audit:current
-
-      - name: Verify automatic PWA updates
-        run: pnpm verify:pwa-update
-
-      - name: Audit mobile advance performance
-        env:
-          PERF_URL: http://127.0.0.1:4173/?audit=1
-          PERF_REPORT: /tmp/football-advance-performance.json
-        run: pnpm audit:advance-performance
-
-      - name: Start match fixture server
-        run: |
-          pnpm exec vite --host 127.0.0.1 --port 4174 > /tmp/football-match-fixture.log 2>&1 &
-          for attempt in {1..30}; do
-            if curl --fail --silent "http://127.0.0.1:4174/scripts/fixtures/animation-preview.html" > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat /tmp/football-match-fixture.log
-          exit 1
-
-      - name: Verify tactical match presentation
-        env:
-          VERIFY_URL: http://127.0.0.1:4174
-        run: pnpm verify:match-tactics
-
-      - name: Verify full match presentation matrix
-        if: github.event_name != 'pull_request'
-        env:
-          VERIFY_URL: http://127.0.0.1:4174
-          ANIMATION_AUDIT_URL: http://127.0.0.1:4173
-        run: |
-          pnpm verify:match-set-pieces
-          pnpm verify:match-shootout
-          pnpm audit:animation-performance
+      - name: Run full browser suite
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: pnpm verify:full
 
       - name: Upload audit diagnostics
         if: failure()

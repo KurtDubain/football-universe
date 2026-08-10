@@ -32,11 +32,11 @@ function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
 async function initializeGame(page: Page): Promise<void> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const store = (window as typeof window & {
-      __gameStore?: { getState: () => { newGame: (seed: number) => void } };
+      __gameStore?: { getState: () => { newGame: (seed: number) => Promise<void> } };
     }).__gameStore;
-    store?.getState().newGame(20260718);
+    await store?.getState().newGame(20260718);
   });
   await page.locator('main').waitFor({ state: 'visible' });
 }

@@ -6,6 +6,7 @@ import { playerTeamStatKey } from '../players/stats';
 import { selectMatchday } from '../players/injuries';
 import { isNeutralVenueFixture } from '../competitions/venue-policy';
 import { attackingTeamIdForEvent, isSetPieceOrigin, playOriginForEvent } from '../match/event-taxonomy';
+import { PLAYER_STAT_COUNTER_FIELDS } from '../players/player-stat-fields';
 
 export type WorldDataIssueSeverity = 'error' | 'warning';
 
@@ -1752,14 +1753,11 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
       });
     }
 
-    for (const field of [
-      'routineSaves', 'shotsOnTargetFaced', 'cleanSheetMinutes',
-      'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
-    ] as const) {
+    for (const field of PLAYER_STAT_COUNTER_FIELDS) {
       const value = stat[field] ?? 0;
       if (Number.isFinite(value) && value >= 0) continue;
       pushIssue(issues, {
-        severity: 'error', code: 'invalid_player_defensive_stat',
+        severity: 'error', code: 'invalid_player_stat',
         message: `Player ${playerId} has invalid ${field}: ${String(value)}.`,
         teamId: stat.teamId, playerId,
       });

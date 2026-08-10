@@ -3,6 +3,10 @@ import type { GameWorld } from '../engine/season/season-manager';
 import { parseCustomTeams } from '../engine/validation/custom-teams';
 import { isNeutralVenueFixture } from '../engine/competitions/venue-policy';
 import {
+  PLAYER_STAT_OPTIONAL_COUNTER_FIELDS as OPTIONAL_PLAYER_STAT_NUMBER_FIELDS,
+  PLAYER_STAT_REQUIRED_COUNTER_FIELDS as PLAYER_STAT_NUMBER_FIELDS,
+} from '../engine/players/player-stat-fields';
+import {
   compressedStorage,
   getLatestCompressedStorageReadPerformance,
   queueCompressedJSONValue,
@@ -160,32 +164,7 @@ const PLAYER_NUMBER_FIELDS = [
   'marketValue',
 ] as const;
 
-const PLAYER_STAT_NUMBER_FIELDS = [
-  'goals',
-  'assists',
-  'yellowCards',
-  'redCards',
-  'appearances',
-  'cleanSheets',
-  'saves',
-  'keyBlocks',
-  'bigChances',
-  'keyPasses',
-] as const;
-
-const OPTIONAL_PLAYER_STAT_NUMBER_FIELDS = [
-  'starts',
-  'substituteAppearances',
-  'minutesPlayed',
-  'routineSaves',
-  'shotsOnTargetFaced',
-  'cleanSheetMinutes',
-  'goalsConcededWhileOnPitch',
-  'interceptions',
-  'clearances',
-  'teamMatchesAllCompetitions',
-  'missedMatches',
-  'injuryAbsenceMatches',
+const OPTIONAL_PLAYER_SCORE_NUMBER_FIELDS = [
   'seasonScore',
   'positionQuality',
   'availabilityScore',
@@ -195,7 +174,7 @@ const OPTIONAL_PLAYER_STAT_NUMBER_FIELDS = [
 ] as const;
 
 function validateOptionalNonNegativeNumbers(value: JsonRecord, context: string): void {
-  for (const key of OPTIONAL_PLAYER_STAT_NUMBER_FIELDS) {
+  for (const key of [...OPTIONAL_PLAYER_STAT_NUMBER_FIELDS, ...OPTIONAL_PLAYER_SCORE_NUMBER_FIELDS]) {
     if (value[key] === undefined) continue;
     const field = requireFiniteNumber(value, key, context);
     if (field < 0) throw new Error(`${context}字段 ${key} 不能为负数`);

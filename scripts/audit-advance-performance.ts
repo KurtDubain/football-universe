@@ -156,14 +156,14 @@ try {
   await waitForAuditStore(page);
   await page.evaluate(async (gameSeed) => {
     type AuditState = {
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
       batchAdvance: (count: number) => Promise<void>;
     };
     const store = (window as typeof window & {
       __gameStore?: { getState: () => AuditState };
     }).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(gameSeed);
+    await store.getState().newGame(gameSeed);
     await store.getState().batchAdvance(35);
   }, seed);
   await page.waitForTimeout(1_000);

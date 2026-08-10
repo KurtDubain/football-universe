@@ -15,7 +15,7 @@ describe('game store advance scheduling', () => {
     return advance;
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     frames = [];
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       frames.push(callback);
@@ -39,7 +39,7 @@ describe('game store advance scheduling', () => {
       newAchievements: [],
     });
     compressedStorage.removeItem(SAVE_STORAGE_KEY);
-    useGameStore.getState().newGame(20260716);
+    await useGameStore.getState().newGame(20260716);
   });
 
   afterEach(() => {
@@ -105,7 +105,7 @@ describe('game store advance scheduling', () => {
     expect(singleNotifications.length).toBeGreaterThan(0);
     expect(singleNotifications.every(achievement => achievement.teamId === favoriteTeamId)).toBe(true);
 
-    useGameStore.getState().newGame(20260716);
+    await useGameStore.getState().newGame(20260716);
     useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
     await completeAdvance(useGameStore.getState().batchAdvance(60));
 
@@ -123,7 +123,7 @@ describe('game store advance scheduling', () => {
     expect(useGameStore.getState().newAchievements).toEqual([]);
   });
 
-  it('clears transient universe state for a new game and a full reset', () => {
+  it('clears transient universe state for a new game and a full reset', async () => {
     const achievement = {
       id: 'test-achievement',
       title: '测试成就',
@@ -138,7 +138,7 @@ describe('game store advance scheduling', () => {
       newAchievements: [achievement],
     });
 
-    useGameStore.getState().newGame(20260809);
+    await useGameStore.getState().newGame(20260809);
     expect(useGameStore.getState()).toMatchObject({
       advanceTick: 0,
       favoriteTeamId: null,

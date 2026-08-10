@@ -37,7 +37,7 @@ type AuditStore = {
         calendar: Array<{ fixtures: Array<{ id: string }>; results: AuditResult[] }>;
       };
     };
-    newGame: (seed: number) => void;
+    newGame: (seed: number) => Promise<void>;
     setObservationJudgment: (fixtureId: string, kind: 'outcome', selection: 'home') => void;
     batchAdvance: (count: number) => Promise<void>;
   };
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
       const settlement = await page.evaluate(async () => {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        store.getState().newGame(20260722);
+        await store.getState().newGame(20260722);
         const state = store.getState();
         const fixtureId = state.world.seasonState.calendar[0].fixtures[0].id;
         store.getState().setObservationJudgment(fixtureId, 'outcome', 'home');
@@ -109,10 +109,10 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: invalid batch settlement ${JSON.stringify(settlement)}`);
       }
 
-      await page.evaluate(() => {
+      await page.evaluate(async () => {
         const store = (window as typeof window & { __gameStore?: AuditStore }).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        store.getState().newGame(20260722);
+        await store.getState().newGame(20260722);
       });
       await page.waitForTimeout(800);
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });

@@ -23,7 +23,7 @@ const assets = [
 
 type AuditState = {
   world: { teamBases: Record<string, { expectation: number }> };
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
   batchAdvance: (count: number) => Promise<boolean>;
   advanceUntil: (type: 'season_end') => Promise<boolean>;
@@ -183,7 +183,7 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
   await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(20260718);
+    await store.getState().newGame(20260718);
     const primary = Object.entries(store.getState().world.teamBases)
       .find(([, team]) => team.expectation <= 3)?.[0];
     if (primary) store.getState().setFavoriteTeams([primary]);
@@ -284,7 +284,7 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
   await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(20260716);
+    await store.getState().newGame(20260716);
     let current = store.getState().getCurrentWindow();
     for (let step = 0; step < 5 && !current?.fixtures.length; step++) {
       await store.getState().advanceWindow();
@@ -353,7 +353,7 @@ async function verifyArchive(context: BrowserContext): Promise<Record<string, un
   await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(20260718);
+    await store.getState().newGame(20260718);
     const teamIds = Object.keys(store.getState().world.teamBases);
     store.getState().setFavoriteTeams(teamIds.slice(0, 1));
     if (!await store.getState().advanceUntil('season_end')) throw new Error('Season end unavailable');

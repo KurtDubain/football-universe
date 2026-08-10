@@ -15,7 +15,7 @@ type AuditState = {
       theme?: { type: string; playerId?: string };
     }>;
   };
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
   setPrimaryFavoriteTeam: (id: string) => void;
   setObservationThemePreference: (preference: 'player_growth') => void;
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
         const store = (window as AuditWindow).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
         const state = store.getState();
-        state.newGame(20260718);
+        await state.newGame(20260718);
         const teamIds = Object.keys(store.getState().world.teamBases);
         store.getState().setFavoriteTeams(teamIds.slice(0, 2));
         store.getState().setObservationThemePreference('player_growth');

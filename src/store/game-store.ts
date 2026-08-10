@@ -9,8 +9,9 @@ import {
   type SaveLoadPerformance,
 } from './save-schema';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
-import { GameWorld, NewsItem, initializeGameWorld, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
-import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
+import type { GameWorld, NewsItem } from '../engine/season/season-manager';
+import { getCurrentWindow, isSeasonFullyComplete } from '../engine/season/world-selectors';
+import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from '../engine/transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -21,10 +22,9 @@ import {
   sellerAcceptanceProbability,
   suggestCounterFee,
 } from '../engine/transfers/transfer-decision';
-import { CalendarWindow } from '../types/season';
-import { MatchResult } from '../types/match';
+import type { CalendarWindow } from '../types/season';
+import type { MatchResult } from '../types/match';
 import type { Achievement } from '../engine/achievements';
-import { enforceStorageLimits } from '../engine/season/storage-limits';
 import { archiveCompletedMatchDetails, boundWorldStorageMetadata, type StorageCleanupResult } from './save-compaction';
 import {
   isObservationSelectionValid,
@@ -33,23 +33,26 @@ import {
   type ObservationSettlement,
 } from '../engine/observation/judgment';
 import { applyGodHandIntervention } from '../engine/season/god-hand';
-import {
-  buildAdvanceWorldResponse,
-  readableAdvanceError,
-  type AdvanceWindowOutcome,
-  type AdvanceWorldResponse,
-} from '../engine/observation/world-response';
-import {
-  getCurrentKeyNodeGuard,
-  planNextKeyNode,
-} from '../engine/observation/key-node';
+import type { AdvanceWindowOutcome, AdvanceWorldResponse } from '../engine/observation/world-response';
+import { getCurrentKeyNodeGuard, planNextKeyNode } from '../engine/observation/key-node';
 import {
   type ObservationThemePreference,
 } from '../engine/observation/observation-theme';
-import {
-  buildAdvanceCompletionState,
-  executeWindowWithObservationSettlement,
-} from './advance-orchestration';
+
+const ADVANCE_ERROR_MESSAGE = '本次推进没有完成，本次操作未提交。请重试；若问题持续，请刷新页面。';
+
+async function loadAdvanceRuntime() {
+  const [orchestration, worldResponse, storageLimits] = await Promise.all([
+    import('./advance-orchestration'),
+    import('../engine/observation/world-response'),
+    import('../engine/season/storage-limits'),
+  ]);
+  return {
+    ...orchestration,
+    ...worldResponse,
+    ...storageLimits,
+  };
+}
 
 interface GameStore {
   world: GameWorld | null;
@@ -80,7 +83,7 @@ interface GameStore {
     customTeams?: import('../types/team').TeamBase[];
     favoriteTeamIds?: string[];
     observationThemePreference?: ObservationThemePreference;
-  }) => void;
+  }) => Promise<void>;
   advanceWindow: () => Promise<boolean>;
   batchAdvance: (count: number) => Promise<boolean>;
   advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
@@ -211,12 +214,13 @@ export const useGameStore = create<GameStore>()(
         set(s => ({ newAchievements: s.newAchievements.slice(1) }));
       },
 
-      newGame: (seed?: number, options?: {
+      newGame: async (seed?: number, options?: {
         gameMode?: import('../types/game-mode').GameMode;
         customTeams?: import('../types/team').TeamBase[];
         favoriteTeamIds?: string[];
         observationThemePreference?: ObservationThemePreference;
       }) => {
+        const { initializeGameWorld } = await import('../engine/season/season-manager');
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
         const world = initializeGameWorld(actualSeed, {
           ...(options?.gameMode ? { gameMode: options.gameMode } : {}),
@@ -249,6 +253,11 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const {
+            buildAdvanceCompletionState,
+            buildAdvanceWorldResponse,
+            executeWindowWithObservationSettlement,
+          } = await loadAdvanceRuntime();
           const favoriteTeamIds = get().favoriteTeamIds;
           const result = executeWindowWithObservationSettlement(
             world,
@@ -276,7 +285,7 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error advancing window:', e);
-          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
           return false;
         }
       },
@@ -288,6 +297,12 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const {
+            buildAdvanceCompletionState,
+            buildAdvanceWorldResponse,
+            enforceStorageLimits,
+            executeWindowWithObservationSettlement,
+          } = await loadAdvanceRuntime();
           const favoriteTeamIds = get().favoriteTeamIds;
           const observationThemePreference = get().observationThemePreference;
           let allResults: MatchResult[] = [];
@@ -338,7 +353,7 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error in batch advance:', e);
-          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
           return false;
         }
       },
@@ -350,6 +365,12 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const {
+            buildAdvanceCompletionState,
+            buildAdvanceWorldResponse,
+            enforceStorageLimits,
+            executeWindowWithObservationSettlement,
+          } = await loadAdvanceRuntime();
           const favoriteTeamIds = get().favoriteTeamIds;
           const observationThemePreference = get().observationThemePreference;
           let allNews: NewsItem[] = [];
@@ -400,7 +421,7 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error in advanceUntil:', e);
-          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
           return false;
         }
       },
@@ -418,6 +439,12 @@ export const useGameStore = create<GameStore>()(
         set({ isAdvancing: true, advanceError: null });
         await yieldForAdvanceFeedback();
         try {
+          const {
+            buildAdvanceCompletionState,
+            buildAdvanceWorldResponse,
+            enforceStorageLimits,
+            executeWindowWithObservationSettlement,
+          } = await loadAdvanceRuntime();
           let allNews: NewsItem[] = [];
           let lastResults: MatchResult[] = [];
           let observationSettlements: ObservationSettlement[] = [];
@@ -479,7 +506,7 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error advancing to key node:', e);
-          set({ isAdvancing: false, advanceError: readableAdvanceError() });
+          set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
           return false;
         }
       },

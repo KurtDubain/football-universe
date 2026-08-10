@@ -29,17 +29,17 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-      const favorites = await page.evaluate(() => {
+      const favorites = await page.evaluate(async () => {
         type AuditState = {
           world: { teamBases: Record<string, unknown> };
-          newGame: (seed: number) => void;
+          newGame: (seed: number) => Promise<void>;
           setFavoriteTeams: (ids: string[]) => void;
         };
         const store = (window as typeof window & {
           __gameStore?: { getState: () => AuditState };
         }).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        store.getState().newGame(20260718);
+        await store.getState().newGame(20260718);
         const ids = Object.keys(store.getState().world.teamBases).slice(0, 3);
         store.getState().setFavoriteTeams(ids);
         return ids;

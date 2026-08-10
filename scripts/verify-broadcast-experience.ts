@@ -24,15 +24,15 @@ async function horizontalOverflow(page: Page): Promise<number> {
 async function initializeObserver(page: Page): Promise<void> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     type AuditState = {
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
       setFavoriteTeam: (teamId: string) => void;
       getCurrentWindow: () => { fixtures: Array<{ homeTeamId: string }> } | null;
     };
     const store = (window as typeof window & { __gameStore?: { getState: () => AuditState } }).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(20260808);
+    await store.getState().newGame(20260808);
     const fixture = store.getState().getCurrentWindow()?.fixtures[0];
     if (!fixture) throw new Error('Initial fixture unavailable');
     store.getState().setFavoriteTeam(fixture.homeTeamId);

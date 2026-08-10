@@ -16,17 +16,17 @@ function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
 async function initializeGame(page: Page): Promise<{ teamId: string; playerId: string; teamName: string; playerName: string }> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-  return page.evaluate((gameSeed) => {
+  return page.evaluate(async (gameSeed) => {
     type AuditState = {
       world: {
         teamBases: Record<string, { name: string }>;
         squads: Record<string, Array<{ uuid: string; name?: string; number: number }>>;
       };
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
     };
     const store = (window as typeof window & { __gameStore?: { getState: () => AuditState } }).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(gameSeed);
+    await store.getState().newGame(gameSeed);
     const state = store.getState();
     const teamId = Object.keys(state.world.teamBases)[0];
     const player = state.world.squads[teamId][0];

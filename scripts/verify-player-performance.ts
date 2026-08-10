@@ -14,15 +14,15 @@ function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
 async function initializeSeason(page: Page): Promise<void> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-  await page.evaluate((gameSeed) => {
+  await page.evaluate(async (gameSeed) => {
     type AuditState = {
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
       advanceWindow: () => Promise<void>;
       isAdvancing: boolean;
     };
     const store = (window as typeof window & { __gameStore?: { getState: () => AuditState } }).__gameStore;
     if (!store) throw new Error('Audit store unavailable');
-    store.getState().newGame(gameSeed);
+    await store.getState().newGame(gameSeed);
   }, seed);
 
   for (let index = 0; index < 12; index++) {

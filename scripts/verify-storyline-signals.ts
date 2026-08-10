@@ -30,7 +30,7 @@ async function main(): Promise<void> {
       await page.evaluate(async () => {
         type AuditState = {
           world: { teamBases: Record<string, { expectation: number }> };
-          newGame: (seed: number) => void;
+          newGame: (seed: number) => Promise<void>;
           setFavoriteTeams: (ids: string[]) => void;
           batchAdvance: (count: number) => Promise<void>;
           advanceUntil: (type: 'cup' | 'season_end') => Promise<void>;
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
           __gameStore?: { getState: () => AuditState };
         }).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        store.getState().newGame(20260718);
+        await store.getState().newGame(20260718);
         const primary = Object.entries(store.getState().world.teamBases)
           .find(([, team]) => team.expectation <= 3)?.[0];
         if (primary) store.getState().setFavoriteTeams([primary]);

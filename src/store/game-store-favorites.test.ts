@@ -55,8 +55,8 @@ describe('observer focus ordering', () => {
     expect(useGameStore.getState().observationThemePreference).toBe('disabled');
   });
 
-  it('initializes the observer focus and lens atomically with a new universe', () => {
-    useGameStore.getState().newGame(20260709, {
+  it('initializes the observer focus and lens atomically with a new universe', async () => {
+    await useGameStore.getState().newGame(20260709, {
       favoriteTeamIds: ['gz_hengda', 'missing-team', 'shimazu'],
       observationThemePreference: 'dark_horse_challenge',
     });
@@ -79,7 +79,7 @@ describe('observer focus ordering', () => {
   });
 
   it('continues the selected observation lens into the next season', async () => {
-    useGameStore.getState().newGame(20260718);
+    await useGameStore.getState().newGame(20260718);
     useGameStore.getState().setObservationThemePreference('player_growth');
 
     expect(await useGameStore.getState().advanceUntil('season_end')).toBe(true);

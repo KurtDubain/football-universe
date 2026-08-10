@@ -2,8 +2,7 @@
  * Phase H — economy module unit tests.
  *
  * We test the small, pure pieces (startingCashForRep, leaguePrize,
- * formatMoney, attemptFireSale, archiveSeasonFinance) — `applyIncome` and
- * `applyExpense` are integration-tested via the season-end pipeline.
+ * formatMoney, categorized income/expense flows, fire sales, and archives.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -14,6 +13,7 @@ import {
   attemptFireSale,
   archiveSeasonFinance,
   setSalaryRateForTesting,
+  applyIncome,
   applyExpense,
   SALARY_RATE,
   SALARY_BRACKETS,
@@ -35,6 +35,7 @@ import {
 import { SeededRNG } from '../match/rng';
 import type { TeamBase, FinanceState } from '../../types/team';
 import type { Player } from '../../types/player';
+import { initializeGameWorld } from '../season/season-manager';
 
 function mkBase(overrides: Partial<TeamBase> = {}): TeamBase {
   return {
@@ -156,6 +157,7 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     const r = applyExpense(fin, squads);
     expect(r.teamFinances.A.cash).toBe(100 - 75);
     expect(r.teamFinances.A.totalExpense).toBe(75);
+    expect(r.breakdown.A.salaries).toBe(75);
     clearFlatRate();
   });
   it('honours setSalaryRateForTesting overrides', () => {
@@ -172,6 +174,31 @@ describe('applyExpense — wage bill is squadValue × salaryRate', () => {
     expect(r.teamFinances.A.cash).toBe(50);
     setSalaryRateForTesting(orig);
     clearFlatRate();
+  });
+});
+
+describe('applyIncome — canonical categorized flows', () => {
+  it('returns the same league prize and sponsor amounts applied to cash', () => {
+    const world = initializeGameWorld(20260811);
+    const completedStandings = (rows: typeof world.league1Standings) => rows.map(row => ({ ...row, played: 1 }));
+    const completedWorld = {
+      ...world,
+      league1Standings: completedStandings(world.league1Standings),
+      league2Standings: completedStandings(world.league2Standings),
+      league3Standings: completedStandings(world.league3Standings),
+    };
+    const championId = completedWorld.league1Standings[0].teamId;
+    const before = completedWorld.teamFinances[championId].cash;
+
+    const result = applyIncome(completedWorld.teamFinances, completedWorld, 1);
+
+    expect(result.breakdown[championId]).toMatchObject({
+      prizeMoney: leaguePrize(1, 1),
+      tvSponsor: TV_SPONSOR_BY_TIER[1],
+    });
+    expect(result.teamFinances[championId].cash - before).toBe(
+      result.breakdown[championId].prizeMoney + result.breakdown[championId].tvSponsor,
+    );
   });
 });
 

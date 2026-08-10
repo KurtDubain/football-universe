@@ -19,7 +19,7 @@ type SeasonResult = {
 
 type AuditStoreState = {
   world: GameWorld | null;
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   advanceWindow: () => Promise<void>;
 };
 
@@ -161,8 +161,8 @@ async function main(): Promise<void> {
     });
 
     await page.waitForFunction(() => Boolean((window as BrowserAuditWindow).__gameStore));
-    await page.evaluate((gameSeed) => {
-      (window as BrowserAuditWindow).__gameStore?.getState().newGame(gameSeed);
+    await page.evaluate(async (gameSeed) => {
+      await (window as BrowserAuditWindow).__gameStore?.getState().newGame(gameSeed);
     }, seed);
     await waitForAuditStore(page);
 

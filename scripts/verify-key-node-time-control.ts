@@ -20,7 +20,7 @@ type AuditState = {
     advancedWindows: number;
     nextWindowLabel: string;
   } | null;
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
 };
 
@@ -51,9 +51,9 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
-      await page.evaluate(() => {
+      await page.evaluate(async () => {
         const store = (window as AuditWindow).__gameStore!;
-        store.getState().newGame(20260726);
+        await store.getState().newGame(20260726);
         store.getState().setFavoriteTeams([]);
       });
       await page.getByTestId('dashboard').waitFor();

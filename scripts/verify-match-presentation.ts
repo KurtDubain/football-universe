@@ -48,14 +48,14 @@ async function verifyViewport(
   try {
     await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const store = (window as typeof window & {
         __gameStore?: { getState: () => Record<string, unknown> };
       }).__gameStore;
       const state = store?.getState() as {
-        newGame: (seed: number) => void;
+        newGame: (seed: number) => Promise<void>;
       };
-      state.newGame(20260716);
+      await state.newGame(20260716);
     });
     await page.getByRole('tab', { name: '比赛日' }).waitFor({ state: 'visible' });
     await page.evaluate(async () => {

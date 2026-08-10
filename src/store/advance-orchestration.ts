@@ -8,10 +8,10 @@ import { buildObservationTheme, type ObservationThemePreference } from '../engin
 import type { AdvanceWindowOutcome, AdvanceWorldResponse } from '../engine/observation/world-response';
 import {
   executeCurrentWindow,
-  getCurrentWindow,
   type GameWorld,
   type NewsItem,
 } from '../engine/season/season-manager';
+import { getCurrentWindow } from '../engine/season/world-selectors';
 import type { MatchResult } from '../types/match';
 
 export interface AdvanceCompletion {

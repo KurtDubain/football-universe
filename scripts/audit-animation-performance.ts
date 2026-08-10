@@ -59,17 +59,17 @@ async function readRendering(page: Page): Promise<RenderingMetrics> {
 async function openFirstLiveMatch(page: Page): Promise<{ fixtureId: string; expectedHome: number; expectedAway: number }> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const state = (window as AuditWindow).__gameStore?.getState() as {
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
     };
-    state.newGame(20260716);
+    await state.newGame(20260716);
   });
   await page.getByRole('tab', { name: '比赛日' }).waitFor({ state: 'visible' });
   const expected = await page.evaluate(async () => {
     const store = (window as AuditWindow).__gameStore;
     const state = store?.getState() as {
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
       getCurrentWindow: () => { fixtures: Array<{ id: string }> } | null;
       toggleStarFixture: (id: string) => void;
       advanceWindow: () => Promise<void>;

@@ -13,7 +13,7 @@ type AuditWindow = Window & {
         pendingObservationJudgment?: { fixtureId: string; kind: string; selection: string } | null;
         observationRecord?: { total: number; correct: number; currentStreak: number; bestStreak: number };
       };
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
     };
   };
 };

@@ -1,5 +1,26 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-11 P1 Maintainability Hardening
+
+- Current request: implement the engineering-maintainability audit's P0/P1 recommendations while preserving the completed local v4.47.0 cup-bracket work. The audit found no P0 issue.
+- Completed the player-stat schema step: one typed runtime field catalog now drives empty rows, match deltas, transfer-segment aggregation, performance aggregation, season-history snapshots, current-save validation, and world-data non-negative checks.
+- Finance income and salary execution now return the exact categorized breakdown applied to cash; season-end history consumes those results instead of duplicating league, cup, sponsor, and wage formulas. Strict TypeScript and 4 files / 99 finance/season tests passed.
+- Moved pure transfer-window world transformations from `store` into `engine/transfers`; the engine no longer imports any store module. Strict TypeScript and 3 files / 27 transfer/store/season tests passed.
+- Added one portable browser-audit runner with submission-level `smoke` and scheduled/manual `full` tiers. It owns production/fixture server lifecycle, CI now calls the tiers directly, a portability gate rejects personal home paths, and 24 obsolete local-save/visual scripts were retired along with stale source references.
+- Split new-universe creation and the season advance runtime behind explicit async boundaries while retaining immediate busy feedback and duplicate-action protection. The initial graph fell from 653,876 bytes / 212,798 gzip to 458,792 bytes / 150,530 gzip; the season manager is now a 47.30 KB gzip on-demand chunk.
+- Final Node 22.22.2 verification passed 110 test files / 832 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog/script portability/bundle gates, and a zero-vulnerability production audit. The browser smoke tier passed a 10-season/500-advance data audit, PWA update and route recovery, mobile advance performance, 126 route/viewport checks, the cup bracket, and tactical match presentation.
+- The standard web-game client also exercised the live Canvas in three controlled bursts. Its state bridge matched the inspected frame, average draw cost was about 0.20 ms, and no new console-error artifact was produced. No P0/P1 implementation item remains open in this pass.
+
+## 2026-08-10 Mobile-First Classic Cup Bracket
+
+- Current request: replace the cup page's round-only fixture cards with an optional classic knockout bracket, keep the list view, prioritize mobile usability, verify the finished result, and push it.
+- Implemented a shared presentation model that merges two-legged ties by team identity, calculates aggregate scores, standardizes football round labels, and projects unplayed future rounds without creating fixtures or teams. Simulation, progression, scores, and saves remain unchanged.
+- Added `晋级图 / 对阵列表` switching for every knockout competition. The classic view renders stable-size tie nodes, bracket connectors, highlighted advancement paths, current-round state, extra-time/penalty labels, a dedicated champion destination, and automatic champion focus after completion.
+- Mobile defaults to the bracket, centers the current round, keeps 44px view and round controls, horizontally scrolls only inside the bracket, and uses team abbreviations with full accessible names. The compact list remains available and the preference persists locally across cups.
+- Added focused component/model coverage and a production-browser audit that advances a real fixed-seed league cup into round two and completion, checks interaction, persistence, match dialogs, internal scrolling, champion resolution, stable geometry, page overflow, and screenshots at 320x568, 390x844, and 1440x900.
+- Visual inspection caught late-round nodes falling below a full-height mobile tree. Mobile now uses a bounded two-dimensional bracket canvas and aligns the selected round near the top of that canvas; active-round and champion screenshots were re-inspected with readable context, no clipping, and zero page-level horizontal overflow.
+- Released locally as v4.47.0. Final Node 22.22.2 verification passed 109 test files / 829 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog and bundle budgets, the standard web-game client, the 126-route viewport matrix, World Cup regression, automatic-update verification, and a zero-vulnerability production dependency audit. The ordinary entry is 237,512 bytes / 73,840 gzip and the initial graph is 653,876 bytes / 212,798 gzip.
+
 ## 2026-08-10 World Cup Host And Music Identity
 
 - Current request: design and implement an original football music layer plus a more prestigious World Cup experience, including a recorded host for every edition, fair access for every club, and a modest host-only tournament advantage; verify, commit, and push the finished release.

@@ -1,4 +1,5 @@
 import type { PlayerPosition, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
+import { PLAYER_STAT_COUNTER_FIELDS } from './player-stat-fields';
 
 /** Minutes at which the soft confidence factor reaches 0.5. */
 export const PLAYER_CONFIDENCE_MINUTES = 900;
@@ -279,21 +280,13 @@ export function computePlayerPerformance(
   return resultFromQuality(computePositionQuality(position, metrics), metrics, leagueStrengthScore(leagueLevel));
 }
 
-const SUM_FIELDS = [
-  'goals', 'assists', 'yellowCards', 'redCards', 'appearances', 'starts',
-  'substituteAppearances', 'minutesPlayed', 'cleanSheets', 'saves', 'keyBlocks',
-  'bigChances', 'keyPasses', 'routineSaves', 'shotsOnTargetFaced',
-  'cleanSheetMinutes', 'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
-  'teamMatchesAllCompetitions', 'missedMatches', 'injuryAbsenceMatches',
-] as const;
-
 function aggregateSegments(segments: PlayerTeamSeasonStats[]): PlayerSeasonStats | undefined {
   const first = segments[0];
   if (!first) return undefined;
   const total = { ...first };
-  for (const field of SUM_FIELDS) (total[field] as number | undefined) = 0;
+  for (const field of PLAYER_STAT_COUNTER_FIELDS) (total[field] as number | undefined) = 0;
   for (const segment of segments) {
-    for (const field of SUM_FIELDS) {
+    for (const field of PLAYER_STAT_COUNTER_FIELDS) {
       (total[field] as number | undefined) = Number(total[field] ?? 0) + Number(segment[field] ?? 0);
     }
   }

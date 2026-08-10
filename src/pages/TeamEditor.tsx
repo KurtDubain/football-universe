@@ -27,6 +27,7 @@ export default function TeamEditor() {
 
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [starting, setStarting] = useState(false);
 
   const filtered = useMemo(() => {
     return teams.map((t, i) => ({ team: t, idx: i }))
@@ -84,18 +85,28 @@ export default function TeamEditor() {
     input.click();
   };
 
-  const startGameWithCustom = () => {
+  const startGameWithCustom = async () => {
+    if (starting) return;
+    setStarting(true);
     try {
-      newGame(undefined, { customTeams: parseCustomTeams(teams), gameMode: 'sandbox' });
+      await newGame(undefined, { customTeams: parseCustomTeams(teams), gameMode: 'sandbox' });
       navigate('/');
     } catch (error) {
       alert(error instanceof Error ? `无法开始：${error.message}` : '无法开始：球队数据无效');
+      setStarting(false);
     }
   };
 
-  const startVanilla = () => {
-    newGame();
-    navigate('/');
+  const startVanilla = async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      await newGame();
+      navigate('/');
+    } catch (error) {
+      alert(error instanceof Error ? `无法开始：${error.message}` : '无法开始游戏');
+      setStarting(false);
+    }
   };
 
   return (
@@ -189,13 +200,13 @@ export default function TeamEditor() {
 
         {/* Action buttons */}
         <div className="flex gap-3 flex-wrap pt-2">
-          <button onClick={startVanilla}
+          <button onClick={startVanilla} disabled={starting}
             className="flex-1 px-5 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium rounded-xl cursor-pointer transition-colors">
-            ← 返回欢迎页（默认开局）
+            {starting ? '正在创建宇宙…' : '← 返回欢迎页（默认开局）'}
           </button>
-          <button onClick={startGameWithCustom}
+          <button onClick={startGameWithCustom} disabled={starting}
             className="flex-1 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl cursor-pointer shadow-lg shadow-blue-900/40">
-            🚀 用自定义球队开局
+            {starting ? '正在创建宇宙…' : '🚀 用自定义球队开局'}
           </button>
         </div>
       </div>

@@ -1,19 +1,18 @@
 /**
- * Phase 2 — store-side helpers for the transfer window.
+ * Pure world transformations for user-facing transfer-window decisions.
  *
  * Each function takes a GameWorld and returns a NEW world with the
  * action applied. Pure (no side effects). Caller wraps in zustand set.
  */
-import type { GameWorld } from '../engine/season/season-manager';
-import type { NewsItem } from '../engine/season/season-manager';
+import type { GameWorld, NewsItem } from '../season/season-manager';
 import {
   applyTransferMove,
   createTransferRecord,
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
-} from '../engine/transfers/transfer-application';
-import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../types/transfer';
-import { estimateFreeAgentSigningCost } from '../engine/transfers/transfer-decision';
+} from './transfer-application';
+import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../../types/transfer';
+import { estimateFreeAgentSigningCost } from './transfer-decision';
 
 function transferSeason(world: GameWorld): number {
   return world.transferWindow?.season ?? world.seasonState.seasonNumber;

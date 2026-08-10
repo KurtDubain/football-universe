@@ -15,7 +15,7 @@ type AuditWorld = {
 
 type AuditState = {
   world: AuditWorld | null;
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
   advanceWindow: () => Promise<boolean>;
   closeTransferWindow: (autoResolve: boolean) => void;
@@ -85,9 +85,9 @@ function attachErrorCapture(page: Page, errors: string[]): void {
 async function initializeSeason(page: Page): Promise<{ teamId: string; playerId: string; coachId: string; advances: number }> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
-  const ids = await page.evaluate((gameSeed) => {
+  const ids = await page.evaluate(async (gameSeed) => {
     const state = (window as AuditWindow).__gameStore!.getState();
-    state.newGame(gameSeed);
+    await state.newGame(gameSeed);
     const world = (window as AuditWindow).__gameStore!.getState().world!;
     const teamId = Object.keys(world.teamBases)[0];
     state.setFavoriteTeams([teamId]);

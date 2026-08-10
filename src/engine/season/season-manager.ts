@@ -1,4 +1,4 @@
-import { SeasonState, CalendarWindow } from '../../types/season';
+import { SeasonState } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
@@ -34,7 +34,7 @@ import { parseCustomTeams } from '../validation/custom-teams';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { handleSeasonEnd, finalizeWorldCup } from './season-end';
-import { autoResolveRemaining } from '../../store/transfer-window-actions';
+import { autoResolveRemaining } from '../transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../players/stats';
 import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
 import { enforceStorageLimits } from './storage-limits';
@@ -48,6 +48,10 @@ import { initTeamFinances } from '../economy/finance';
 import { rankClubCoefficients } from '../rankings/club-coefficient';
 import { advanceStorylines } from './storylines';
 import { computeSegmentedPlayerPerformance } from '../players/player-performance';
+import { snapshotPlayerStatCounters } from '../players/player-stat-fields';
+import { getCurrentWindow } from './world-selectors';
+
+export { getCurrentWindow, isSeasonFullyComplete } from './world-selectors';
 
 // ── Public interfaces ────────────────────────────────────────────
 
@@ -384,14 +388,7 @@ function snapshotPlayerStatsHistory(
       position: player?.position ?? retired!.position,
       rating: player?.rating ?? retired?.peakRating,
       age: player?.age ?? retired?.age,
-      goals: stat.goals,
-      assists: stat.assists,
-      appearances: stat.appearances,
-      starts: stat.starts,
-      substituteAppearances: stat.substituteAppearances,
-      minutesPlayed: stat.minutesPlayed,
-      yellowCards: stat.yellowCards,
-      redCards: stat.redCards,
+      ...snapshotPlayerStatCounters(stat),
       teamGoalsConceded: ctx.gc,
       teamMatches: ctx.matches,
       teamLeagueLevel: ctx.leagueLevel,
@@ -399,20 +396,6 @@ function snapshotPlayerStatsHistory(
       teamGoalsFor: ctx.goalsFor,
       teamGoalsAgainst: ctx.goalsAgainst,
       teamPoints: ctx.points,
-      cleanSheets: stat.cleanSheets,
-      saves: stat.saves,
-      keyBlocks: stat.keyBlocks,
-      bigChances: stat.bigChances,
-      keyPasses: stat.keyPasses,
-      routineSaves: stat.routineSaves ?? 0,
-      shotsOnTargetFaced: stat.shotsOnTargetFaced ?? 0,
-      cleanSheetMinutes: stat.cleanSheetMinutes ?? 0,
-      goalsConcededWhileOnPitch: stat.goalsConcededWhileOnPitch ?? 0,
-      interceptions: stat.interceptions ?? 0,
-      clearances: stat.clearances ?? 0,
-      teamMatchesAllCompetitions: stat.teamMatchesAllCompetitions ?? stat.appearances,
-      missedMatches: stat.missedMatches ?? 0,
-      injuryAbsenceMatches: stat.injuryAbsenceMatches ?? 0,
       seasonScore: performance.seasonScore,
       positionQuality: performance.positionQuality,
       availabilityScore: performance.availabilityScore,
@@ -1005,17 +988,6 @@ function generateSeasonBuffs(
 }
 
 /**
- * Get the current calendar window, or null if season is complete.
- */
-export function getCurrentWindow(world: GameWorld): CalendarWindow | null {
-  const { seasonState } = world;
-  if (seasonState.completed) return null;
-  const { calendar, currentWindowIndex } = seasonState;
-  if (currentWindowIndex >= calendar.length) return null;
-  return calendar[currentWindowIndex];
-}
-
-/**
  * Execute the current calendar window: simulate all matches and update state.
  *
  * `options.favoriteTeamIds` — Phase 2 transfer-window plumbing. Listed
@@ -1314,7 +1286,3 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
 }
 
 export { handleSeasonEnd } from './season-end';
-
-export function isSeasonFullyComplete(world: GameWorld): boolean {
-  return world.seasonState.completed;
-}

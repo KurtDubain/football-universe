@@ -9,7 +9,7 @@ import { SAVE_STORAGE_KEY } from './save-schema';
 describe('game store observation settlement paths', () => {
   let frames: FrameRequestCallback[];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     frames = [];
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       frames.push(callback);
@@ -34,7 +34,7 @@ describe('game store observation settlement paths', () => {
       newAchievements: [],
     });
     compressedStorage.removeItem(SAVE_STORAGE_KEY);
-    useGameStore.getState().newGame(20260722);
+    await useGameStore.getState().newGame(20260722);
   });
 
   afterEach(() => {

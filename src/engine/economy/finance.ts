@@ -18,9 +18,9 @@
  * ── Tuning history (TUNE_LOG) ─────────────────────────────────────
  *
  * `SALARY_RATE` was finalized after running 20-season simulations against
- * the s16 real save with 5 RNG seeds × N candidate rates. The harness lives
- * at `scripts/sim-economy.ts` (read-only over the saved baseline). Below is
- * a condensed log; full output is reproducible by running the harness.
+ * the former s16 tuning baseline with 5 RNG seeds × N candidate rates. The
+ * historical harness was retired with legacy save migrations; current
+ * reproducible coverage lives in finance tests and fresh-world audits.
  *
  *  Pass 1: brief-suggested 3% / 5% / 7%
  *    All three bunched at "elite > 1000M cash by S20" because typical L1
@@ -71,15 +71,15 @@
  *
  * Fix: progressive brackets. See `SALARY_BRACKETS` further down. Tuning
  * was repeated with per-team trajectories (not tier means) tracked.
- * `scripts/sim-economy-tune.ts` ran 6 candidate schedules across 3 seeds
- * × 20 seasons. Winner (B): 33% / 22% / 15% over €0-€50M / €50-€200M /
+ * The historical tuner ran 6 candidate schedules across 3 seeds × 20
+ * seasons. Winner (B): 33% / 22% / 15% over €0-€50M / €50-€200M /
  * €200M+. Result: elite mean cash €439M (was €73M), 0 negatives, 0 rep≥90
  * negatives, 8 fire sales over 60 season-runs. 近江鹰 (rep=99) ended €0
  * (was -€259M).
  */
-import { TeamBase, FinanceState, FinanceSeasonRecord } from '../../types/team';
+import { TeamBase, FinanceState, FinanceSeasonRecord, type FinanceBreakdown } from '../../types/team';
 import { Player } from '../../types/player';
-import { GameWorld, NewsItem } from '../season/season-manager';
+import type { GameWorld, NewsItem } from '../season/season-manager';
 import { StandingEntry } from '../../types/league';
 import { ContinentalCupState } from '../../types/cup';
 import { SeededRNG } from '../match/rng';
@@ -94,20 +94,19 @@ import { pickFreeSquadNumber, pickTransferReleaseCandidate } from '../transfers/
  *
  * NOTE: in v2 the runtime salary calculation uses `computeSalary()` with
  * progressive brackets (see `SALARY_BRACKETS`). `SALARY_RATE` is preserved
- * as the *headline* rate (matches the first bracket) for migrations,
- * legacy test fixtures, and as a quick reference. Code calling out to
+ * as the *headline* rate (matches the first bracket) for focused test
+ * fixtures and as a quick reference. Code calling out to
  * salary calculation MUST go through `computeSalary()` not this constant.
  */
 export const SALARY_RATE = 0.33;
 
 /**
- * Mutable shadow of SALARY_RATE for tuning sims. Production code reads
- * this via `getSalaryRate()`; the sim harness in `scripts/sim-economy.ts`
- * flips it via `setSalaryRateForTesting()` to compare candidate rates.
+ * Mutable shadow of SALARY_RATE for focused model tests. Production code
+ * reads this via `getSalaryRate()`; tests can flip it through
+ * `setSalaryRateForTesting()` to compare candidate rates.
  *
  * In v2 (bracketed salaries), flipping the rate switches the salary
- * calculation to a flat-rate variant — useful for comparing bracketed
- * vs flat models head-to-head in the harness.
+ * calculation to a flat-rate variant for bracketed-vs-flat assertions.
  */
 let _runtimeSalaryRate: number = SALARY_RATE;
 let _useFlatRate: boolean = false;
@@ -186,8 +185,7 @@ export function resetLeagueWageCap(): void { _runtimeWageCap = LEAGUE_WAGE_CAP_B
 // Sample salaries (default brackets 33/22/15 @ 50/200):
 //   €30M squad → €10M / €100M → €28M / €200M → €50M / €500M → €95M
 //
-// Tuned via 6-candidate sim across 3 seeds × 20 seasons; see
-// scripts/sim-economy-tune.ts. Winner had:
+// Tuned historically via 6 candidates across 3 seeds × 20 seasons. Winner had:
 //   elite mean €439M (was €73M flat-33%)  — 0 negatives, 0 rep≥90 negatives
 //   top   mean €501M  / mid mean €347M  / low mean €251M
 //   8 fire sales total over 60 season-runs (still triggers, but rarely
@@ -536,6 +534,27 @@ export function formatMoney(n: number): string {
   return `${sign}€${abs.toFixed(1)}M`;
 }
 
+export function emptyFinanceBreakdown(): FinanceBreakdown {
+  return { prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0 };
+}
+
+export function createFinanceBreakdown(teamIds: Iterable<string>): Record<string, FinanceBreakdown> {
+  return Object.fromEntries([...teamIds].map(teamId => [teamId, emptyFinanceBreakdown()]));
+}
+
+export function addFinanceBreakdown(
+  current: FinanceBreakdown,
+  addition: FinanceBreakdown,
+): FinanceBreakdown {
+  return {
+    prizeMoney: current.prizeMoney + addition.prizeMoney,
+    tvSponsor: current.tvSponsor + addition.tvSponsor,
+    transferIncome: current.transferIncome + addition.transferIncome,
+    salaries: current.salaries + addition.salaries,
+    transferExpense: current.transferExpense + addition.transferExpense,
+  };
+}
+
 /**
  * Apply prize money + TV/sponsor income to every team. Pure: returns new
  * teamFinances + news items. Caller assigns the patch into the world.
@@ -558,12 +577,17 @@ export function applyIncome(
   teamFinances: Record<string, FinanceState>,
   world: GameWorld,
   season: number,
-): { teamFinances: Record<string, FinanceState>; news: NewsItem[] } {
+): {
+  teamFinances: Record<string, FinanceState>;
+  news: NewsItem[];
+  breakdown: Record<string, FinanceBreakdown>;
+} {
   const next: Record<string, FinanceState> = { ...teamFinances };
   for (const id of Object.keys(next)) {
     next[id] = { ...next[id] };
   }
   const news: NewsItem[] = [];
+  const breakdown = createFinanceBreakdown(Object.keys(next));
   const windowIndex = world.seasonState.currentWindowIndex;
 
   // Resolve each team's level from the standings (the played-this-season
@@ -601,6 +625,8 @@ export function applyIncome(
     const prize = leaguePrize(lv, rank);
     next[id].cash += tv + prize;
     next[id].totalIncome += tv + prize;
+    breakdown[id].tvSponsor += tv;
+    breakdown[id].prizeMoney += prize;
   }
 
   // ── 2. Cup prizes (tiered by elimination round) ──
@@ -611,6 +637,7 @@ export function applyIncome(
       if (!next[teamId] || amt <= 0) continue;
       next[teamId].cash += amt;
       next[teamId].totalIncome += amt;
+      breakdown[teamId].prizeMoney += amt;
     }
   }
   // Super cup — KO portion only (group exits get €0 by design, not iterated)
@@ -620,6 +647,7 @@ export function applyIncome(
       if (!next[teamId] || amt <= 0) continue;
       next[teamId].cash += amt;
       next[teamId].totalIncome += amt;
+      breakdown[teamId].prizeMoney += amt;
     }
   }
   // World cup prize money is paid by `finalizeWorldCup` in season-end.ts —
@@ -641,6 +669,7 @@ export function applyIncome(
       if (!next[teamId] || amt <= 0) continue;
       next[teamId].cash += amt;
       next[teamId].totalIncome += amt;
+      breakdown[teamId].prizeMoney += amt;
     }
   }
 
@@ -668,7 +697,7 @@ export function applyIncome(
     });
   }
 
-  return { teamFinances: next, news };
+  return { teamFinances: next, news, breakdown };
 }
 
 /**
@@ -688,8 +717,9 @@ export function applyExpense(
   teamFinances: Record<string, FinanceState>,
   squads: Record<string, Player[]>,
   teamLevels: Record<string, 1 | 2 | 3> = {},
-): { teamFinances: Record<string, FinanceState> } {
+): { teamFinances: Record<string, FinanceState>; breakdown: Record<string, FinanceBreakdown> } {
   const next: Record<string, FinanceState> = { ...teamFinances };
+  const breakdown = createFinanceBreakdown(Object.keys(next));
   for (const id of Object.keys(next)) {
     next[id] = { ...next[id] };
     const squad = squads[id] ?? [];
@@ -700,8 +730,9 @@ export function applyExpense(
       : computeSalary(squadValue, level);
     next[id].cash -= salaries;
     next[id].totalExpense += salaries;
+    breakdown[id].salaries += salaries;
   }
-  return { teamFinances: next };
+  return { teamFinances: next, breakdown };
 }
 
 /**
@@ -848,33 +879,18 @@ export function attemptFireSale(
  * Archive each team's season totals into history, then reset the running
  * income / expense counters. Returns new teamFinances.
  *
- * Recomputes prizeMoney / tvSponsor / transferIncome / salaries /
- * transferExpense from the running deltas — totalIncome/Expense are aggregate;
- * we infer the breakdown by re-deriving it from the season's events in the
- * caller (or simply by passing the breakdown in). For simplicity we store
- * the aggregates and zero rough-bucket breakdowns; UI shows totalIncome /
- * totalExpense.
- *
  * This is a snapshot pass — no side effects on cash. Cash carries forward.
  */
 export function archiveSeasonFinance(
   teamFinances: Record<string, FinanceState>,
   season: number,
   startCashByTeam: Record<string, number>,
-  breakdown: Record<string, {
-    prizeMoney: number;
-    tvSponsor: number;
-    transferIncome: number;
-    salaries: number;
-    transferExpense: number;
-  }>,
+  breakdown: Record<string, FinanceBreakdown>,
 ): Record<string, FinanceState> {
   const next: Record<string, FinanceState> = { ...teamFinances };
   for (const [teamId, fin] of Object.entries(next)) {
     const startCash = startCashByTeam[teamId] ?? fin.cash - fin.totalIncome + fin.totalExpense;
-    const bd = breakdown[teamId] ?? {
-      prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
-    };
+    const bd = breakdown[teamId] ?? emptyFinanceBreakdown();
     const record: FinanceSeasonRecord = {
       season,
       startCash: Math.round(startCash * 10) / 10,
@@ -917,4 +933,4 @@ export function archiveSeasonFinance(
 // LEAGUE_PRIZE_BASE = 60, decay = 0.85: top 8 only — keeps the curve from
 //   handing money to relegated teams (8th @ €16M is the floor).
 //
-// All simulation outputs are reproducible — see scripts/sim-economy.ts.
+// Current regressions are covered by finance unit tests and fresh-world audits.

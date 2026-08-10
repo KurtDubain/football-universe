@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { applyOfferTransfer, signFreeAgent } from './transfer-window-actions';
-import type { GameWorld } from '../engine/season/season-manager';
-import type { Player, PlayerSeasonStats } from '../types/player';
-import type { FinanceState, TeamBase } from '../types/team';
-import type { IncomingOffer } from '../types/transfer';
+import type { GameWorld } from '../season/season-manager';
+import type { Player, PlayerSeasonStats } from '../../types/player';
+import type { FinanceState, TeamBase } from '../../types/team';
+import type { IncomingOffer } from '../../types/transfer';
 
 function makeTeam(id: string, overall: number): TeamBase {
   return {

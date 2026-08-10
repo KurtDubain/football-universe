@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.46.0",
+  "version": "4.47.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "screenshots": "tsx scripts/screenshot.ts",
+    "scripts:check": "tsx scripts/check-portable-scripts.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
@@ -39,6 +40,7 @@
     "verify:floating-advance": "tsx scripts/verify-floating-advance.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
     "verify:mobile-routes": "tsx scripts/verify-mobile-routes.ts",
+    "verify:cup-bracket": "tsx scripts/verify-cup-bracket.ts",
     "verify:world-cup-experience": "tsx scripts/verify-world-cup-experience.ts",
     "verify:feedback": "tsx scripts/verify-feedback.ts",
     "verify:pwa-update": "tsx scripts/verify-pwa-update.ts",
@@ -58,7 +60,9 @@
     "verify:key-node": "tsx scripts/verify-key-node-time-control.ts",
     "verify:observation-route": "tsx scripts/verify-observation-theme-route.ts",
     "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts",
-    "verify:dashboard-focus": "tsx scripts/verify-dashboard-observation-focus.ts"
+    "verify:dashboard-focus": "tsx scripts/verify-dashboard-observation-focus.ts",
+    "verify:smoke": "pnpm build:audit && tsx scripts/run-browser-audit-suite.ts smoke",
+    "verify:full": "pnpm build:audit && tsx scripts/run-browser-audit-suite.ts full"
   },
   "dependencies": {
     "i18next": "^26.1.0",

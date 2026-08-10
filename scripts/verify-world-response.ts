@@ -22,7 +22,7 @@ type AuditStore = {
       seasonChanged: boolean;
       nextSeason: number;
     } | null;
-    newGame: (seed: number) => void;
+    newGame: (seed: number) => Promise<void>;
     setFavoriteTeams: (ids: string[]) => void;
     advanceWindow: () => Promise<boolean>;
     batchAdvance: (count: number) => Promise<boolean>;
@@ -55,9 +55,9 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
-      await page.evaluate(() => {
+      await page.evaluate(async () => {
         const store = (window as AuditWindow).__gameStore!;
-        store.getState().newGame(20260713);
+        await store.getState().newGame(20260713);
         const teamIds = Object.keys(store.getState().world.teamBases);
         store.getState().setFavoriteTeams(teamIds.slice(0, 2));
       });

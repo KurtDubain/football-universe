@@ -30,6 +30,7 @@ export type IconName =
   | 'rocket'   | 'target'      | 'burst'   | 'arrow-up'
   | 'arrow-down' | 'medal'     | 'bandage' | 'flex'
   | 'warning'  | 'clipboard'   | 'chart'   | 'megaphone'
+  | 'bracket'
   | 'news'     | 'tie'         | 'trend-up'| 'tophat'
   | 'backpack' | 'refresh'     | 'speech'  | 'outbox'
   | 'inbox'    | 'dice'        | 'coin'    | 'cart'
@@ -267,6 +268,13 @@ function renderIcon(name: IconName, accent?: string): ReactElement {
       return (
         <>
           <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+        </>
+      );
+    case 'bracket':
+      return (
+        <>
+          <path d="M4 5h5M4 10h5M9 5v5M9 7.5h5M14 7.5v4.5M14 12h6" />
+          <path d="M4 14h5M4 19h5M9 14v5M9 16.5h5M14 12v4.5" />
         </>
       );
     case 'megaphone':

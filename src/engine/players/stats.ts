@@ -2,6 +2,12 @@ import { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/pl
 import { MatchResult } from '../../types/match';
 import { pickMatchday as pickMatchdayWithDiscipline } from './injuries';
 import { selectStartingEleven } from '../match/participation';
+import {
+  createEmptyPlayerStatCounters,
+  PLAYER_STAT_COUNTER_FIELDS,
+  type PlayerStatCounterField,
+  type PlayerStatCounterRecord,
+} from './player-stat-fields';
 
 /**
  * Player-stat semantics, kept close to the update engine:
@@ -32,28 +38,7 @@ export function createInitialPlayerStats(
       stats[p.uuid] = {
         playerId: p.uuid,
         teamId,
-        goals: 0,
-        assists: 0,
-        yellowCards: 0,
-        redCards: 0,
-        appearances: 0,
-        starts: 0,
-        substituteAppearances: 0,
-        minutesPlayed: 0,
-        cleanSheets: 0,
-        saves: 0,
-        keyBlocks: 0,
-        bigChances: 0,
-        keyPasses: 0,
-        routineSaves: 0,
-        shotsOnTargetFaced: 0,
-        cleanSheetMinutes: 0,
-        goalsConcededWhileOnPitch: 0,
-        interceptions: 0,
-        clearances: 0,
-        teamMatchesAllCompetitions: 0,
-        missedMatches: 0,
-        injuryAbsenceMatches: 0,
+        ...createEmptyPlayerStatCounters(),
       };
     }
   }
@@ -68,28 +53,7 @@ export function emptyPlayerStat(playerId: string, teamId: string): PlayerSeasonS
   return {
     playerId,
     teamId,
-    goals: 0,
-    assists: 0,
-    yellowCards: 0,
-    redCards: 0,
-    appearances: 0,
-    starts: 0,
-    substituteAppearances: 0,
-    minutesPlayed: 0,
-    cleanSheets: 0,
-    saves: 0,
-    keyBlocks: 0,
-    bigChances: 0,
-    keyPasses: 0,
-    routineSaves: 0,
-    shotsOnTargetFaced: 0,
-    cleanSheetMinutes: 0,
-    goalsConcededWhileOnPitch: 0,
-    interceptions: 0,
-    clearances: 0,
-    teamMatchesAllCompetitions: 0,
-    missedMatches: 0,
-    injuryAbsenceMatches: 0,
+    ...createEmptyPlayerStatCounters(),
   };
 }
 
@@ -178,33 +142,21 @@ function resolveResultMatchday(
     .map(player => ({ ...player, role: 'starter' as const, minutesPlayed: 90, enteredMinute: 0, exitedMinute: 90 }));
 }
 
-const STAT_COUNTER_FIELDS = [
-  'goals', 'assists', 'yellowCards', 'redCards', 'appearances', 'starts',
-  'substituteAppearances', 'minutesPlayed', 'cleanSheets', 'saves', 'keyBlocks',
-  'bigChances', 'keyPasses', 'routineSaves', 'shotsOnTargetFaced',
-  'cleanSheetMinutes', 'goalsConcededWhileOnPitch', 'interceptions', 'clearances',
-  'teamMatchesAllCompetitions', 'missedMatches', 'injuryAbsenceMatches',
-] as const;
-
-type StatCounterField = typeof STAT_COUNTER_FIELDS[number];
-type PlayerStatDelta = Record<StatCounterField, number> & { playerId: string; teamId: string };
+type PlayerStatDelta = PlayerStatCounterRecord & { playerId: string; teamId: string };
 
 function emptyPlayerStatDelta(playerId: string, teamId: string): PlayerStatDelta {
-  return Object.assign(
-    { playerId, teamId },
-    Object.fromEntries(STAT_COUNTER_FIELDS.map(field => [field, 0])),
-  ) as unknown as PlayerStatDelta;
+  return { playerId, teamId, ...createEmptyPlayerStatCounters() };
 }
 
 function incrementDelta(
   deltas: Map<string, PlayerStatDelta>,
   playerId: string | undefined,
   teamId: string,
-  updates: Partial<Record<StatCounterField, number>>,
+  updates: Partial<Record<PlayerStatCounterField, number>>,
 ): void {
   if (!playerId) return;
   const delta = deltas.get(playerId) ?? emptyPlayerStatDelta(playerId, teamId);
-  for (const field of STAT_COUNTER_FIELDS) delta[field] += updates[field] ?? 0;
+  for (const field of PLAYER_STAT_COUNTER_FIELDS) delta[field] += updates[field] ?? 0;
   deltas.set(playerId, delta);
 }
 
@@ -315,7 +267,7 @@ function buildMatchStatDeltas(
 function applyStatDelta(stat: PlayerSeasonStats, delta: PlayerStatDelta): PlayerSeasonStats {
   const next = { ...stat };
   const legacyTeamMatches = stat.teamMatchesAllCompetitions ?? stat.appearances;
-  for (const field of STAT_COUNTER_FIELDS) {
+  for (const field of PLAYER_STAT_COUNTER_FIELDS) {
     const current = Number(
       next[field]
       ?? (field === 'teamMatchesAllCompetitions' ? legacyTeamMatches : 0),
@@ -451,7 +403,7 @@ export function getTopScorerByTeamFromSegments(
  *
  * Why this exists: most engine paths keep `stats.teamId` in lockstep
  * (auto-transfer in transfer-window.ts and the manual paths in
- * transfer-window-actions.ts both call this after moving a player).
+ * transfer-window-actions.ts also calls this after moving a player).
  * This helper is the "belt" — call it whenever you suspect drift, e.g.
  * right before computing season-end awards or before reading
  * per-team aggregates over `playerStats`. Stat rows whose uuid no

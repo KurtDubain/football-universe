@@ -118,11 +118,11 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-      const ids = await page.evaluate((seed) => {
+      const ids = await page.evaluate(async (seed) => {
         const store = (window as typeof window & {
           __gameStore?: {
             getState: () => {
-              newGame: (nextSeed: number) => void;
+              newGame: (nextSeed: number) => Promise<void>;
               world: {
                 teamBases: Record<string, unknown>;
                 coachBases: Record<string, unknown>;
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
             };
           };
         }).__gameStore;
-        store?.getState().newGame(seed);
+        await store?.getState().newGame(seed);
         const world = store!.getState().world;
         const teamId = Object.keys(world.teamBases)[0];
         localStorage.removeItem('floating-advance-position-v2');

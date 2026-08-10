@@ -8,7 +8,7 @@ type AuditWindow = Window & {
   __gameStore?: {
     getState: () => {
       initialized: boolean;
-      newGame: (seed: number) => void;
+      newGame: (seed: number) => Promise<void>;
     };
   };
 };

@@ -88,7 +88,7 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 | **大陆/南洲/东洲杯** | 区域内全队参赛；俱乐部积分用于分档，中立场3轮小组赛 + 单回合淘汰 | S5起每6赛季 |
 | **环球冠军杯** | 32队、轮换东道主、8组中立场3轮小组赛 + 单回合淘汰 | 每4赛季 |
 
-对称淘汰赛对阵树 · 客场进球规则 · 杯赛规则卡
+经典淘汰赛晋级图 / 对阵列表切换 · 移动端当前轮自动定位 · 客场进球规则 · 杯赛规则卡
 
 ### 🎮 4 种游戏模式
 - **自由模式** — 默认平衡设置
@@ -153,6 +153,10 @@ pnpm verify:pwa-update         # 远端版本识别与自动更新
 pnpm verify:pwa-transition     # 真实旧构建到新构建的 Service Worker 切换
 pnpm verify:route-recovery     # 分包失败、慢速网络与离线恢复
 pnpm verify:mobile-routes      # 全路由移动端、平板与桌面矩阵
+pnpm verify:cup-bracket       # 晋级图、视图切换与移动端杯赛体验
+pnpm verify:smoke             # 自动构建并运行提交级浏览器回归
+pnpm verify:full              # 自动构建并运行每周完整浏览器矩阵
+pnpm scripts:check            # 禁止审计脚本依赖个人电脑绝对路径
 pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 ```
 

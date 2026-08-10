@@ -12,7 +12,7 @@ type AuditState = {
     observationRecord?: { total: number };
     seasonState: { currentWindowIndex: number };
   };
-  newGame: (seed: number) => void;
+  newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
   setObservationThemePreference: (preference: 'dark_horse_challenge') => void;
 };
@@ -42,10 +42,10 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
-      const initial = await page.evaluate(() => {
+      const initial = await page.evaluate(async () => {
         const store = (window as AuditWindow).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        store.getState().newGame(20260718);
+        await store.getState().newGame(20260718);
         const ids = Object.keys(store.getState().world.teamBases).slice(0, 3);
         store.getState().setFavoriteTeams(ids);
         store.getState().setObservationThemePreference('dark_horse_challenge');

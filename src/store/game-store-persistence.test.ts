@@ -60,7 +60,7 @@ describe('game store current-save persistence', () => {
   });
 
   it('does not duplicate result/news batches and reconstructs them on hydration', async () => {
-    useGameStore.getState().newGame(13579);
+    await useGameStore.getState().newGame(13579);
     await useGameStore.getState().advanceWindow();
     const resultCount = useGameStore.getState().lastResults.length;
     expect(resultCount).toBeGreaterThan(0);
@@ -81,7 +81,7 @@ describe('game store current-save persistence', () => {
   });
 
   it('preserves the bounded universe intervention record across export and reload', async () => {
-    useGameStore.getState().newGame(20260722);
+    await useGameStore.getState().newGame(20260722);
     const teamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
     useGameStore.getState().useGodHand(teamId, 'boost');
     __flushCompressedStorageForTests();
@@ -99,7 +99,7 @@ describe('game store current-save persistence', () => {
   });
 
   it('preserves a pending observation and its bounded lifetime record', async () => {
-    useGameStore.getState().newGame(20260722);
+    await useGameStore.getState().newGame(20260722);
     const world = useGameStore.getState().world!;
     const fixtureId = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures[0].id;
     useGameStore.getState().setObservationJudgment(fixtureId, 'goals', 'over-2');

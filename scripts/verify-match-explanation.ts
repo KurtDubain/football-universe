@@ -27,11 +27,11 @@ async function main(): Promise<void> {
 
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
-      await page.evaluate(() => {
+      await page.evaluate(async () => {
         const store = (window as typeof window & {
-          __gameStore?: { getState: () => { newGame: (seed: number) => void } };
+          __gameStore?: { getState: () => { newGame: (seed: number) => Promise<void> } };
         }).__gameStore;
-        store?.getState().newGame(20260718);
+        await store?.getState().newGame(20260718);
       });
       await page.getByTestId('focus-matches').waitFor({ state: 'visible' });
       await page.locator('[data-testid="focus-matches"] > div [role="button"]').first().click();

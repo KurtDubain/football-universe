@@ -99,3 +99,6 @@ export interface FinanceSeasonRecord {
   salaries: number;       // wage bill
   transferExpense: number;// purchases (incl. fire sale buys)
 }
+
+/** Categorized season flows before start/end cash are attached for history. */
+export type FinanceBreakdown = Omit<FinanceSeasonRecord, 'season' | 'startCash' | 'endCash'>;

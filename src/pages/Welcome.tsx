@@ -67,7 +67,7 @@ export default function Welcome() {
     };
     try {
       playGameFeedback('start');
-      newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
+      await newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
         gameMode: startPath === 'recommended' ? 'free' : mode,
         favoriteTeamIds: selectedTeamId ? [selectedTeamId] : [],
         observationThemePreference: startPath === 'recommended' ? recommendedTheme[lens] : 'auto',

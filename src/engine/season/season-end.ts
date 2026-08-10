@@ -25,20 +25,15 @@ import { applyAnnualRevaluation } from '../economy/market-value';
 import {
   applyIncome as applyFinanceIncome,
   applyExpense as applyFinanceExpense,
+  addFinanceBreakdown,
   attemptFireSale,
   archiveSeasonFinance,
+  createFinanceBreakdown,
   initTeamFinances,
-  leaguePrize,
   CUP_PRIZE,
-  TV_SPONSOR_BY_TIER,
-  computeSalary,
   formatMoney,
   attributeCupPrizes,
-  LEAGUE_CUP_TIERS,
-  SUPER_CUP_TIERS,
   WORLD_CUP_TIERS,
-  MAINLAND_CUP_TIERS,
-  SMALL_CONTINENTAL_CUP_TIERS,
 } from '../economy/finance';
 import { worldCupConfig } from '../../config/competitions';
 
@@ -124,18 +119,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   }
   // Per-team breakdown of this season's income / expense flows. Populated
   // incrementally as each economy step runs; consumed by archiveSeasonFinance.
-  const financeBreakdown: Record<string, {
-    prizeMoney: number;
-    tvSponsor: number;
-    transferIncome: number;
-    salaries: number;
-    transferExpense: number;
-  }> = {};
-  for (const tid of Object.keys(teamFinances)) {
-    financeBreakdown[tid] = {
-      prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
-    };
-  }
+  const financeBreakdown = createFinanceBreakdown(Object.keys(teamFinances));
 
   // Determine champions
   const league1Champion = world.league1Standings[0]?.teamId ?? '';
@@ -607,67 +591,12 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // the just-finished standings — NOT from teamStates which may already
   // reflect promotion/relegation by this point in the patch chain.
   {
-    // Compute per-team breakdown so the archive pass knows what came from
-    // where. We mirror the logic in applyIncome here so the breakdown
-    // stays in sync; refactoring applyIncome to return a breakdown is
-    // possible but the duplication is ~15 lines so we keep them paired.
-    for (const teamId of getAllTeamIds(teamStates)) {
-      const standingsByLevel: Record<1 | 2 | 3, StandingEntry[]> = {
-        1: world.league1Standings,
-        2: world.league2Standings,
-        3: world.league3Standings,
-      };
-      let lv: 1 | 2 | 3 = teamStates[teamId].leagueLevel;
-      let rank = 99;
-      for (const [lvStr, st] of Object.entries(standingsByLevel)) {
-        const idx = st.findIndex(s => s.teamId === teamId && s.played > 0);
-        if (idx >= 0) {
-          lv = parseInt(lvStr) as 1 | 2 | 3;
-          rank = idx + 1;
-          break;
-        }
-      }
-      const tv = TV_SPONSOR_BY_TIER[lv];
-      const prize = leaguePrize(lv, rank);
-      financeBreakdown[teamId].tvSponsor += tv;
-      financeBreakdown[teamId].prizeMoney += prize;
-    }
-    // Cup prizes — tiered (mirrors applyIncome via shared helper).
-    if (world.leagueCup?.rounds && world.leagueCup.rounds.length > 0) {
-      const prizes = attributeCupPrizes(world.leagueCup.rounds, LEAGUE_CUP_TIERS);
-      for (const [teamId, amt] of Object.entries(prizes)) {
-        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
-      }
-    }
-    if (world.superCup?.knockoutRounds && world.superCup.knockoutRounds.length > 0) {
-      const prizes = attributeCupPrizes(world.superCup.knockoutRounds, SUPER_CUP_TIERS);
-      for (const [teamId, amt] of Object.entries(prizes)) {
-        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
-      }
-    }
-    // World cup prize money (winner / runner-up / quarters / R16) is booked by
-    // finalizeWorldCup AFTER the WC tail plays — see season-end.ts.
-    // At this point in the pipeline (season_end window), the WC final
-    // hasn't happened yet; reading world.worldCup.winnerId here gives
-    // undefined every time, which is why this used to silently lose
-    // prize money every WC year.
-    // Continental cups — region-aware tier (mainland 8-team, others 4-team)
-    const continentalConfigs: Array<[typeof continentalCups.mainland_cup, typeof LEAGUE_CUP_TIERS]> = [
-      [continentalCups.mainland_cup, MAINLAND_CUP_TIERS],
-      [continentalCups.southern_cup, SMALL_CONTINENTAL_CUP_TIERS],
-      [continentalCups.eastern_cup, SMALL_CONTINENTAL_CUP_TIERS],
-    ];
-    for (const [cup, tier] of continentalConfigs) {
-      if (!cup?.completed || !cup.rounds || cup.rounds.length === 0) continue;
-      const prizes = attributeCupPrizes(cup.rounds, tier);
-      for (const [teamId, amt] of Object.entries(prizes)) {
-        if (financeBreakdown[teamId]) financeBreakdown[teamId].prizeMoney += amt;
-      }
-    }
-    // Now apply via the canonical implementation — modifies cash + totalIncome.
     const incomeResult = applyFinanceIncome(teamFinances, world, seasonNumber);
     teamFinances = incomeResult.teamFinances;
     news.push(...incomeResult.news);
+    for (const [teamId, breakdown] of Object.entries(incomeResult.breakdown)) {
+      financeBreakdown[teamId] = addFinanceBreakdown(financeBreakdown[teamId], breakdown);
+    }
   }
 
   // ── Transfer window ──────────────────────────────────────────
@@ -800,20 +729,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
         teamLevels[tid] = (world.teamStates[tid]?.leagueLevel ?? 3) as 1 | 2 | 3;
       }
     }
-    // Compute breakdown for archive using the same formula applyExpense uses
-    // (otherwise the FinancePanel salary number diverges from the actual
-    // cash deduction — a sneaky UI lie that bit us in v1).
-    for (const [teamId, squad] of Object.entries(squads)) {
-      const squadValue = (squad ?? []).reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
-      const salaries = computeSalary(squadValue, teamLevels[teamId] ?? 1);
-      financeBreakdown[teamId] = financeBreakdown[teamId] ?? {
-        prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0,
-      };
-      financeBreakdown[teamId].salaries += salaries;
-    }
-    // Apply via canonical implementation
     const expenseResult = applyFinanceExpense(teamFinances, squads, teamLevels);
     teamFinances = expenseResult.teamFinances;
+    for (const [teamId, breakdown] of Object.entries(expenseResult.breakdown)) {
+      financeBreakdown[teamId] = addFinanceBreakdown(financeBreakdown[teamId], breakdown);
+    }
   }
 
   // ── Phase H: Fire sale for negative-cash teams ─────────────────
