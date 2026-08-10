@@ -27,6 +27,7 @@ const SMOKE_CHECKS: AuditCheck[] = [
   { script: 'verify:route-recovery' },
   { script: 'verify:mobile-routes' },
   { script: 'verify:cup-bracket' },
+  { script: 'verify:tournament-music' },
   { script: 'verify:match-tactics', server: 'fixture' },
 ];
 

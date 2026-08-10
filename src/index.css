@@ -851,6 +851,7 @@ body {
   overflow: hidden;
   transition: transform 0.1s ease, background-color 0.16s ease, box-shadow 0.16s ease;
 }
+.ui-action-feedback.floating-advance-overlay { position: fixed; }
 .ui-action-feedback:active:not(:disabled) { transform: scale(0.975); }
 .ui-action-feedback[aria-busy='true']::after {
   position: absolute;

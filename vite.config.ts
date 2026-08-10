@@ -87,11 +87,11 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /\/assets\/world-cup-.*\.m4a$/,
+            urlPattern: /\/assets\/(?:world|league|super|mainland|southern|eastern)-cup-.*\.m4a$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'football-tournament-music',
-              expiration: { maxEntries: 3, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 90 },
             },
           },
           {

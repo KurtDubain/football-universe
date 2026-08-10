@@ -34,7 +34,7 @@ export type IconName =
   | 'news'     | 'tie'         | 'trend-up'| 'tophat'
   | 'backpack' | 'refresh'     | 'speech'  | 'outbox'
   | 'inbox'    | 'dice'        | 'coin'    | 'cart'
-  | 'money'    | 'gloves'      | 'boot'    | 'play'
+  | 'money'    | 'gloves'      | 'boot'    | 'play'      | 'pause'
   | 'sparkle'  | 'handshake'   | 'eye'     | 'lock'
   | 'gem'      | 'leaf'        | 'mortarboard'
   | 'volume'   | 'volume-off'  | 'flag'      | 'whistle';
@@ -412,6 +412,13 @@ function renderIcon(name: IconName, accent?: string): ReactElement {
     case 'play':
       return (
         <path d="M7 4l13 8-13 8V4z" fill={accent ?? 'currentColor'} />
+      );
+    case 'pause':
+      return (
+        <>
+          <path d="M7 5v14" strokeWidth={3} />
+          <path d="M17 5v14" strokeWidth={3} />
+        </>
       );
     case 'sparkle':
       // 4-point sparkle for "new" / fresh

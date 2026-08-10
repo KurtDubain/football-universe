@@ -6,6 +6,7 @@ import type {
 } from '../types/match-presentation';
 import { getUnlockedGameAudioContext } from './game-feedback';
 import type { SoundProfile } from './preferences';
+import { ambientMusicSceneForFinal } from './ambient-music';
 
 export type MatchSoundCue =
   | 'goal_home'
@@ -48,7 +49,7 @@ export interface MatchSoundscape {
 interface MatchSoundscapeOptions {
   result: Pick<MatchResult,
     'fixtureId' | 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'roundLabel' | 'isNeutralVenue'
-  >;
+  > & Partial<Pick<MatchResult, 'competitionName'>>;
   featured: boolean;
   muted: boolean;
   profile: SoundProfile;
@@ -687,9 +688,13 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     if (!this.context || !this.actionGain || !this.musicGain) return;
     scheduleWhistle(this.context, this.actionGain, 0.08);
     if (!this.options.featured) return;
-    const isWorldCupFinal = this.options.result.competitionType === 'world_cup'
-      && (this.options.result.roundLabel === 'Final' || this.options.result.roundLabel === '决赛');
-    if (isWorldCupFinal) return;
+    const isTournamentFinal = this.options.result.roundLabel === 'Final' || this.options.result.roundLabel === '决赛';
+    const hasFullFinalTheme = isTournamentFinal && ambientMusicSceneForFinal(
+      this.options.result.competitionType,
+      this.options.result.competitionName ?? '',
+      false,
+    ) !== null;
+    if (hasFullFinalTheme) return;
     this.crowdDuckUntil = this.context.currentTime + 1.95;
     this.refreshCrowdGain(0.08);
     if (this.crowdRecoveryTimer !== null) clearTimeout(this.crowdRecoveryTimer);

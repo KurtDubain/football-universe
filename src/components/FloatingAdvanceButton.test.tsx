@@ -43,8 +43,9 @@ describe('FloatingAdvanceButton', () => {
     expect(advance.title).toContain('Home 复位');
     expect(advance.className).toContain('h-12');
     expect(advance.className).toContain('w-12');
-    expect(advance.className).toContain('hidden');
-    expect(advance.className).toContain('sm:flex');
+    expect(advance.className).toContain('fixed');
+    expect(advance.className).toContain('flex');
+    expect(advance.className).not.toContain('hidden');
   });
 
   it('supports keyboard movement and Home reset', () => {

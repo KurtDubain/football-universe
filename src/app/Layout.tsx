@@ -4,6 +4,8 @@ import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
+import TournamentMusicDirector from '../components/TournamentMusicDirector';
+import TournamentMusicNowPlaying from '../components/TournamentMusicNowPlaying';
 import AchievementToast from '../components/AchievementToast';
 import { APP_VERSION } from '../version';
 import { SAVE_STORAGE_KEY } from '../store/save-schema';
@@ -121,9 +123,6 @@ export default function Layout({ children }: LayoutProps) {
       return false;
     }
   });
-  const [showFloatingBtn, setShowFloatingBtn] = useState(() => {
-    try { return localStorage.getItem('floating-btn') !== '0'; } catch { return true; }
-  });
 
   useEffect(() => {
     const handleSaveError = () => setSaveError(true);
@@ -139,14 +138,6 @@ export default function Layout({ children }: LayoutProps) {
     window.addEventListener('football-save-size', handleSaveSize);
     return () => window.removeEventListener('football-save-size', handleSaveSize);
   }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('floating-btn', showFloatingBtn ? '1' : '0');
-    } catch {
-      window.dispatchEvent(new CustomEvent('football-save-error'));
-    }
-  }, [showFloatingBtn]);
 
   const currentWindow = getCurrentWindow();
   const nextKeyNode = useMemo(
@@ -455,6 +446,7 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
+        <TournamentMusicDirector seasonNumber={seasonNumber} />
         {/* Top bar */}
         <header className="app-shell-header h-[48px] bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -585,8 +577,6 @@ export default function Layout({ children }: LayoutProps) {
                     ? '当前关键内容处理完成后，固定步数推进会重新开放。'
                     : '固定步数会连续结算，不会在中途关键节点前自动停下。'}
                 </p>
-                <div className="border-t border-slate-700 my-0.5" />
-                <button onClick={() => { setShowFloatingBtn(!showFloatingBtn); setShowFastMenu(false); }} className="hidden min-h-11 w-full cursor-pointer px-3 py-2 text-left text-xs text-slate-400 hover:bg-slate-700 sm:block">{showFloatingBtn ? '隐藏桌面悬浮按钮' : '显示桌面悬浮按钮'}</button>
               </div>
             )}
           </div>
@@ -598,6 +588,7 @@ export default function Layout({ children }: LayoutProps) {
           favoriteTeamNames={favoriteTeamNames}
           excludedFixtureIds={featuredFixtureIds}
         />
+        <TournamentMusicNowPlaying />
 
         {saveNearCapacity && (
           <div role="status" className="px-3 sm:px-5 py-2 bg-amber-950/60 border-b border-amber-700/50 text-amber-100 text-xs flex items-center gap-2">
@@ -608,21 +599,19 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className={`app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in ${showFloatingBtn ? 'sm:pb-20' : ''}`} key={location.pathname}>
+        <main className="app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in" key={location.pathname}>
           {children}
         </main>
       </div>
 
       {/* Floating advance button */}
-      {showFloatingBtn && (
-        <FloatingAdvanceButton
-          stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
-          accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
-          isAdvancing={isAdvancing}
-          disabled={isAdvancing || !currentWindow}
-          onAdvance={handleFloatingAdvance}
-        />
-      )}
+      <FloatingAdvanceButton
+        stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
+        accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
+        isAdvancing={isAdvancing}
+        disabled={isAdvancing || !currentWindow}
+        onAdvance={handleFloatingAdvance}
+      />
 
       {/* Achievement toast */}
       <AchievementToastContainer />

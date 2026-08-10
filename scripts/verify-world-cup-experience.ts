@@ -9,7 +9,7 @@ import { validateWorldData } from '../src/engine/validation/world-data';
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const seed = Number(process.env.VERIFY_SEED ?? 20260715);
 
-type MusicEvent = { scene: string; state: string };
+type MusicEvent = { owner?: string; scene: string; state: string };
 type AuditWindow = Window & {
   __gameStore?: {
     setState: (patch: {
@@ -209,12 +209,26 @@ async function verifyHostPage(
 
   const musicButton = page.getByTestId('world-cup-music-toggle');
   await musicButton.waitFor({ state: 'visible' });
-  if (await musicButton.getAttribute('aria-pressed') !== 'true') await musicButton.click();
+  await page.waitForFunction(() => {
+    const events = (window as AuditWindow).__worldCupMusicEvents ?? [];
+    const playbackState = document.querySelector<HTMLElement>('[data-testid="tournament-music-now-playing"]')?.dataset.playbackState
+      ?? document.querySelector<HTMLElement>('[data-testid="world-cup-music-toggle"]')?.dataset.playbackState;
+    return events.some(event => event.scene === 'world_cup' && event.state === 'started')
+      || playbackState === 'blocked';
+  }, null, { timeout: 5_000 });
+  const autoStarted = await page.evaluate(() =>
+    ((window as AuditWindow).__worldCupMusicEvents ?? [])
+      .some(event => event.scene === 'world_cup' && event.state === 'started')
+  );
+  if (!autoStarted) await musicButton.click();
   await page.waitForFunction(() =>
     (window as AuditWindow).__worldCupMusicEvents?.some(event =>
       event.scene === 'world_cup' && event.state === 'started'
     ),
   null, { timeout: 5_000 });
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="world-cup-music-toggle"]')?.getAttribute('aria-pressed') === 'true',
+  null, { timeout: 2_000 });
   const media = await page.evaluate(() => ({
     support: document.createElement('audio').canPlayType('audio/mp4; codecs="mp4a.40.2"'),
     resources: performance.getEntriesByType('resource')
@@ -231,7 +245,28 @@ async function verifyHostPage(
 
   const screenshot = `/tmp/football-world-cup-${viewportName}.png`;
   await page.screenshot({ path: screenshot, animations: 'disabled', fullPage: false });
-  return { featureText, ...media, screenshot };
+  let advancePersistence = false;
+  if (viewportName === 'mobile-390') {
+    const stoppedBefore = await page.evaluate(() =>
+      ((window as AuditWindow).__worldCupMusicEvents ?? [])
+        .filter(event => event.scene === 'world_cup' && event.state === 'stopped').length
+    );
+    await page.getByTestId('header-advance').click();
+    await page.waitForURL(url => url.pathname === '/', { timeout: 15_000 });
+    const nowPlaying = page.getByTestId('tournament-music-now-playing');
+    await nowPlaying.waitFor({ state: 'visible' });
+    assert(await nowPlaying.getAttribute('data-music-scene') === 'world_cup', 'World Cup identity was lost after advancing');
+    assert(await page.getByTestId('tournament-music-global-toggle').getAttribute('aria-pressed') === 'true', 'World Cup music did not remain active after advancing');
+    await page.waitForTimeout(450);
+    const stoppedAfter = await page.evaluate(() =>
+      ((window as AuditWindow).__worldCupMusicEvents ?? [])
+        .filter(event => event.scene === 'world_cup' && event.state === 'stopped').length
+    );
+    assert(stoppedAfter === stoppedBefore, 'World Cup music restarted or stopped during the route transition');
+    await page.screenshot({ path: '/tmp/football-world-cup-mobile-390-persistent.png', animations: 'disabled', fullPage: false });
+    advancePersistence = true;
+  }
+  return { featureText, ...media, advancePersistence, screenshot };
 }
 
 async function verifySettings(page: Page): Promise<Record<string, unknown>> {

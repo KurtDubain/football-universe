@@ -39,7 +39,8 @@ import {
   matchOpenerKindForCompetition,
   matchOpenerLabel,
 } from './match-live/match-opener-artwork';
-import { startAmbientMusic } from '../feedback/ambient-music';
+import { ambientMusicSceneForFinal } from '../feedback/ambient-music';
+import { holdTournamentMusic, overrideTournamentMusic } from '../feedback/tournament-music-session';
 
 interface Props {
   result: MatchResult;
@@ -351,7 +352,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const previousCommentaryCountRef = useRef<number | null>(null);
   const soundscapeRef = useRef<MatchSoundscape | null>(null);
   const previousPhaseRef = useRef<PlaybackPhase>(initialPlaybackState.phase);
-  const [ceremonyMusicOwner] = useState(() => `world-cup-final-${result.fixtureId}`);
+  const [ceremonyMusicOwner] = useState(() => `tournament-final-${result.fixtureId}`);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -387,6 +388,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, [result.events, result.homeTeamId, timelineMax]);
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
   const finished = playback.phase === 'finished';
+  const finalMusicScene = openerFinal
+    ? ambientMusicSceneForFinal(result.competitionType, result.competitionName, finished)
+    : null;
   const paused = playback.phase === 'paused';
   const halftime = playback.phase === 'halftime';
   const extraTimeBreak = playback.phase === 'extra_time_break';
@@ -441,28 +445,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, [feedbackPreferences.effectsVolume, feedbackPreferences.musicVolume]);
 
   useEffect(() => {
-    const isWorldCupFinal = (result.competitionType === 'world_cup') && openerFinal;
-    if (
-      !isWorldCupFinal
-      || !feedbackPreferences.soundEnabled
-      || feedbackPreferences.musicVolume <= 0
-      || locallyMuted
-      || !pageVisible
-    ) return;
-    const lease = startAmbientMusic(
-      finished ? 'world_cup_champion' : 'world_cup_final',
-      ceremonyMusicOwner,
-    );
-    return lease.stop;
+    if (locallyMuted || !pageVisible) return holdTournamentMusic(ceremonyMusicOwner);
+    if (finalMusicScene) return overrideTournamentMusic(ceremonyMusicOwner, finalMusicScene);
+    return holdTournamentMusic(ceremonyMusicOwner);
   }, [
     ceremonyMusicOwner,
-    feedbackPreferences.musicVolume,
-    feedbackPreferences.soundEnabled,
-    finished,
+    finalMusicScene,
     locallyMuted,
-    openerFinal,
     pageVisible,
-    result.competitionType,
   ]);
 
   useEffect(() => {

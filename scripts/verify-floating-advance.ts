@@ -8,6 +8,7 @@ const viewports = [
   { name: 'mobile-430', width: 430, height: 932, isMobile: true, hasTouch: true },
   { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
 ] as const;
+const requestedViewport = process.env.VERIFY_VIEWPORT;
 
 type AuditIds = {
   teamId: string;
@@ -58,35 +59,25 @@ async function verifyRouteCoverage(
     await page.goto(`${baseUrl}${path}?audit=1`, { waitUntil: 'networkidle' });
     const floating = page.getByTestId('floating-advance');
     if (await floating.count() !== 1) {
-      throw new Error(`${viewport.name} ${path}: expected one responsive floating control`);
+      throw new Error(`${viewport.name} ${path}: expected one persistent floating control`);
     }
-
-    if (viewport.isMobile) {
-      if (await floating.isVisible()) {
-        throw new Error(`${viewport.name} ${path}: desktop shortcut covered mobile content`);
-      }
-      const actualPath = new URL(page.url()).pathname;
-      const mobileAction = actualPath === '/'
-        ? page.getByTestId('dashboard-advance').first()
-        : page.getByTestId('header-advance');
-      if (!await mobileAction.isVisible()) {
-        throw new Error(`${viewport.name} ${path}: mobile advance action is unavailable`);
-      }
-      continue;
-    }
-
     const box = await floating.boundingBox();
-    if (!box) throw new Error(`${viewport.name} ${path}: desktop floating control is not visible`);
-    const contentBox = await page.locator('.app-route-content').boundingBox();
-    if (!contentBox) throw new Error(`${viewport.name} ${path}: route content has no box`);
-    const margin = 11;
+    if (!box) throw new Error(`${viewport.name} ${path}: floating control is not visible`);
+    const presentation = await floating.evaluate(element => {
+      const styles = getComputedStyle(element);
+      return { position: styles.position, display: styles.display, zIndex: Number(styles.zIndex) };
+    });
+    if (presentation.position !== 'fixed' || presentation.display === 'none' || presentation.zIndex < 100) {
+      throw new Error(`${viewport.name} ${path}: floating control lost overlay presentation ${JSON.stringify(presentation)}`);
+    }
+    const margin = 10;
     if (
-      box.x < contentBox.x + margin
-      || box.y < contentBox.y + margin
-      || box.x + box.width > contentBox.x + contentBox.width - margin
-      || box.y + box.height > contentBox.y + contentBox.height - margin
+      box.x < margin
+      || box.y < margin
+      || box.x + box.width > viewport.width - margin
+      || box.y + box.height > viewport.height - margin
     ) {
-      throw new Error(`${viewport.name} ${path}: desktop shortcut escaped the content area`);
+      throw new Error(`${viewport.name} ${path}: floating control escaped the visual viewport`);
     }
   }
   return paths;
@@ -105,7 +96,11 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   const reports: unknown[] = [];
   try {
-    for (const viewport of viewports) {
+    const selectedViewports = requestedViewport
+      ? viewports.filter(viewport => viewport.name === requestedViewport)
+      : viewports;
+    if (selectedViewports.length === 0) throw new Error(`Unknown viewport: ${requestedViewport}`);
+    for (const viewport of selectedViewports) {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
         isMobile: viewport.isMobile,
@@ -135,7 +130,7 @@ async function main(): Promise<void> {
         const world = store!.getState().world;
         const teamId = Object.keys(world.teamBases)[0];
         localStorage.removeItem('floating-advance-position-v2');
-        localStorage.removeItem('floating-btn');
+        localStorage.setItem('floating-btn', '0');
         return {
           teamId,
           playerId: world.squads[teamId][0].uuid,
@@ -149,24 +144,31 @@ async function main(): Promise<void> {
       let initial: Awaited<ReturnType<typeof floating.boundingBox>> = null;
       let dragged: Awaited<ReturnType<typeof floating.boundingBox>> = null;
       let restored: Awaited<ReturnType<typeof floating.boundingBox>> = null;
+      const initialPresentation = await page.evaluate(() => {
+        const control = document.querySelector<HTMLElement>('[data-testid="floating-advance"]');
+        const content = document.querySelector<HTMLElement>('.app-route-content');
+        if (!control || !content) return null;
+        const styles = getComputedStyle(control);
+        return {
+          position: styles.position,
+          display: styles.display,
+          contentPaddingBottom: Number.parseFloat(getComputedStyle(content).paddingBottom),
+        };
+      });
+      initial = await floating.boundingBox();
+      const minimumWidth = viewport.isMobile ? 44 : 88;
+      if (!initial || initial.width < minimumWidth || initial.height < 44) {
+        throw new Error(`${viewport.name}: persistent shortcut is missing or undersized`);
+      }
+      if (!initialPresentation || initialPresentation.position !== 'fixed' || initialPresentation.display === 'none') {
+        throw new Error(`${viewport.name}: shortcut is not a fixed overlay`);
+      }
+      const expectedPadding = viewport.isMobile ? 12 : 20;
+      if (Math.abs(initialPresentation.contentPaddingBottom - expectedPadding) > 1) {
+        throw new Error(`${viewport.name}: route content still reserves space for the floating control`);
+      }
 
-      if (viewport.isMobile) {
-        if (await floating.isVisible()) throw new Error(`${viewport.name}: floating shortcut is visible`);
-        if (!await page.getByTestId('dashboard-advance').first().isVisible()) {
-          throw new Error(`${viewport.name}: Dashboard has no primary advance action`);
-        }
-      } else {
-        initial = await floating.boundingBox();
-        if (!initial || initial.width < 88 || initial.height < 44) {
-          throw new Error(`${viewport.name}: desktop shortcut is missing or undersized`);
-        }
-
-        await page.evaluate(() => localStorage.setItem('floating-btn', '0'));
-        await page.reload({ waitUntil: 'networkidle' });
-        if (await page.getByTestId('floating-advance').count() !== 0) {
-          throw new Error(`${viewport.name}: explicit hidden preference was ignored`);
-        }
-        await page.evaluate(() => localStorage.setItem('floating-btn', '1'));
+      if (!viewport.isMobile) {
         await page.goto(`${baseUrl}/teams?audit=1`, { waitUntil: 'networkidle' });
 
         const draggable = page.getByTestId('floating-advance');
@@ -192,8 +194,9 @@ async function main(): Promise<void> {
         }
         await page.setViewportSize({ width: 390, height: 844 });
         await page.waitForTimeout(80);
-        if (await page.getByTestId('floating-advance').isVisible()) {
-          throw new Error(`${viewport.name}: shortcut stayed visible below the mobile breakpoint`);
+        const compact = await page.getByTestId('floating-advance').boundingBox();
+        if (!compact || compact.width > 52 || compact.height < 44) {
+          throw new Error(`${viewport.name}: shortcut disappeared or failed to compact below the mobile breakpoint`);
         }
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.waitForTimeout(80);
@@ -201,13 +204,11 @@ async function main(): Promise<void> {
 
       const coveredRoutes = await verifyRouteCoverage(page, viewport, ids);
       await page.goto(`${baseUrl}/teams?audit=1`, { waitUntil: 'networkidle' });
-      const advanceAction = viewport.isMobile
-        ? page.getByTestId('header-advance')
-        : page.getByTestId('floating-advance');
+      const advanceAction = page.getByTestId('floating-advance');
       await advanceAction.click();
       await page.waitForURL(url => url.pathname === '/');
-      if (viewport.isMobile && await page.getByTestId('floating-advance').isVisible()) {
-        throw new Error(`${viewport.name}: shortcut reappeared after navigation`);
+      if (!await page.getByTestId('floating-advance').isVisible()) {
+        throw new Error(`${viewport.name}: shortcut disappeared after navigation`);
       }
       await page.getByTestId('toggle-full-report').click();
       await page.getByTestId('result-sequence').waitFor({ state: 'visible', timeout: 10_000 });
@@ -223,8 +224,9 @@ async function main(): Promise<void> {
       await page.screenshot({ path: screenshot, animations: 'disabled' });
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
-        mobileUsesContextAction: viewport.isMobile,
+        persistentOverlay: true,
         initial,
+        initialPresentation,
         dragged,
         restored,
         coveredRoutes,
