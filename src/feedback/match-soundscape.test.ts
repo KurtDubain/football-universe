@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { MatchEvent } from '../types/match';
 import {
   classifyMatchSoundEvent,
+  computeCrowdGainLevel,
   computeCrowdIntensity,
+  isPresentationSequencedSoundEvent,
   MATCH_SOUND_PROFILE_MIX,
   matchPrestige,
 } from './match-soundscape';
@@ -36,6 +38,14 @@ describe('match soundscape semantics', () => {
     expect(classifyMatchSoundEvent(event('free_kick'), 'home', false)).toBe('free_kick');
   });
 
+  it('routes visible pitch events through the synchronized presentation path', () => {
+    expect(isPresentationSequencedSoundEvent(event('goal'))).toBe(true);
+    expect(isPresentationSequencedSoundEvent(event('save'))).toBe(true);
+    expect(isPresentationSequencedSoundEvent(event('corner'))).toBe(true);
+    expect(isPresentationSequencedSoundEvent(event('red_card'))).toBe(false);
+    expect(isPresentationSequencedSoundEvent(event('substitution'))).toBe(false);
+  });
+
   it('raises crowd presence by profile without hiding action cues in quiet mode', () => {
     expect(MATCH_SOUND_PROFILE_MIX.quiet.crowd).toBeLessThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
     expect(MATCH_SOUND_PROFILE_MIX.stadium.crowd).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
@@ -54,6 +64,15 @@ describe('match soundscape semantics', () => {
     }, 0.2);
     expect(late).toBeGreaterThan(early);
     expect(shootout).toBeGreaterThan(late);
+  });
+
+  it('raises the ambient crowd in dangerous play but drops that lift while paused', () => {
+    const settled = computeCrowdGainLevel(0.5, 0.1, false);
+    const dangerous = computeCrowdGainLevel(0.5, 0.95, false);
+    const paused = computeCrowdGainLevel(0.5, 0.95, true);
+
+    expect(dangerous).toBeGreaterThan(settled);
+    expect(paused).toBeLessThan(dangerous);
   });
 
   it('gives finals and world competition a bounded prestige lift', () => {

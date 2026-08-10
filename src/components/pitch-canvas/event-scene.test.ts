@@ -18,6 +18,16 @@ describe('event-directed pitch scenes', () => {
     expect(sceneForEvent(event('df_block', 'AWAY'), 'HOME')?.attackingHome).toBe(true);
   });
 
+  it('keeps routine saves central while allowing key saves to reach the corners', () => {
+    const routine = sceneForEvent(event('save', 'HOME'), 'HOME');
+    const key = sceneForEvent(event('gk_save', 'HOME'), 'HOME');
+
+    expect(routine?.target.y).toBeGreaterThanOrEqual(0.46);
+    expect(routine?.target.y).toBeLessThanOrEqual(0.54);
+    expect(key?.target.y).toBeGreaterThanOrEqual(0.4);
+    expect(key?.target.y).toBeLessThanOrEqual(0.6);
+  });
+
   it('maps structured corner and free-kick events to delivery scenes', () => {
     const corner: MatchEvent = {
       ...event('corner', 'HOME'),

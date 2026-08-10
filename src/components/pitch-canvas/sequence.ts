@@ -4,6 +4,7 @@ import { generateSetPieceSequence } from './set-pieces';
 import {
   BASE_FORMATION,
   type PassPhase,
+  type PresentationChanceStyle,
   type PresentationPlayPattern,
   type PresentationPlayStage,
   type PresentationSetPiece,
@@ -21,6 +22,7 @@ export interface SequenceOptions {
   sourceOverride?: { x: number; y: number };
   homePossessionShare?: number;
   transition?: boolean;
+  chanceStyle?: PresentationChanceStyle;
 }
 
 interface OpenPlayPlan {
@@ -251,6 +253,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   let pattern: PresentationPlayPattern;
   let passTargets: Array<{ x: number; y: number }>;
   let directedShotOrigin: { x: number; y: number } | undefined;
+  let chanceStyle: PresentationChanceStyle | undefined;
   if (options.forceShot) {
     const shooter = options.shooterIdx ?? (8 + Math.floor(r(19) * 3));
     const defaultCreator = 5 + Math.floor(r(4) * 3);
@@ -261,26 +264,57 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       .filter((slot): slot is number => slot !== undefined)
       .filter((slot, index, slots) => index === 0 || slot !== slots[index - 1]);
     const shooterY = BASE_FORMATION[shooter]?.y ?? 0.5;
-    directedShotOrigin = {
-      x: isHome ? 0.8 + r(17) * 0.07 : 0.2 - r(17) * 0.07,
-      y: Math.min(0.78, Math.max(0.22, shooterY + (r(18) - 0.5) * 0.12)),
-    };
+    const styleRoll = r(15);
+    chanceStyle = options.chanceStyle ?? (
+      styleRoll < 0.24 ? 'cutback'
+        : styleRoll < 0.48 ? 'cross'
+          : styleRoll < 0.75 ? 'through_ball'
+            : 'central'
+    );
+    const upperFlank = r(16) < 0.5;
+    const shotProgress = chanceStyle === 'through_ball' || chanceStyle === 'cross'
+      ? 0.85 + r(17) * 0.04
+      : chanceStyle === 'cutback'
+        ? 0.8 + r(17) * 0.045
+        : 0.82 + r(17) * 0.05;
+    const shotY = chanceStyle === 'central'
+      ? Math.min(0.68, Math.max(0.32, shooterY + (r(18) - 0.5) * 0.1))
+      : 0.42 + r(18) * 0.16;
+    directedShotOrigin = mirrorPoint({ x: shotProgress, y: shotY }, isHome);
     const source = options.sourceOverride ?? (() => {
       const slot = BASE_FORMATION[route[0]] ?? BASE_FORMATION[6];
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
-    const shotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
+    const directedShotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
     const sourceProgress = isHome ? source.x : 1 - source.x;
     pattern = options.transition
       ? 'counter'
-      : Math.abs(directedShotOrigin.y - 0.5) > 0.16
+      : chanceStyle === 'cross' || chanceStyle === 'cutback'
         ? 'wing_overload'
-        : shotProgress - sourceProgress > 0.35
+        : chanceStyle === 'through_ball' || directedShotProgress - sourceProgress > 0.35
           ? 'counter'
           : 'central_combination';
     passTargets = route.slice(1).map((receiverIdx, index) => {
       const t = (index + 1) / Math.max(1, route.length - 1);
       if (index === route.length - 2) return directedShotOrigin!;
+      if (chanceStyle === 'cross') {
+        return mirrorPoint({
+          x: 0.76 + r(21 + index) * 0.05,
+          y: upperFlank ? 0.13 : 0.87,
+        }, isHome);
+      }
+      if (chanceStyle === 'cutback') {
+        return mirrorPoint({
+          x: 0.87 + r(21 + index) * 0.035,
+          y: upperFlank ? 0.18 : 0.82,
+        }, isHome);
+      }
+      if (chanceStyle === 'through_ball') {
+        return mirrorPoint({
+          x: 0.66 + r(21 + index) * 0.06,
+          y: 0.42 + (r(24 + index) - 0.5) * 0.16,
+        }, isHome);
+      }
       const receiverY = BASE_FORMATION[receiverIdx]?.y ?? directedShotOrigin!.y;
       return {
         x: source.x + (directedShotOrigin!.x - source.x) * t,
@@ -313,6 +347,21 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     })();
     const longBall = Math.hypot(target.x - source.x, target.y - source.y) > 0.34;
     const isLastPass = i === route.length - 2;
+    const directedDelivery = Boolean(options.forceShot && isLastPass && chanceStyle);
+    const directedDuration = chanceStyle === 'cross'
+      ? 44 + r(i + 10) * 8
+      : chanceStyle === 'through_ball'
+        ? 34 + r(i + 10) * 7
+        : chanceStyle === 'cutback'
+          ? 27 + r(i + 10) * 6
+          : 30 + r(i + 10) * 7;
+    const directedArc = chanceStyle === 'cross'
+      ? 0.62 + r(i + 13) * 0.22
+      : chanceStyle === 'through_ball'
+        ? 0.08 + r(i + 13) * 0.12
+        : chanceStyle === 'cutback'
+          ? r(i + 13) * 0.06
+          : 0.04 + r(i + 13) * 0.12;
     phases.push({
       passerIdx: route[i],
       receiverIdx: route[i + 1],
@@ -320,13 +369,14 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       kind: 'pass',
       pattern,
       stage: stageForPass(pattern, i, route.length - 1),
+      chanceStyle,
       duration: options.forceShot
-        ? (longBall ? 30 + r(i + 10) * 6 : 24 + r(i + 11) * 6)
+        ? directedDelivery ? directedDuration : (longBall ? 34 + r(i + 10) * 7 : 27 + r(i + 11) * 7)
         : longBall ? 70 + r(i + 10) * 25 : 42 + r(i + 11) * 20,
       hold: options.forceShot
         ? 7 + r(i + 12) * 4
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
-      arc: longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
+      arc: directedDelivery ? directedArc : longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
       ...(i === 0 && options.startingPlayerIdx !== undefined && {
         releaseDelayFrames: options.transition ? 18 : 12,
@@ -345,7 +395,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       kind: 'shot',
       pattern,
       stage: 'finish',
-      duration: options.forceShot ? 30 + r(31) * 8 : 32 + r(31) * 12,
+      chanceStyle,
+      duration: options.forceShot
+        ? chanceStyle === 'cross' ? 26 + r(31) * 7 : 31 + r(31) * 9
+        : 32 + r(31) * 12,
       hold: options.forceShot ? 20 + r(32) * 8 : 16 + r(32) * 8,
       arc: 0.04 + r(33) * 0.16,
       swerve: (r(34) - 0.5) * (options.forceShot ? 0.9 : 0.65),

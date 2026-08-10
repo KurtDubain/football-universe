@@ -95,6 +95,26 @@ describe('pitch possession sequences', () => {
     expect(shot.hold).toBeGreaterThanOrEqual(20);
   });
 
+  it('gives directed chances distinct deterministic delivery shapes', () => {
+    const common = {
+      attackingHome: true,
+      forceShot: true,
+      startingPlayerIdx: 6,
+      creatorIdx: 7,
+      shooterIdx: 9,
+      sourceOverride: { x: 0.5, y: 0.5 },
+    } as const;
+    const cross = generateSequence(118, { ...common, chanceStyle: 'cross' });
+    const cutback = generateSequence(118, { ...common, chanceStyle: 'cutback' });
+    const throughBall = generateSequence(118, { ...common, chanceStyle: 'through_ball' });
+
+    expect(cross.phases[0].chanceStyle).toBe('cross');
+    expect(cross.phases.at(-2)?.arc).toBeGreaterThan(0.6);
+    expect(cutback.phases.at(-2)?.arc).toBeLessThan(0.07);
+    expect(throughBall.phases.at(-2)?.targetOverride?.x).toBeGreaterThan(0.84);
+    expect(cross.phases[0].targetOverride).not.toEqual(cutback.phases[0].targetOverride);
+  });
+
   it('progresses toward goal unless the episode explicitly recycles possession', () => {
     for (let seed = 1; seed <= 80; seed++) {
       const sequence = generateSequence(seed, { attackingHome: true });

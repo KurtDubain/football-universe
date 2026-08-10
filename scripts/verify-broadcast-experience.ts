@@ -9,6 +9,8 @@ const viewports = [
 interface AudioDelivery {
   type: 'start' | 'event' | 'stage' | 'stop';
   cue?: string;
+  moment?: 'setup' | 'contact' | 'outcome';
+  presentationId?: string;
 }
 
 function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
@@ -95,7 +97,7 @@ async function verifyViewport(viewport: typeof viewports[number]) {
     await canvas.waitFor({ state: 'visible' });
     await page.waitForFunction(() => (
       (window as typeof window & { __broadcastAudio?: AudioDelivery[] }).__broadcastAudio ?? []
-    ).some(delivery => delivery.type === 'event'), undefined, { timeout: 12_000 });
+    ).some(delivery => delivery.moment === 'outcome'), undefined, { timeout: 15_000 });
     const nonBlank = await canvas.evaluate(element => {
       const source = element as HTMLCanvasElement;
       const context2d = source.getContext('2d');
@@ -120,10 +122,18 @@ async function verifyViewport(viewport: typeof viewports[number]) {
     if (!deliveries.some(delivery => delivery.type === 'event')) {
       throw new Error(`${viewport.name}: no event sound was scheduled`);
     }
+    const contactIndex = deliveries.findIndex(delivery => delivery.moment === 'contact');
+    const outcomeIndex = deliveries.findIndex(delivery => delivery.moment === 'outcome');
+    if (contactIndex < 0 || outcomeIndex < 0 || outcomeIndex <= contactIndex) {
+      throw new Error(`${viewport.name}: pitch audio did not preserve contact-before-outcome timing ${JSON.stringify(deliveries)}`);
+    }
     if (!deliveries.some(delivery => delivery.type === 'stage' && delivery.cue === 'fulltime')) {
       throw new Error(`${viewport.name}: fulltime sound stage missing`);
     }
     await page.getByRole('button', { name: '关闭', exact: true }).click();
+    if (await page.getByTestId('trophy-celebration').count()) {
+      throw new Error(`${viewport.name}: an ordinary focused match incorrectly triggered a trophy celebration`);
+    }
 
     const seasonStatus = await page.evaluate(async () => {
       type AuditState = {

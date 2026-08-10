@@ -5,6 +5,7 @@ import { clamp, lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence';
 import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
+import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
 import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
@@ -16,7 +17,14 @@ import {
   GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES, SHOT_OUTCOME_MAX_FRAMES,
   type BroadcastCameraState,
 } from './pitch-canvas/renderer';
-import { BASE_FORMATION, type Particle, type PassPhase, type PlayerState } from './pitch-canvas/types';
+import {
+  BASE_FORMATION,
+  type MatchPresentationAtmosphere,
+  type MatchPresentationCue,
+  type Particle,
+  type PassPhase,
+  type PlayerState,
+} from './pitch-canvas/types';
 import {
   degradeRenderBudget,
   selectRenderBudget,
@@ -43,6 +51,8 @@ interface Props {
   shootout?: boolean;
   possession?: [number, number];
   onPlaybackHoldChange?: (holding: boolean) => void;
+  onPresentationCue?: (cue: MatchPresentationCue) => void;
+  onPresentationAtmosphereChange?: (snapshot: MatchPresentationAtmosphere) => void;
 }
 
 interface PitchDebugState {
@@ -56,6 +66,7 @@ interface PitchDebugState {
     outcome: SceneOutcome;
     target: { x: number; y: number };
   } & EventActors) | null;
+  atmosphere: MatchPresentationAtmosphere;
   ball: { x: number; y: number; elevation: number };
   camera: { focusX: number; focusY: number; zoom: number };
   ballHolderId: string | null;
@@ -144,6 +155,7 @@ function sequenceOptionsForScene(
     creatorIdx: scene.outcome === 'delivery'
       ? eventActorSlot
       : slotForPlayer(attackingRoster, actors.creatorId),
+    chanceStyle: origin === 'counter' ? 'through_ball' : undefined,
     ...(!setPiece && continuity ? {
       sourceOverride: continuity.source,
       startingPlayerIdx: continuity.startingPlayerIdx,
@@ -161,7 +173,7 @@ function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
-    possession = [50, 50], onPlaybackHoldChange,
+    possession = [50, 50], onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -185,9 +197,17 @@ function PitchCanvas(props: Props) {
   const shotOutcomeTargetRef = useRef({ x: 0, y: 0 });
   const shotOutcomeAttackingHomeRef = useRef(true);
   const shotOutcomeSeedRef = useRef(0);
+  const shotOutcomeHeldRef = useRef(false);
   const particlesRef = useRef<Particle[]>([]);
   const pendingImpactSceneRef = useRef<EventScene | null>(null);
   const triggeredImpactKeyRef = useRef<string | null>(null);
+  const emittedPresentationCueIdsRef = useRef(new Set<string>());
+  const lastAtmosphereRef = useRef<MatchPresentationAtmosphere & { frame: number }>({
+    danger: -1,
+    attackingHome: true,
+    inFlight: false,
+    frame: -100,
+  });
   const wakeRenderLoopRef = useRef<() => void>(() => undefined);
 
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
@@ -228,6 +248,7 @@ function PitchCanvas(props: Props) {
     phase: 'passing',
     attackingSide: 'home',
     event: null,
+    atmosphere: { danger: 0, attackingHome: true, inFlight: false },
     ball: { x: 0.5, y: 0.5, elevation: 0 },
     camera: { focusX: 0.5, focusY: 0.5, zoom: 1 },
     ballHolderId: null,
@@ -270,19 +291,19 @@ function PitchCanvas(props: Props) {
   const liveRef = useRef({
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
-    onPlaybackHoldChange,
+    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   });
   useEffect(() => {
     liveRef.current = {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
-      onPlaybackHoldChange,
+      onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
   }, [
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
-    onPlaybackHoldChange,
+    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   ]);
 
   useEffect(() => () => {
@@ -402,6 +423,24 @@ function PitchCanvas(props: Props) {
       }
     }
 
+    function emitPresentationCue(
+      scene: EventScene,
+      moment: MatchPresentationCue['moment'],
+      detail: Pick<MatchPresentationCue, 'action' | 'outcome'> = {},
+      phaseOrdinal = phaseIdxRef.current,
+    ): void {
+      const id = `${scene.key}:${moment}:${moment === 'contact' ? phaseOrdinal : 'scene'}`;
+      if (emittedPresentationCueIdsRef.current.has(id)) return;
+      emittedPresentationCueIdsRef.current.add(id);
+      liveRef.current.onPresentationCue?.({
+        id,
+        moment,
+        event: scene.event,
+        attackingHome: scene.attackingHome,
+        ...detail,
+      });
+    }
+
     function recordRenderDuration(duration: number): void {
       renderedFrames++;
       renderDurations.push(duration);
@@ -458,6 +497,8 @@ function PitchCanvas(props: Props) {
       triggeredImpactKeyRef.current = scene.key;
       pendingImpactSceneRef.current = null;
       postShotRestingBallRef.current = null;
+      shotOutcomeHeldRef.current = scene.outcome === 'save' && scene.event.type === 'save';
+      emitPresentationCue(scene, 'outcome', { outcome: scene.outcome });
 
       if (scene.outcome === 'goal') {
         goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
@@ -547,6 +588,7 @@ function PitchCanvas(props: Props) {
         goalCelebFrame.current = 0;
         flashWhiteRef.current = 0;
         postShotRestingBallRef.current = null;
+        shotOutcomeHeldRef.current = false;
         const ballX = clamp((ballPos.current.x - P) / fw, 0.03, 0.97);
         const ballY = clamp((ballPos.current.y - P) / fh, 0.05, 0.95);
         const attackingRoster = activePitchPlayers(sceneToStart.attackingHome ? homeRoster : awayRoster, minute, maxMinute);
@@ -700,6 +742,7 @@ function PitchCanvas(props: Props) {
             homePossessionShare,
           };
           postShotRestingBallRef.current = null;
+          shotOutcomeHeldRef.current = false;
         } else {
           const completedPhase = sequenceRef.current[sequenceRef.current.length - 1];
           const nextAttackingHome = completedPhase?.attackingHome ?? true;
@@ -772,6 +815,9 @@ function PitchCanvas(props: Props) {
           if (waitingForEvent || waitingForDelivery) {
             phaseFrameRef.current = phase.hold;
           } else {
+            if (scene?.outcome === 'delivery' && !newPhase) {
+              emitPresentationCue(scene, 'outcome', { outcome: 'delivery' });
+            }
             phaseIdxRef.current++;
             phaseFrameRef.current = 0;
             if (newPhase) {
@@ -829,6 +875,27 @@ function PitchCanvas(props: Props) {
       const finalTargetX = P + ballTarget.x * fw;
       const finalTargetY = P + ballTarget.y * fh;
       const releaseDelayFrames = currentPhase.releaseDelayFrames ?? (currentPhase.kind === 'shot' ? 8 : 0);
+      if (
+        directedShotScene
+        && currentPhase.setPiece
+        && phaseIdxRef.current === 0
+        && phaseFrameRef.current <= 1
+      ) {
+        emitPresentationCue(directedShotScene, 'setup');
+      }
+      const contactFrame = Math.max(1, releaseDelayFrames);
+      if (
+        directedShotScene
+        && phaseStateRef.current !== 'holding'
+        && phaseFrameRef.current === contactFrame
+        && (currentPhase.kind === 'shot' || currentPhase.setPiece)
+      ) {
+        emitPresentationCue(
+          directedShotScene,
+          'contact',
+          { action: currentPhase.kind === 'shot' ? 'shot' : 'delivery' },
+        );
+      }
       const phaseProgress = phaseStateRef.current === 'holding'
         ? 1
         : clamp(
@@ -881,6 +948,7 @@ function PitchCanvas(props: Props) {
           attackingHome: shotOutcomeAttackingHomeRef.current,
           progress: 1 - shotOutcomeFrameRef.current / SHOT_OUTCOME_MAX_FRAMES,
           seed: shotOutcomeSeedRef.current,
+          held: shotOutcomeHeldRef.current,
         });
         displayBx = rebound.bx;
         displayBy = rebound.by;
@@ -928,6 +996,21 @@ function PitchCanvas(props: Props) {
           : currentPhase.stage === 'transition'
             ? 'transition'
             : 'possession';
+      const atmosphere = presentationAtmosphereForPhase(
+        currentPhase,
+        clamp(ballNX, 0, 1),
+        phaseStateRef.current !== 'holding',
+      );
+      const previousAtmosphere = lastAtmosphereRef.current;
+      const atmosphereChanged = atmosphere.attackingHome !== previousAtmosphere.attackingHome
+        || atmosphere.stage !== previousAtmosphere.stage
+        || atmosphere.setPiece !== previousAtmosphere.setPiece
+        || atmosphere.inFlight !== previousAtmosphere.inFlight
+        || Math.abs(atmosphere.danger - previousAtmosphere.danger) >= 0.08;
+      if (atmosphereChanged || f - previousAtmosphere.frame >= 12) {
+        lastAtmosphereRef.current = { ...atmosphere, frame: f };
+        live.onPresentationAtmosphereChange?.(atmosphere);
+      }
       const assignmentKey = `${sequenceSeedRef.current}:${tacticalMoment}:${isAttHome ? 'H' : 'A'}:${activeHome.length}:${activeAway.length}`;
       if (tacticalAssignmentKeyRef.current !== assignmentKey) {
         tacticalAssignmentKeyRef.current = assignmentKey;
@@ -1008,7 +1091,9 @@ function PitchCanvas(props: Props) {
           isAttacker && currentPhase.kind === 'shot'
             ? 'shot'
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
-              ? directedShotScene.outcome
+              ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
+                ? 'catch'
+                : directedShotScene.outcome
               : undefined,
           isAttacker ? attackerActionProgress : phaseProgress,
         );
@@ -1026,7 +1111,9 @@ function PitchCanvas(props: Props) {
           isAttacker && currentPhase.kind === 'shot'
             ? 'shot'
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
-              ? directedShotScene.outcome
+              ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
+                ? 'catch'
+                : directedShotScene.outcome
               : undefined,
           isAttacker ? attackerActionProgress : phaseProgress,
         );
@@ -1046,6 +1133,7 @@ function PitchCanvas(props: Props) {
               ...directedActors,
             }
           : null,
+        atmosphere,
         ball: {
           x: (displayBx - P) / fw,
           y: (displayBy - P) / fh,

@@ -1,8 +1,21 @@
 // Pure type definitions + constants for the PitchCanvas pipeline.
 // No logic — only data shapes shared across the pitch-canvas modules.
 
+import type {
+  PresentationChanceStyle,
+  PresentationPlayStage,
+  PresentationSetPiece,
+} from '../../types/match-presentation';
+
+export type {
+  MatchPresentationAtmosphere,
+  MatchPresentationCue,
+  PresentationChanceStyle,
+  PresentationPlayStage,
+  PresentationSetPiece,
+} from '../../types/match-presentation';
+
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
-export type PresentationSetPiece = 'corner' | 'direct_free_kick' | 'crossed_free_kick' | 'penalty';
 export type PresentationPlayPattern =
   | 'build_up'
   | 'wing_overload'
@@ -10,7 +23,6 @@ export type PresentationPlayPattern =
   | 'switch_play'
   | 'counter'
   | 'recycle';
-export type PresentationPlayStage = 'build' | 'progress' | 'create' | 'finish' | 'transition';
 
 // 4-3-3 formation positions (normalized 0-1, x is depth, y is width).
 // This matches the authoritative starter shape in match participation.
@@ -59,6 +71,7 @@ export interface PassPhase {
   setPiece?: PresentationSetPiece;
   pattern?: PresentationPlayPattern;
   stage?: PresentationPlayStage;
+  chanceStyle?: PresentationChanceStyle;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };

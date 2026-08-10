@@ -9,6 +9,8 @@ interface Tone {
   endFrequency?: number;
 }
 
+const FEEDBACK_VOLUME_LIFT = 1.24;
+
 const CUE_TONES: Record<GameFeedbackCue, Tone[]> = {
   start: [
     { offset: 0, duration: 1.7, frequency: 164.81, type: 'sine', volume: 0.012, endFrequency: 166.5 },
@@ -48,7 +50,7 @@ function scheduleTone(context: AudioContext, tone: Tone): void {
   oscillator.frequency.setValueAtTime(tone.frequency, start);
   if (tone.endFrequency) oscillator.frequency.exponentialRampToValueAtTime(tone.endFrequency, end);
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(tone.volume, start + 0.012);
+  gain.gain.exponentialRampToValueAtTime(tone.volume * FEEDBACK_VOLUME_LIFT, start + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.0001, end);
   oscillator.connect(gain).connect(context.destination);
   oscillator.start(start);

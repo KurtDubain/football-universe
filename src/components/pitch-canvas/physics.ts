@@ -225,6 +225,7 @@ export interface PostShotBallInput {
   attackingHome: boolean;
   progress: number;
   seed: number;
+  held?: boolean;
 }
 
 /**
@@ -236,6 +237,14 @@ export function computePostShotBallPosition(input: PostShotBallInput): BallCompu
   const progress = clamp(input.progress, 0, 1);
   const travel = 1 - (1 - progress) * (1 - progress);
   const attackDirection = input.attackingHome ? 1 : -1;
+  if (input.outcome === 'save' && input.held) {
+    return {
+      bx: input.target.x - attackDirection * 3 * travel,
+      by: input.target.y + Math.sin(progress * Math.PI) * 1.5,
+      arcLift: Math.sin(progress * Math.PI) * 1.5,
+      spinDelta: 0.16 * (1 - progress),
+    };
+  }
   const sideDirection = seededRand(input.seed + 211) < 0.5 ? -1 : 1;
   const distance = input.outcome === 'block' ? 34 : input.outcome === 'save' ? 18 : 16;
   const lateral = input.outcome === 'block' ? 24 : input.outcome === 'save' ? 8 : 13;

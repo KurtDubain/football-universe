@@ -82,6 +82,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
   const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
+  const [pendingLiveCelebration, setPendingLiveCelebration] = useState<'trophy' | 'confetti' | null>(null);
   const [liveResult, setLiveResult] = useState<MatchResult | null>(null);
   const [liveFeatured, setLiveFeatured] = useState(false);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
@@ -103,23 +104,24 @@ function DashboardContent({ world }: { world: GameWorld }) {
     const finalResult = lastResults.find(r =>
       r.roundLabel === 'Final' || r.roundLabel === '决赛'
     );
+    const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
+    const nextCelebration = prevWindow
+      ? shouldCelebrate(prevWindow.type, prevWindow.label, lastResults)
+      : null;
     if (starredHit) {
       setLiveFeatured(true);
       setLiveResult(starredHit);
+      setPendingLiveCelebration(nextCelebration);
       // Clear starred (one-shot per advance)
       clearStarredFixtures();
     } else if (finalResult) {
       setLiveFeatured(true);
       setLiveResult(finalResult);
+      setPendingLiveCelebration(nextCelebration);
     } else {
       setActiveTab('results');
-    }
-
-    // Check celebration
-    const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
-    if (prevWindow) {
-      const celeb = shouldCelebrate(prevWindow.type, prevWindow.label, lastResults);
-      if (celeb && !finalResult && !starredHit) setCelebrationType(celeb);
+      setPendingLiveCelebration(null);
+      if (nextCelebration) setCelebrationType(nextCelebration);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTick]);
@@ -345,6 +347,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
             lastNews={lastNews}
             onResultClick={handleResultClick}
             onLiveView={(r) => {
+              setPendingLiveCelebration(null);
               setLiveFeatured(false);
               setLiveResult(r);
             }}
@@ -372,7 +375,8 @@ function DashboardContent({ world }: { world: GameWorld }) {
             setLiveResult(null);
             setLiveFeatured(false);
             setActiveTab('results');
-            setCelebrationType('trophy');
+            if (pendingLiveCelebration) setCelebrationType(pendingLiveCelebration);
+            setPendingLiveCelebration(null);
           }}
         />
       )}

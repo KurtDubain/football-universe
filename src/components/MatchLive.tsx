@@ -13,7 +13,15 @@ import {
   type PlaybackMode,
 } from './match-live/playback-mode';
 import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
-import { createMatchSoundscape, type MatchSoundscape } from '../feedback/match-soundscape';
+import {
+  createMatchSoundscape,
+  isPresentationSequencedSoundEvent,
+  type MatchSoundscape,
+} from '../feedback/match-soundscape';
+import type {
+  MatchPresentationAtmosphere,
+  MatchPresentationCue,
+} from '../types/match-presentation';
 import {
   setFeedbackPreferences,
   useFeedbackPreferences,
@@ -440,6 +448,16 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     timelineMax,
   ]);
 
+  const handlePresentationCue = useCallback((cue: MatchPresentationCue) => {
+    if (!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible || showOpener) return;
+    const soundscape = soundscapeRef.current;
+    soundscape?.playPresentation(cue);
+  }, [feedbackPreferences.soundEnabled, locallyMuted, pageVisible, showOpener]);
+
+  const handlePresentationAtmosphere = useCallback((snapshot: MatchPresentationAtmosphere) => {
+    soundscapeRef.current?.updatePresentation(snapshot);
+  }, []);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -509,11 +527,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   useEffect(() => {
     if (!feedbackPreferences.soundEnabled || locallyMuted || !playback.flashEvent) return;
     const soundscape = soundscapeRef.current;
+    if (isPresentationSequencedSoundEvent(playback.flashEvent)) {
+      const isGoal = playback.flashEvent.type === 'goal'
+        || playback.flashEvent.type === 'own_goal'
+        || playback.flashEvent.type === 'penalty_goal';
+      if (isGoal && !soundscape?.started) playGameFeedback('goal');
+      return;
+    }
     soundscape?.playEvent(playback.flashEvent);
-    const isGoal = playback.flashEvent.type === 'goal'
-      || playback.flashEvent.type === 'own_goal'
-      || playback.flashEvent.type === 'penalty_goal';
-    if (isGoal && !soundscape?.started) playGameFeedback('goal');
   }, [
     feedbackPreferences.soundEnabled,
     locallyMuted,
@@ -802,11 +823,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   : extraTimeBreak
                     ? { label: '加时赛', sublabel: 'EXTRA TIME' }
                     : { label: '中场休息', sublabel: 'HALF TIME' }}
-                active={playback.phase === 'playing' && pageVisible}
+                active={playback.phase === 'playing' && pageVisible && !showOpener}
                 playbackMode={playback.mode}
                 shootout={inShootout}
                 possession={result.stats.possession}
                 onPlaybackHoldChange={setPresentationHolding}
+                onPresentationCue={handlePresentationCue}
+                onPresentationAtmosphereChange={handlePresentationAtmosphere}
               />
             </div>
 

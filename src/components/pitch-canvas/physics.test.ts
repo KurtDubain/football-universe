@@ -102,6 +102,18 @@ describe('pitch player movement', () => {
     expect(Math.abs(block.by - 140)).toBeGreaterThan(Math.abs(save.by - 140));
   });
 
+  it('keeps a routine held save with the goalkeeper instead of inventing a rebound', () => {
+    const held = computePostShotBallPosition({
+      outcome: 'save', target: { x: 500, y: 140 }, attackingHome: true, progress: 1, seed: 2, held: true,
+    });
+    const parried = computePostShotBallPosition({
+      outcome: 'save', target: { x: 500, y: 140 }, attackingHome: true, progress: 1, seed: 2,
+    });
+
+    expect(Math.abs(held.bx - 500)).toBeLessThan(Math.abs(parried.bx - 500));
+    expect(Math.abs(held.by - 140)).toBeLessThan(2);
+  });
+
   it('carries possession forward without leaving the pitch', () => {
     expect(computeCarryTarget({ x: 0.5, y: 0.4 }, true, 1, 0.03)).toEqual({ x: 0.53, y: 0.4 });
     expect(computeCarryTarget({ x: 0.04, y: 0.4 }, false, 1, 0.03).x).toBe(0.03);

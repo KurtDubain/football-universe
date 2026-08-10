@@ -114,7 +114,7 @@ export function drawPlayer(
   highlighted = false,
   label?: string,
   facingTarget?: { x: number; y: number },
-  action?: 'shot' | 'save' | 'block',
+  action?: 'shot' | 'save' | 'catch' | 'block',
   actionProgress = 0,
 ): void {
   const px = P + p.x * fw;
@@ -163,13 +163,14 @@ export function drawPlayer(
     ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.stroke();
     if (label) {
       ctx.font = 'bold 7px sans-serif';
-      const labelY = action === 'save' || action === 'block' ? py + 15 : Math.max(8, py - 11);
+      const labelY = action === 'save' || action === 'catch' || action === 'block' ? py + 15 : Math.max(8, py - 11);
       const labelWidth = ctx.measureText(label).width + 5;
+      const labelX = clamp(px, P + labelWidth / 2 + 3, P + fw - labelWidth / 2 - 3);
       ctx.fillStyle = 'rgba(2,6,23,0.72)';
-      ctx.fillRect(px - labelWidth / 2, labelY - 7, labelWidth, 9);
+      ctx.fillRect(labelX - labelWidth / 2, labelY - 7, labelWidth, 9);
       ctx.fillStyle = '#fef3c7';
       ctx.textAlign = 'center';
-      ctx.fillText(label, px, labelY);
+      ctx.fillText(label, labelX, labelY);
     }
   }
 
@@ -203,6 +204,18 @@ export function drawPlayer(
       );
       ctx.strokeStyle = `rgba(255,255,255,${0.3 + actionWave * 0.55})`;
       ctx.lineWidth = 1.4;
+      ctx.stroke();
+    } else if (action === 'catch' && actionWave > 0.05) {
+      const sideX = -directionY;
+      const sideY = directionX;
+      ctx.beginPath();
+      ctx.moveTo(px + sideX * 4, py + sideY * 4);
+      ctx.lineTo(px + directionX * 6 * actionWave, py + directionY * 6 * actionWave);
+      ctx.moveTo(px - sideX * 4, py - sideY * 4);
+      ctx.lineTo(px + directionX * 6 * actionWave, py + directionY * 6 * actionWave);
+      ctx.strokeStyle = 'rgba(147,197,253,0.72)';
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
       ctx.stroke();
     } else if (actionWave > 0.05) {
       ctx.beginPath();
@@ -257,7 +270,7 @@ export function drawPlayer(
     ctx.beginPath();
     ctx.moveTo(px + directionX * markerStart, py + directionY * markerStart);
     ctx.lineTo(px + directionX * markerEnd, py + directionY * markerEnd);
-    ctx.strokeStyle = action === 'save' ? '#93c5fd' : action === 'block' ? '#fde68a' : 'rgba(255,255,255,0.9)';
+    ctx.strokeStyle = action === 'save' || action === 'catch' ? '#93c5fd' : action === 'block' ? '#fde68a' : 'rgba(255,255,255,0.9)';
     ctx.lineWidth = action ? 1.8 : 1.1;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -441,7 +454,7 @@ export function drawShotOutcome(
   ctx.font = 'bold 9px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = outcome === 'save' ? '#bfdbfe' : outcome === 'block' ? '#fde68a' : '#e2e8f0';
-  const safeLabelX = Math.max(30, Math.min(canvasWidth - 30, targetX));
+  const safeLabelX = Math.max(42, Math.min(canvasWidth - 42, targetX));
   ctx.fillText(label, safeLabelX, Math.max(14, targetY - 13 - progress * 5));
   ctx.restore();
 }

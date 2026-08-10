@@ -1,5 +1,9 @@
 import type { MatchEvent, MatchResult } from '../types/match';
-import { eventAttacksForHome } from '../engine/match/event-taxonomy';
+import { eventAttacksForHome, isShotEvent } from '../engine/match/event-taxonomy';
+import type {
+  MatchPresentationAtmosphere,
+  MatchPresentationCue,
+} from '../types/match-presentation';
 import { getUnlockedGameAudioContext } from './game-feedback';
 import type { SoundProfile } from './preferences';
 
@@ -31,7 +35,9 @@ export interface MatchSoundscape {
   readonly started: boolean;
   start: () => boolean;
   update: (snapshot: MatchAtmosphereSnapshot) => void;
+  updatePresentation: (snapshot: MatchPresentationAtmosphere) => void;
   playEvent: (event: MatchEvent) => void;
+  playPresentation: (cue: MatchPresentationCue) => void;
   playStage: (stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime') => void;
   setMuted: (muted: boolean) => void;
   setProfile: (profile: SoundProfile) => void;
@@ -55,9 +61,9 @@ interface SoundProfileMix {
 }
 
 export const MATCH_SOUND_PROFILE_MIX: Readonly<Record<SoundProfile, SoundProfileMix>> = {
-  quiet: { master: 0.58, crowd: 0.55, action: 1, music: 0.65 },
-  balanced: { master: 0.72, crowd: 1, action: 1, music: 0.85 },
-  stadium: { master: 0.78, crowd: 1.35, action: 1.08, music: 0.95 },
+  quiet: { master: 0.66, crowd: 0.68, action: 1.18, music: 0.72 },
+  balanced: { master: 0.86, crowd: 1.16, action: 1.18, music: 0.92 },
+  stadium: { master: 0.94, crowd: 1.52, action: 1.28, music: 1 },
 };
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -81,7 +87,12 @@ function seededNoise(seed: number): () => number {
   };
 }
 
-function reportSoundscape(detail: { type: 'start' | 'event' | 'stage' | 'stop'; cue?: string }): void {
+function reportSoundscape(detail: {
+  type: 'start' | 'event' | 'stage' | 'stop';
+  cue?: string;
+  moment?: MatchPresentationCue['moment'];
+  presentationId?: string;
+}): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent('football-match-soundscape', { detail }));
 }
@@ -109,6 +120,19 @@ export function computeCrowdIntensity(
   const closeMatch = Math.abs(snapshot.homeScore - snapshot.awayScore) <= 1;
   const lateTension = closeMatch ? clamp((progress - 0.55) / 0.45) * 0.34 : 0;
   return clamp(0.24 + prestige * 0.42 + progress * 0.12 + lateTension, 0.16, 1);
+}
+
+export function computeCrowdGainLevel(
+  matchIntensity: number,
+  presentationDanger: number,
+  paused: boolean,
+): number {
+  const activeDanger = paused ? 0 : clamp(presentationDanger);
+  return 0.016 + clamp(matchIntensity) * 0.045 + activeDanger * 0.026;
+}
+
+export function isPresentationSequencedSoundEvent(event: MatchEvent): boolean {
+  return isShotEvent(event) || event.type === 'corner' || event.type === 'free_kick';
 }
 
 export function classifyMatchSoundEvent(
@@ -273,6 +297,10 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   private muted: boolean;
   private profile: SoundProfile;
   private lastCrowdIntensity = 0.24;
+  private presentationDanger = 0;
+  private macroPaused = false;
+  private fixturePulse = 1;
+  private dangerWasHigh = false;
   private readonly seed: number;
   private readonly prestige: number;
 
@@ -298,9 +326,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     const musicGain = context.createGain();
     const mix = MATCH_SOUND_PROFILE_MIX[this.profile];
     master.gain.value = this.muted ? 0.0001 : mix.master;
-    crowdGain.gain.value = (0.011 + this.lastCrowdIntensity * 0.031) * mix.crowd;
-    crowdReactionGain.gain.value = 0.86 * mix.crowd;
-    actionGain.gain.value = 0.96 * mix.action;
+    crowdGain.gain.value = computeCrowdGainLevel(this.lastCrowdIntensity, 0, false) * mix.crowd;
+    crowdReactionGain.gain.value = mix.crowd;
+    actionGain.gain.value = mix.action;
     musicGain.gain.value = 0.8 * mix.music;
     crowdGain.connect(master);
     crowdReactionGain.connect(master);
@@ -362,58 +390,178 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     if (!this.started && !this.start()) return;
     if (!this.context || !this.crowdGain) return;
     const intensity = computeCrowdIntensity(snapshot, this.prestige);
-    const fixturePulse = 0.96 + Math.sin((snapshot.minute + this.seed % 29) * 0.41) * 0.04;
+    this.fixturePulse = 0.96 + Math.sin((snapshot.minute + this.seed % 29) * 0.41) * 0.04;
     this.lastCrowdIntensity = intensity;
-    setGain(
-      this.crowdGain,
-      (0.011 + intensity * 0.031) * MATCH_SOUND_PROFILE_MIX[this.profile].crowd * fixturePulse,
-      this.context,
-      0.45,
-    );
+    this.macroPaused = snapshot.paused;
+    this.refreshCrowdGain(0.45);
+  }
+
+  updatePresentation(snapshot: MatchPresentationAtmosphere): void {
+    if (!this.started && !this.start()) return;
+    if (!this.context || !this.crowdReactionGain || !this.eventNoise) return;
+    const previousDanger = this.presentationDanger;
+    this.presentationDanger = clamp(snapshot.danger);
+    this.refreshCrowdGain(0.16);
+
+    const dangerIsHigh = !this.macroPaused && this.presentationDanger >= 0.72;
+    if (dangerIsHigh && !this.dangerWasHigh && previousDanger < 0.72) {
+      scheduleNoiseBurst(
+        this.context,
+        this.crowdReactionGain,
+        this.eventNoise,
+        0.032,
+        0.72,
+        snapshot.inFlight ? 1120 : 860,
+      );
+    }
+    this.dangerWasHigh = dangerIsHigh;
   }
 
   playEvent(event: MatchEvent): void {
-    if ((!this.started && !this.start()) || !this.context || !this.actionGain
-      || !this.crowdReactionGain || !this.musicGain || !this.eventNoise) return;
     const cue = classifyMatchSoundEvent(
       event,
       this.options.result.homeTeamId,
       Boolean(this.options.result.isNeutralVenue),
     );
+    this.playClassifiedEvent(event, cue, true);
+  }
+
+  playPresentation(cue: MatchPresentationCue): void {
+    if ((!this.started && !this.start()) || !this.context || !this.actionGain
+      || !this.crowdReactionGain || !this.eventNoise) return;
+    const context = this.context;
+    const noise = this.eventNoise;
+    const actionOutput = createPannedOutput(
+      context,
+      this.actionGain,
+      cue.attackingHome ? 0.24 : -0.24,
+    );
+    const crowdOutput = createPannedOutput(
+      context,
+      this.crowdReactionGain,
+      cue.attackingHome ? 0.12 : -0.12,
+    );
+
+    if (cue.moment === 'setup') {
+      const origin = cue.event.playOrigin;
+      if (origin === 'direct_free_kick' || origin === 'crossed_free_kick'
+        || origin === 'penalty' || cue.event.shootout) {
+        scheduleWhistle(context, actionOutput, 0.02);
+      }
+      scheduleNoiseBurst(context, crowdOutput, noise, 0.026, 0.58, 720, 0.04);
+      reportSoundscape({
+        type: 'event',
+        cue: 'set_piece_setup',
+        moment: cue.moment,
+        presentationId: cue.id,
+      });
+      return;
+    }
+
+    if (cue.moment === 'contact') {
+      const strength = cue.action === 'shot' ? 1.3 : 0.84;
+      scheduleKickContact(context, actionOutput, noise, 0, strength);
+      if (cue.action === 'shot') {
+        scheduleOscillator(context, actionOutput, 106, 0.01, 0.1, 0.026, 'sine', 68);
+      }
+      reportSoundscape({
+        type: 'event',
+        cue: cue.action === 'shot' ? 'shot_contact' : 'delivery_contact',
+        moment: cue.moment,
+        presentationId: cue.id,
+      });
+      return;
+    }
+
+    if (cue.outcome === 'delivery') {
+      const retained = cue.event.setPiece?.resolution === 'retained';
+      scheduleNoiseBurst(context, crowdOutput, noise, retained ? 0.034 : 0.025, 0.52, retained ? 980 : 650);
+      reportSoundscape({
+        type: 'event',
+        cue: retained ? 'delivery_retained' : 'delivery_cleared',
+        moment: cue.moment,
+        presentationId: cue.id,
+      });
+      return;
+    }
+
+    const classified = classifyMatchSoundEvent(
+      cue.event,
+      this.options.result.homeTeamId,
+      Boolean(this.options.result.isNeutralVenue),
+    );
+    this.playClassifiedEvent(cue.event, classified, false, cue);
+  }
+
+  private playClassifiedEvent(
+    event: MatchEvent,
+    cue: MatchSoundCue,
+    includeContact: boolean,
+    presentation?: MatchPresentationCue,
+  ): void {
+    if (cue === 'none'
+      || (!this.started && !this.start())
+      || !this.context
+      || !this.actionGain
+      || !this.crowdReactionGain
+      || !this.musicGain
+      || !this.eventNoise) return;
     const context = this.context;
     const noise = this.eventNoise;
     const attackingHome = eventAttacksForHome(event, this.options.result.homeTeamId);
     const actionOutput = createPannedOutput(context, this.actionGain, attackingHome ? 0.24 : -0.24);
     const crowdOutput = createPannedOutput(context, this.crowdReactionGain, attackingHome ? 0.12 : -0.12);
 
-    if (cue === 'none') return;
-    reportSoundscape({ type: 'event', cue });
+    reportSoundscape({
+      type: 'event',
+      cue,
+      moment: presentation?.moment,
+      presentationId: presentation?.id,
+    });
     if (cue.startsWith('goal_')) {
-      scheduleKickContact(context, actionOutput, noise, 0, 1.15);
+      if (includeContact) scheduleKickContact(context, actionOutput, noise, 0, 1.15);
       scheduleOscillator(context, actionOutput, 112, 0.02, 0.16, 0.05, 'sine', 72);
-      scheduleNoiseBurst(context, actionOutput, noise, 0.032, 0.32, 2450, 0.05);
-      const volume = cue === 'goal_home' ? 0.16 : cue === 'goal_neutral' ? 0.125 : 0.075;
-      scheduleNoiseBurst(context, crowdOutput, noise, volume, 1.55, cue === 'goal_away' ? 720 : 1040, 0.04);
+      scheduleNoiseBurst(context, actionOutput, noise, 0.044, 0.38, 2450, 0.03);
+      const volume = cue === 'goal_home' ? 0.205 : cue === 'goal_neutral' ? 0.165 : 0.095;
+      scheduleNoiseBurst(context, crowdOutput, noise, volume, 1.8, cue === 'goal_away' ? 720 : 1040, 0.03);
       scheduleOscillator(context, this.musicGain, 392, 0.14, 0.24, 0.018, 'triangle', 523);
       scheduleOscillator(context, this.musicGain, 523, 0.32, 0.32, 0.017, 'triangle', 659);
       return;
     }
     if (cue === 'woodwork') {
-      scheduleKickContact(context, actionOutput, noise, 0, 1.05);
-      scheduleOscillator(context, actionOutput, 1480, 0.05, 0.08, 0.04, 'triangle', 890);
-      scheduleNoiseBurst(context, crowdOutput, noise, 0.055, 0.55, 760, 0.07);
+      if (includeContact) scheduleKickContact(context, actionOutput, noise, 0, 1.05);
+      scheduleOscillator(context, actionOutput, 1480, 0.02, 0.1, 0.052, 'triangle', 890);
+      scheduleNoiseBurst(context, crowdOutput, noise, 0.072, 0.62, 760, 0.04);
       return;
     }
     if (cue === 'save' || cue === 'block') {
-      scheduleKickContact(context, actionOutput, noise, 0, cue === 'save' ? 0.9 : 1.08);
-      scheduleOscillator(context, actionOutput, cue === 'save' ? 130 : 104, 0.03, 0.13, 0.035, 'sine', 70);
-      scheduleNoiseBurst(context, crowdOutput, noise, cue === 'save' ? 0.06 : 0.05, 0.62, 820, 0.04);
+      const routineSave = event.type === 'save';
+      if (includeContact) scheduleKickContact(context, actionOutput, noise, 0, cue === 'save' ? 0.9 : 1.08);
+      scheduleOscillator(
+        context,
+        actionOutput,
+        routineSave ? 168 : cue === 'save' ? 128 : 104,
+        0.01,
+        routineSave ? 0.1 : 0.15,
+        routineSave ? 0.026 : 0.046,
+        'sine',
+        routineSave ? 108 : 68,
+      );
+      scheduleNoiseBurst(
+        context,
+        crowdOutput,
+        noise,
+        routineSave ? 0.04 : cue === 'save' ? 0.082 : 0.068,
+        routineSave ? 0.42 : 0.72,
+        routineSave ? 1050 : 820,
+        0.02,
+      );
       return;
     }
     if (cue === 'miss') {
-      scheduleKickContact(context, actionOutput, noise);
+      if (includeContact) scheduleKickContact(context, actionOutput, noise);
       scheduleOscillator(context, actionOutput, 118, 0.02, 0.1, 0.025, 'sine', 78);
-      scheduleNoiseBurst(context, crowdOutput, noise, 0.048, 0.48, 680, 0.06);
+      scheduleNoiseBurst(context, crowdOutput, noise, 0.064, 0.58, 680, 0.03);
       return;
     }
     if (cue === 'card' || cue === 'red_card') {
@@ -426,13 +574,15 @@ class BrowserMatchSoundscape implements MatchSoundscape {
       return;
     }
     if (cue === 'corner') {
-      scheduleKickContact(context, actionOutput, noise, 0.02, 0.9);
+      if (includeContact) scheduleKickContact(context, actionOutput, noise, 0.02, 0.9);
       scheduleNoiseBurst(context, crowdOutput, noise, 0.034, 0.58, 980, 0.05);
       return;
     }
     if (cue === 'free_kick') {
-      scheduleWhistle(context, actionOutput, 0.02);
-      scheduleKickContact(context, actionOutput, noise, 0.2, 1.05);
+      if (includeContact) {
+        scheduleWhistle(context, actionOutput, 0.02);
+        scheduleKickContact(context, actionOutput, noise, 0.2, 1.05);
+      }
       scheduleNoiseBurst(context, crowdOutput, noise, 0.036, 0.62, 900, 0.1);
     }
   }
@@ -468,9 +618,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
       || !this.actionGain || !this.musicGain) return;
     const mix = MATCH_SOUND_PROFILE_MIX[profile];
     setGain(this.master, this.muted ? 0.0001 : mix.master, this.context, 0.2);
-    setGain(this.crowdGain, (0.011 + this.lastCrowdIntensity * 0.031) * mix.crowd, this.context, 0.25);
-    setGain(this.crowdReactionGain, 0.86 * mix.crowd, this.context, 0.25);
-    setGain(this.actionGain, 0.96 * mix.action, this.context, 0.2);
+    this.refreshCrowdGain(0.25);
+    setGain(this.crowdReactionGain, mix.crowd, this.context, 0.25);
+    setGain(this.actionGain, mix.action, this.context, 0.2);
     setGain(this.musicGain, 0.8 * mix.music, this.context, 0.2);
   }
 
@@ -494,7 +644,24 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.compressor?.disconnect();
     this.compressor = null;
     this.eventNoise = null;
+    this.presentationDanger = 0;
+    this.dangerWasHigh = false;
     if (wasStarted) reportSoundscape({ type: 'stop' });
+  }
+
+  private refreshCrowdGain(duration: number): void {
+    if (!this.context || !this.crowdGain) return;
+    const mix = MATCH_SOUND_PROFILE_MIX[this.profile];
+    setGain(
+      this.crowdGain,
+      computeCrowdGainLevel(
+        this.lastCrowdIntensity,
+        this.presentationDanger,
+        this.macroPaused,
+      ) * mix.crowd * this.fixturePulse,
+      this.context,
+      duration,
+    );
   }
 
   private playOpeningTheme(): void {

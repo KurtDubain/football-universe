@@ -60,7 +60,9 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
     ? (seededRand(seed + 1) > 0.5 ? 0.34 : 0.66)
     : outcome === 'block'
       ? 0.46 + seededRand(seed + 2) * 0.08
-      : 0.42 + seededRand(seed + 3) * 0.16;
+      : outcome === 'save' && event.type === 'save'
+        ? 0.46 + seededRand(seed + 3) * 0.08
+        : 0.4 + seededRand(seed + 3) * 0.2;
 
   return {
     key,
