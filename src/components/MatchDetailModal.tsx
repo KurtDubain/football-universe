@@ -183,6 +183,9 @@ function PreMatchView({
             {!fixture.isNeutralVenue && (
               <span className="ml-1.5 text-xs text-green-400">(主)</span>
             )}
+            {fixture.tournamentHostTeamId === homeTeam.id && (
+              <span data-testid="world-cup-host-badge" className="ml-1.5 rounded bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">东道主</span>
+            )}
           </div>
 
           {/* VS */}
@@ -192,7 +195,7 @@ function PreMatchView({
               {fixture.competitionName} - {fixture.roundLabel}
             </div>
             {fixture.isNeutralVenue && (
-              <div className="text-[10px] text-amber-400 mt-0.5 font-medium">🏟️ 中立场</div>
+              <div className="mt-0.5 text-[10px] font-medium text-amber-400">中立场</div>
             )}
           </div>
 
@@ -210,6 +213,9 @@ function PreMatchView({
             >
               {awayTeam.shortName}
             </Link>
+            {fixture.tournamentHostTeamId === awayTeam.id && (
+              <span data-testid="world-cup-host-badge" className="ml-1.5 rounded bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">东道主</span>
+            )}
           </div>
         </div>
         <div

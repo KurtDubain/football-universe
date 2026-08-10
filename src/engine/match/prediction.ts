@@ -21,7 +21,7 @@ export interface MatchPrediction {
 }
 
 export interface MatchPredictionOptions {
-  fixture?: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue'>;
+  fixture?: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue' | 'tournamentHostTeamId'>;
   homeSquad?: Player[];
   awaySquad?: Player[];
   globalWindowIdx?: number;

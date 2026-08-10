@@ -31,6 +31,7 @@ function cupFixturesToMatchFixtures(
     competitionType,
     competitionName,
     roundLabel: f.roundName,
+    ...(f.tournamentHostTeamId ? { tournamentHostTeamId: f.tournamentHostTeamId } : {}),
   }));
 }
 

@@ -2,7 +2,7 @@ import { SeasonState, CalendarWindow } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRegion } from '../../types/cup';
+import { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRegion, type WorldCupEdition } from '../../types/cup';
 import { MatchResult } from '../../types/match';
 import { HonorRecord } from '../../types/honor';
 import { Player, PlayerSeasonStats, PlayerRetirement } from '../../types/player';
@@ -15,6 +15,7 @@ import { determinePromotionRelegation } from '../standings/promotion-relegation'
 import { initLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { initSuperCup, getSuperCupGroupFixtures } from '../cups/super-cup';
 import { continentalCupWindowCount, initContinentalCup } from '../cups/continental-cup';
+import { ensureWorldCupEdition } from '../cups/world-cup-host';
 import { generateAllSquads } from '../players/generator';
 import {
   createInitialPlayerStatSegments,
@@ -104,6 +105,8 @@ export interface GameWorld {
   leagueCup: CupState;
   superCup: SuperCupState;
   worldCup: WorldCupState | null;
+  /** One compact row per four-season World Cup edition, retained for host/champion history. */
+  worldCupEditions?: WorldCupEdition[];
   /**
    * Continental cups. Populated every six seasons (S5, S11, S17...)
    * after `initializeNewSeason`; null in off-years. Each region's cup is
@@ -518,6 +521,7 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     leagueCup: undefined!,
     superCup: undefined!,
     worldCup: null,
+    worldCupEditions: [],
     continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null },
     honorHistory: [],
     teamTrophies: {},
@@ -734,6 +738,16 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
 
   // Check world cup year
   const isWorldCupYear = seasonNumber % BALANCE.WORLD_CUP_INTERVAL === 0;
+  const worldCupPlan = isWorldCupYear
+    ? ensureWorldCupEdition(
+      world.worldCupEditions,
+      allTeamIds,
+      world.teamBases,
+      seasonNumber,
+      world.seed,
+    )
+    : null;
+  const worldCupEditions = worldCupPlan?.editions ?? world.worldCupEditions ?? [];
 
   const seasonState: SeasonState = {
     seasonNumber,
@@ -748,6 +762,19 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
 
   // ── Generate draw announcement news ──
   const drawNews: NewsItem[] = [];
+
+  if (worldCupPlan?.created) {
+    const host = world.teamBases[worldCupPlan.edition.hostTeamId];
+    drawNews.push({
+      id: `world-cup-host-S${seasonNumber}`,
+      seasonNumber,
+      windowIndex: 0,
+      type: 'trophy',
+      importance: 'major',
+      title: `第${seasonNumber}赛季环球冠军杯主办地揭晓`,
+      description: `${host?.name ?? worldCupPlan.edition.hostTeamId}成为本届东道主。全部32队仍将参赛，比赛保持中立场规则；东道主在自己的比赛中获得4%赛会氛围加成。`,
+    });
+  }
 
   // League cup draw
   drawNews.push({
@@ -872,6 +899,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     leagueCup,
     superCup,
     worldCup: null,
+    worldCupEditions,
     continentalCups,
     coachChangesThisSeason: [],
     squads,

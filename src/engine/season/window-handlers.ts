@@ -414,6 +414,7 @@ export function handleWorldCupGroup(
     competitionType: 'world_cup_group' as const,
     competitionName: '环球冠军杯',
     roundLabel: cf.roundName,
+    ...(cf.tournamentHostTeamId ? { tournamentHostTeamId: cf.tournamentHostTeamId } : {}),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, false);
@@ -438,6 +439,7 @@ export function handleWorldCupGroup(
           competitionType: 'world_cup' as const,
           competitionName: '环球冠军杯',
           roundLabel: cf.roundName,
+          ...(cf.tournamentHostTeamId ? { tournamentHostTeamId: cf.tournamentHostTeamId } : {}),
         }));
       }
     }
@@ -476,6 +478,7 @@ export function handleWorldCup(
     competitionType: 'world_cup' as const,
     competitionName: '环球冠军杯',
     roundLabel: cf.roundName,
+    ...(cf.tournamentHostTeamId ? { tournamentHostTeamId: cf.tournamentHostTeamId } : {}),
   }));
 
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, true);
@@ -497,6 +500,7 @@ export function handleWorldCup(
         competitionType: 'world_cup' as const,
         competitionName: '环球冠军杯',
         roundLabel: cf.roundName,
+        ...(cf.tournamentHostTeamId ? { tournamentHostTeamId: cf.tournamentHostTeamId } : {}),
       }));
     }
   }

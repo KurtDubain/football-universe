@@ -622,6 +622,7 @@ export function simulateMatch(
     ...(homeParticipation && { homeMatchday: homeParticipation.snapshot }),
     ...(awayParticipation && { awayMatchday: awayParticipation.snapshot }),
     ...(isNeutral && { isNeutralVenue: true }),
+    ...(fixture.tournamentHostTeamId ? { tournamentHostTeamId: fixture.tournamentHostTeamId } : {}),
     prediction: forecastFromModel(model),
   };
 

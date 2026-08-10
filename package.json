@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.45.0",
+  "version": "4.46.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -14,6 +14,7 @@
     "build:audit": "VITE_ENABLE_AUDIT=true pnpm build",
     "bundle:check": "tsx scripts/check-bundle-size.ts",
     "changelog:check": "tsx scripts/check-changelog.ts",
+    "music:generate": "tsx scripts/generate-world-cup-music.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "screenshots": "tsx scripts/screenshot.ts",
@@ -38,6 +39,7 @@
     "verify:floating-advance": "tsx scripts/verify-floating-advance.ts",
     "verify:ui-foundation": "tsx scripts/verify-ui-foundation.ts",
     "verify:mobile-routes": "tsx scripts/verify-mobile-routes.ts",
+    "verify:world-cup-experience": "tsx scripts/verify-world-cup-experience.ts",
     "verify:feedback": "tsx scripts/verify-feedback.ts",
     "verify:pwa-update": "tsx scripts/verify-pwa-update.ts",
     "verify:pwa-transition": "tsx scripts/verify-pwa-deployment-transition.ts",

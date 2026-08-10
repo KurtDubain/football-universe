@@ -28,6 +28,7 @@ function generateGroupFixtures(
   teamIds: string[],
   groupIndex: number,
   seasonNumber: number,
+  hostTeamId?: string,
 ): CupFixture[] {
   const n = teamIds.length;
   const fixtures: CupFixture[] = [];
@@ -59,6 +60,7 @@ function generateGroupFixtures(
         homeTeamId: roundMatches[m][0],
         awayTeamId: roundMatches[m][1],
         isNeutralVenue: true,
+        ...(hostTeamId ? { tournamentHostTeamId: hostTeamId } : {}),
       });
     }
   }
@@ -134,6 +136,7 @@ export function initWorldCup(
   participantIds: string[],
   seasonNumber: number,
   rng: SeededRNG,
+  hostTeamId?: string,
 ): WorldCupState {
   if (participantIds.length !== 32) {
     throw new Error(`World cup requires 32 teams, got ${participantIds.length}`);
@@ -153,7 +156,7 @@ export function initWorldCup(
     groupName: String.fromCharCode(65 + i),
     teamIds,
     standings: teamIds.map(createEmptyStanding),
-    fixtures: generateGroupFixtures(teamIds, i, seasonNumber),
+    fixtures: generateGroupFixtures(teamIds, i, seasonNumber, hostTeamId),
   }));
 
   return {
@@ -162,6 +165,7 @@ export function initWorldCup(
     groupStageCompleted: false,
     completed: false,
     participantIds,
+    ...(hostTeamId ? { hostTeamId } : {}),
   };
 }
 
@@ -282,6 +286,7 @@ export function completeWorldCupGroupStage(
     homeTeamId: pair[0],
     awayTeamId: pair[1],
     isNeutralVenue: true,
+    ...(state.hostTeamId ? { tournamentHostTeamId: state.hostTeamId } : {}),
   }));
 
   const knockoutRounds: CupRound[] = [
@@ -373,6 +378,7 @@ export function advanceWorldCupKnockout(
       homeTeamId: winners[i],
       awayTeamId: winners[i + 1],
       isNeutralVenue: true,
+      ...(state.hostTeamId ? { tournamentHostTeamId: state.hostTeamId } : {}),
     });
   }
 

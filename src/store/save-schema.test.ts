@@ -235,6 +235,17 @@ describe('current schema hydration boundary', () => {
       save.state.world.continentalCups.mainland_cup!.groups[0].fixtures[0].round = 4;
       return JSON.stringify(save);
     })()],
+    ['invalid World Cup host archive result', (() => {
+      const save = makeSave(4);
+      const hostTeamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.worldCupEditions = [{
+        seasonNumber: 4,
+        announcedSeasonNumber: 4,
+        hostTeamId,
+        hostResult: '神秘成绩',
+      }];
+      return JSON.stringify(save);
+    })()],
   ])('quarantines %s, clears the active key, and exposes a recovery notice', (_label, payload) => {
     localStorage.setItem(SAVE_STORAGE_KEY, payload);
 

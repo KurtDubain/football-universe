@@ -96,7 +96,12 @@ export function suspendGameAudio(): void {
 }
 
 function playAudioCue(cue: FeedbackCue): boolean {
-  if (!getFeedbackPreferences().soundEnabled || audioUnavailableEnvironment()) return false;
+  const preferences = getFeedbackPreferences();
+  if (!preferences.soundEnabled || audioUnavailableEnvironment()) return false;
+  const volumeScale = cue === 'start' || cue === 'season_end'
+    ? preferences.musicVolume
+    : preferences.effectsVolume;
+  if (volumeScale <= 0) return false;
   const timestamp = now();
   if (timestamp - (lastCueAt.get(cue) ?? Number.NEGATIVE_INFINITY) < RATE_LIMIT_MS[cue]) return false;
   if (!unlockGameAudio() || !audioContext) return false;
@@ -106,7 +111,7 @@ function playAudioCue(cue: FeedbackCue): boolean {
     .then(({ scheduleFeedbackCue }) => {
       if (!getFeedbackPreferences().soundEnabled || audioUnavailableEnvironment()
         || context.state === 'closed') return;
-      scheduleFeedbackCue(context, cue);
+      scheduleFeedbackCue(context, cue, volumeScale);
     })
     .catch(() => {
       // A missing optional sound chunk must never affect the game.

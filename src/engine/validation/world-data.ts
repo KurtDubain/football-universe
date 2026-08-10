@@ -1866,6 +1866,55 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
   for (const [index, group] of (world.worldCup?.groups ?? []).entries()) {
     validateNeutralSingleRoundGroup(group.fixtures, `World Cup group ${index + 1}`);
   }
+  const activeWorldCupHost = world.worldCup?.hostTeamId;
+  if (activeWorldCupHost && !world.worldCup?.participantIds.includes(activeWorldCupHost)) {
+    pushIssue(issues, {
+      severity: 'error',
+      code: 'world_cup_host_not_participant',
+      message: `World Cup host ${activeWorldCupHost} is not a tournament participant.`,
+      teamId: activeWorldCupHost,
+    });
+  }
+  const editionSeasons = new Set<number>();
+  for (const edition of world.worldCupEditions ?? []) {
+    if (!teamBaseIds.has(edition.hostTeamId) || editionSeasons.has(edition.seasonNumber)) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'world_cup_edition_invalid',
+        message: `World Cup edition S${edition.seasonNumber} has an invalid or duplicate host record.`,
+        teamId: edition.hostTeamId,
+      });
+    }
+    editionSeasons.add(edition.seasonNumber);
+  }
+  if (activeWorldCupHost) {
+    const activeEdition = world.worldCupEditions?.find(
+      edition => edition.seasonNumber === world.seasonState.seasonNumber,
+    );
+    if (!activeEdition || activeEdition.hostTeamId !== activeWorldCupHost) {
+      pushIssue(issues, {
+        severity: 'error',
+        code: 'world_cup_edition_host_mismatch',
+        message: `Active World Cup host ${activeWorldCupHost} is not backed by the current edition archive.`,
+        teamId: activeWorldCupHost,
+      });
+    }
+    const stateFixtures = [
+      ...(world.worldCup?.groups.flatMap(group => group.fixtures) ?? []),
+      ...(world.worldCup?.knockoutRounds.flatMap(round => round.fixtures) ?? []),
+    ];
+    for (const fixture of stateFixtures) {
+      if (fixture.tournamentHostTeamId !== activeWorldCupHost) {
+        pushIssue(issues, {
+          severity: 'error',
+          code: 'world_cup_state_fixture_host_mismatch',
+          message: `World Cup state fixture ${fixture.id} is not linked to active host ${activeWorldCupHost}.`,
+          teamId: activeWorldCupHost,
+          fixtureId: fixture.id,
+        });
+      }
+    }
+  }
   for (const cup of Object.values(world.continentalCups ?? {})) {
     if (!cup) continue;
     for (const [index, group] of cup.groups.entries()) {
@@ -1890,6 +1939,19 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
           severity: 'error',
           code: 'fixture_venue_policy_mismatch',
           message: `Fixture ${fixture.id} has a venue policy inconsistent with ${fixture.competitionType}/${fixture.roundLabel}.`,
+          fixtureId: fixture.id,
+        });
+      }
+      if (
+        (fixture.competitionType === 'world_cup' || fixture.competitionType === 'world_cup_group')
+        && activeWorldCupHost
+        && fixture.tournamentHostTeamId !== activeWorldCupHost
+      ) {
+        pushIssue(issues, {
+          severity: 'error',
+          code: 'world_cup_fixture_host_mismatch',
+          message: `Fixture ${fixture.id} is not linked to active host ${activeWorldCupHost}.`,
+          teamId: activeWorldCupHost,
           fixtureId: fixture.id,
         });
       }

@@ -17,6 +17,7 @@ import {
 } from '../feedback/preferences';
 import {
   playGameFeedback,
+  playUiFeedback,
   suspendGameAudio,
   unlockGameAudio,
 } from '../feedback/game-feedback';
@@ -98,7 +99,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
     },
     {
       key: 'match', title: '比赛模拟', icon: '⚽',
-      content: `影响比赛结果的因素：球队OVR、教练加成、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)、动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)、弱队补正(${(BALANCE.UNDERDOG_BOOST * 100).toFixed(0)}%)。真实主场比赛具有${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%主场优势；世界杯、洲际杯、联赛杯、单回合决赛和升降级附加赛均为中立场，不应用该加成。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
+      content: `影响比赛结果的因素：球队OVR、教练加成、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)、动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)、弱队补正(${(BALANCE.UNDERDOG_BOOST * 100).toFixed(0)}%)。真实主场比赛具有${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%主场优势；世界杯、洲际杯、联赛杯、单回合决赛和升降级附加赛均为中立场，不应用该加成。世界杯东道主仅在自己的比赛中获得独立的${(BALANCE.WORLD_CUP_HOST_ADVANTAGE * 100).toFixed(0)}%赛会氛围加成，不叠加普通主场优势。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
     },
     {
       key: 'coach', title: '教练系统', icon: '👔',
@@ -203,6 +204,36 @@ function SettingsContent({ world }: { world: GameWorld }) {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="grid gap-3 py-3 sm:grid-cols-2" data-testid="sound-level-settings">
+            {([
+              ['effectsVolume', '比赛与界面音效', feedbackPreferences.effectsVolume, 'effects-volume'],
+              ['musicVolume', '主题音乐', feedbackPreferences.musicVolume, 'music-volume'],
+            ] as const).map(([field, label, value, testId]) => (
+              <label key={field} className="block rounded-md border border-slate-700/70 bg-slate-900/35 px-3 py-2">
+                <span className="mb-2 flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-slate-300">{label}</span>
+                  <span className="tabular-nums text-slate-500">{Math.round(value * 100)}%</span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={Math.round(value * 100)}
+                  data-testid={testId}
+                  aria-label={`${label}音量`}
+                  onChange={event => setFeedbackPreferences({ [field]: Number(event.target.value) / 100 })}
+                  onPointerUp={() => {
+                    if (!feedbackPreferences.soundEnabled) return;
+                    unlockGameAudio();
+                    if (field === 'musicVolume') playGameFeedback('start');
+                    else playUiFeedback('confirm');
+                  }}
+                  className="h-6 w-full cursor-pointer accent-emerald-500"
+                />
+              </label>
+            ))}
           </div>
           <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
             <span>

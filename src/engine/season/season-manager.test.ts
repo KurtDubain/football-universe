@@ -543,6 +543,9 @@ describe('executeCurrentWindow', () => {
     while (world.seasonState.seasonNumber < 4 || getCurrentWindow(world)?.type !== 'season_end') {
       world = executeCurrentWindow(world).world;
     }
+    const announcedEdition = world.worldCupEditions?.find(edition => edition.seasonNumber === 4);
+    expect(announcedEdition?.hostTeamId).toBeTruthy();
+    expect(world.newsLog.some(item => item.id === 'world-cup-host-S4')).toBe(true);
     const identityByPlayer = new Map(Object.values(world.squads).flat().map(player => [
       player.uuid,
       { age: player.age, rating: player.rating },
@@ -554,7 +557,11 @@ describe('executeCurrentWindow', () => {
     expect(world.squads).not.toBe(domesticInput.squads);
     expect(world.seasonState.calendar.filter(window => window.type === 'world_cup_group')).toHaveLength(3);
     expect(world.seasonState.calendar.filter(window => window.type === 'world_cup')).toHaveLength(4);
+    expect(world.worldCup!.hostTeamId).toBe(announcedEdition!.hostTeamId);
     expect(world.worldCup!.groups.flatMap(group => group.fixtures).every(fixture => fixture.isNeutralVenue)).toBe(true);
+    expect(world.worldCup!.groups.flatMap(group => group.fixtures).every(
+      fixture => fixture.tournamentHostTeamId === announcedEdition!.hostTeamId,
+    )).toBe(true);
     const worldCupTeamId = world.worldCup!.participantIds[0];
     const starter = [...world.squads[worldCupTeamId]].sort((a, b) => b.rating - a.rating)[0];
     const domesticAppearances = world.playerStats[starter.uuid].appearances;
@@ -562,6 +569,9 @@ describe('executeCurrentWindow', () => {
     const firstGroupRound = executeCurrentWindow(world);
     expect(firstGroupRound.results).toHaveLength(16);
     expect(firstGroupRound.results.every(result => result.isNeutralVenue)).toBe(true);
+    expect(firstGroupRound.results.every(
+      result => result.tournamentHostTeamId === announcedEdition!.hostTeamId,
+    )).toBe(true);
     expect(firstGroupRound.results.every(result =>
       result.prediction?.factors?.every(factor => factor.source !== 'home_advantage'),
     )).toBe(true);
@@ -580,6 +590,12 @@ describe('executeCurrentWindow', () => {
 
     expect(archived).toMatchObject(identityByPlayer.get(starter.uuid)!);
     expect(archived!.appearances).toBeGreaterThan(domesticAppearances);
+    expect(world.worldCupEditions?.find(edition => edition.seasonNumber === 4)).toMatchObject({
+      hostTeamId: announcedEdition!.hostTeamId,
+      winnerId: expect.any(String),
+      runnerUpId: expect.any(String),
+      hostResult: expect.any(String),
+    });
     expect(completionNews.some(item => item.title.includes('环球冠军杯冠军') && item.importance === 'major')).toBe(true);
   });
 

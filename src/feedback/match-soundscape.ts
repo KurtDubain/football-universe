@@ -41,6 +41,7 @@ export interface MatchSoundscape {
   playStage: (stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime') => void;
   setMuted: (muted: boolean) => void;
   setProfile: (profile: SoundProfile) => void;
+  setLevels: (effectsVolume: number, musicVolume: number) => void;
   stop: () => void;
 }
 
@@ -51,6 +52,8 @@ interface MatchSoundscapeOptions {
   featured: boolean;
   muted: boolean;
   profile: SoundProfile;
+  effectsVolume?: number;
+  musicVolume?: number;
 }
 
 interface SoundProfileMix {
@@ -301,6 +304,8 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   private macroPaused = false;
   private fixturePulse = 1;
   private dangerWasHigh = false;
+  private effectsVolume: number;
+  private musicVolume: number;
   private crowdDuckUntil = 0;
   private crowdRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly seed: number;
@@ -309,6 +314,8 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   constructor(private readonly options: MatchSoundscapeOptions) {
     this.muted = options.muted;
     this.profile = options.profile;
+    this.effectsVolume = clamp(options.effectsVolume ?? 1);
+    this.musicVolume = clamp(options.musicVolume ?? 1);
     this.seed = hashSeed(options.result.fixtureId);
     this.prestige = matchPrestige({ ...options.result, featured: options.featured });
   }
@@ -328,10 +335,10 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     const musicGain = context.createGain();
     const mix = MATCH_SOUND_PROFILE_MIX[this.profile];
     master.gain.value = this.muted ? 0.0001 : mix.master;
-    crowdGain.gain.value = computeCrowdGainLevel(this.lastCrowdIntensity, 0, false) * mix.crowd;
-    crowdReactionGain.gain.value = mix.crowd;
-    actionGain.gain.value = mix.action;
-    musicGain.gain.value = mix.music;
+    crowdGain.gain.value = computeCrowdGainLevel(this.lastCrowdIntensity, 0, false) * mix.crowd * this.effectsVolume;
+    crowdReactionGain.gain.value = mix.crowd * this.effectsVolume;
+    actionGain.gain.value = mix.action * this.effectsVolume;
+    musicGain.gain.value = mix.music * this.musicVolume;
     crowdGain.connect(master);
     crowdReactionGain.connect(master);
     actionGain.connect(master);
@@ -621,9 +628,15 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     const mix = MATCH_SOUND_PROFILE_MIX[profile];
     setGain(this.master, this.muted ? 0.0001 : mix.master, this.context, 0.2);
     this.refreshCrowdGain(0.25);
-    setGain(this.crowdReactionGain, mix.crowd, this.context, 0.25);
-    setGain(this.actionGain, mix.action, this.context, 0.2);
-    setGain(this.musicGain, mix.music, this.context, 0.2);
+    setGain(this.crowdReactionGain, mix.crowd * this.effectsVolume, this.context, 0.25);
+    setGain(this.actionGain, mix.action * this.effectsVolume, this.context, 0.2);
+    setGain(this.musicGain, mix.music * this.musicVolume, this.context, 0.2);
+  }
+
+  setLevels(effectsVolume: number, musicVolume: number): void {
+    this.effectsVolume = clamp(effectsVolume);
+    this.musicVolume = clamp(musicVolume);
+    this.setProfile(this.profile);
   }
 
   stop(): void {
@@ -664,7 +677,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
         this.lastCrowdIntensity,
         this.presentationDanger,
         this.macroPaused,
-      ) * mix.crowd * this.fixturePulse * musicDuck,
+      ) * mix.crowd * this.effectsVolume * this.fixturePulse * musicDuck,
       this.context,
       duration,
     );
@@ -674,6 +687,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     if (!this.context || !this.actionGain || !this.musicGain) return;
     scheduleWhistle(this.context, this.actionGain, 0.08);
     if (!this.options.featured) return;
+    const isWorldCupFinal = this.options.result.competitionType === 'world_cup'
+      && (this.options.result.roundLabel === 'Final' || this.options.result.roundLabel === '决赛');
+    if (isWorldCupFinal) return;
     this.crowdDuckUntil = this.context.currentTime + 1.95;
     this.refreshCrowdGain(0.08);
     if (this.crowdRecoveryTimer !== null) clearTimeout(this.crowdRecoveryTimer);

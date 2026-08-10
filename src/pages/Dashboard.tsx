@@ -1072,6 +1072,9 @@ function OverviewTab({ world }: { world: GameWorld }) {
   const lcRound = world.leagueCup.completed ? '已结束' : `第${world.leagueCup.currentRound}轮`;
   const scStatus = world.superCup.completed ? '已结束' : world.superCup.groupStageCompleted ? '淘汰赛' : '小组赛';
   const wcStatus = world.worldCup ? (world.worldCup.completed ? '已结束' : world.worldCup.groupStageCompleted ? '淘汰赛' : '小组赛') : null;
+  const worldCupEdition = world.worldCupEditions?.find(
+    edition => edition.seasonNumber === world.seasonState.seasonNumber,
+  );
 
   // Top scorer
   const topScorer = Object.values(world.playerStats).reduce<PlayerSeasonStats | null>(
@@ -1099,10 +1102,11 @@ function OverviewTab({ world }: { world: GameWorld }) {
       </div>
 
       {/* World cup if applicable */}
-      {wcStatus && (
-        <div className="bg-sky-900/15 rounded-lg border border-sky-800/30 px-3 py-2 flex items-center justify-between">
+      {(wcStatus || worldCupEdition) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-sky-800/30 bg-sky-900/15 px-3 py-2">
           <span className="text-xs text-sky-400 font-medium">环球冠军杯</span>
-          <span className="text-xs text-sky-300">{wcStatus}</span>
+          <span className="text-xs text-sky-300">{wcStatus ?? '东道主已揭晓'}</span>
+          {worldCupEdition && <span className="text-xs text-emerald-300">主办: {getTeamName(worldCupEdition.hostTeamId, world.teamBases)}</span>}
           {world.worldCup?.winnerId && <span className="text-xs text-amber-400">冠军: {getTeamName(world.worldCup.winnerId, world.teamBases)}</span>}
         </div>
       )}
@@ -1197,6 +1201,7 @@ function OverviewTab({ world }: { world: GameWorld }) {
               {world.seasonState.isWorldCupYear && (
                 <div>
                   <span className="text-sky-400 font-semibold">本赛季为环球冠军杯年</span>
+                  {worldCupEdition && <div className="mt-1 text-slate-400">东道主：{getTeamName(worldCupEdition.hostTeamId, world.teamBases)}</div>}
                 </div>
               )}
             </div>

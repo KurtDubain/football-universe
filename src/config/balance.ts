@@ -32,4 +32,6 @@ export const BALANCE = {
 
   // world cup cycle
   WORLD_CUP_INTERVAL: 4,
+  /** Separate neutral-tournament atmosphere boost for the selected host club. */
+  WORLD_CUP_HOST_ADVANTAGE: 0.04,
 } as const;

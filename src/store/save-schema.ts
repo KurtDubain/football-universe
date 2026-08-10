@@ -224,6 +224,22 @@ function validatePlayerScoreFields(value: JsonRecord, context: string): void {
   }
 }
 
+function validateTournamentHost(
+  value: JsonRecord,
+  competitionType: string,
+  teamIds: Set<string>,
+  context: string,
+): void {
+  if (value.tournamentHostTeamId === undefined) return;
+  if (
+    typeof value.tournamentHostTeamId !== 'string'
+    || !teamIds.has(value.tournamentHostTeamId)
+    || (competitionType !== 'world_cup' && competitionType !== 'world_cup_group')
+  ) {
+    throw new Error(`${context}世界杯东道主字段无效`);
+  }
+}
+
 function validateCalendarWindow(value: unknown, index: number, teamIds: Set<string>): void {
   if (!isRecord(value)) throw new Error(`存档赛程窗口 ${index + 1} 无效`);
   requireFiniteNumber(value, 'id', `存档赛程窗口 ${index + 1} `);
@@ -255,6 +271,7 @@ function validateCalendarWindow(value: unknown, index: number, teamIds: Set<stri
     if (!expectedNeutral && fixture.isNeutralVenue === true) {
       throw new Error(`存档比赛 ${fixture.id as string} 的场地标记与赛事规则不一致`);
     }
+    validateTournamentHost(fixture, competitionType, teamIds, `存档比赛 ${fixture.id as string} `);
   }
 
   const results = requireArray(value, 'results');
@@ -301,6 +318,7 @@ function validateCalendarWindow(value: unknown, index: number, teamIds: Set<stri
     if (!expectedNeutral && result.isNeutralVenue === true) {
       throw new Error(`存档赛果 ${result.fixtureId as string} 的场地标记与赛事规则不一致`);
     }
+    validateTournamentHost(result, competitionType, teamIds, `存档赛果 ${result.fixtureId as string} `);
   }
 }
 
@@ -329,6 +347,7 @@ function validateCupFixtureVenue(
   if (!expectedNeutral && value.isNeutralVenue === true) {
     throw new Error(`${context}对阵 ${id} 的场地标记与赛事规则不一致`);
   }
+  validateTournamentHost(value, competitionType, teamIds, `${context}对阵 ${id} `);
   if (value.result !== undefined && !isRecord(value.result)) throw new Error(`${context}对阵 ${id} 的赛果无效`);
   return value;
 }
@@ -456,6 +475,12 @@ function validateWorldCup(value: JsonRecord, teamIds: Set<string>): void {
     validateNeutralGroup(group, `世界杯第 ${index + 1} `, 4, teamIds, 'world_cup'),
   );
   if (new Set(grouped).size !== 32) throw new Error('世界杯球队分组存在重复');
+  if (
+    value.hostTeamId !== undefined
+    && (typeof value.hostTeamId !== 'string' || !teamIds.has(value.hostTeamId))
+  ) {
+    throw new Error('世界杯东道主无效');
+  }
   requireBoolean(value, 'groupStageCompleted', '世界杯 ');
   requireBoolean(value, 'completed', '世界杯 ');
   validateKnockoutRounds(value.knockoutRounds, '世界杯', teamIds);
@@ -617,6 +642,45 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     requireArray(world, 'observerSeasonTrajectories'),
     teamIds,
   );
+  if (world.worldCupEditions !== undefined) {
+    if (!Array.isArray(world.worldCupEditions) || world.worldCupEditions.length > 50) {
+      throw new Error('世界杯届次档案无效');
+    }
+    const editionSeasons = new Set<number>();
+    for (const edition of world.worldCupEditions) {
+      if (!isRecord(edition)) throw new Error('世界杯届次档案行无效');
+      const editionSeason = requireFiniteNumber(edition, 'seasonNumber', '世界杯届次 ');
+      const announcedSeason = requireFiniteNumber(edition, 'announcedSeasonNumber', '世界杯届次 ');
+      const hostTeamId = requireString(edition, 'hostTeamId', '世界杯届次 ');
+      if (
+        !Number.isInteger(editionSeason)
+        || editionSeason < 1
+        || editionSeason % 4 !== 0
+        || !Number.isInteger(announcedSeason)
+        || announcedSeason < 1
+        || announcedSeason > editionSeason
+        || !teamIds.has(hostTeamId)
+        || editionSeasons.has(editionSeason)
+      ) {
+        throw new Error(`世界杯第 ${editionSeason} 赛季届次档案无效`);
+      }
+      editionSeasons.add(editionSeason);
+      for (const field of ['winnerId', 'runnerUpId']) {
+        if (edition[field] !== undefined && (typeof edition[field] !== 'string' || !teamIds.has(edition[field] as string))) {
+          throw new Error(`世界杯第 ${editionSeason} 赛季${field}无效`);
+        }
+      }
+      if (edition.winnerId !== undefined && edition.winnerId === edition.runnerUpId) {
+        throw new Error(`世界杯第 ${editionSeason} 赛季冠亚军无效`);
+      }
+      if (
+        edition.hostResult !== undefined
+        && !['冠军', '亚军', '四强', '八强', '16强', '小组赛'].includes(edition.hostResult as string)
+      ) {
+        throw new Error(`世界杯第 ${editionSeason} 赛季东道主成绩无效`);
+      }
+    }
+  }
   validateLeagueCup(leagueCup, teamIds);
   validateSuperCup(superCup, teamIds);
 

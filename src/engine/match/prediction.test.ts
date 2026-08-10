@@ -119,6 +119,45 @@ describe('shared match forecast', () => {
     expect(reversed.factors.some(factor => factor.source === 'home_advantage')).toBe(false);
   });
 
+  it('applies a separate World Cup host boost without restoring home advantage', () => {
+    const home = team('home', 80);
+    const away = team('away', 80);
+    const neutralFixture = {
+      ...fixture(true),
+      competitionType: 'world_cup_group' as const,
+    };
+    const neutral = predictMatch(home, away, state('home'), state('away'), null, null, {
+      fixture: neutralFixture,
+    });
+    const hosted = predictMatch(home, away, state('home'), state('away'), null, null, {
+      fixture: { ...neutralFixture, tournamentHostTeamId: 'away' },
+    });
+
+    expect(hosted.awayWinPct).toBeGreaterThan(neutral.awayWinPct);
+    expect(hosted.factors).toContainEqual(expect.objectContaining({
+      source: 'world_cup_host',
+      beneficiary: 'away',
+      evidenceValue: 4,
+    }));
+    expect(hosted.factors.some(factor => factor.source === 'home_advantage')).toBe(false);
+  });
+
+  it('keeps the host atmosphere visible even when a larger context factor competes with it', () => {
+    const strong = team('home', 95);
+    const host = team('away', 55);
+    const hosted = predictMatch(strong, host, state('home'), state('away'), null, null, {
+      fixture: {
+        ...fixture(true),
+        competitionType: 'world_cup_group',
+        tournamentHostTeamId: host.id,
+      },
+    });
+
+    expect(hosted.factors).toHaveLength(2);
+    expect(hosted.factors.some(factor => factor.source === 'world_cup_host')).toBe(true);
+    expect(hosted.factors.some(factor => factor.source === 'team_strength')).toBe(true);
+  });
+
   it('prices the predicted favorite at lower odds and persists the same forecast in simulation', () => {
     const home = team('home', 86);
     const away = team('away', 72);

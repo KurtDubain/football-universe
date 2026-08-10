@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getTeamShortName, getTierLabel, getTierColor } from '../utils/format';
-import type { CupState, SuperCupState, WorldCupState, ContinentalCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
+import type { CupState, SuperCupState, WorldCupState, WorldCupEdition, ContinentalCupState, CupRound, SuperCupGroup, CupFixture } from '../types/cup';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { TeamBase, TeamState } from '../types/team';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -11,6 +11,8 @@ import TeamBadge from '../components/TeamBadge';
 import { CompetitionMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
 import { EmptyState, PageHeader, PageShell } from '../components/ui';
 import { applyVenuePolicy } from '../engine/competitions/venue-policy';
+import worldCupArtwork from '../assets/visual/match-opener-world-v1.webp';
+import WorldCupMusicControl from '../components/WorldCupMusicControl';
 
 const roundNameCN: Record<string, string> = {
   R32: '第一轮', R16: '第二轮', QF: '八强', SF: '四强', Final: '决赛',
@@ -61,6 +63,7 @@ export default function Cup() {
       id: fix.id, homeTeamId: fix.homeTeamId, awayTeamId: fix.awayTeamId,
       competitionType: ct,
       competitionName: compName, roundLabel: fix.roundName,
+      ...(fix.tournamentHostTeamId ? { tournamentHostTeamId: fix.tournamentHostTeamId } : {}),
     });
     setSelectedFixture(mf);
     if (fix.result) {
@@ -76,6 +79,7 @@ export default function Cup() {
         events: [], stats: { possession:[50,50], shots:[0,0], shotsOnTarget:[0,0], corners:[0,0], fouls:[0,0], yellowCards:[0,0], redCards:[0,0] },
         competitionType: mf.competitionType, competitionName: compName, roundLabel: fix.roundName,
         isNeutralVenue: mf.isNeutralVenue,
+        ...(mf.tournamentHostTeamId ? { tournamentHostTeamId: mf.tournamentHostTeamId } : {}),
       });
     } else { setSelectedResult(null); }
   };
@@ -94,8 +98,8 @@ export default function Cup() {
       {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} tb={tb} ts={ts} onClick={f => handleClick(f, '联赛杯')} />}
       {type === 'super_cup' && <SuperCupView cup={world.superCup} tb={tb} ts={ts} onClick={f => handleClick(f, '超级杯')} />}
       {type === 'world_cup' && (world.worldCup
-        ? <WorldCupView cup={world.worldCup} tb={tb} ts={ts} onClick={f => handleClick(f, '环球冠军杯')} />
-        : <InactiveCup type="world_cup" title="环球冠军杯" description="每四个赛季举行一次，本赛季处于赛事间歇期。" />
+        ? <WorldCupView cup={world.worldCup} editions={world.worldCupEditions ?? []} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '环球冠军杯')} />
+        : <WorldCupInactive editions={world.worldCupEditions ?? []} seasonNumber={world.seasonState.seasonNumber} musicEnabled={!selectedFixture} tb={tb} />
       )}
       {isContinental && (continentalCup
         ? <ContinentalCupView cup={continentalCup} tb={tb} ts={ts} onClick={f => handleClick(f, continentalCup.name)} />
@@ -195,15 +199,29 @@ function SuperCupView({ cup, tb, ts, onClick }: { cup: SuperCupState; tb: Record
 //  World Cup
 // ══════════════════════════════════════════════════════════════
 
-function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
+function WorldCupView({ cup, editions, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: WorldCupState; editions: WorldCupEdition[]; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: (f: CupFixture) => void }) {
+  const edition = editions.find(item => item.seasonNumber === seasonNumber);
   return (
     <>
       <CupHeader type="world_cup" title="环球冠军杯" description={`${cup.participantIds.length} 队 · 四年一届`} winnerId={cup.completed ? cup.winnerId : undefined} tb={tb} />
+      {cup.hostTeamId && (
+        <WorldCupHostFeature
+          hostTeamId={cup.hostTeamId}
+          seasonNumber={edition?.seasonNumber}
+          hostResult={edition?.hostResult}
+          tb={tb}
+          active
+          musicEnabled={musicEnabled}
+          musicScene={cup.completed ? 'world_cup_champion' : 'world_cup'}
+          statusLabel={cup.completed ? '本届已结束' : cup.groupStageCompleted ? '淘汰赛进行中' : '小组赛进行中'}
+        />
+      )}
       <RulesCard lines={[
         '参赛: 全部32支球队',
         '抽签: 4档分组 (按实力排位)，每组2顶+1甲+1乙',
         '小组赛: 8组×4队，中立场单循环3轮，每组前2名晋级16强',
         '淘汰赛: 16强→八强→四强→决赛，中立场单回合',
+        '东道主: 全部球队均可主办；东道主比赛获得4%赛会氛围加成，但不叠加普通主场优势',
         '每4个赛季举办一次',
       ]} />
       <h2 className="text-sm font-semibold text-slate-300">小组赛</h2>
@@ -216,7 +234,110 @@ function WorldCupView({ cup, tb, ts, onClick }: { cup: WorldCupState; tb: Record
           <BracketView rounds={cup.knockoutRounds} tb={tb} ts={ts} onClick={onClick} />
         </>
       )}
+      <WorldCupEditionHistory editions={editions} tb={tb} />
     </>
+  );
+}
+
+function WorldCupInactive({ editions, seasonNumber, musicEnabled, tb }: {
+  editions: WorldCupEdition[];
+  seasonNumber: number;
+  musicEnabled: boolean;
+  tb: Record<string, TeamBase>;
+}) {
+  const current = editions.find(edition => edition.seasonNumber === seasonNumber);
+  const latest = current ?? editions.at(-1);
+  return (
+    <>
+      <PageHeader icon={<CompetitionMark type="world_cup" size={54} title="环球冠军杯徽记" />} title="环球冠军杯" description="四年一届的世界舞台" />
+      {latest && (
+        <WorldCupHostFeature
+          hostTeamId={latest.hostTeamId}
+          seasonNumber={latest.seasonNumber}
+          hostResult={latest.hostResult}
+          tb={tb}
+          active={Boolean(current)}
+          musicEnabled={Boolean(current) && musicEnabled}
+          statusLabel={current ? '等待开幕' : undefined}
+        />
+      )}
+      <EmptyState
+        icon={<CompetitionMark type="world_cup" size={44} />}
+        title={current ? '本届赛事尚未开幕' : '本赛季未举办'}
+        description={current
+          ? '东道主已经揭晓，联赛赛季结束后将进入3轮小组赛和单场淘汰赛。'
+          : '环球冠军杯每四个赛季举行一次；主办地会在世界杯赛季开始时揭晓。'}
+      />
+      <WorldCupEditionHistory editions={editions} tb={tb} />
+    </>
+  );
+}
+
+function WorldCupHostFeature({ hostTeamId, seasonNumber, hostResult, tb, active, musicEnabled, musicScene = 'world_cup', statusLabel }: {
+  hostTeamId: string;
+  seasonNumber?: number;
+  hostResult?: string;
+  tb: Record<string, TeamBase>;
+  active: boolean;
+  musicEnabled: boolean;
+  musicScene?: 'world_cup' | 'world_cup_champion';
+  statusLabel?: string;
+}) {
+  const host = tb[hostTeamId];
+  if (!host) return null;
+  return (
+    <section className="relative min-h-48 overflow-hidden rounded-lg border border-emerald-700/45 bg-slate-950" data-testid="world-cup-host-feature">
+      <img src={worldCupArtwork} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+      <div className="absolute inset-0 bg-slate-950/55" />
+      <div className="relative flex min-h-48 flex-col justify-end gap-4 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-emerald-300">第 {seasonNumber ?? '-'} 赛季 · 世界杯东道主</div>
+          <Link to={`/team/${hostTeamId}`} className="mt-3 flex min-w-0 items-center gap-3 hover:text-emerald-300">
+            <TeamBadge teamId={host.id} shortName={host.shortName} color={host.color} size={58} />
+            <span className="min-w-0">
+              <span className="block text-2xl font-bold text-white sm:text-3xl">{host.name}</span>
+              <span className="mt-1 block text-xs text-slate-300">{host.region.replace('+', ' · ')}</span>
+            </span>
+          </Link>
+        </div>
+        <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+          {active && <WorldCupMusicControl scene={musicScene} enabled={musicEnabled} />}
+          <div className="flex flex-wrap gap-2 text-xs sm:justify-end">
+            <span className="rounded border border-emerald-500/45 bg-emerald-950/75 px-2.5 py-1.5 font-semibold text-emerald-200">赛会氛围 +4%</span>
+            <span className="rounded border border-slate-500/45 bg-slate-950/75 px-2.5 py-1.5 text-slate-200">常规主场优势关闭</span>
+            {hostResult && <span className="rounded border border-amber-500/45 bg-amber-950/75 px-2.5 py-1.5 text-amber-200">东道主成绩：{hostResult}</span>}
+            {!hostResult && statusLabel && <span className="rounded border border-sky-500/45 bg-sky-950/75 px-2.5 py-1.5 text-sky-200">{statusLabel}</span>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorldCupEditionHistory({ editions, tb }: { editions: WorldCupEdition[]; tb: Record<string, TeamBase> }) {
+  if (editions.length === 0) return null;
+  return (
+    <section aria-labelledby="world-cup-edition-history-title">
+      <h2 id="world-cup-edition-history-title" className="mb-2 text-sm font-semibold text-slate-300">历届主办与冠军</h2>
+      <div className="overflow-x-auto rounded-lg border border-slate-700">
+        <table className="w-full min-w-[560px] text-xs">
+          <thead className="bg-slate-800/80 text-slate-500">
+            <tr><th className="px-3 py-2 text-left">赛季</th><th className="px-3 py-2 text-left">东道主</th><th className="px-3 py-2 text-left">东道主成绩</th><th className="px-3 py-2 text-left">冠军</th><th className="px-3 py-2 text-left">亚军</th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800 bg-slate-900/45">
+            {[...editions].reverse().slice(0, 8).map(edition => (
+              <tr key={edition.seasonNumber}>
+                <td className="px-3 py-2 font-semibold text-slate-300">S{edition.seasonNumber}</td>
+                <td className="px-3 py-2"><Link to={`/team/${edition.hostTeamId}`} className="text-emerald-300 hover:text-emerald-200">{getTeamShortName(edition.hostTeamId, tb)}</Link></td>
+                <td className="px-3 py-2 text-slate-400">{edition.hostResult ?? '待开幕'}</td>
+                <td className="px-3 py-2 text-amber-300">{edition.winnerId ? getTeamShortName(edition.winnerId, tb) : '—'}</td>
+                <td className="px-3 py-2 text-slate-400">{edition.runnerUpId ? getTeamShortName(edition.runnerUpId, tb) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -614,7 +735,13 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
               {group.fixtures.map(fix => {
                 const has = !!fix.result;
                 return (
-                  <button key={fix.id} onClick={() => onClick(fix)} className="w-full flex items-center text-xs py-1 px-2 rounded hover:bg-slate-700/40 cursor-pointer text-left">
+                  <button
+                    key={fix.id}
+                    type="button"
+                    data-fixture-id={fix.id}
+                    onClick={() => onClick(fix)}
+                    className="flex w-full cursor-pointer items-center rounded px-2 py-1 text-left text-xs hover:bg-slate-700/40"
+                  >
                     <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
                       <TeamTag teamId={fix.homeTeamId} ts={ts} tb={tb} />
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tb[fix.homeTeamId]?.color ?? '#666' }} />

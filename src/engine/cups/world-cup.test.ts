@@ -83,12 +83,14 @@ describe('initWorldCup', () => {
 
   it('generates one neutral match per pair: 6 fixtures per group, 48 total', () => {
     const teams = Array.from({ length: 32 }, (_, i) => `t${i + 1}`);
-    const wc = initWorldCup(teams, 1, new SeededRNG(11));
+    const wc = initWorldCup(teams, 1, new SeededRNG(11), 't32');
+    expect(wc.hostTeamId).toBe('t32');
     const total = wc.groups.reduce((s, g) => s + g.fixtures.length, 0);
     expect(total).toBe(48);
     for (const group of wc.groups) {
       expect(group.fixtures).toHaveLength(6);
       expect(group.fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+      expect(group.fixtures.every(fixture => fixture.tournamentHostTeamId === 't32')).toBe(true);
       expect(new Set(group.fixtures.map(fixture => fixture.round))).toEqual(new Set([1, 2, 3]));
       const appearances = new Map(group.teamIds.map(teamId => [teamId, 0]));
       const pairs = new Set<string>();
@@ -104,7 +106,7 @@ describe('initWorldCup', () => {
 
   it('completes three neutral group rounds without mutating the input states', () => {
     const teams = Array.from({ length: 32 }, (_, i) => `t${i + 1}`);
-    let wc = initWorldCup(teams, 4, new SeededRNG(11));
+    let wc = initWorldCup(teams, 4, new SeededRNG(11), 't32');
     for (let round = 1; round <= 3; round++) {
       const input = wc;
       const before = structuredClone(input);
@@ -120,6 +122,7 @@ describe('initWorldCup', () => {
     expect(completed.knockoutRounds[0].roundName).toBe('R16');
     expect(completed.knockoutRounds[0].fixtures).toHaveLength(8);
     expect(completed.knockoutRounds[0].fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+    expect(completed.knockoutRounds[0].fixtures.every(fixture => fixture.tournamentHostTeamId === 't32')).toBe(true);
   });
 
   it('rejects partial or unresolved knockout results without favoring a team slot', () => {

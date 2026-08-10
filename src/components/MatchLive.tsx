@@ -39,6 +39,7 @@ import {
   matchOpenerKindForCompetition,
   matchOpenerLabel,
 } from './match-live/match-opener-artwork';
+import { startAmbientMusic } from '../feedback/ambient-music';
 
 interface Props {
   result: MatchResult;
@@ -350,6 +351,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const previousCommentaryCountRef = useRef<number | null>(null);
   const soundscapeRef = useRef<MatchSoundscape | null>(null);
   const previousPhaseRef = useRef<PlaybackPhase>(initialPlaybackState.phase);
+  const [ceremonyMusicOwner] = useState(() => `world-cup-final-${result.fixtureId}`);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -409,6 +411,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       featured: prestigeOpener,
       muted: !feedbackPreferences.soundEnabled || locallyMuted,
       profile: feedbackPreferences.soundProfile,
+      effectsVolume: feedbackPreferences.effectsVolume,
+      musicVolume: feedbackPreferences.musicVolume,
     });
     soundscapeRef.current = soundscape;
     if (feedbackPreferences.soundEnabled && !locallyMuted) soundscape.start();
@@ -428,6 +432,38 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   useEffect(() => {
     soundscapeRef.current?.setProfile(feedbackPreferences.soundProfile);
   }, [feedbackPreferences.soundProfile]);
+
+  useEffect(() => {
+    soundscapeRef.current?.setLevels(
+      feedbackPreferences.effectsVolume,
+      feedbackPreferences.musicVolume,
+    );
+  }, [feedbackPreferences.effectsVolume, feedbackPreferences.musicVolume]);
+
+  useEffect(() => {
+    const isWorldCupFinal = (result.competitionType === 'world_cup') && openerFinal;
+    if (
+      !isWorldCupFinal
+      || !feedbackPreferences.soundEnabled
+      || feedbackPreferences.musicVolume <= 0
+      || locallyMuted
+      || !pageVisible
+    ) return;
+    const lease = startAmbientMusic(
+      finished ? 'world_cup_champion' : 'world_cup_final',
+      ceremonyMusicOwner,
+    );
+    return lease.stop;
+  }, [
+    ceremonyMusicOwner,
+    feedbackPreferences.musicVolume,
+    feedbackPreferences.soundEnabled,
+    finished,
+    locallyMuted,
+    openerFinal,
+    pageVisible,
+    result.competitionType,
+  ]);
 
   useEffect(() => {
     soundscapeRef.current?.update({
@@ -682,7 +718,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                       <span className="sm:hidden">{ht?.shortName ?? ht?.name ?? '主队'}</span>
                       <span className="hidden sm:inline">{ht?.name ?? '主队'}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-400">{result.isNeutralVenue ? '中立场' : '主队'}</div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      {result.tournamentHostTeamId === result.homeTeamId ? '东道主 · 中立场' : result.isNeutralVenue ? '中立场' : '主队'}
+                    </div>
                   </div>
                   {ht && <TeamBadge teamId={ht.id} shortName={ht.shortName} color={ht.color} size={34} />}
                 </div>
@@ -694,7 +732,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                       <span className="sm:hidden">{at?.shortName ?? at?.name ?? '客队'}</span>
                       <span className="hidden sm:inline">{at?.name ?? '客队'}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-400">{result.isNeutralVenue ? '中立场' : '客队'}</div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      {result.tournamentHostTeamId === result.awayTeamId ? '东道主 · 中立场' : result.isNeutralVenue ? '中立场' : '客队'}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -5,6 +5,10 @@ export type SoundProfile = 'quiet' | 'balanced' | 'stadium';
 export interface FeedbackPreferences {
   soundEnabled: boolean;
   soundProfile: SoundProfile;
+  /** Relative gain for UI, crowd, and match-action sound. */
+  effectsVolume: number;
+  /** Relative gain for short motifs and longer tournament music. */
+  musicVolume: number;
   hapticsEnabled: boolean;
 }
 
@@ -12,8 +16,16 @@ export const FEEDBACK_PREFERENCES_KEY = 'football-feedback-preferences-v1';
 export const DEFAULT_FEEDBACK_PREFERENCES: FeedbackPreferences = {
   soundEnabled: true,
   soundProfile: 'balanced',
+  effectsVolume: 1,
+  musicVolume: 1,
   hapticsEnabled: false,
 };
+
+function safeVolume(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(1, value))
+    : fallback;
+}
 
 function isSoundProfile(value: unknown): value is SoundProfile {
   return value === 'quiet' || value === 'balanced' || value === 'stadium';
@@ -32,6 +44,8 @@ export function parseFeedbackPreferences(raw: string | null): FeedbackPreference
       soundProfile: isSoundProfile(parsed.soundProfile)
         ? parsed.soundProfile
         : DEFAULT_FEEDBACK_PREFERENCES.soundProfile,
+      effectsVolume: safeVolume(parsed.effectsVolume, DEFAULT_FEEDBACK_PREFERENCES.effectsVolume),
+      musicVolume: safeVolume(parsed.musicVolume, DEFAULT_FEEDBACK_PREFERENCES.musicVolume),
       hapticsEnabled: typeof parsed.hapticsEnabled === 'boolean'
         ? parsed.hapticsEnabled
         : DEFAULT_FEEDBACK_PREFERENCES.hapticsEnabled,
@@ -61,7 +75,12 @@ export function getFeedbackPreferences(): FeedbackPreferences {
 }
 
 export function setFeedbackPreferences(patch: Partial<FeedbackPreferences>): FeedbackPreferences {
-  currentPreferences = { ...currentPreferences, ...patch };
+  currentPreferences = {
+    ...currentPreferences,
+    ...patch,
+    effectsVolume: safeVolume(patch.effectsVolume, currentPreferences.effectsVolume),
+    musicVolume: safeVolume(patch.musicVolume, currentPreferences.musicVolume),
+  };
   try {
     window.localStorage.setItem(FEEDBACK_PREFERENCES_KEY, JSON.stringify(currentPreferences));
   } catch {

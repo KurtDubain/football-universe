@@ -345,7 +345,10 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
   if (honor.worldCupWinner) {
     const wcChamp = getTeamName(honor.worldCupWinner, tb);
     const wcCont = tb[honor.worldCupWinner]?.region?.split('+')[0];
-    paragraphs.push(`赛季末的环球冠军杯上，${wcChamp}力压群雄登顶，为${wcCont || '所在大洲'}带来了至高荣耀。`);
+    const hostLead = honor.worldCupHostId
+      ? `由${getTeamName(honor.worldCupHostId, tb)}主办的`
+      : '赛季末的';
+    paragraphs.push(`${hostLead}环球冠军杯上，${wcChamp}力压群雄登顶，为${wcCont || '所在大洲'}带来了至高荣耀。`);
   }
 
   if (honor.promoted.length > 0 && honor.relegated.length > 0) {
@@ -364,6 +367,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
           <span>{totalGoals}粒进球</span>
           <span>场均{avgGoals}球</span>
           {honor.worldCupWinner && <span className="text-sky-400">⭐ 世界杯年</span>}
+          {honor.worldCupHostId && <span className="text-emerald-400">主办：{getTeamName(honor.worldCupHostId, tb)}</span>}
         </div>
         <div className="mt-3 max-w-2xl mx-auto space-y-2">
           {paragraphs.map((p, i) => (

@@ -23,6 +23,7 @@ export type MatchFactorSource =
   | 'fatigue'
   | 'momentum'
   | 'home_advantage'
+  | 'world_cup_host'
   | 'coach'
   | 'competition_fit'
   | 'underdog_response'
@@ -56,6 +57,8 @@ export interface MatchFixture {
    * event attribution; "home" is just a label, not a venue.
    */
   isNeutralVenue?: boolean;
+  /** World Cup host identity. This never converts a neutral fixture into a home fixture. */
+  tournamentHostTeamId?: string;
 }
 
 export interface MatchEvent {
@@ -188,6 +191,8 @@ export interface MatchResult {
   awayMatchday?: MatchdaySnapshot;
   /** True if the match was played at a neutral venue. */
   isNeutralVenue?: boolean;
+  /** Frozen World Cup host identity for historical explanation and replay UI. */
+  tournamentHostTeamId?: string;
   /** Deterministic pre-match forecast used by predictions, odds, and upset labels. */
   prediction?: {
     homeWinPct: number;

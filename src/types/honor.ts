@@ -6,6 +6,7 @@ export interface HonorRecord {
   leagueCupWinner: string;
   superCupWinner: string;
   worldCupWinner?: string;
+  worldCupHostId?: string;
   promoted: { teamId: string; from: number; to: number }[];
   relegated: { teamId: string; from: number; to: number }[];
   coachChanges: { teamId: string; oldCoachId: string; newCoachId: string; reason: string }[];

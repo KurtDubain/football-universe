@@ -24,6 +24,7 @@ import {
   MAX_STORYLINE_HISTORY,
 } from './storylines';
 import { OBSERVER_SEASON_TRAJECTORY_LIMIT } from '../observation/season-trajectory';
+import { WORLD_CUP_EDITION_HISTORY_LIMIT } from '../cups/world-cup-host';
 
 /** Keep matchHistory entries from the last N seasons (inclusive of current). */
 export const MATCH_HISTORY_SEASONS = 3;
@@ -136,11 +137,17 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     world.observerSeasonTrajectories,
     OBSERVER_SEASON_TRAJECTORY_LIMIT,
   );
+  const worldCupEditions = trimList(
+    world.worldCupEditions,
+    WORLD_CUP_EDITION_HISTORY_LIMIT,
+  );
   const storylinesUnchanged = (world.activeStorylines === undefined || world.activeStorylines === activeStorylines)
     && (world.storylineHistory === undefined || world.storylineHistory === storylineHistory)
     && (world.storylineCooldowns === undefined || world.storylineCooldowns === storylineCooldowns);
   const trajectoriesUnchanged = world.observerSeasonTrajectories === undefined
     || world.observerSeasonTrajectories === observerSeasonTrajectories;
+  const editionsUnchanged = world.worldCupEditions === undefined
+    || world.worldCupEditions === worldCupEditions;
 
   // Avoid spinning a fresh world if nothing actually changed. We treat the
   // input as "unchanged" only when the original array reference is identical
@@ -157,6 +164,7 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     && !playerHistoryChanged
     && storylinesUnchanged
     && trajectoriesUnchanged
+    && editionsUnchanged
   ) {
     return world;
   }
@@ -172,5 +180,6 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     storylineHistory,
     storylineCooldowns,
     observerSeasonTrajectories,
+    worldCupEditions,
   };
 }

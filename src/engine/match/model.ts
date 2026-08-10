@@ -22,7 +22,7 @@ export interface MatchModelInput {
   awayState: TeamState;
   homeCoach: CoachBase | null;
   awayCoach: CoachBase | null;
-  fixture: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue'>;
+  fixture: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue' | 'tournamentHostTeamId'>;
   homeBoosts?: PlayerBoosts;
   awayBoosts?: PlayerBoosts;
   homeAbsenceLoss?: PlayerBoosts;
@@ -204,6 +204,23 @@ function buildMatchFactors(input: MatchModelInput): MatchFactor[] {
     });
   }
 
+  const isWorldCup = fixture.competitionType === 'world_cup'
+    || fixture.competitionType === 'world_cup_group';
+  const hostSide = isWorldCup && fixture.tournamentHostTeamId === fixture.homeTeamId
+    ? 'home'
+    : isWorldCup && fixture.tournamentHostTeamId === fixture.awayTeamId
+      ? 'away'
+      : null;
+  if (hostSide) {
+    const team = hostSide === 'home' ? homeTeam : awayTeam;
+    candidates.push({
+      source: 'world_cup_host', category: 'context', beneficiary: hostSide, direction: 'positive',
+      importance: 2, label: `${team.shortName}东道主氛围`,
+      detail: `${team.shortName}获得世界杯东道主的现场支持；赛事仍按中立场处理，不叠加常规主场优势。`,
+      evidenceValue: Math.round(BALANCE.WORLD_CUP_HOST_ADVANTAGE * 100), rank: 4.2,
+    });
+  }
+
   const coachValue = (coach: CoachBase | null) => coach
     ? (coach.attackBuff + coach.defenseBuff) * BALANCE.COACH_BUFF_WEIGHT / 2
     : 0;
@@ -245,8 +262,14 @@ function buildMatchFactors(input: MatchModelInput): MatchFactor[] {
     });
   }
 
-  const selected: RankedMatchFactor[] = [];
-  for (const factor of candidates.sort((a, b) => b.rank - a.rank || a.source.localeCompare(b.source))) {
+  const rankedCandidates = candidates.sort((a, b) => b.rank - a.rank || a.source.localeCompare(b.source));
+  // A tournament host modifier is small by design, but unlike generic form or
+  // strength comparisons it is otherwise invisible to the player. Pin it into
+  // the bounded explanation set so the fixture never applies an unexplained 4%.
+  const pinnedHostFactor = rankedCandidates.find(factor => factor.source === 'world_cup_host');
+  const selected: RankedMatchFactor[] = pinnedHostFactor ? [pinnedHostFactor] : [];
+  for (const factor of rankedCandidates) {
+    if (selected.some(item => item.source === factor.source)) continue;
     if (selected.some(item => item.category === factor.category)) continue;
     selected.push(factor);
     if (selected.length === 3) break;
@@ -340,6 +363,19 @@ export function calculateMatchModel(input: MatchModelInput): MatchModel {
   const neutral = !!fixture.isNeutralVenue;
   const home = adjustedStrengths(homeTeam, homeState, homeCoach, !neutral, homeBoosts);
   const away = adjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts);
+  const isWorldCup = fixture.competitionType === 'world_cup'
+    || fixture.competitionType === 'world_cup_group';
+  const hostStrengths = isWorldCup && fixture.tournamentHostTeamId === fixture.homeTeamId
+    ? home
+    : isWorldCup && fixture.tournamentHostTeamId === fixture.awayTeamId
+      ? away
+      : null;
+  if (hostStrengths) {
+    const multiplier = 1 + BALANCE.WORLD_CUP_HOST_ADVANTAGE;
+    hostStrengths.attack *= multiplier;
+    hostStrengths.midfield *= multiplier;
+    hostStrengths.defense *= multiplier;
+  }
 
   const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);
   if (overallGap > 8) {

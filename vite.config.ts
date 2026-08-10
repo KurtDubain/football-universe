@@ -87,6 +87,14 @@ export default defineConfig({
             },
           },
           {
+            urlPattern: /\/assets\/world-cup-.*\.m4a$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'football-tournament-music',
+              expiration: { maxEntries: 3, maxAgeSeconds: 60 * 60 * 24 * 90 },
+            },
+          },
+          {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'google-fonts-stylesheets' },

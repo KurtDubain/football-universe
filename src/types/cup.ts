@@ -8,6 +8,8 @@ export interface CupFixture {
   awayTeamId: string;
   /** The team slots are labels only; neither side receives home advantage. */
   isNeutralVenue?: boolean;
+  /** World Cup host identity; applies a separate tournament boost to this team only. */
+  tournamentHostTeamId?: string;
   result?: { home: number; away: number; extraTime?: boolean; penalties?: boolean; penHome?: number; penAway?: number };
   winnerId?: string;
 }
@@ -66,4 +68,15 @@ export interface WorldCupState {
   completed: boolean;
   winnerId?: string;
   participantIds: string[];
+  /** Optional so an active legacy save remains readable; all new editions set it. */
+  hostTeamId?: string;
+}
+
+export interface WorldCupEdition {
+  seasonNumber: number;
+  hostTeamId: string;
+  announcedSeasonNumber: number;
+  winnerId?: string;
+  runnerUpId?: string;
+  hostResult?: string;
 }

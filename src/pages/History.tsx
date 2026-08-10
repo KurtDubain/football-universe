@@ -369,6 +369,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
                           </span>
                         )}
                         {record.worldCupWinner && <span className="text-[10px] bg-sky-900/50 text-sky-400 px-1.5 py-0.5 rounded">环球冠军杯</span>}
+                        {record.worldCupHostId && <span className="rounded bg-emerald-950/70 px-1.5 py-0.5 text-[10px] text-emerald-300">主办：{getTeamName(record.worldCupHostId, world.teamBases)}</span>}
                         <span className="text-slate-500 text-xs">{isExpanded ? '▲' : '▼'}</span>
                       </div>
                     </button>

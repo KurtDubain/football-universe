@@ -97,7 +97,7 @@ function scheduleTone(context: AudioContext, tone: Tone, volumeLift: number): vo
   }, { once: true });
 }
 
-export function scheduleFeedbackCue(context: AudioContext, cue: FeedbackCue): void {
-  const volumeLift = volumeLiftForCue(cue);
+export function scheduleFeedbackCue(context: AudioContext, cue: FeedbackCue, volumeScale = 1): void {
+  const volumeLift = volumeLiftForCue(cue) * Math.max(0, Math.min(1, volumeScale));
   CUE_TONES[cue].forEach(tone => scheduleTone(context, tone, volumeLift));
 }

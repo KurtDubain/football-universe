@@ -9,6 +9,7 @@ import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
 import { checkAchievements } from '../achievements';
 import { selectWorldCupParticipants, initWorldCup } from '../cups/world-cup';
+import { completeWorldCupEdition, ensureWorldCupEdition } from '../cups/world-cup-host';
 import { getAllTeamIds, createNewsId, cnRoundLabel } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
 import { appendWorldCupWindows } from './calendar-builder';
@@ -170,7 +171,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   }
 
   // Create honor record
-  const honor = createHonorRecord(
+  const worldCupHostId = world.worldCupEditions?.find(
+    edition => edition.seasonNumber === seasonNumber,
+  )?.hostTeamId;
+  const honor = {
+    ...createHonorRecord(
     seasonNumber,
     league1Champion,
     league2Champion,
@@ -181,7 +186,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     actualPromoted,
     actualRelegated,
     coachChangesThisSeason,
-  );
+    ),
+    ...(worldCupHostId ? { worldCupHostId } : {}),
+  };
   const honorHistory = [...world.honorHistory, honor];
 
   // Generate trophies for all teams
@@ -1457,9 +1464,16 @@ export function initializeWorldCup(world: GameWorld): GameWorld {
     teamOveralls[id] = world.teamBases[id]?.overall ?? 0;
   }
   const participants = selectWorldCupParticipants(allTeamIds, teamOveralls);
+  const hostPlan = ensureWorldCupEdition(
+    world.worldCupEditions,
+    allTeamIds,
+    world.teamBases,
+    seasonNumber,
+    world.seed,
+  );
 
   // Initialize world cup
-  const worldCup = initWorldCup(participants, seasonNumber, rng);
+  const worldCup = initWorldCup(participants, seasonNumber, rng, hostPlan.edition.hostTeamId);
 
   // Get group fixtures for all 3 neutral single-round-robin rounds.
   const groupRoundFixtures: CupFixture[][] = [];
@@ -1499,14 +1513,16 @@ export function initializeWorldCup(world: GameWorld): GameWorld {
   const wcDrawNews: NewsItem = {
     id: `draw-wc-S${seasonNumber}`,
     seasonNumber, windowIndex: world.seasonState.calendar.length, type: 'trophy',
-    title: `环球冠军杯抽签揭晓 — 32队8组`,
-    description: wcGroupInfo,
+    importance: 'major',
+    title: `环球冠军杯抽签揭晓 — ${world.teamBases[hostPlan.edition.hostTeamId]?.shortName ?? hostPlan.edition.hostTeamId}主办`,
+    description: `东道主在本届赛事享有4%赛会氛围加成，其他比赛继续按中立场计算。${wcGroupInfo}`,
   };
 
   return {
     ...world,
     seasonState,
     worldCup,
+    worldCupEditions: hostPlan.editions,
     newsLog: [...world.newsLog, wcDrawNews],
     rngState: rng.getState(),
   };
@@ -1535,6 +1551,9 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
       honorHistory[honorHistory.length - 1] = {
         ...lastHonor,
         worldCupWinner: wcWinnerId,
+        ...(updatedWorld.worldCup?.hostTeamId
+          ? { worldCupHostId: updatedWorld.worldCup.hostTeamId }
+          : {}),
       };
     }
 
@@ -1584,7 +1603,21 @@ export function finalizeWorldCup(world: GameWorld): GameWorld {
       }
     }
 
-    updatedWorld = { ...updatedWorld, honorHistory, teamTrophies, coachTrophies, teamSeasonRecords };
+    const worldCupEditions = completeWorldCupEdition(
+      updatedWorld.worldCupEditions,
+      updatedWorld.worldCup!,
+      sn,
+      wcWinnerId,
+      wcRunnerUp,
+    );
+    updatedWorld = {
+      ...updatedWorld,
+      honorHistory,
+      teamTrophies,
+      coachTrophies,
+      teamSeasonRecords,
+      worldCupEditions,
+    };
 
     // ── Phase H: WC prize money (winner / runner-up / semis / quarters / R16) ──
     // This was originally in applyIncome (handleSeasonEnd), but at that
