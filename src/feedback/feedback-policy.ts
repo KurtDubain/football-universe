@@ -8,6 +8,17 @@ export type GameFeedbackCue =
   | 'story_upgrade'
   | 'season_end';
 
+export type UiFeedbackCue =
+  | 'advance'
+  | 'selection'
+  | 'confirm'
+  | 'toggle_on'
+  | 'toggle_off'
+  | 'intervention'
+  | 'reject';
+
+export type FeedbackCue = GameFeedbackCue | UiFeedbackCue;
+
 export function selectWorldFeedbackCue(response: AdvanceWorldResponse | null): GameFeedbackCue | null {
   if (!response) return null;
   if (response.seasonChanged) return 'season_end';
@@ -22,6 +33,6 @@ export function selectWorldFeedbackCue(response: AdvanceWorldResponse | null): G
   return null;
 }
 
-export function shouldVibrateForCue(cue: GameFeedbackCue): boolean {
+export function shouldVibrateForCue(cue: FeedbackCue): boolean {
   return cue === 'major_upset' || cue === 'season_end';
 }

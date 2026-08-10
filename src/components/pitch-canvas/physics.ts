@@ -48,6 +48,34 @@ export interface BallComputeResult {
   spinDelta: number;           // amount to add to ball spin this frame
 }
 
+export function computeReceptionTouchOffset(
+  source: { x: number; y: number },
+  target: { x: number; y: number },
+  progress: number,
+  distance = 3.4,
+): { x: number; y: number } {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 0.001) return { x: 0, y: 0 };
+  const touch = Math.sin(clamp(progress, 0, 1) * Math.PI) * distance;
+  return { x: dx / length * touch, y: dy / length * touch };
+}
+
+export function computeDefensiveReactionProgress(
+  stage: PresentationPlayStage | undefined,
+  phaseState: 'passing' | 'holding' | 'shooting',
+  phaseProgress: number,
+): number {
+  if (phaseState === 'holding') return 1;
+  const delay = stage === 'transition' ? 0.035
+    : stage === 'finish' ? 0.055
+      : stage === 'create' ? 0.075
+        : stage === 'progress' ? 0.1
+          : 0.13;
+  return clamp((phaseProgress - delay) / 0.32, 0, 1);
+}
+
 export interface DefensiveRoles {
   presserIndex: number;
   coverIndex: number;
@@ -642,6 +670,18 @@ export function updatePlayerPositions(
           playerPos[i].sprintT = Math.max(playerPos[i].sprintT, preparation * 0.8);
         }
       }
+    }
+
+    if (!teamHasBall && defensiveAction?.playerIndex !== i) {
+      const reaction = computeDefensiveReactionProgress(
+        currentPhase.stage,
+        phaseState,
+        phaseProgress,
+      );
+      const minimumRead = slot.role === 'GK' ? 1 : 0.18;
+      const reactionBlend = minimumRead + (1 - minimumRead) * reaction;
+      targetX_n = lerp(playerPos[i].x, targetX_n, reactionBlend);
+      targetY_n = lerp(playerPos[i].y, targetY_n, reactionBlend);
     }
 
     targetX_n = clamp(targetX_n, 0.03, 0.97);

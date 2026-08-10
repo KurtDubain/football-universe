@@ -7,6 +7,7 @@ import {
   type PresentationChanceStyle,
   type PresentationPlayPattern,
   type PresentationPlayStage,
+  type PresentationRestart,
   type PresentationSetPiece,
 } from './types';
 
@@ -23,6 +24,15 @@ export interface SequenceOptions {
   homePossessionShare?: number;
   transition?: boolean;
   chanceStyle?: PresentationChanceStyle;
+  restart?: PresentationRestart;
+}
+
+export function restartReleaseDelay(restart: PresentationRestart): number {
+  if (restart === 'kickoff') return 30;
+  if (restart === 'goal_kick') return 24;
+  if (restart === 'keeper_release') return 22;
+  if (restart === 'clearance') return 12;
+  return 7;
 }
 
 interface OpenPlayPlan {
@@ -379,8 +389,11 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       arc: directedDelivery ? directedArc : longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
       ...(i === 0 && options.startingPlayerIdx !== undefined && {
-        releaseDelayFrames: options.transition ? 18 : 12,
+        releaseDelayFrames: options.restart
+          ? restartReleaseDelay(options.restart)
+          : options.transition ? 18 : 12,
       }),
+      ...(i === 0 && options.restart ? { restart: options.restart } : {}),
       ...(i === 0 && options.sourceOverride ? { sourceOverride: options.sourceOverride } : {}),
       targetOverride: target,
     });

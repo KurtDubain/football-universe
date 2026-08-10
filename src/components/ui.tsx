@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
+import { playUiFeedback } from '../feedback/game-feedback';
 
 function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
@@ -168,7 +169,11 @@ export function SegmentedControl<T extends string>({
             role="tab"
             aria-selected={selected}
             disabled={option.disabled}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              if (selected) return;
+              playUiFeedback('selection');
+              onChange(option.value);
+            }}
             className="ui-segmented-option"
           >
             {option.label}

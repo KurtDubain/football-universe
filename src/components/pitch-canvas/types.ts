@@ -4,6 +4,7 @@
 import type {
   PresentationChanceStyle,
   PresentationPlayStage,
+  PresentationRestart,
   PresentationSetPiece,
 } from '../../types/match-presentation';
 
@@ -12,6 +13,7 @@ export type {
   MatchPresentationCue,
   PresentationChanceStyle,
   PresentationPlayStage,
+  PresentationRestart,
   PresentationSetPiece,
 } from '../../types/match-presentation';
 
@@ -72,6 +74,7 @@ export interface PassPhase {
   pattern?: PresentationPlayPattern;
   stage?: PresentationPlayStage;
   chanceStyle?: PresentationChanceStyle;
+  restart?: PresentationRestart;
   intercepted: boolean; // pass gets stolen halfway through
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };

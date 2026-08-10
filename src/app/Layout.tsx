@@ -18,6 +18,7 @@ import {
 } from '../feedback/preferences';
 import {
   playGameFeedback,
+  playUiFeedback,
   suspendGameAudio,
   unlockGameAudio,
 } from '../feedback/game-feedback';
@@ -158,17 +159,23 @@ export default function Layout({ children }: LayoutProps) {
     }
   };
   const handleWindowAdvance = async () => {
+    playUiFeedback('advance');
     const advanced = await advanceWindow();
+    if (!advanced) playUiFeedback('reject');
     if (advanced) showLatestResponse();
   };
   const handleBatchAdvance = async (count: number) => {
     setShowFastMenu(false);
+    playUiFeedback('advance');
     const advanced = await batchAdvance(count);
+    if (!advanced) playUiFeedback('reject');
     if (advanced) showLatestResponse();
   };
   const handleKeyNodeAdvance = async () => {
     setShowFastMenu(false);
+    playUiFeedback('advance');
     const advanced = await advanceToNextKeyNode();
+    if (!advanced) playUiFeedback('reject');
     if (advanced) showLatestResponse();
   };
   const handleFloatingAdvance = handleWindowAdvance;
@@ -505,8 +512,9 @@ export default function Layout({ children }: LayoutProps) {
               <button
                 data-testid="header-advance"
                 onClick={handleWindowAdvance}
+                aria-busy={isAdvancing}
                 disabled={isAdvancing || !currentWindow}
-                className="h-[44px] min-w-[44px] rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
+                className="ui-action-feedback h-[44px] min-w-[44px] rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
               >
                 {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
               </button>
@@ -534,7 +542,7 @@ export default function Layout({ children }: LayoutProps) {
                     data-testid="advance-next-key-node"
                     onClick={handleKeyNodeAdvance}
                     disabled={!nextKeyNode || nextKeyNode.blocked || isAdvancing}
-                    className="min-h-11 w-full rounded-md bg-emerald-700 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                    className="press-scale min-h-11 w-full rounded-md bg-emerald-700 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                   >
                     {nextKeyNode?.blocked ? '当前就是关键节点' : '前往下一关键节点'}
                   </button>
@@ -558,14 +566,14 @@ export default function Layout({ children }: LayoutProps) {
                   <button
                     onClick={() => handleBatchAdvance(5)}
                     disabled={isAdvancing || nextKeyNode?.blocked}
-                    className="min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="press-scale min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     推进 5 轮
                   </button>
                   <button
                     onClick={() => handleBatchAdvance(10)}
                     disabled={isAdvancing || nextKeyNode?.blocked}
-                    className="min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="press-scale min-h-11 cursor-pointer px-2 py-2 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     推进 10 轮
                   </button>

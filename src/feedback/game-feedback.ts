@@ -1,24 +1,36 @@
 import { getFeedbackPreferences } from './preferences';
-import { shouldVibrateForCue, type GameFeedbackCue } from './feedback-policy';
+import {
+  shouldVibrateForCue,
+  type FeedbackCue,
+  type GameFeedbackCue,
+  type UiFeedbackCue,
+} from './feedback-policy';
 
 type AudioContextConstructor = new () => AudioContext;
 
 export interface FeedbackDelivery {
-  cue: GameFeedbackCue;
+  cue: FeedbackCue;
   audioPlayed: boolean;
   hapticPlayed: boolean;
 }
 
-const RATE_LIMIT_MS: Record<GameFeedbackCue, number> = {
+const RATE_LIMIT_MS: Record<FeedbackCue, number> = {
   start: 800,
   goal: 250,
   major_upset: 2_000,
   story_upgrade: 2_000,
   season_end: 2_000,
+  advance: 280,
+  selection: 70,
+  confirm: 180,
+  toggle_on: 120,
+  toggle_off: 120,
+  intervention: 900,
+  reject: 300,
 };
 
 let audioContext: AudioContext | null = null;
-const lastCueAt = new Map<GameFeedbackCue, number>();
+const lastCueAt = new Map<FeedbackCue, number>();
 let lastHapticAt = Number.NEGATIVE_INFINITY;
 
 function audioContextConstructor(): AudioContextConstructor | null {
@@ -83,7 +95,7 @@ export function suspendGameAudio(): void {
   }
 }
 
-function playAudioCue(cue: GameFeedbackCue): boolean {
+function playAudioCue(cue: FeedbackCue): boolean {
   if (!getFeedbackPreferences().soundEnabled || audioUnavailableEnvironment()) return false;
   const timestamp = now();
   if (timestamp - (lastCueAt.get(cue) ?? Number.NEGATIVE_INFINITY) < RATE_LIMIT_MS[cue]) return false;
@@ -102,7 +114,7 @@ function playAudioCue(cue: GameFeedbackCue): boolean {
   return true;
 }
 
-function playHapticCue(cue: GameFeedbackCue): boolean {
+function playHapticCue(cue: FeedbackCue): boolean {
   const preferences = getFeedbackPreferences();
   if (!preferences.hapticsEnabled || !shouldVibrateForCue(cue) || hapticUnavailableEnvironment()) return false;
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return false;
@@ -117,7 +129,7 @@ function playHapticCue(cue: GameFeedbackCue): boolean {
   }
 }
 
-export function playGameFeedback(cue: GameFeedbackCue): FeedbackDelivery {
+function deliverFeedback(cue: FeedbackCue): FeedbackDelivery {
   const delivery = {
     cue,
     audioPlayed: playAudioCue(cue),
@@ -129,4 +141,12 @@ export function playGameFeedback(cue: GameFeedbackCue): FeedbackDelivery {
     }));
   }
   return delivery;
+}
+
+export function playGameFeedback(cue: GameFeedbackCue): FeedbackDelivery {
+  return deliverFeedback(cue);
+}
+
+export function playUiFeedback(cue: UiFeedbackCue): FeedbackDelivery {
+  return deliverFeedback(cue);
 }

@@ -108,5 +108,7 @@ describe('game feedback policy', () => {
     expect(shouldVibrateForCue('story_upgrade')).toBe(false);
     expect(shouldVibrateForCue('major_upset')).toBe(true);
     expect(shouldVibrateForCue('season_end')).toBe(true);
+    expect(shouldVibrateForCue('advance')).toBe(false);
+    expect(shouldVibrateForCue('intervention')).toBe(false);
   });
 });

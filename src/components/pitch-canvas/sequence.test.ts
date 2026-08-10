@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPassTarget, generateSequence } from './sequence';
+import { buildPassTarget, generateSequence, restartReleaseDelay } from './sequence';
 
 describe('pitch possession sequences', () => {
   it('creates deterministic, bounded receiving points rather than fixed formation coordinates', () => {
@@ -67,6 +67,23 @@ describe('pitch possession sequences', () => {
       sourceOverride: source,
     });
     expect(sequence.phases.every(phase => phase.pattern === 'counter')).toBe(true);
+  });
+
+  it('gives structured restarts enough setup time without slowing second balls', () => {
+    expect(restartReleaseDelay('kickoff')).toBeGreaterThan(restartReleaseDelay('goal_kick'));
+    expect(restartReleaseDelay('goal_kick')).toBeGreaterThan(restartReleaseDelay('second_ball'));
+
+    const restart = generateSequence(191, {
+      attackingHome: false,
+      startingPlayerIdx: 0,
+      sourceOverride: { x: 0.92, y: 0.5 },
+      restart: 'goal_kick',
+    });
+    expect(restart.phases[0]).toMatchObject({
+      restart: 'goal_kick',
+      releaseDelayFrames: 24,
+      sourceOverride: { x: 0.92, y: 0.5 },
+    });
   });
 
   it('stages an authoritative chance after a visible turnover before releasing the shot', () => {

@@ -9,6 +9,7 @@ import {
   type ObservationJudgmentKind,
   type ObservationSelection,
 } from '../engine/observation/judgment';
+import { playUiFeedback } from '../feedback/game-feedback';
 import { Icon } from './Icon';
 
 const KIND_OPTIONS: Array<{ id: ObservationJudgmentKind; label: string }> = [
@@ -82,8 +83,11 @@ export default function ObservationPanel({
       aria-label={advanceAction.ariaLabel}
       aria-busy={advanceAction.isAdvancing}
       disabled={advanceAction.isAdvancing}
-      onClick={advanceAction.onAdvance}
-      className="flex min-h-11 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+      onClick={() => {
+        playUiFeedback('advance');
+        advanceAction.onAdvance();
+      }}
+      className="ui-action-feedback flex min-h-11 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
     >
       <Icon name="play" size={16} />
       <span className="text-xs font-semibold">{advanceAction.label}</span>
@@ -96,7 +100,10 @@ export default function ObservationPanel({
       <div className={advanceButton ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-2' : undefined}>
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => {
+            playUiFeedback('selection');
+            setExpanded(true);
+          }}
           aria-label={pending
             ? `本轮已判断：${observationSelectionLabel(pending.selection)}；点击修改`
             : '做出本轮观察判断 · 可选'}
@@ -136,14 +143,17 @@ export default function ObservationPanel({
             </h3>
             <p className="mt-1 text-[11px] text-slate-500">每轮最多记录一条，不消耗资源，也不会影响赛果。</p>
           </div>
-          <button type="button" onClick={() => setExpanded(false)} className="min-h-11 px-2 text-xs text-slate-500 hover:text-slate-300">收起</button>
+          <button type="button" onClick={() => { playUiFeedback('toggle_off'); setExpanded(false); }} className="min-h-11 px-2 text-xs text-slate-500 hover:text-slate-300">收起</button>
         </div>
 
         <div className="mt-3 space-y-3">
           <select
             aria-label="选择判断比赛"
             value={fixture.id}
-            onChange={event => setFixtureId(event.target.value)}
+            onChange={event => {
+              playUiFeedback('selection');
+              setFixtureId(event.target.value);
+            }}
             className="min-h-11 w-full rounded border border-slate-700 bg-slate-900 px-3 text-xs text-slate-200 focus:border-sky-600 focus:outline-none"
           >
             {fixtures.map(entry => (
@@ -160,7 +170,11 @@ export default function ObservationPanel({
                 type="button"
                 role="tab"
                 aria-selected={kind === option.id}
-                onClick={() => setKind(option.id)}
+                onClick={() => {
+                  if (kind === option.id) return;
+                  playUiFeedback('selection');
+                  setKind(option.id);
+                }}
                 className={`min-h-9 rounded px-2 text-xs font-medium ${kind === option.id ? 'bg-sky-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
                 {option.label}
@@ -175,9 +189,10 @@ export default function ObservationPanel({
                 type="button"
                 onClick={() => {
                   setJudgment(fixture.id, kind, option.selection);
+                  playUiFeedback('confirm');
                   setExpanded(false);
                 }}
-                className={`min-h-11 rounded border px-2 text-xs transition-colors ${pending?.fixtureId === fixture.id && pending.kind === kind && pending.selection === option.selection
+                className={`press-scale min-h-11 rounded border px-2 text-xs transition-colors ${pending?.fixtureId === fixture.id && pending.kind === kind && pending.selection === option.selection
                   ? 'border-sky-500 bg-sky-900/50 text-sky-100'
                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-700'
                 }`}
@@ -191,7 +206,7 @@ export default function ObservationPanel({
           <div className="flex items-center justify-between gap-3 border-t border-slate-700 pt-2 text-[11px] text-slate-500">
             <span>{home.shortName} {prediction.homeWinPct}% · 平 {prediction.drawPct}% · {away.shortName} {prediction.awayWinPct}%</span>
             {pending && (
-              <button type="button" onClick={cancelJudgment} className="min-h-9 shrink-0 px-2 text-red-400 hover:text-red-300">撤销判断</button>
+              <button type="button" onClick={() => { cancelJudgment(); playUiFeedback('toggle_off'); }} className="min-h-9 shrink-0 px-2 text-red-400 hover:text-red-300">撤销判断</button>
             )}
           </div>
         </div>

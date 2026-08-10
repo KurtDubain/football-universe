@@ -114,7 +114,7 @@ export function drawPlayer(
   highlighted = false,
   label?: string,
   facingTarget?: { x: number; y: number },
-  action?: 'shot' | 'save' | 'catch' | 'block',
+  action?: 'receive' | 'shot' | 'save' | 'catch' | 'block',
   actionProgress = 0,
 ): void {
   const px = P + p.x * fw;
@@ -178,7 +178,7 @@ export function drawPlayer(
   // appears before release; goalkeeper and block shapes only open after their
   // reaction begins, preserving the event timing.
   if (action && facingLength > 0.01) {
-    const actionWave = action === 'shot'
+    const actionWave = action === 'shot' || action === 'receive'
       ? Math.sin(Math.min(1, actionProgress) * Math.PI)
       : Math.min(1, Math.max(0, (actionProgress - 0.15) / 0.55));
     if (action === 'shot') {
@@ -205,6 +205,19 @@ export function drawPlayer(
       ctx.strokeStyle = `rgba(255,255,255,${0.3 + actionWave * 0.55})`;
       ctx.lineWidth = 1.4;
       ctx.stroke();
+    } else if (action === 'receive' && actionWave > 0.05) {
+      const sideX = -directionY;
+      const sideY = directionX;
+      ctx.beginPath();
+      ctx.moveTo(px - directionX * 1.5, py - directionY * 1.5);
+      ctx.lineTo(
+        px + directionX * (5 + actionWave * 2) + sideX * 2.2,
+        py + directionY * (5 + actionWave * 2) + sideY * 2.2,
+      );
+      ctx.strokeStyle = 'rgba(255,255,255,0.72)';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
     } else if (action === 'catch' && actionWave > 0.05) {
       const sideX = -directionY;
       const sideY = directionX;
@@ -229,16 +242,24 @@ export function drawPlayer(
   }
 
   // Body
-  const actionWave = action === 'shot'
+  const actionWave = action === 'shot' || action === 'receive'
     ? Math.sin(Math.min(1, actionProgress) * Math.PI)
     : action
       ? Math.min(1, Math.max(0, (actionProgress - 0.15) / 0.55))
       : 0;
   ctx.save();
   ctx.translate(px, py);
-  if (action === 'save' && facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
+  if ((action === 'save' || action === 'receive') && facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
   ctx.beginPath();
-  ctx.ellipse(0, 0, action === 'save' ? 5.5 + actionWave * 2.5 : 5.5, action === 'save' ? 5.5 - actionWave * 1.4 : 5.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    0,
+    0,
+    action === 'save' ? 5.5 + actionWave * 2.5 : action === 'receive' ? 5.5 + actionWave * 0.7 : 5.5,
+    action === 'save' ? 5.5 - actionWave * 1.4 : action === 'receive' ? 5.5 - actionWave * 0.5 : 5.5,
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fillStyle = color; ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8; ctx.stroke();
   ctx.restore();

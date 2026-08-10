@@ -150,7 +150,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 py-2">
             <span>
               <span className="block text-sm font-medium text-slate-200">现场与关键声音</span>
-              <span className="mt-0.5 block text-[11px] text-slate-500">直播使用动态球场氛围，开局、决赛与赛季终章使用短音乐</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">直播使用动态球场氛围，关键操作、开局、决赛与赛季终章使用短声音</span>
             </span>
             <input
               type="checkbox"
@@ -173,7 +173,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <div className="py-3" data-testid="sound-profile-setting">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-slate-200">球场声场</span>
-              <span className="text-[10px] text-slate-500">动作始终清晰，调整观众氛围强度</span>
+              <span className="text-[10px] text-slate-500">调整观众、动作与短音乐层级</span>
             </div>
             <div className="grid grid-cols-3 overflow-hidden rounded-md border border-slate-700 bg-slate-900/45" role="group" aria-label="球场声场强度">
               {([

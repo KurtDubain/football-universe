@@ -10,7 +10,7 @@ import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, getBaseSlot, computeBallPosition, resolvePhasePoints, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
+import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, computeReceptionTouchOffset, getBaseSlot, computeBallPosition, resolvePhasePoints, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
 import {
   drawPitch, drawHalftime, drawPlayer, drawBall,
   drawGoalCelebration, drawShotOutcome, applyCameraShake, applyWhiteFlash,
@@ -79,6 +79,7 @@ interface PitchDebugState {
   action: {
     kind: PassPhase['kind'];
     setPiece?: PassPhase['setPiece'];
+    restart?: PassPhase['restart'];
     pattern?: PassPhase['pattern'];
     stage?: PassPhase['stage'];
     passerIdx: number;
@@ -480,7 +481,7 @@ function PitchCanvas(props: Props) {
       const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
-      if (firstPhase.setPiece && firstPhase.sourceOverride) {
+      if ((firstPhase.setPiece || firstPhase.restart) && firstPhase.sourceOverride) {
         const takerOffset = firstPhase.attackingHome ? 0 : 11;
         const taker = playerPosRef.current[takerOffset + firstPhase.passerIdx];
         taker.x = firstPhase.sourceOverride.x;
@@ -688,8 +689,10 @@ function PitchCanvas(props: Props) {
         const completedScene = sequenceSceneRef.current;
         let continuationOptions: SequenceOptions;
         if (completedScene) {
-          const attackingSecondBall = completedScene.outcome === 'block'
-            && seededRand(completedScene.seed + 401) < 0.36;
+          const attackingSecondBall = (
+            completedScene.outcome === 'block'
+            || (completedScene.outcome === 'save' && completedScene.event.type === 'gk_save')
+          ) && seededRand(completedScene.seed + 401) < (completedScene.outcome === 'block' ? 0.36 : 0.28);
           const retainedDelivery = completedScene.outcome === 'delivery'
             && completedScene.event.setPiece?.resolution === 'retained';
           const restartingHome = completedScene.outcome === 'delivery'
@@ -697,6 +700,15 @@ function PitchCanvas(props: Props) {
             : attackingSecondBall
               ? completedScene.attackingHome
               : !completedScene.attackingHome;
+          const restart = completedScene.outcome === 'goal'
+            ? 'kickoff'
+            : completedScene.outcome === 'miss'
+              ? 'goal_kick'
+              : completedScene.outcome === 'save' && completedScene.event.type === 'save'
+                ? 'keeper_release'
+                : attackingSecondBall
+                  ? 'second_ball'
+                  : 'clearance';
           const restartingRoster = restartingHome ? homeRoster : awayRoster;
           const activeRestartingRoster = activePitchPlayers(restartingRoster, minute, maxMinute);
           const actors = actorsForEvent(completedScene.event, live.allEvents);
@@ -739,6 +751,7 @@ function PitchCanvas(props: Props) {
             attackingHome: restartingHome,
             startingPlayerIdx: restartSlot,
             sourceOverride: restartSource,
+            restart,
             homePossessionShare,
           };
           postShotRestingBallRef.current = null;
@@ -917,8 +930,19 @@ function PitchCanvas(props: Props) {
         releaseDelayFrames,
         swerve: currentPhase.swerve,
       });
-      const bx = ballResult.bx;
-      const by = ballResult.by;
+      let bx = ballResult.bx;
+      let by = ballResult.by;
+      const receptionFrames = Math.min(10, Math.max(1, currentPhase.hold));
+      if (phaseStateRef.current === 'holding' && currentPhase.kind === 'pass'
+        && phaseFrameRef.current <= receptionFrames) {
+        const receptionOffset = computeReceptionTouchOffset(
+          ballSourceRef.current,
+          { x: finalTargetX, y: finalTargetY },
+          phaseFrameRef.current / receptionFrames,
+        );
+        bx += receptionOffset.x;
+        by += receptionOffset.y;
+      }
       ballArcLiftRef.current = ballResult.arcLift;
       ballSpinRef.current += ballResult.spinDelta;
 
@@ -1084,18 +1108,28 @@ function PitchCanvas(props: Props) {
         const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
         const isAttacker = directedActors.attackerId === player.playerId;
         const isDefender = directedActors.defenderId === player.playerId;
+        const receivingTouch = hasBall && currentPhase.kind === 'pass'
+          && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
         drawPlayer(
           ctx, playerPosRef.current[player.slotIndex], homeColor, player.playerNumber,
           hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
-          isAttacker ? { x: finalTargetX, y: finalTargetY } : isDefender ? { x: bx, y: by } : undefined,
-          isAttacker && currentPhase.kind === 'shot'
+          isAttacker
+            ? { x: finalTargetX, y: finalTargetY }
+            : isDefender
+              ? { x: bx, y: by }
+              : receivingTouch ? ballSourceRef.current : undefined,
+          receivingTouch
+            ? 'receive'
+            : isAttacker && currentPhase.kind === 'shot'
             ? 'shot'
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
               ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
                 ? 'catch'
                 : directedShotScene.outcome
               : undefined,
-          isAttacker ? attackerActionProgress : phaseProgress,
+          receivingTouch
+            ? phaseFrameRef.current / receptionFrames
+            : isAttacker ? attackerActionProgress : phaseProgress,
         );
       }
       for (const player of visibleAway) {
@@ -1104,18 +1138,28 @@ function PitchCanvas(props: Props) {
         const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
         const isAttacker = directedActors.attackerId === player.playerId;
         const isDefender = directedActors.defenderId === player.playerId;
+        const receivingTouch = hasBall && currentPhase.kind === 'pass'
+          && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
         drawPlayer(
           ctx, playerPosRef.current[11 + player.slotIndex], awayColor, player.playerNumber,
           hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
-          isAttacker ? { x: finalTargetX, y: finalTargetY } : isDefender ? { x: bx, y: by } : undefined,
-          isAttacker && currentPhase.kind === 'shot'
+          isAttacker
+            ? { x: finalTargetX, y: finalTargetY }
+            : isDefender
+              ? { x: bx, y: by }
+              : receivingTouch ? ballSourceRef.current : undefined,
+          receivingTouch
+            ? 'receive'
+            : isAttacker && currentPhase.kind === 'shot'
             ? 'shot'
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
               ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
                 ? 'catch'
                 : directedShotScene.outcome
               : undefined,
-          isAttacker ? attackerActionProgress : phaseProgress,
+          receivingTouch
+            ? phaseFrameRef.current / receptionFrames
+            : isAttacker ? attackerActionProgress : phaseProgress,
         );
       }
 
@@ -1154,6 +1198,7 @@ function PitchCanvas(props: Props) {
         action: {
           kind: currentPhase.kind,
           setPiece: currentPhase.setPiece,
+          restart: currentPhase.restart,
           pattern: currentPhase.pattern,
           stage: currentPhase.stage,
           passerIdx: currentPhase.passerIdx,

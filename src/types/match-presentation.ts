@@ -3,6 +3,7 @@ import type { MatchEvent } from './match';
 export type PresentationSetPiece = 'corner' | 'direct_free_kick' | 'crossed_free_kick' | 'penalty';
 export type PresentationPlayStage = 'build' | 'progress' | 'create' | 'finish' | 'transition';
 export type PresentationChanceStyle = 'central' | 'through_ball' | 'cutback' | 'cross';
+export type PresentationRestart = 'kickoff' | 'goal_kick' | 'keeper_release' | 'second_ball' | 'clearance';
 
 export interface MatchPresentationCue {
   id: string;

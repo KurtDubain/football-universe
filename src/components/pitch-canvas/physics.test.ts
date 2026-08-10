@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computePostShotBallPosition, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
 
 function initialPlayers(): PlayerState[] {
@@ -59,6 +59,23 @@ describe('pitch player movement', () => {
     expect(groundPass.bx).toBeGreaterThan(50);
     expect(windingUp.bx).toBe(10);
     expect(windingUp.arcLift).toBe(0);
+  });
+
+  it('cushions an arriving pass without moving either endpoint', () => {
+    const source = { x: 20, y: 40 };
+    const target = { x: 120, y: 80 };
+    expect(computeReceptionTouchOffset(source, target, 0)).toEqual({ x: 0, y: 0 });
+    expect(computeReceptionTouchOffset(source, target, 1).x).toBeCloseTo(0);
+    const middle = computeReceptionTouchOffset(source, target, 0.5);
+    expect(Math.hypot(middle.x, middle.y)).toBeCloseTo(3.4);
+    expect(middle.x).toBeGreaterThan(0);
+    expect(middle.y).toBeGreaterThan(0);
+  });
+
+  it('lets transitions react faster than settled build-up while preserving a readable delay', () => {
+    expect(computeDefensiveReactionProgress('build', 'passing', 0.08)).toBe(0);
+    expect(computeDefensiveReactionProgress('transition', 'passing', 0.08)).toBeGreaterThan(0);
+    expect(computeDefensiveReactionProgress('finish', 'holding', 0)).toBe(1);
   });
 
   it('adds a bounded visual bend to shots without changing their endpoints', () => {

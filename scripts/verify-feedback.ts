@@ -154,6 +154,44 @@ async function main(): Promise<void> {
       throw new Error(`Start feedback did not play: ${JSON.stringify(startProbe)}`);
     }
 
+    await page.evaluate(() => {
+      const probe = (window as typeof window & {
+        __feedbackProbe?: { deliveries: unknown[]; starts: unknown[] };
+      }).__feedbackProbe;
+      if (probe) {
+        probe.deliveries.length = 0;
+        probe.starts.length = 0;
+      }
+    });
+    const focusToggle = page.getByTestId('focus-watch-toggle').first();
+    await focusToggle.click();
+    await focusToggle.click();
+    await page.getByRole('tab', { name: '总览', exact: true }).click();
+    await page.getByRole('tab', { name: '比赛日', exact: true }).click();
+    await page.getByRole('button', { name: /做出本轮观察判断/ }).click();
+    await page.getByRole('button', { name: /主胜/ }).click();
+    await page.getByTestId('dashboard-advance').click();
+    await page.waitForFunction(() => {
+      const state = (window as typeof window & {
+        __gameStore?: { getState: () => { advanceTick: number; isAdvancing: boolean } };
+      }).__gameStore?.getState();
+      return Boolean(state && state.advanceTick > 0 && !state.isAdvancing);
+    });
+    await page.waitForTimeout(150);
+    const uiDeliveries = await page.evaluate(() => (
+      window as typeof window & {
+        __feedbackProbe?: {
+          deliveries: Array<{ cue: string; audioPlayed: boolean; hapticPlayed: boolean }>;
+          starts: unknown[];
+        };
+      }
+    ).__feedbackProbe);
+    for (const cue of ['toggle_on', 'toggle_off', 'selection', 'confirm', 'advance']) {
+      if (!uiDeliveries?.deliveries.some(item => item.cue === cue && item.audioPlayed && !item.hapticPlayed)) {
+        throw new Error(`UI feedback ${cue} did not play: ${JSON.stringify(uiDeliveries)}`);
+      }
+    }
+
     const soundToggle = page.getByTestId('global-sound-toggle');
     const toggleBox = await soundToggle.boundingBox();
     if (!toggleBox || toggleBox.width < 44 || toggleBox.height < 44) {
@@ -322,6 +360,7 @@ async function main(): Promise<void> {
       beforeGesture,
       target: toggleBox,
       soundProfileTarget: profileBox,
+      uiDeliveries: uiDeliveries?.deliveries,
       seasonDelivery,
       reducedMotionAudioPreserved: true,
       reducedMotionHapticsSuppressed: true,

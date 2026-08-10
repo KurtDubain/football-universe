@@ -61,9 +61,9 @@ interface SoundProfileMix {
 }
 
 export const MATCH_SOUND_PROFILE_MIX: Readonly<Record<SoundProfile, SoundProfileMix>> = {
-  quiet: { master: 0.66, crowd: 0.68, action: 1.18, music: 0.72 },
-  balanced: { master: 0.86, crowd: 1.16, action: 1.18, music: 0.92 },
-  stadium: { master: 0.94, crowd: 1.52, action: 1.28, music: 1 },
+  quiet: { master: 0.66, crowd: 0.68, action: 1.18, music: 0.84 },
+  balanced: { master: 0.86, crowd: 1.16, action: 1.18, music: 1.14 },
+  stadium: { master: 0.94, crowd: 1.52, action: 1.28, music: 1.18 },
 };
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -301,6 +301,8 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   private macroPaused = false;
   private fixturePulse = 1;
   private dangerWasHigh = false;
+  private crowdDuckUntil = 0;
+  private crowdRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly seed: number;
   private readonly prestige: number;
 
@@ -329,7 +331,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     crowdGain.gain.value = computeCrowdGainLevel(this.lastCrowdIntensity, 0, false) * mix.crowd;
     crowdReactionGain.gain.value = mix.crowd;
     actionGain.gain.value = mix.action;
-    musicGain.gain.value = 0.8 * mix.music;
+    musicGain.gain.value = mix.music;
     crowdGain.connect(master);
     crowdReactionGain.connect(master);
     actionGain.connect(master);
@@ -621,7 +623,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.refreshCrowdGain(0.25);
     setGain(this.crowdReactionGain, mix.crowd, this.context, 0.25);
     setGain(this.actionGain, mix.action, this.context, 0.2);
-    setGain(this.musicGain, 0.8 * mix.music, this.context, 0.2);
+    setGain(this.musicGain, mix.music, this.context, 0.2);
   }
 
   stop(): void {
@@ -646,19 +648,23 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.eventNoise = null;
     this.presentationDanger = 0;
     this.dangerWasHigh = false;
+    this.crowdDuckUntil = 0;
+    if (this.crowdRecoveryTimer !== null) clearTimeout(this.crowdRecoveryTimer);
+    this.crowdRecoveryTimer = null;
     if (wasStarted) reportSoundscape({ type: 'stop' });
   }
 
   private refreshCrowdGain(duration: number): void {
     if (!this.context || !this.crowdGain) return;
     const mix = MATCH_SOUND_PROFILE_MIX[this.profile];
+    const musicDuck = this.context.currentTime < this.crowdDuckUntil ? 0.76 : 1;
     setGain(
       this.crowdGain,
       computeCrowdGainLevel(
         this.lastCrowdIntensity,
         this.presentationDanger,
         this.macroPaused,
-      ) * mix.crowd * this.fixturePulse,
+      ) * mix.crowd * this.fixturePulse * musicDuck,
       this.context,
       duration,
     );
@@ -668,11 +674,18 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     if (!this.context || !this.actionGain || !this.musicGain) return;
     scheduleWhistle(this.context, this.actionGain, 0.08);
     if (!this.options.featured) return;
+    this.crowdDuckUntil = this.context.currentTime + 1.95;
+    this.refreshCrowdGain(0.08);
+    if (this.crowdRecoveryTimer !== null) clearTimeout(this.crowdRecoveryTimer);
+    this.crowdRecoveryTimer = setTimeout(() => {
+      this.crowdRecoveryTimer = null;
+      this.refreshCrowdGain(0.35);
+    }, 1_950);
     const root = this.options.result.competitionType === 'world_cup' ? 196 : 174.61;
     [root, root * 1.5, root * 2].forEach((frequency, index) => {
-      scheduleOscillator(this.context!, this.musicGain!, frequency, 0.24 + index * 0.08, 1.45, 0.012, 'sine', frequency * 1.01);
+      scheduleOscillator(this.context!, this.musicGain!, frequency, 0.24 + index * 0.08, 1.45, 0.016, 'sine', frequency * 1.01);
     });
-    scheduleOscillator(this.context, this.musicGain, root * 2, 1.05, 0.72, 0.014, 'triangle', root * 2.5);
+    scheduleOscillator(this.context, this.musicGain, root * 2, 1.05, 0.72, 0.019, 'triangle', root * 2.5);
   }
 }
 

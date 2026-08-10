@@ -50,6 +50,7 @@ describe('match soundscape semantics', () => {
     expect(MATCH_SOUND_PROFILE_MIX.quiet.crowd).toBeLessThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
     expect(MATCH_SOUND_PROFILE_MIX.stadium.crowd).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
     expect(MATCH_SOUND_PROFILE_MIX.quiet.action).toBeGreaterThanOrEqual(MATCH_SOUND_PROFILE_MIX.balanced.action);
+    expect(MATCH_SOUND_PROFILE_MIX.balanced.music).toBeGreaterThan(1);
   });
 
   it('raises tension late in a close match and for shootouts', () => {

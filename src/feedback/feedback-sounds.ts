@@ -1,4 +1,4 @@
-import type { GameFeedbackCue } from './feedback-policy';
+import type { FeedbackCue } from './feedback-policy';
 
 interface Tone {
   offset: number;
@@ -9,9 +9,11 @@ interface Tone {
   endFrequency?: number;
 }
 
-const FEEDBACK_VOLUME_LIFT = 1.24;
+const MUSICAL_VOLUME_LIFT = 1.62;
+const EVENT_VOLUME_LIFT = 1.24;
+const UI_VOLUME_LIFT = 1.08;
 
-const CUE_TONES: Record<GameFeedbackCue, Tone[]> = {
+const CUE_TONES: Record<FeedbackCue, Tone[]> = {
   start: [
     { offset: 0, duration: 1.7, frequency: 164.81, type: 'sine', volume: 0.012, endFrequency: 166.5 },
     { offset: 0.18, duration: 1.55, frequency: 246.94, type: 'sine', volume: 0.011, endFrequency: 249 },
@@ -39,9 +41,43 @@ const CUE_TONES: Record<GameFeedbackCue, Tone[]> = {
     { offset: 1.52, duration: 0.78, frequency: 523.25, type: 'triangle', volume: 0.016, endFrequency: 659.25 },
     { offset: 2.18, duration: 0.62, frequency: 659.25, type: 'triangle', volume: 0.014, endFrequency: 783.99 },
   ],
+  advance: [
+    { offset: 0, duration: 0.1, frequency: 104, type: 'sine', volume: 0.022, endFrequency: 72 },
+    { offset: 0.055, duration: 0.12, frequency: 196, type: 'triangle', volume: 0.01, endFrequency: 246.94 },
+  ],
+  selection: [
+    { offset: 0, duration: 0.055, frequency: 540, type: 'sine', volume: 0.008, endFrequency: 610 },
+  ],
+  confirm: [
+    { offset: 0, duration: 0.09, frequency: 392, type: 'sine', volume: 0.012, endFrequency: 440 },
+    { offset: 0.075, duration: 0.14, frequency: 587.33, type: 'triangle', volume: 0.016, endFrequency: 659.25 },
+  ],
+  toggle_on: [
+    { offset: 0, duration: 0.065, frequency: 440, type: 'sine', volume: 0.01, endFrequency: 554.37 },
+    { offset: 0.055, duration: 0.1, frequency: 659.25, type: 'triangle', volume: 0.012 },
+  ],
+  toggle_off: [
+    { offset: 0, duration: 0.065, frequency: 523.25, type: 'sine', volume: 0.009, endFrequency: 392 },
+  ],
+  intervention: [
+    { offset: 0, duration: 0.22, frequency: 110, type: 'sine', volume: 0.024, endFrequency: 65.41 },
+    { offset: 0.1, duration: 0.28, frequency: 196, type: 'triangle', volume: 0.018, endFrequency: 293.66 },
+    { offset: 0.24, duration: 0.22, frequency: 392, type: 'sine', volume: 0.014, endFrequency: 523.25 },
+  ],
+  reject: [
+    { offset: 0, duration: 0.12, frequency: 174.61, type: 'triangle', volume: 0.012, endFrequency: 130.81 },
+  ],
 };
 
-function scheduleTone(context: AudioContext, tone: Tone): void {
+function volumeLiftForCue(cue: FeedbackCue): number {
+  if (cue === 'start' || cue === 'season_end') return MUSICAL_VOLUME_LIFT;
+  if (cue === 'advance' || cue === 'selection' || cue === 'confirm'
+    || cue === 'toggle_on' || cue === 'toggle_off' || cue === 'intervention'
+    || cue === 'reject') return UI_VOLUME_LIFT;
+  return EVENT_VOLUME_LIFT;
+}
+
+function scheduleTone(context: AudioContext, tone: Tone, volumeLift: number): void {
   const start = context.currentTime + tone.offset;
   const end = start + tone.duration;
   const oscillator = context.createOscillator();
@@ -50,7 +86,7 @@ function scheduleTone(context: AudioContext, tone: Tone): void {
   oscillator.frequency.setValueAtTime(tone.frequency, start);
   if (tone.endFrequency) oscillator.frequency.exponentialRampToValueAtTime(tone.endFrequency, end);
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(tone.volume * FEEDBACK_VOLUME_LIFT, start + 0.012);
+  gain.gain.exponentialRampToValueAtTime(tone.volume * volumeLift, start + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.0001, end);
   oscillator.connect(gain).connect(context.destination);
   oscillator.start(start);
@@ -61,6 +97,7 @@ function scheduleTone(context: AudioContext, tone: Tone): void {
   }, { once: true });
 }
 
-export function scheduleFeedbackCue(context: AudioContext, cue: GameFeedbackCue): void {
-  CUE_TONES[cue].forEach(tone => scheduleTone(context, tone));
+export function scheduleFeedbackCue(context: AudioContext, cue: FeedbackCue): void {
+  const volumeLift = volumeLiftForCue(cue);
+  CUE_TONES[cue].forEach(tone => scheduleTone(context, tone, volumeLift));
 }

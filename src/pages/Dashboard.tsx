@@ -38,6 +38,7 @@ import { describeDashboardAction } from '../engine/observation/dashboard-action'
 import { SegmentedControl } from '../components/ui';
 import { WorldMomentFeature } from '../components/WorldMomentFeature';
 import { worldMomentKindForNews } from '../components/world-moment';
+import { playUiFeedback } from '../feedback/game-feedback';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -600,11 +601,15 @@ function MatchdayTab({
                     <div className="focus-fixture-main mb-1 flex items-center justify-between">
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playUiFeedback(isStarred ? 'toggle_off' : 'toggle_on');
+                          toggleStarFixture(fixture.id);
+                        }}
                         data-testid="focus-watch-toggle"
                         aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
                         aria-pressed={isStarred}
-                        className={`-my-2 mr-0.5 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,box-shadow] ${isStarred ? 'border-amber-400/60 bg-amber-400/12 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]' : 'border-transparent bg-slate-950/25 text-slate-500 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-200'}`}
+                        className={`press-scale -my-2 mr-0.5 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,box-shadow] ${isStarred ? 'border-amber-400/60 bg-amber-400/12 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]' : 'border-transparent bg-slate-950/25 text-slate-500 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-200'}`}
                         title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
                       >
                         <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
@@ -890,6 +895,12 @@ function ResultsTab({
   const isAdvancing = useGameStore((s) => s.isAdvancing);
   const currentWindow = useGameStore((s) => s.getCurrentWindow)();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const handleAdvance = () => {
+    playUiFeedback('advance');
+    void advanceWindow().then(advanced => {
+      if (!advanced) playUiFeedback('reject');
+    });
+  };
   const favoriteTeamNames = favoriteTeamIds
     .flatMap(teamId => {
       const team = world.teamBases[teamId];
@@ -959,8 +970,8 @@ function ResultsTab({
             aria-label={resultsAction.ariaLabel}
             aria-busy={isAdvancing}
             disabled={isAdvancing}
-            onClick={() => void advanceWindow()}
-            className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+            onClick={handleAdvance}
+            className="ui-action-feedback flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
           >
             <Icon name="play" size={16} />
             <span className="text-xs font-semibold">{resultsAction.label}</span>
@@ -1396,10 +1407,14 @@ function FixtureCard({
       {/* Spoiler-free watch button — top-right corner */}
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); toggleStarFixture(fixture.id); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          playUiFeedback(isStarred ? 'toggle_off' : 'toggle_on');
+          toggleStarFixture(fixture.id);
+        }}
         aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
         aria-pressed={isStarred}
-        className={`absolute right-1 top-1 inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,opacity,box-shadow] ${isStarred ? 'border-amber-400/55 bg-amber-400/10 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.07)]' : 'border-transparent bg-slate-950/20 text-slate-500 hover:border-slate-600 hover:bg-slate-900/75 hover:text-slate-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
+        className={`press-scale absolute right-1 top-1 inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,opacity,box-shadow] ${isStarred ? 'border-amber-400/55 bg-amber-400/10 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.07)]' : 'border-transparent bg-slate-950/20 text-slate-500 hover:border-slate-600 hover:bg-slate-900/75 hover:text-slate-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}
         title={isStarred ? '已锁定无剧透观战' : '推进后无剧透观战'}
       >
         <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
@@ -1509,9 +1524,14 @@ function PredictionPanel({ l1Teams, teamBases, seasonNumber }: { l1Teams: string
           <option value="">选择降级队</option>
           {l1Teams.map(id => <option key={id} value={id}>{teamBases[id]?.name ?? id}</option>)}
         </select>
-        <button onClick={() => { if (champion && relegated) setPrediction(champion, relegated); }}
+        <button onClick={() => {
+          if (champion && relegated) {
+            setPrediction(champion, relegated);
+            playUiFeedback('confirm');
+          }
+        }}
           disabled={!champion || !relegated}
-          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
+          className="press-scale px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
           确认预测
         </button>
       </div>
@@ -1554,18 +1574,24 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
           {teamIds.map(id => <option key={id} value={id}>{teamBases[id]?.name ?? id}</option>)}
         </select>
         <div className="flex gap-1">
-          <button onClick={() => setType('boost')}
+          <button onClick={() => { if (type !== 'boost') playUiFeedback('selection'); setType('boost'); }}
             className={`px-3 py-1.5 text-xs rounded cursor-pointer ${type === 'boost' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
             祝福
           </button>
-          <button onClick={() => setType('nerf')}
+          <button onClick={() => { if (type !== 'nerf') playUiFeedback('selection'); setType('nerf'); }}
             className={`px-3 py-1.5 text-xs rounded cursor-pointer ${type === 'nerf' ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
             厄运
           </button>
         </div>
-        <button onClick={() => { if (teamId) { applyGodHand(teamId, type); setShow(false); } }}
+        <button onClick={() => {
+          if (teamId) {
+            applyGodHand(teamId, type);
+            playUiFeedback('intervention');
+            setShow(false);
+          }
+        }}
           disabled={!teamId}
-          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
+          className="press-scale px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded cursor-pointer transition-colors">
           确认干预
         </button>
         <button onClick={() => setShow(false)}
