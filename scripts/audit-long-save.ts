@@ -44,6 +44,14 @@ interface Checkpoint {
 interface BrowserCheckpointResult {
   season: number;
   actualStorageBytes: number;
+  loadPerformance: {
+    storageReadMs: number;
+    decompressionMs: number;
+    parseMs: number;
+    validationMs: number;
+    totalMs: number;
+    recovered: boolean;
+  } | null;
   reloadDigestMatches: boolean;
   advanceDigestMatches: boolean;
   errors: number;
@@ -152,6 +160,13 @@ async function verifyCheckpointInBrowser(page: Page, checkpoint: Checkpoint): Pr
 
   await page.reload({ waitUntil: 'networkidle' });
   await waitForAudit(page);
+  const loadPerformance = await page.evaluate(() => {
+    const audit = (window as typeof window & {
+      __gameAudit?: { getSaveLoadPerformance: () => BrowserCheckpointResult['loadPerformance'] };
+    }).__gameAudit;
+    if (!audit) throw new Error('Audit bridge unavailable');
+    return audit.getSaveLoadPerformance();
+  });
   const reloadedSave = await page.evaluate(() => {
     const audit = (window as typeof window & {
       __gameAudit?: { exportSave: () => string };
@@ -184,6 +199,7 @@ async function verifyCheckpointInBrowser(page: Page, checkpoint: Checkpoint): Pr
   return {
     season: checkpoint.season,
     actualStorageBytes,
+    loadPerformance,
     reloadDigestMatches,
     advanceDigestMatches: digestWorld(advancedWorld) === digestWorld(expectedAfterAdvance),
     errors: validation.errors.length,
@@ -268,6 +284,9 @@ const passed = rolloverErrors === 0
   && browserErrors.length === 0
   && browserCheckpoints.every((checkpoint) => (
     checkpoint.actualStorageBytes < LONG_SAVE_TARGET_BYTES
+    && checkpoint.loadPerformance !== null
+    && checkpoint.loadPerformance.totalMs < 1_000
+    && !checkpoint.loadPerformance.recovered
     && checkpoint.reloadDigestMatches
     && checkpoint.advanceDigestMatches
     && checkpoint.errors === 0

@@ -7,6 +7,7 @@ export interface ReloadSafetySnapshot {
   visible: boolean;
   isAdvancing: boolean;
   hasBlockingDialog: boolean;
+  isRouteLoading: boolean;
 }
 
 export function parseRemoteAppVersion(value: unknown): RemoteAppVersion | null {
@@ -24,7 +25,10 @@ export function parseRemoteAppVersion(value: unknown): RemoteAppVersion | null {
 }
 
 export function canReloadForAppUpdate(snapshot: ReloadSafetySnapshot): boolean {
-  return snapshot.visible && !snapshot.isAdvancing && !snapshot.hasBlockingDialog;
+  return snapshot.visible
+    && !snapshot.isAdvancing
+    && !snapshot.hasBlockingDialog
+    && !snapshot.isRouteLoading;
 }
 
 interface UpdateCoordinatorOptions {

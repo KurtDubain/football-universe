@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
@@ -7,7 +7,9 @@ import { __flushCompressedStorageForTests, compressedStorage } from './compresse
 import {
   __resetSaveRecoveryForTests,
   consumeSaveRecoveryMessage,
+  createCurrentSavePersistStorage,
   currentSaveStorage,
+  getLatestSaveLoadPerformance,
   getLatestSaveRecoveryDiagnostic,
   getSaveRecoveryMessage,
   SAVE_DIAGNOSTIC_KEY,
@@ -68,6 +70,28 @@ beforeEach(() => {
 });
 
 describe('current schema hydration boundary', () => {
+  it('reads, decompresses, parses, and validates a persisted envelope only once', () => {
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(makeSave(12)));
+    __flushCompressedStorageForTests();
+    const parse = vi.spyOn(JSON, 'parse');
+    const storage = createCurrentSavePersistStorage();
+
+    const loaded = storage.getItem(SAVE_STORAGE_KEY);
+    const performance = getLatestSaveLoadPerformance();
+
+    expect(loaded).toMatchObject({ state: { initialized: true } });
+    expect(parse).toHaveBeenCalledTimes(1);
+    expect(performance).toMatchObject({
+      source: 'compressed',
+      recovered: false,
+    });
+    expect(performance?.compressedChars).toBeGreaterThan(0);
+    expect(performance?.decompressedChars).toBeGreaterThan(performance?.compressedChars ?? 0);
+    expect(performance?.parseMs).toBeGreaterThanOrEqual(0);
+    expect(performance?.validationMs).toBeGreaterThanOrEqual(0);
+    parse.mockRestore();
+  });
+
   it('hydrates a valid current save through Zustand JSON storage', () => {
     compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(makeSave(7)));
     __flushCompressedStorageForTests();

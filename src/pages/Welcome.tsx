@@ -37,6 +37,7 @@ export default function Welcome() {
   const [favoriteTeam, setFavoriteTeamChoice] = useState('');
   const [mode, setMode] = useState<GameMode>('free');
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [recoveryMessage] = useState(consumeSaveRecoveryMessage);
 
@@ -45,9 +46,12 @@ export default function Welcome() {
     ? defaultTeams.find(team => team.id === selectedLens.teamId)
     : null;
 
-  function handleStart() {
-    playGameFeedback('start');
+  async function handleStart() {
+    if (starting) return;
     setStarting(true);
+    setStartError(null);
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+
     const selectedTeamId = startPath === 'recommended'
       ? selectedLens.teamId
       : favoriteTeam || null;
@@ -61,12 +65,21 @@ export default function Welcome() {
       underdog: 'promotion_survival',
       neutral: 'pure_observation',
     };
-    newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
-      gameMode: startPath === 'recommended' ? 'free' : mode,
-      favoriteTeamIds: selectedTeamId ? [selectedTeamId] : [],
-      observationThemePreference: startPath === 'recommended' ? recommendedTheme[lens] : 'auto',
-    });
-    navigate('/');
+    try {
+      playGameFeedback('start');
+      newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
+        gameMode: startPath === 'recommended' ? 'free' : mode,
+        favoriteTeamIds: selectedTeamId ? [selectedTeamId] : [],
+        observationThemePreference: startPath === 'recommended' ? recommendedTheme[lens] : 'auto',
+      });
+      navigate('/');
+    } catch (error) {
+      console.error('[welcome] Failed to initialize game world.', error);
+      setStarting(false);
+      setStartError(error instanceof Error
+        ? `宇宙初始化失败：${error.message}`
+        : '宇宙初始化失败，请重试或刷新应用。');
+    }
   }
 
   return (
@@ -236,9 +249,14 @@ export default function Welcome() {
             )}
 
             <div className="mt-4 space-y-2">
+              {startError && (
+                <div role="alert" className="rounded border border-red-800/70 bg-red-950/65 px-3 py-2 text-xs leading-5 text-red-100">
+                  {startError} 当前设置和已有存档均未被清除。
+                </div>
+              )}
               <button
                 type="button"
-                onClick={handleStart}
+                onClick={() => void handleStart()}
                 disabled={starting}
                 className="press-scale flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-lg shadow-black/30 transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >

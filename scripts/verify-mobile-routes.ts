@@ -53,8 +53,13 @@ type RouteMetrics = {
 
 const mobileViewports: Viewport[] = [
   { width: 320, height: 568, label: 'mobile-compact' },
+  { width: 360, height: 800, label: 'mobile-standard' },
   { width: 390, height: 844, label: 'mobile' },
   { width: 430, height: 932, label: 'mobile-wide' },
+];
+
+const tabletViewports: Viewport[] = [
+  { width: 768, height: 1024, label: 'tablet-portrait' },
 ];
 
 const desktopViewports: Viewport[] = [
@@ -382,6 +387,72 @@ async function verifyErrorBoundary(browser: Awaited<ReturnType<typeof chromium.l
   }
 }
 
+async function verifyStandaloneAndRotation(browser: Awaited<ReturnType<typeof chromium.launch>>): Promise<Record<string, boolean>> {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.addInitScript({
+    content: `
+      (() => {
+        const original = window.matchMedia.bind(window);
+        window.matchMedia = function matchMedia(query) {
+          if (query === '(display-mode: standalone)') {
+            return {
+              matches: true,
+              media: query,
+              onchange: null,
+              addListener() {},
+              removeListener() {},
+              addEventListener() {},
+              removeEventListener() {},
+              dispatchEvent() { return true; },
+            };
+          }
+          return original(query);
+        };
+      })();
+    `,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => Boolean((window as AuditWindow).__gameStore));
+    await page.evaluate((gameSeed) => (window as AuditWindow).__gameStore!.getState().newGame(gameSeed), seed + 1);
+    await page.getByTestId('app-shell').waitFor();
+
+    const portrait = await page.evaluate(() => ({
+      standalone: window.matchMedia('(display-mode: standalone)').matches,
+      viewportFitCover: document.querySelector('meta[name="viewport"]')?.getAttribute('content')?.includes('viewport-fit=cover') ?? false,
+      shellDelta: Math.abs(document.querySelector<HTMLElement>('[data-testid="app-shell"]')!.getBoundingClientRect().height - window.innerHeight),
+      overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+    }));
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(100);
+    const landscape = await page.evaluate(() => ({
+      shellDelta: Math.abs(document.querySelector<HTMLElement>('[data-testid="app-shell"]')!.getBoundingClientRect().height - window.innerHeight),
+      overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      headerVisible: document.querySelector<HTMLElement>('.app-shell-header')!.getBoundingClientRect().height >= 44,
+    }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(100);
+    const restored = await page.evaluate(() => (
+      Math.max(0, document.documentElement.scrollWidth - window.innerWidth) <= 1
+      && Math.abs(document.querySelector<HTMLElement>('[data-testid="app-shell"]')!.getBoundingClientRect().height - window.innerHeight) <= 1
+    ));
+
+    return {
+      standaloneMode: portrait.standalone,
+      viewportFitCover: portrait.viewportFitCover,
+      standaloneNoOverflow: portrait.overflow <= 1,
+      standaloneUsesDynamicViewport: portrait.shellDelta <= 1,
+      landscapeNoOverflow: landscape.overflow <= 1,
+      landscapeUsesDynamicViewport: landscape.shellDelta <= 1,
+      landscapeHeaderVisible: landscape.headerVisible,
+      portraitRestored: restored,
+    };
+  } finally {
+    await context.close();
+  }
+}
+
 async function main(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -393,7 +464,7 @@ async function main(): Promise<void> {
     const initialized = await initializeSeason(page);
     const routeMetrics: RouteMetrics[] = [];
     const marketRoute: RouteDescriptor = { name: 'market', path: '/market' };
-    for (const viewport of [...mobileViewports, ...desktopViewports]) {
+    for (const viewport of [...mobileViewports, ...tabletViewports, ...desktopViewports]) {
       routeMetrics.push(await inspectRoute(
         page,
         viewport.width < 640 ? marketRoute : { ...marketRoute, root: true },
@@ -443,6 +514,11 @@ async function main(): Promise<void> {
         routeMetrics.push(await inspectRoute(page, route, viewport));
       }
     }
+    for (const viewport of tabletViewports) {
+      for (const route of routes) {
+        routeMetrics.push(await inspectRoute(page, { ...route, root: true }, viewport));
+      }
+    }
     for (const viewport of desktopViewports) {
       for (const route of routes.filter(item => [
         'dashboard', 'season-review', 'league', 'team-detail', 'player-detail',
@@ -461,7 +537,15 @@ async function main(): Promise<void> {
     const offlineRevisit = await verifyOfflineRevisit(page, context);
     const welcome = await verifyWelcome(browser);
     const errorBoundary = await verifyErrorBoundary(browser);
-    const checks = { ...navigation, ...accessibilityModes, offlineRevisit, ...welcome, ...errorBoundary };
+    const standaloneAndRotation = await verifyStandaloneAndRotation(browser);
+    const checks = {
+      ...navigation,
+      ...accessibilityModes,
+      offlineRevisit,
+      ...welcome,
+      ...errorBoundary,
+      ...standaloneAndRotation,
+    };
     const failedChecks = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     if (failedChecks.length > 0) throw new Error(`Interaction checks failed: ${failedChecks.join(', ')}`);
     if (runtimeErrors.length > 0) throw new Error(`Runtime errors: ${runtimeErrors.join(' | ')}`);

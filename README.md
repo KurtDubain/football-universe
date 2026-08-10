@@ -115,7 +115,7 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 3 大洲（大陆/南洲/东洲）跨洲赛事统计 · 三层德比体系（巅峰/焦点/地区，OVR动态判定）
 
 ### 📱 PWA 离线
-首次访问后可安装到桌面 · 完全离线可玩 · 自动更新
+首次访问后可安装到桌面 · 核心观察与推进离线可用 · 次级页面在线打开后可离线重访 · 自动安全更新
 
 ---
 
@@ -150,6 +150,10 @@ pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
 pnpm audit:advance-performance # 移动端推进、重复点击与存档恢复
 pnpm verify:pwa-update         # 远端版本识别与自动更新
+pnpm verify:pwa-transition     # 真实旧构建到新构建的 Service Worker 切换
+pnpm verify:route-recovery     # 分包失败、慢速网络与离线恢复
+pnpm verify:mobile-routes      # 全路由移动端、平板与桌面矩阵
+pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 ```
 
 ---
@@ -167,7 +171,7 @@ pnpm verify:pwa-update         # 远端版本识别与自动更新
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-~52,000 production lines · 192 production source files · 102 test files · 33 browser/simulation audit commands
+~52,900 production lines · 197 production source files · 106 test files · 36 browser/simulation audit commands
 
 生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 

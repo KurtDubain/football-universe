@@ -409,7 +409,7 @@ export default function Layout({ children }: LayoutProps) {
   );
 
   return (
-    <div className="h-[100dvh] bg-[var(--surface-page)] flex overflow-hidden">
+    <div data-testid="app-shell" className="h-[100dvh] bg-[var(--surface-page)] flex overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-52 bg-[var(--surface-panel)] border-r border-[var(--border-subtle)] flex-col shrink-0 relative">
         <div className="p-3 border-b border-slate-700/60">

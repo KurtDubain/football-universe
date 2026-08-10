@@ -25,10 +25,11 @@ describe('app update coordinator', () => {
   });
 
   it('reloads only while visible, idle, and outside a blocking dialog', () => {
-    expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: false })).toBe(true);
-    expect(canReloadForAppUpdate({ visible: false, isAdvancing: false, hasBlockingDialog: false })).toBe(false);
-    expect(canReloadForAppUpdate({ visible: true, isAdvancing: true, hasBlockingDialog: false })).toBe(false);
-    expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: true })).toBe(false);
+    expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: false, isRouteLoading: false })).toBe(true);
+    expect(canReloadForAppUpdate({ visible: false, isAdvancing: false, hasBlockingDialog: false, isRouteLoading: false })).toBe(false);
+    expect(canReloadForAppUpdate({ visible: true, isAdvancing: true, hasBlockingDialog: false, isRouteLoading: false })).toBe(false);
+    expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: true, isRouteLoading: false })).toBe(false);
+    expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: false, isRouteLoading: true })).toBe(false);
   });
 
   it('waits through an unsafe operation and reloads once after it becomes safe', () => {

@@ -1,34 +1,33 @@
-import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import Layout from './Layout';
 import Welcome from '../pages/Welcome';
-import { LoadingSkeleton } from '../components/ui';
+import { RecoverableRoute } from './route-resource';
 
-const Dashboard = lazy(() => import('../pages/Dashboard'));
-const Calendar = lazy(() => import('../pages/Calendar'));
-const League = lazy(() => import('../pages/League'));
-const Cup = lazy(() => import('../pages/Cup'));
-const Coaches = lazy(() => import('../pages/Coaches'));
-const TeamDetail = lazy(() => import('../pages/TeamDetail'));
-const CoachDetail = lazy(() => import('../pages/CoachDetail'));
-const History = lazy(() => import('../pages/History'));
-const Compare = lazy(() => import('../pages/Compare'));
-const Chronicle = lazy(() => import('../pages/Chronicle'));
-const Legends = lazy(() => import('../pages/Legends'));
-const Teams = lazy(() => import('../pages/Teams'));
-const Players = lazy(() => import('../pages/Players'));
-const PlayerDetail = lazy(() => import('../pages/PlayerDetail'));
-const Settings = lazy(() => import('../pages/Settings'));
-const TeamEditor = lazy(() => import('../pages/TeamEditor'));
-const Transfers = lazy(() => import('../pages/Transfers'));
-const Market = lazy(() => import('../pages/Market'));
-const MemorableMatches = lazy(() => import('../pages/MemorableMatches'));
-const AdvancedSearch = lazy(() => import('../pages/AdvancedSearch'));
+const routeImporters = {
+  dashboard: () => import('../pages/Dashboard'),
+  calendar: () => import('../pages/Calendar'),
+  league: () => import('../pages/League'),
+  cup: () => import('../pages/Cup'),
+  coaches: () => import('../pages/Coaches'),
+  teamDetail: () => import('../pages/TeamDetail'),
+  coachDetail: () => import('../pages/CoachDetail'),
+  history: () => import('../pages/History'),
+  compare: () => import('../pages/Compare'),
+  chronicle: () => import('../pages/Chronicle'),
+  legends: () => import('../pages/Legends'),
+  teams: () => import('../pages/Teams'),
+  players: () => import('../pages/Players'),
+  playerDetail: () => import('../pages/PlayerDetail'),
+  settings: () => import('../pages/Settings'),
+  teamEditor: () => import('../pages/TeamEditor'),
+  transfers: () => import('../pages/Transfers'),
+  market: () => import('../pages/Market'),
+  memorable: () => import('../pages/MemorableMatches'),
+  search: () => import('../pages/AdvancedSearch'),
+};
 
-export function RouteLoading({ fullPage = false }: { fullPage?: boolean }) {
-  return <LoadingSkeleton fullPage={fullPage} />;
-}
+export { RouteLoading } from './route-resource';
 
 export default function App() {
   const initialized = useGameStore((s) => s.initialized);
@@ -40,38 +39,36 @@ export default function App() {
 
   if (!initialized) {
     if (location.pathname === '/team-editor') {
-      return <Suspense fallback={<RouteLoading fullPage />}><TeamEditor /></Suspense>;
+      return <RecoverableRoute routeId="team-editor" importer={routeImporters.teamEditor} fullPage />;
     }
     return <Welcome />;
   }
 
   return (
     <Layout>
-      <Suspense fallback={<RouteLoading />}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/calendar" element={<Calendar />} />
-          <Route path="/league/:level" element={<League />} />
-          <Route path="/cup/:type" element={<Cup />} />
-          <Route path="/teams" element={<Teams />} />
-          <Route path="/coaches" element={<Coaches />} />
-          <Route path="/players" element={<Players />} />
-          <Route path="/player/:id" element={<PlayerDetail />} />
-          <Route path="/team/:id" element={<TeamDetail />} />
-          <Route path="/coach/:id" element={<CoachDetail />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/chronicle" element={<Chronicle />} />
-          <Route path="/legends" element={<Legends />} />
-          <Route path="/transfers" element={<Transfers />} />
-          <Route path="/market" element={<Market />} />
-          <Route path="/memorable" element={<MemorableMatches />} />
-          <Route path="/search" element={<AdvancedSearch />} />
-          <Route path="/compare" element={<Compare />} />
-          <Route path="/team-editor" element={<TeamEditor />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Suspense>
+      <Routes>
+        <Route path="/" element={<RecoverableRoute routeId="dashboard" importer={routeImporters.dashboard} />} />
+        <Route path="/calendar" element={<RecoverableRoute routeId="calendar" importer={routeImporters.calendar} />} />
+        <Route path="/league/:level" element={<RecoverableRoute routeId="league" importer={routeImporters.league} />} />
+        <Route path="/cup/:type" element={<RecoverableRoute routeId="cup" importer={routeImporters.cup} />} />
+        <Route path="/teams" element={<RecoverableRoute routeId="teams" importer={routeImporters.teams} />} />
+        <Route path="/coaches" element={<RecoverableRoute routeId="coaches" importer={routeImporters.coaches} />} />
+        <Route path="/players" element={<RecoverableRoute routeId="players" importer={routeImporters.players} />} />
+        <Route path="/player/:id" element={<RecoverableRoute routeId="player-detail" importer={routeImporters.playerDetail} />} />
+        <Route path="/team/:id" element={<RecoverableRoute routeId="team-detail" importer={routeImporters.teamDetail} />} />
+        <Route path="/coach/:id" element={<RecoverableRoute routeId="coach-detail" importer={routeImporters.coachDetail} />} />
+        <Route path="/history" element={<RecoverableRoute routeId="history" importer={routeImporters.history} />} />
+        <Route path="/chronicle" element={<RecoverableRoute routeId="chronicle" importer={routeImporters.chronicle} />} />
+        <Route path="/legends" element={<RecoverableRoute routeId="legends" importer={routeImporters.legends} />} />
+        <Route path="/transfers" element={<RecoverableRoute routeId="transfers" importer={routeImporters.transfers} />} />
+        <Route path="/market" element={<RecoverableRoute routeId="market" importer={routeImporters.market} />} />
+        <Route path="/memorable" element={<RecoverableRoute routeId="memorable" importer={routeImporters.memorable} />} />
+        <Route path="/search" element={<RecoverableRoute routeId="search" importer={routeImporters.search} />} />
+        <Route path="/compare" element={<RecoverableRoute routeId="compare" importer={routeImporters.compare} />} />
+        <Route path="/team-editor" element={<RecoverableRoute routeId="team-editor" importer={routeImporters.teamEditor} />} />
+        <Route path="/settings" element={<RecoverableRoute routeId="settings" importer={routeImporters.settings} />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </Layout>
   );
 }

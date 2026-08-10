@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.42.0",
+  "version": "4.43.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -40,6 +40,8 @@
     "verify:mobile-routes": "tsx scripts/verify-mobile-routes.ts",
     "verify:feedback": "tsx scripts/verify-feedback.ts",
     "verify:pwa-update": "tsx scripts/verify-pwa-update.ts",
+    "verify:pwa-transition": "tsx scripts/verify-pwa-deployment-transition.ts",
+    "verify:route-recovery": "tsx scripts/verify-route-recovery.ts",
     "verify:visual-assets": "tsx scripts/verify-visual-assets.ts",
     "verify:history-summary": "tsx scripts/verify-history-summary.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-workflow.ts",

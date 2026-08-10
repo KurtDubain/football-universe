@@ -28,6 +28,24 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let compressionWorker: Worker | null = null;
 let workerUnavailable = false;
 
+export interface CompressedStorageReadPerformance {
+  source: 'missing' | 'pending' | 'plain' | 'compressed';
+  storageReadMs: number;
+  decompressionMs: number;
+  compressedChars: number;
+  decompressedChars: number;
+}
+
+let latestReadPerformance: CompressedStorageReadPerformance | null = null;
+
+function nowMs(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function recordReadPerformance(performanceEntry: CompressedStorageReadPerformance): void {
+  latestReadPerformance = performanceEntry;
+}
+
 function serializePending(entry: PendingWrite): string {
   return entry.serialized ? String(entry.payload) : JSON.stringify(entry.payload);
 }
@@ -186,15 +204,62 @@ if (typeof window !== 'undefined') {
 export const compressedStorage: StateStorage = {
   getItem: (name): string | null => {
     const pending = writeQueue.get(name);
-    if (pending) return serializePending(pending);
+    if (pending) {
+      const serialized = serializePending(pending);
+      recordReadPerformance({
+        source: 'pending',
+        storageReadMs: 0,
+        decompressionMs: 0,
+        compressedChars: 0,
+        decompressedChars: serialized.length,
+      });
+      return serialized;
+    }
 
+    const readStart = nowMs();
     const raw = localStorage.getItem(name);
-    if (raw == null) return null;
-    if (raw.length > 0 && raw[0] === '{') return raw;
+    const storageReadMs = nowMs() - readStart;
+    if (raw == null) {
+      recordReadPerformance({
+        source: 'missing',
+        storageReadMs,
+        decompressionMs: 0,
+        compressedChars: 0,
+        decompressedChars: 0,
+      });
+      return null;
+    }
+    if (raw.length > 0 && raw[0] === '{') {
+      recordReadPerformance({
+        source: 'plain',
+        storageReadMs,
+        decompressionMs: 0,
+        compressedChars: raw.length,
+        decompressedChars: raw.length,
+      });
+      return raw;
+    }
+
+    const decompressionStart = nowMs();
     try {
       const decompressed = decompressFromUTF16(raw);
-      return decompressed && decompressed.length > 0 ? decompressed : raw;
+      const value = decompressed && decompressed.length > 0 ? decompressed : raw;
+      recordReadPerformance({
+        source: 'compressed',
+        storageReadMs,
+        decompressionMs: nowMs() - decompressionStart,
+        compressedChars: raw.length,
+        decompressedChars: value.length,
+      });
+      return value;
     } catch {
+      recordReadPerformance({
+        source: 'compressed',
+        storageReadMs,
+        decompressionMs: nowMs() - decompressionStart,
+        compressedChars: raw.length,
+        decompressedChars: raw.length,
+      });
       return raw;
     }
   },
@@ -242,4 +307,9 @@ export function __resetCompressedStorageForTests(): void {
   inFlight.clear();
   postMessageCosts.clear();
   nextRevision = 1;
+  latestReadPerformance = null;
+}
+
+export function getLatestCompressedStorageReadPerformance(): CompressedStorageReadPerformance | null {
+  return latestReadPerformance;
 }

@@ -5,6 +5,7 @@ import {
   createSafeUpdateCoordinator,
   parseRemoteAppVersion,
 } from './update-coordinator';
+import { ROUTE_RESOURCE_ERROR_EVENT, ROUTE_RESOURCE_SETTLED_EVENT } from './events';
 
 const VERSION_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const VERSION_ENDPOINT = '/version.json';
@@ -35,6 +36,7 @@ function isSafeToReload(): boolean {
     visible: document.visibilityState === 'visible',
     isAdvancing: useGameStore.getState().isAdvancing,
     hasBlockingDialog: Boolean(document.querySelector('[role="dialog"][aria-modal="true"]')),
+    isRouteLoading: Boolean(document.querySelector('[data-route-loading="true"]')),
   });
 }
 
@@ -150,10 +152,18 @@ export function startAppUpdateMonitor(): () => void {
   const handleOnline = () => {
     void checkNow();
   };
+  const handleRouteResourceError = () => {
+    void checkNow();
+  };
+  const handleRouteResourceSettled = () => {
+    coordinator.notifySafetyChanged();
+  };
 
   document.addEventListener('visibilitychange', handleForeground);
   window.addEventListener('focus', handleFocus);
   window.addEventListener('online', handleOnline);
+  window.addEventListener(ROUTE_RESOURCE_ERROR_EVENT, handleRouteResourceError);
+  window.addEventListener(ROUTE_RESOURCE_SETTLED_EVENT, handleRouteResourceSettled);
   const unsubscribeStore = useGameStore.subscribe((state, previousState) => {
     if (previousState.isAdvancing && !state.isAdvancing) coordinator.notifySafetyChanged();
   });
@@ -188,6 +198,8 @@ export function startAppUpdateMonitor(): () => void {
     document.removeEventListener('visibilitychange', handleForeground);
     window.removeEventListener('focus', handleFocus);
     window.removeEventListener('online', handleOnline);
+    window.removeEventListener(ROUTE_RESOURCE_ERROR_EVENT, handleRouteResourceError);
+    window.removeEventListener(ROUTE_RESOURCE_SETTLED_EVENT, handleRouteResourceSettled);
     navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     if (exposeAudit) delete window.__appUpdateAudit;
   };

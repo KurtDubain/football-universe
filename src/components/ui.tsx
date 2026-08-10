@@ -215,17 +215,17 @@ export function EmptyState({ title, description, action, icon, className }: Empt
   );
 }
 
-interface LoadingSkeletonProps {
+interface LoadingSkeletonProps extends HTMLAttributes<HTMLDivElement> {
   fullPage?: boolean;
-  className?: string;
 }
 
-export function LoadingSkeleton({ fullPage = false, className }: LoadingSkeletonProps) {
+export function LoadingSkeleton({ fullPage = false, className, ...props }: LoadingSkeletonProps) {
   return (
     <div
       role="status"
       aria-label="正在加载页面"
       className={cx('ui-loading-shell', fullPage && 'ui-loading-full-page', className)}
+      {...props}
     >
       <span className="sr-only">正在加载...</span>
       <div className="ui-loading-content animate-pulse motion-reduce:animate-none" aria-hidden="true">

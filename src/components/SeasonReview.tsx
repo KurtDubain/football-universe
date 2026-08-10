@@ -312,8 +312,13 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                 <Link key={row.playerId} to={`/player/${row.playerId}`} className="flex items-center gap-2 rounded border border-slate-700/50 bg-slate-900/35 p-2.5 hover:border-amber-600/50">
                   <span className="w-6 text-center text-sm font-black text-slate-500">{index + 1}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-100">{row.identity.playerName}</span>
-                    <span className="block truncate text-[10px] text-slate-500">{row.identity.teamShortName ?? row.identity.teamName} · {row.identity.position}</span>
+                    <span className="block truncate text-sm font-semibold text-slate-100" title={row.identity.playerName}>{row.identity.playerName}</span>
+                    <span
+                      className="block truncate text-[10px] text-slate-500"
+                      title={`${row.identity.teamName} · ${row.identity.position}`}
+                    >
+                      {row.identity.teamShortName ?? row.identity.teamName} · {row.identity.position}
+                    </span>
                   </span>
                   <span className="text-lg font-black text-amber-300">{performance.seasonScore.toFixed(1)}</span>
                 </Link>

@@ -2,7 +2,12 @@ import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middlew
 import type { GameWorld } from '../engine/season/season-manager';
 import { parseCustomTeams } from '../engine/validation/custom-teams';
 import { isNeutralVenueFixture } from '../engine/competitions/venue-policy';
-import { compressedStorage, queueCompressedJSONValue } from './compressed-storage';
+import {
+  compressedStorage,
+  getLatestCompressedStorageReadPerformance,
+  queueCompressedJSONValue,
+  type CompressedStorageReadPerformance,
+} from './compressed-storage';
 import { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION } from './save-constants';
 
 export { SAVE_DIAGNOSTIC_KEY, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-constants';
@@ -51,8 +56,26 @@ export interface SaveRecoveryDiagnostic {
   payload: string;
 }
 
+export interface SaveLoadPerformance {
+  source: CompressedStorageReadPerformance['source'];
+  storageReadMs: number;
+  decompressionMs: number;
+  parseMs: number;
+  validationMs: number;
+  totalMs: number;
+  compressedChars: number;
+  decompressedChars: number;
+  recovered: boolean;
+  failureReason?: string;
+}
+
 let latestRecovery: SaveRecoveryDiagnostic | null = null;
 let recoveryMessagePending = false;
+let latestSaveLoadPerformance: SaveLoadPerformance | null = null;
+
+function nowMs(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -711,14 +734,15 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
   return world as unknown as GameWorld;
 }
 
-export function parseCurrentSave(text: string): CurrentSaveEnvelope {
-  let parsed: unknown;
+function parseCurrentSaveJSON(text: string): unknown {
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
     throw new Error('文件不是有效的 JSON 存档');
   }
+}
 
+function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
   if (!isRecord(parsed)) throw new Error('存档顶层结构无效');
   if (parsed.version !== SAVE_SCHEMA_VERSION) {
     throw new Error(`仅支持当前版本存档（需要 v${SAVE_SCHEMA_VERSION}）`);
@@ -755,6 +779,10 @@ export function parseCurrentSave(text: string): CurrentSaveEnvelope {
   };
 }
 
+export function parseCurrentSave(text: string): CurrentSaveEnvelope {
+  return validateCurrentSaveValue(parseCurrentSaveJSON(text));
+}
+
 function quarantineInvalidSave(name: string, payload: string, error: unknown): void {
   const reason = error instanceof Error ? error.message : '存档结构无效';
   latestRecovery = {
@@ -773,20 +801,77 @@ function quarantineInvalidSave(name: string, payload: string, error: unknown): v
 }
 
 export const currentSaveStorage: StateStorage = {
-  getItem: (name) => {
-    const raw = compressedStorage.getItem(name) as string | null;
-    if (raw === null) return null;
-    try {
-      parseCurrentSave(raw);
-      return raw;
-    } catch (error) {
-      quarantineInvalidSave(name, raw, error);
-      return null;
-    }
-  },
+  getItem: (name) => readCurrentSave(name)?.raw ?? null,
   setItem: (name, value) => compressedStorage.setItem(name, value),
   removeItem: (name) => compressedStorage.removeItem(name),
 };
+
+function readCurrentSave(name: string): { raw: string; envelope: CurrentSaveEnvelope } | null {
+  const totalStart = nowMs();
+  const raw = compressedStorage.getItem(name) as string | null;
+  const storagePerformance = getLatestCompressedStorageReadPerformance();
+  const base = {
+    source: storagePerformance?.source ?? 'missing',
+    storageReadMs: storagePerformance?.storageReadMs ?? 0,
+    decompressionMs: storagePerformance?.decompressionMs ?? 0,
+    compressedChars: storagePerformance?.compressedChars ?? 0,
+    decompressedChars: storagePerformance?.decompressedChars ?? raw?.length ?? 0,
+  } satisfies Pick<SaveLoadPerformance,
+    'source' | 'storageReadMs' | 'decompressionMs' | 'compressedChars' | 'decompressedChars'>;
+
+  if (raw === null) {
+    latestSaveLoadPerformance = {
+      ...base,
+      parseMs: 0,
+      validationMs: 0,
+      totalMs: nowMs() - totalStart,
+      recovered: false,
+    };
+    return null;
+  }
+
+  let parsed: unknown;
+  const parseStart = nowMs();
+  try {
+    parsed = parseCurrentSaveJSON(raw);
+  } catch (error) {
+    latestSaveLoadPerformance = {
+      ...base,
+      parseMs: nowMs() - parseStart,
+      validationMs: 0,
+      totalMs: nowMs() - totalStart,
+      recovered: true,
+      failureReason: error instanceof Error ? error.message : String(error),
+    };
+    quarantineInvalidSave(name, raw, error);
+    return null;
+  }
+
+  const parseMs = nowMs() - parseStart;
+  const validationStart = nowMs();
+  try {
+    const envelope = validateCurrentSaveValue(parsed);
+    latestSaveLoadPerformance = {
+      ...base,
+      parseMs,
+      validationMs: nowMs() - validationStart,
+      totalMs: nowMs() - totalStart,
+      recovered: false,
+    };
+    return { raw, envelope };
+  } catch (error) {
+    latestSaveLoadPerformance = {
+      ...base,
+      parseMs,
+      validationMs: nowMs() - validationStart,
+      totalMs: nowMs() - totalStart,
+      recovered: true,
+      failureReason: error instanceof Error ? error.message : String(error),
+    };
+    quarantineInvalidSave(name, raw, error);
+    return null;
+  }
+}
 
 function hasSamePersistedState<T>(a: StorageValue<T> | null, b: StorageValue<T>): boolean {
   if (!a || a.version !== b.version) return false;
@@ -809,11 +894,11 @@ export function createCurrentSavePersistStorage<T>(): PersistStorage<T> {
   let lastValue: StorageValue<T> | null = null;
   return {
     getItem: (name) => {
-      const raw = currentSaveStorage.getItem(name);
-      if (raw === null || raw instanceof Promise) return null;
-      const parsed = parseCurrentSave(raw) as unknown as StorageValue<T>;
-      lastValue = parsed;
-      return parsed;
+      const loaded = readCurrentSave(name);
+      if (!loaded) return null;
+      const envelope = loaded.envelope as unknown as StorageValue<T>;
+      lastValue = envelope;
+      return envelope;
     },
     setItem: (name, value) => {
       if (hasSamePersistedState(lastValue, value)) return;
@@ -842,7 +927,12 @@ export function getLatestSaveRecoveryDiagnostic(): SaveRecoveryDiagnostic | null
   return latestRecovery;
 }
 
+export function getLatestSaveLoadPerformance(): SaveLoadPerformance | null {
+  return latestSaveLoadPerformance;
+}
+
 export function __resetSaveRecoveryForTests(): void {
   latestRecovery = null;
   recoveryMessagePending = false;
+  latestSaveLoadPerformance = null;
 }

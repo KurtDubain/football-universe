@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { compressedStorage } from './compressed-storage';
-import { createCurrentSavePersistStorage, SAVE_SCHEMA_VERSION, SAVE_STORAGE_KEY } from './save-schema';
+import {
+  createCurrentSavePersistStorage,
+  getLatestSaveLoadPerformance,
+  SAVE_SCHEMA_VERSION,
+  SAVE_STORAGE_KEY,
+  type SaveLoadPerformance,
+} from './save-schema';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
 import { GameWorld, NewsItem, initializeGameWorld, getCurrentWindow, isSeasonFullyComplete } from '../engine/season/season-manager';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from './transfer-window-actions';
@@ -854,11 +860,13 @@ if (
     __gameAudit?: {
       exportSave: () => string;
       importSave: (text: string) => void;
+      getSaveLoadPerformance: () => SaveLoadPerformance | null;
     };
   };
   auditWindow.__gameStore = useGameStore;
   auditWindow.__gameAudit = {
     exportSave: () => exportCurrentSave(SAVE_STORAGE_KEY),
     importSave: (text) => importCurrentSave(SAVE_STORAGE_KEY, text),
+    getSaveLoadPerformance: () => getLatestSaveLoadPerformance(),
   };
 }
