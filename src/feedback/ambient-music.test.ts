@@ -38,7 +38,7 @@ describe('ambient tournament music', () => {
     expect(await lease.started).toBe(true);
     expect(AudioMock.instances).toHaveLength(1);
     expect(AudioMock.instances[0].loop).toBe(true);
-    expect(AudioMock.instances[0].volume).toBeCloseTo(0.52);
+    expect(AudioMock.instances[0].volume).toBeCloseTo(0.7);
     lease.stop();
     expect(AudioMock.instances[0].pause).toHaveBeenCalledTimes(1);
   });
@@ -50,7 +50,7 @@ describe('ambient tournament music', () => {
     const final = startAmbientMusic('world_cup_final', 'match-final');
     expect(await final.started).toBe(true);
     expect(AudioMock.instances[0].pause).toHaveBeenCalledTimes(1);
-    expect(AudioMock.instances[1].volume).toBeCloseTo(0.29);
+    expect(AudioMock.instances[1].volume).toBeCloseTo(0.39);
     page.stop();
     expect(AudioMock.instances[1].pause).not.toHaveBeenCalled();
     final.stop();

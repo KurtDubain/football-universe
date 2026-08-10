@@ -9,9 +9,11 @@ interface Tone {
   endFrequency?: number;
 }
 
-const MUSICAL_VOLUME_LIFT = 1.62;
-const EVENT_VOLUME_LIFT = 1.24;
-const UI_VOLUME_LIFT = 1.08;
+export const FEEDBACK_VOLUME_LIFT = {
+  musical: 2.1,
+  event: 1.55,
+  ui: 1.4,
+} as const;
 
 const CUE_TONES: Record<FeedbackCue, Tone[]> = {
   start: [
@@ -69,12 +71,12 @@ const CUE_TONES: Record<FeedbackCue, Tone[]> = {
   ],
 };
 
-function volumeLiftForCue(cue: FeedbackCue): number {
-  if (cue === 'start' || cue === 'season_end') return MUSICAL_VOLUME_LIFT;
+export function feedbackVolumeLiftForCue(cue: FeedbackCue): number {
+  if (cue === 'start' || cue === 'season_end') return FEEDBACK_VOLUME_LIFT.musical;
   if (cue === 'advance' || cue === 'selection' || cue === 'confirm'
     || cue === 'toggle_on' || cue === 'toggle_off' || cue === 'intervention'
-    || cue === 'reject') return UI_VOLUME_LIFT;
-  return EVENT_VOLUME_LIFT;
+    || cue === 'reject') return FEEDBACK_VOLUME_LIFT.ui;
+  return FEEDBACK_VOLUME_LIFT.event;
 }
 
 function scheduleTone(context: AudioContext, tone: Tone, volumeLift: number): void {
@@ -98,6 +100,6 @@ function scheduleTone(context: AudioContext, tone: Tone, volumeLift: number): vo
 }
 
 export function scheduleFeedbackCue(context: AudioContext, cue: FeedbackCue, volumeScale = 1): void {
-  const volumeLift = volumeLiftForCue(cue) * Math.max(0, Math.min(1, volumeScale));
+  const volumeLift = feedbackVolumeLiftForCue(cue) * Math.max(0, Math.min(1, volumeScale));
   CUE_TONES[cue].forEach(tone => scheduleTone(context, tone, volumeLift));
 }

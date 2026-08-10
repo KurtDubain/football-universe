@@ -1,5 +1,13 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-11 Base Audio Loudness Lift
+
+- Current request: raise the game's default perceived loudness without removing player volume controls, mute behavior, accessibility handling, or the quiet/balanced/stadium sound profiles.
+- Raised the internal mastering baseline for UI feedback, match events, and musical cues. The default balanced live mix is about 30% louder, while the optional quiet and stadium profiles retain distinct dynamics and the existing compressor continues to protect peaks.
+- Increased the World Cup theme, final, and champion playback gains by about 35% without changing the audio assets, download size, lazy loading, cache policy, or independent music/effects sliders.
+- Added focused regression coverage for cue categories, mastering order, ambient-music gain, profile output, and peak bounds. Released as v4.48.0 with an in-game changelog entry.
+- Final Node 22.22.2 verification passed 111 test files / 833 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, bundle/script/changelog gates, and the production dependency audit with no known vulnerabilities. Production browser checks passed feedback settings, broadcast audio, World Cup music, offline behavior, mobile/desktop layout, and the standard live-Canvas client; average sampled Canvas draw cost was about 0.29 ms.
+
 ## 2026-08-11 P1 Maintainability Hardening
 
 - Current request: implement the engineering-maintainability audit's P0/P1 recommendations while preserving the completed local v4.47.0 cup-bracket work. The audit found no P0 issue.

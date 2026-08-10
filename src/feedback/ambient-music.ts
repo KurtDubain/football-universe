@@ -18,9 +18,9 @@ export interface AmbientMusicLease {
 }
 
 const TRACKS: Record<AmbientMusicScene, { source: string; loop: boolean; gain: number }> = {
-  world_cup: { source: worldCupThemeUrl, loop: true, gain: 0.52 },
-  world_cup_final: { source: worldCupFinalUrl, loop: false, gain: 0.58 },
-  world_cup_champion: { source: worldCupChampionUrl, loop: false, gain: 0.64 },
+  world_cup: { source: worldCupThemeUrl, loop: true, gain: 0.7 },
+  world_cup_final: { source: worldCupFinalUrl, loop: false, gain: 0.78 },
+  world_cup_champion: { source: worldCupChampionUrl, loop: false, gain: 0.86 },
 };
 
 let activeMusic: ActiveMusic | null = null;

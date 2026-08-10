@@ -64,9 +64,9 @@ interface SoundProfileMix {
 }
 
 export const MATCH_SOUND_PROFILE_MIX: Readonly<Record<SoundProfile, SoundProfileMix>> = {
-  quiet: { master: 0.66, crowd: 0.68, action: 1.18, music: 0.84 },
-  balanced: { master: 0.86, crowd: 1.16, action: 1.18, music: 1.14 },
-  stadium: { master: 0.94, crowd: 1.52, action: 1.28, music: 1.18 },
+  quiet: { master: 0.76, crowd: 0.72, action: 1.26, music: 0.9 },
+  balanced: { master: 1.04, crowd: 1.22, action: 1.26, music: 1.22 },
+  stadium: { master: 1.12, crowd: 1.58, action: 1.36, music: 1.28 },
 };
 
 function clamp(value: number, min = 0, max = 1): number {
