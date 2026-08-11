@@ -20,6 +20,11 @@ import type { GameWorld } from '../engine/season/season-manager';
 import { EmptyState, Panel } from '../components/ui';
 import { getPositionHeadlineMetrics } from './player-detail-metrics';
 import TransferTeamLink from '../components/TransferTeamLink';
+import {
+  buildRecentPlayerForm,
+  FAVORITE_PLAYER_LIMIT,
+  selectStarObservations,
+} from '../engine/players/star-presence';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -27,7 +32,7 @@ const TAG_HINT: Record<PlayerTag, string> = {
   iron:         '铁人 — 受伤几率 ÷3',
   glass:        '玻璃人 — 受伤几率 ×2，市值打 7 折',
   clutch:       '大心脏 — 在杯赛决赛 / 德比战中进球倾向 ×1.3',
-  late_bloomer: '大器晚成 — 巅峰年龄 28-32（默认 24-29）',
+  late_bloomer: '大器晚成 — 成长曲线通常比同龄球员更晚成熟',
   wanderer:     '浪子 — 每赛季 8% 概率自请离队进自由市场',
 };
 
@@ -62,6 +67,8 @@ export default function PlayerDetail() {
 }
 
 function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }) {
+  const favoritePlayerIds = useGameStore((state) => state.favoritePlayerIds);
+  const toggleFavoritePlayer = useGameStore((state) => state.toggleFavoritePlayer);
   const found = findPlayerByUuid(world.squads, uuid);
   const player = found?.player;
   const teamId = found?.teamId;
@@ -95,21 +102,24 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
     return { rank, total: rows.length };
   }, [world, player, uuid]);
 
-  // Recent match highlights — only regulation/ET goals; shootout kicks excluded
-  const highlights = useMemo(() => {
-    const hl: { window: string; minute: number; desc: string }[] = [];
-    for (const w of world.seasonState.calendar) {
-      if (!w.completed || !w.results) continue;
-      for (const r of w.results) {
-        for (const e of r.events) {
-          if (e.playerId === uuid && e.type === 'goal' && e.minute <= 120) {
-            hl.push({ window: w.label, minute: e.minute, desc: e.description });
-          }
-        }
-      }
-    }
-    return hl.slice(-8);
-  }, [world.seasonState.calendar, uuid]);
+  const starContext = useMemo(() => {
+    const activePlayers = Object.values(world.squads).flat();
+    const playerMap = new Map(activePlayers.map(item => [item.uuid, item]));
+    const results = world.seasonState.calendar
+      .filter(window => window.completed)
+      .flatMap(window => window.results ?? []);
+    const recentForms = buildRecentPlayerForm(results, playerMap);
+    const observations = selectStarObservations(activePlayers, {
+      playerStats: world.playerStats,
+      playerStatSegments: world.playerStatSegments,
+      seasonStartLevels: world.seasonStartLevels,
+    }, recentForms);
+    return {
+      recentForm: recentForms.get(uuid) ?? null,
+      worldFocus: observations.worldFocus.some(entry => entry.player.uuid === uuid),
+      risingStar: observations.risingStars.some(entry => entry.player.uuid === uuid),
+    };
+  }, [world, uuid]);
 
   // Key match metrics — excludes shootout kicks; lateGoals uses RUNNING score
   // at goal time (not final score) so 89' goal in 3-1 game isn't counted, and
@@ -208,6 +218,8 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   const contribution = teamTotalGoals > 0 ? Math.round((clubGoals / teamTotalGoals) * 100) : 0;
   const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
   const headlineMetrics = getPositionHeadlineMetrics(player.position, stats);
+  const isFollowed = favoritePlayerIds.includes(uuid);
+  const followLimitReached = !isFollowed && favoritePlayerIds.length >= FAVORITE_PLAYER_LIMIT;
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -217,7 +229,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
           <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-black text-white shrink-0" style={{ backgroundColor: team.color }}>
             {player.number}
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <h2 className="text-xl font-bold text-slate-100">{player.name ?? `${player.number}号球员`}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <Link to={`/team/${teamId}`} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
@@ -252,8 +264,24 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
               {overallRanking.rank > 0 && (
                 <span className="text-[10px] font-semibold text-amber-400">综合第{overallRanking.rank}/{overallRanking.total}</span>
               )}
+              {starContext.worldFocus && (
+                <span className="text-[10px] rounded border border-amber-600/45 bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-300">世界焦点</span>
+              )}
+              {starContext.risingStar && (
+                <span className="text-[10px] rounded border border-emerald-600/40 bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-300">U23 新星</span>
+              )}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => toggleFavoritePlayer(uuid)}
+            disabled={followLimitReached}
+            aria-label={isFollowed ? `取消关注 ${player.name}` : `关注 ${player.name}`}
+            title={followLimitReached ? `最多关注 ${FAVORITE_PLAYER_LIMIT} 名球员` : isFollowed ? '取消关注' : '关注球员'}
+            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border transition-colors ${isFollowed ? 'border-amber-500/50 bg-amber-500/12 text-amber-300' : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-200'} disabled:cursor-not-allowed disabled:opacity-35`}
+          >
+            <Icon name="star" size={18} />
+          </button>
         </div>
       </div>
 
@@ -344,29 +372,21 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">球员属性</h3>
         <div className="space-y-2">
           <AttrBar label="综合能力" value={player.rating} max={99} />
-          {typeof player.peakRating === 'number' && player.peakRating > player.rating && (
-            <AttrBar
-              label={`巅峰能力 (${player.peakAge ?? '?'}岁)`}
-              value={player.peakRating}
-              max={99}
-              color="bg-amber-500"
-            />
-          )}
           <AttrBar label="进球倾向" value={player.goalScoring} max={100} color="bg-amber-500" />
         </div>
       </div>
 
-      {/* Goal Highlights */}
-      {highlights.length > 0 && (
+      {starContext.recentForm && starContext.recentForm.summaries.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">本赛季进球记录</h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">近期比赛影响</h3>
+            <span className="text-[11px] text-slate-500">最近 {starContext.recentForm.appearances} 场</span>
+          </div>
           <div className="space-y-1.5">
-            {highlights.map((h, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="text-amber-400 inline-flex"><Icon name="ball" size={12} /></span>
-                <span className="text-slate-500 w-8 shrink-0">{h.minute}'</span>
-                <span className="text-slate-300 flex-1 truncate" title={h.desc}>{h.desc}</span>
-                <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[100px]" title={h.window}>{h.window}</span>
+            {starContext.recentForm.summaries.map((summary, index) => (
+              <div key={`${summary}-${index}`} className="flex min-h-8 items-center gap-2 border-t border-slate-700/35 text-xs first:border-t-0">
+                <span className="inline-flex text-amber-300"><Icon name="sparkle" size={12} /></span>
+                <span className="min-w-0 flex-1 truncate text-slate-300" title={summary}>{summary}</span>
               </div>
             ))}
           </div>
@@ -833,6 +853,10 @@ function RetiredPlayerView({
   world: ReturnType<typeof useGameStore.getState>['world'];
   stats: PlayerSeasonStats | undefined;
 }) {
+  const favoritePlayerIds = useGameStore((state) => state.favoritePlayerIds);
+  const toggleFavoritePlayer = useGameStore((state) => state.toggleFavoritePlayer);
+  const isFollowed = favoritePlayerIds.includes(retired.uuid);
+  const followLimitReached = !isFollowed && favoritePlayerIds.length >= FAVORITE_PLAYER_LIMIT;
   const team = world?.teamBases[retired.teamId];
   const careerTotals = world ? computePlayerCareerTotals(world, retired.uuid) : null;
   const careerGoals = Math.max(retired.careerGoals ?? 0, careerTotals?.goals ?? stats?.goals ?? 0);
@@ -847,12 +871,24 @@ function RetiredPlayerView({
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400">
             {posLabel[retired.position] ?? retired.position}
           </span>
-          <Link
-            to="/legends"
-            className="text-[10px] text-blue-400 hover:text-blue-300 ml-auto"
-          >
-            查看名人堂条目 →
-          </Link>
+          <span className="ml-auto flex items-center gap-2">
+            <Link
+              to="/legends"
+              className="text-[10px] text-blue-400 hover:text-blue-300"
+            >
+              查看名人堂条目 →
+            </Link>
+            <button
+              type="button"
+              onClick={() => toggleFavoritePlayer(retired.uuid)}
+              disabled={followLimitReached}
+              aria-label={isFollowed ? `取消关注 ${retired.name}` : `关注 ${retired.name}`}
+              title={followLimitReached ? `最多关注 ${FAVORITE_PLAYER_LIMIT} 名球员` : isFollowed ? '取消关注' : '关注球员'}
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md border ${isFollowed ? 'border-amber-500/50 bg-amber-500/12 text-amber-300' : 'border-slate-700 text-slate-500'} disabled:cursor-not-allowed disabled:opacity-35`}
+            >
+              <Icon name="star" size={17} />
+            </button>
+          </span>
         </div>
         <h2 className="text-xl font-bold text-slate-100">{retired.name}</h2>
         <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-slate-400">

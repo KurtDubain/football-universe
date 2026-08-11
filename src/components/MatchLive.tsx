@@ -41,6 +41,16 @@ import {
 } from './match-live/match-opener-artwork';
 import { ambientMusicSceneForFinal } from '../feedback/ambient-music';
 import { holdTournamentMusic, overrideTournamentMusic } from '../feedback/tournament-music-session';
+import {
+  APPROACH_LABELS,
+  TACTICS_REASON_LABELS,
+} from '../engine/coaches/tactics';
+import {
+  describeFeaturedMatchup,
+  FEATURED_PLAYER_REASON_LABELS,
+  PLAYER_IMPACT_UNIT_LABELS,
+} from '../engine/players/star-presence';
+import { computeMatchPlayerImpacts } from '../engine/players/match-player-impact';
 
 interface Props {
   result: MatchResult;
@@ -399,6 +409,26 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const stageLabel = getPlaybackStageLabel(playback, Boolean(result.penalties));
   const shootoutEvents = shownEvents.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
   const inShootout = Boolean(result.penalties && playback.minute > 120);
+  const featuredPlayers = useMemo(() => result.featuredPlayers ?? [], [result.featuredPlayers]);
+  const featuredPlayerIds = useMemo(
+    () => featuredPlayers.map(player => player.playerId),
+    [featuredPlayers],
+  );
+  const featuredMatchup = useMemo(
+    () => describeFeaturedMatchup(featuredPlayers, result.homeTeamId, result.awayTeamId),
+    [featuredPlayers, result.awayTeamId, result.homeTeamId],
+  );
+  const matchImpactsByPlayer = useMemo(() => {
+    const totalHome = result.homeGoals + (result.etHomeGoals ?? 0);
+    const totalAway = result.awayGoals + (result.etAwayGoals ?? 0);
+    const winnerTeamId = totalHome > totalAway
+      ? result.homeTeamId
+      : totalAway > totalHome
+        ? result.awayTeamId
+        : null;
+    return new Map(computeMatchPlayerImpacts({ ...result, winnerTeamId })
+      .map(impact => [impact.playerId, impact]));
+  }, [result]);
 
   useEffect(() => {
     if (!showOpener) return;
@@ -822,6 +852,65 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           </div>
         </div>
 
+        {(result.homeTactics || result.awayTactics) && (
+          <div
+            data-testid="live-tactics-strip"
+            className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-y border-slate-800/70 bg-slate-950/55 px-3 py-2"
+          >
+            <div
+              className="min-w-0 text-right"
+              title={result.homeTactics
+                ? `${TACTICS_REASON_LABELS[result.homeTactics.reason]} · ${result.homeTactics.tags.join(' · ')}`
+                : '旧比赛未保存战术快照'}
+            >
+              <div className="truncate text-xs font-bold text-slate-200">
+                {result.homeTactics?.formation ?? '阵型未记录'}
+              </div>
+              <div className="truncate text-[9px] text-emerald-300/75">
+                {result.homeTactics ? APPROACH_LABELS[result.homeTactics.approach] : '历史比赛'}
+              </div>
+            </div>
+            <div className="border-x border-slate-700/70 px-2 text-center text-[8px] font-semibold text-slate-500">
+              战术部署
+            </div>
+            <div
+              className="min-w-0"
+              title={result.awayTactics
+                ? `${TACTICS_REASON_LABELS[result.awayTactics.reason]} · ${result.awayTactics.tags.join(' · ')}`
+                : '旧比赛未保存战术快照'}
+            >
+              <div className="truncate text-xs font-bold text-slate-200">
+                {result.awayTactics?.formation ?? '阵型未记录'}
+              </div>
+              <div className="truncate text-[9px] text-emerald-300/75">
+                {result.awayTactics ? APPROACH_LABELS[result.awayTactics.approach] : '历史比赛'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {featuredPlayers.length > 0 && (
+          <div
+            data-testid="live-featured-players"
+            className="flex min-w-0 items-center gap-3 overflow-x-auto border-b border-amber-400/10 bg-amber-300/[0.025] px-3 py-1.5 text-[9px] scrollbar-thin"
+          >
+            <span className="shrink-0 font-bold text-amber-300">
+              {featuredMatchup ?? '焦点球员'}
+            </span>
+            <span className="h-3 w-px shrink-0 bg-slate-700" aria-hidden="true" />
+            {featuredPlayers.map((player, index) => (
+              <span
+                key={player.playerId}
+                className="shrink-0 text-slate-300"
+                title={`${FEATURED_PLAYER_REASON_LABELS[player.reason]} · 赛前边际影响 ${player.marginalUnitImpact >= 0 ? '+' : ''}${player.marginalUnitImpact.toFixed(1)} ${PLAYER_IMPACT_UNIT_LABELS[player.impactUnit]}`}
+              >
+                <span className="text-amber-300/80">{index + 1}</span> {player.playerName}
+                <span className="ml-1 text-slate-600">{player.position}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="lg:grid lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.8fr)]">
           <div className="min-w-0">
             {inShootout && (
@@ -860,6 +949,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 playbackMode={playback.mode}
                 shootout={inShootout}
                 possession={result.stats.possession}
+                featuredPlayerIds={featuredPlayerIds}
+                homeApproach={result.homeTactics?.approach}
+                awayApproach={result.awayTactics?.approach}
                 onPlaybackHoldChange={setPresentationHolding}
                 onPresentationCue={handlePresentationCue}
                 onPresentationAtmosphereChange={handlePresentationAtmosphere}
@@ -948,9 +1040,28 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
         {/* Final results */}
         {finished && (
-          <div className="px-4 pb-3 text-center space-y-1 animate-slide-up">
+          <div className="space-y-2 px-4 pb-3 text-center animate-slide-up">
             {result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
             {result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
+            {featuredPlayers.length > 0 && (
+              <div data-testid="live-featured-review" className="border-t border-slate-800/70 pt-2 text-left">
+                <div className="mb-1.5 text-[9px] font-semibold text-slate-500">焦点球员赛后观察</div>
+                <div className="grid gap-x-5 gap-y-1 sm:grid-cols-2">
+                  {featuredPlayers.map(player => {
+                    const impact = matchImpactsByPlayer.get(player.playerId);
+                    return (
+                      <div key={player.playerId} className="flex min-w-0 items-baseline justify-between gap-2 text-[10px]">
+                        <span className="shrink-0 font-semibold text-slate-300">{player.playerName}</span>
+                        <span className="min-w-0 truncate text-right text-slate-500" title={impact?.summary}>
+                          {impact?.summary ?? '未形成关键事件'} · 赛前边际
+                          {' '}{player.marginalUnitImpact >= 0 ? '+' : ''}{player.marginalUnitImpact.toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
         </div>

@@ -3,6 +3,7 @@ import { Trophy, TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { GameWorld } from '../season/season-manager';
 import { generateFreshCoach, formatCandidateCoachId, deriveCoachBuffsFromStyle } from './coach-generator';
+import { derivePreferredFormation } from './tactics';
 
 /**
  * Hard age cap. At or above this age, retirement is forced regardless of
@@ -122,6 +123,7 @@ export function pickReplacement(
       stabilityBuff: buffs.stabilityBuff,
       age: 38 + rng.nextInt(0, 5), // freshly-retired player → 38-43
     };
+    coach.preferredFormation = derivePreferredFormation(coach);
     const state: CoachState = {
       id: coachId,
       currentTeamId: teamId,

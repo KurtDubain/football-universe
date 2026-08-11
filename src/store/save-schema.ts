@@ -45,6 +45,20 @@ const OBSERVATION_THEME_TYPES = new Set([
 ]);
 const OBSERVER_PHASES = new Set(['opening', 'midseason', 'run_in', 'final']);
 const DESTINY_DEVIATION_TIERS = new Set(['normal', 'minor', 'upset', 'major_upset']);
+const COACH_FORMATIONS = new Set(['4-3-3', '4-2-3-1', '4-4-2', '5-4-1']);
+const MATCH_APPROACHES = new Set(['pressing', 'control', 'balanced', 'counter', 'low_block']);
+const TACTICS_REASONS = new Set([
+  'coach_identity',
+  'underdog_response',
+  'control_favorite',
+  'fatigue_management',
+  'cup_caution',
+]);
+const TACTICS_EXECUTION = new Set(['developing', 'coherent', 'elite']);
+const PLAYER_POSITIONS = new Set(['GK', 'DF', 'MF', 'FW']);
+const FEATURED_PLAYER_REASONS = new Set(['ability', 'form', 'defensive_anchor', 'creator', 'finisher']);
+const PLAYER_IMPACT_UNITS = new Set(['attack', 'midfield', 'defense']);
+const FAVORITE_PLAYER_LIMIT = 8;
 
 export interface CurrentSaveEnvelope {
   version: typeof SAVE_SCHEMA_VERSION;
@@ -219,6 +233,72 @@ function validateTournamentHost(
   }
 }
 
+function validateMatchTacticsSnapshot(value: unknown, context: string): void {
+  if (!isRecord(value)) throw new Error(`${context}战术快照无效`);
+  if (!COACH_FORMATIONS.has(value.formation as string)) throw new Error(`${context}阵型无效`);
+  if (!MATCH_APPROACHES.has(value.approach as string)) throw new Error(`${context}比赛策略无效`);
+  if (!TACTICS_REASONS.has(value.reason as string)) throw new Error(`${context}战术原因无效`);
+  if (!TACTICS_EXECUTION.has(value.execution as string)) throw new Error(`${context}战术执行档位无效`);
+  for (const field of ['attackDelta', 'midfieldDelta', 'defenseDelta']) {
+    const amount = requireFiniteNumber(value, field, context);
+    if (Math.abs(amount) > 3) throw new Error(`${context}字段 ${field} 超出范围`);
+  }
+  const tags = requireArray(value, 'tags');
+  if (tags.length > 3 || tags.some(tag => typeof tag !== 'string' || tag.length === 0)) {
+    throw new Error(`${context}战术标签无效`);
+  }
+}
+
+function startingPlayerIds(result: JsonRecord): Set<string> {
+  const ids = new Set<string>();
+  for (const key of ['homeMatchday', 'awayMatchday']) {
+    const snapshot = result[key];
+    if (!isRecord(snapshot) || !Array.isArray(snapshot.players)) continue;
+    for (const player of snapshot.players) {
+      if (!isRecord(player) || typeof player.playerId !== 'string') continue;
+      if (player.role === 'starter' || player.enteredMinute === 0) ids.add(player.playerId);
+    }
+  }
+  return ids;
+}
+
+function validateFeaturedPlayers(
+  value: unknown,
+  result: JsonRecord,
+  homeTeamId: string,
+  awayTeamId: string,
+  context: string,
+): void {
+  if (!Array.isArray(value) || value.length > 5) throw new Error(`${context}焦点球员列表无效`);
+  const seen = new Set<string>();
+  const starters = startingPlayerIds(result);
+  for (const entry of value) {
+    if (!isRecord(entry)) throw new Error(`${context}焦点球员无效`);
+    const playerId = requireString(entry, 'playerId', `${context}焦点球员 `);
+    requireString(entry, 'playerName', `${context}焦点球员 ${playerId} `);
+    const teamId = requireString(entry, 'teamId', `${context}焦点球员 ${playerId} `);
+    if (seen.has(playerId) || (teamId !== homeTeamId && teamId !== awayTeamId)) {
+      throw new Error(`${context}焦点球员 ${playerId} 的归属无效`);
+    }
+    if (starters.size > 0 && !starters.has(playerId)) {
+      throw new Error(`${context}焦点球员 ${playerId} 不在真实首发中`);
+    }
+    seen.add(playerId);
+    if (!PLAYER_POSITIONS.has(entry.position as string)) throw new Error(`${context}焦点球员 ${playerId} 位置无效`);
+    if (!FEATURED_PLAYER_REASONS.has(entry.reason as string)) throw new Error(`${context}焦点球员 ${playerId} 原因无效`);
+    if (!PLAYER_IMPACT_UNITS.has(entry.impactUnit as string)) throw new Error(`${context}焦点球员 ${playerId} 影响单位无效`);
+    const rating = requireFiniteNumber(entry, 'ratingAtKickoff', `${context}焦点球员 ${playerId} `);
+    const marginal = requireFiniteNumber(entry, 'marginalUnitImpact', `${context}焦点球员 ${playerId} `);
+    if (rating < 0 || rating > 100 || marginal < 0 || marginal > 15) {
+      throw new Error(`${context}焦点球员 ${playerId} 数值超出范围`);
+    }
+    if (entry.seasonScoreAtKickoff !== undefined) {
+      const score = requireFiniteNumber(entry, 'seasonScoreAtKickoff', `${context}焦点球员 ${playerId} `);
+      if (score < 0 || score > 100) throw new Error(`${context}焦点球员 ${playerId} 赛季评分超出范围`);
+    }
+  }
+}
+
 function validateCalendarWindow(value: unknown, index: number, teamIds: Set<string>): void {
   if (!isRecord(value)) throw new Error(`存档赛程窗口 ${index + 1} 无效`);
   requireFiniteNumber(value, 'id', `存档赛程窗口 ${index + 1} `);
@@ -280,6 +360,21 @@ function validateCalendarWindow(value: unknown, index: number, teamIds: Set<stri
         }
         validateOptionalNonNegativeNumbers(contribution, `球员 ${playerId} 防守贡献 `);
       }
+    }
+    if (result.homeTactics !== undefined) {
+      validateMatchTacticsSnapshot(result.homeTactics, `存档赛果 ${result.fixtureId as string} 主队`);
+    }
+    if (result.awayTactics !== undefined) {
+      validateMatchTacticsSnapshot(result.awayTactics, `存档赛果 ${result.fixtureId as string} 客队`);
+    }
+    if (result.featuredPlayers !== undefined) {
+      validateFeaturedPlayers(
+        result.featuredPlayers,
+        result,
+        homeTeamId,
+        awayTeamId,
+        `存档赛果 ${result.fixtureId as string} `,
+      );
     }
     if (!teamIds.has(homeTeamId) || !teamIds.has(awayTeamId)) {
       throw new Error(`存档赛果 ${result.fixtureId as string} 引用了无效球队`);
@@ -796,6 +891,16 @@ function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
   requireArray(state, 'lastResults');
   requireArray(state, 'lastNews');
   requireArray(state, 'favoriteTeamIds');
+  const favoritePlayerIds = state.favoritePlayerIds === undefined
+    ? []
+    : requireArray(state, 'favoritePlayerIds');
+  if (
+    favoritePlayerIds.length > FAVORITE_PLAYER_LIMIT
+    || favoritePlayerIds.some(playerId => typeof playerId !== 'string' || playerId.length === 0)
+    || new Set(favoritePlayerIds).size !== favoritePlayerIds.length
+  ) {
+    throw new Error('存档字段 favoritePlayerIds 无效');
+  }
   if (state.favoriteTeamId !== null && typeof state.favoriteTeamId !== 'string') {
     throw new Error('存档字段 favoriteTeamId 无效');
   }
@@ -818,6 +923,7 @@ function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
       ...state,
       initialized: true,
       world,
+      favoritePlayerIds,
     },
   };
 }

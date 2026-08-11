@@ -7,6 +7,7 @@ import {
   type MatchStats,
 } from '../../types';
 import { Player } from '../../types/player';
+import type { MatchApproach } from '../../types/coach';
 import { SeededRNG } from './rng';
 
 // ── Goal description pools (Chinese) ──────────────────────────────
@@ -32,6 +33,13 @@ const OPEN_PLAY_GOALS = [
   '长途奔袭后怒射入网',
   '二过一配合后轻松推射',
   '胸部停球后凌空抽射',
+];
+
+const COUNTER_GOALS = [
+  '快速反击中直塞身后，单刀冷静推射得手',
+  '后场断球后纵向推进，接应传中包抄破门',
+  '防守反击形成多打少，禁区内低射入网',
+  '长传发动转换，前锋抢在回防前完成破门',
 ];
 
 const FREE_KICK_GOALS = [
@@ -96,6 +104,12 @@ const MISS_DESCRIPTIONS = [
   '大力射门击中横梁弹出',
 ];
 
+const COUNTER_MISSES = [
+  '快速反击形成单刀，最后一脚稍稍偏出',
+  '纵向转换撕开防线，仓促射门越过横梁',
+  '反击中接到横传，包抄射门被立柱拒绝',
+];
+
 const YELLOW_CARD_DESCRIPTIONS = [
   '飞铲犯规被黄牌警告',
   '鲁莽犯规领到黄牌',
@@ -154,12 +168,14 @@ function pickPlayer(
   rng: SeededRNG,
   useGoalScoring: boolean = false,
   isBigMatch: boolean = false,
+  abilityWeight: number = 0,
 ): Player {
   const weights = squad.map((p) => {
     const posWeight = positionWeights[p.position] ?? 1;
     const scoringWeight = useGoalScoring ? Math.max(1, p.goalScoring) : 10;
     const clutchMul = isBigMatch && p.tag === 'clutch' ? 1.3 : 1;
-    return posWeight * scoringWeight * clutchMul;
+    const abilityMultiplier = Math.max(0.55, 1 + ((p.rating - 60) / 40) * abilityWeight);
+    return posWeight * scoringWeight * clutchMul * abilityMultiplier;
   });
 
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -183,6 +199,7 @@ function pickGoalScorer(squad: Player[], rng: SeededRNG, isBigMatch: boolean = f
     rng,
     true,
     isBigMatch,
+    0.35,
   );
 }
 
@@ -194,6 +211,8 @@ function pickAssistProvider(squad: Player[], scorerUuid: string, rng: SeededRNG)
     { MF: 10, FW: 6, DF: 3, GK: 0.1 },
     rng,
     false,
+    false,
+    0.7,
   );
 }
 
@@ -231,6 +250,8 @@ function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
     { FW: 8, MF: 5, DF: 1, GK: 0.1 },
     rng,
     true,
+    false,
+    0.25,
   );
 }
 
@@ -240,6 +261,8 @@ function pickSetPieceTaker(squad: Player[], rng: SeededRNG): Player {
     { MF: 10, FW: 6, DF: 3, GK: 0.05 },
     rng,
     false,
+    false,
+    0.9,
   );
 }
 
@@ -337,6 +360,16 @@ function randomMinuteInRange(
   return rng.nextInt(min, max);
 }
 
+export function counterOriginChance(approach: MatchApproach | undefined): number {
+  switch (approach) {
+    case 'counter': return 0.32;
+    case 'low_block': return 0.23;
+    case 'pressing': return 0.12;
+    case 'control': return 0.08;
+    default: return 0.14;
+  }
+}
+
 // ── Main export ────────────────────────────────────────────────────
 
 export function generateMatchEvents(
@@ -357,9 +390,13 @@ export function generateMatchEvents(
   awayPlayersAtMinute?: (minute: number) => Player[],
   homeRedCardCandidatesAtMinute?: (minute: number) => Player[],
   awayRedCardCandidatesAtMinute?: (minute: number) => Player[],
+  phase: 'full' | 'regulation' | 'extra_time' | 'shootout' = 'full',
+  tacticalApproaches?: { home: MatchApproach; away: MatchApproach },
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
-  const maxMinute = extraTime ? 120 : 90;
+  const maxMinute = phase === 'regulation' ? 90 : extraTime ? 120 : 90;
+  const isExtraTimeOnly = phase === 'extra_time';
+  const isShootoutOnly = phase === 'shootout';
   const dismissedAt = new Map<string, number>();
 
   function getSquad(teamId: string, minute: number): Player[] | undefined {
@@ -371,11 +408,17 @@ export function generateMatchEvents(
     return squad?.filter(player => (dismissedAt.get(player.uuid) ?? Number.POSITIVE_INFINITY) > minute);
   }
 
+  function approachFor(teamId: string): MatchApproach | undefined {
+    if (teamId === homeTeamId) return tacticalApproaches?.home;
+    if (teamId === awayTeamId) return tacticalApproaches?.away;
+    return undefined;
+  }
+
   // Roll dismissal first so every later event picker can exclude a player
   // after their red-card minute. Output order is still chronological below.
-  if (rng.next() < 0.06) {
+  if (!isShootoutOnly && rng.next() < (isExtraTimeOnly ? 0.02 : 0.06)) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(20, maxMinute, rng);
+    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 20, maxMinute, rng);
     const squad = teamId === homeTeamId
       ? homeRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute)
       : awayRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute);
@@ -423,8 +466,9 @@ export function generateMatchEvents(
         description = playOrigin === 'corner' ? rng.pick(CORNER_GOALS) : rng.pick(FREE_KICK_GOALS);
         setPiece = setPieceContext(playOrigin, rng);
       } else {
-        description = rng.pick(OPEN_PLAY_GOALS);
-        if (rng.next() < 0.14) playOrigin = 'counter';
+        const isCounter = rng.next() < counterOriginChance(approachFor(teamId));
+        playOrigin = isCounter ? 'counter' : 'open_play';
+        description = rng.pick(isCounter ? COUNTER_GOALS : OPEN_PLAY_GOALS);
       }
 
       // Pick a scorer if squad is available
@@ -469,21 +513,23 @@ export function generateMatchEvents(
   };
 
   // Regulation goals
-  generateGoalEvents(homeGoals, homeTeamId, false);
-  generateGoalEvents(awayGoals, awayTeamId, false);
+  if (!isExtraTimeOnly && !isShootoutOnly) {
+    generateGoalEvents(homeGoals, homeTeamId, false);
+    generateGoalEvents(awayGoals, awayTeamId, false);
+  }
 
   // Extra time goals (separate so they get 91-120 minute range)
-  if (extraTime) {
+  if (extraTime && phase !== 'regulation' && !isShootoutOnly) {
     generateGoalEvents(etHomeGoals, homeTeamId, true);
     generateGoalEvents(etAwayGoals, awayTeamId, true);
   }
 
   // ── Yellow cards (2-6 per match) ─────────────────────────────────
 
-  const totalYellows = rng.nextInt(2, 6);
+  const totalYellows = isShootoutOnly ? 0 : isExtraTimeOnly ? rng.nextInt(0, 2) : rng.nextInt(2, 6);
   for (let i = 0; i < totalYellows; i++) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(1, maxMinute, rng);
+    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
     const description = rng.pick(YELLOW_CARD_DESCRIPTIONS);
     const squad = getSquad(teamId, minute);
 
@@ -510,21 +556,26 @@ export function generateMatchEvents(
 
   // ── Near misses (1-3) ────────────────────────────────────────────
 
-  const totalMisses = rng.nextInt(1, 3);
+  const totalMisses = isShootoutOnly ? 0 : isExtraTimeOnly ? rng.nextInt(0, 1) : rng.nextInt(1, 3);
   for (let i = 0; i < totalMisses; i++) {
     const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(1, maxMinute, rng);
+    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
     const originRoll = rng.next();
+    const openPlayRoll = Math.max(0, (originRoll - 0.17) / 0.83);
     const playOrigin: MatchPlayOrigin = originRoll < 0.1
       ? 'corner'
       : originRoll < 0.17
         ? (rng.next() < 0.45 ? 'direct_free_kick' : 'crossed_free_kick')
-        : 'open_play';
+        : openPlayRoll < counterOriginChance(approachFor(teamId))
+          ? 'counter'
+          : 'open_play';
     const description = playOrigin === 'corner'
       ? rng.pick(CORNER_MISSES)
       : playOrigin === 'direct_free_kick' || playOrigin === 'crossed_free_kick'
         ? rng.pick(FREE_KICK_MISSES)
-        : rng.pick(MISS_DESCRIPTIONS);
+        : playOrigin === 'counter'
+          ? rng.pick(COUNTER_MISSES)
+          : rng.pick(MISS_DESCRIPTIONS);
     const setPiece = setPieceContext(playOrigin, rng);
     const squad = getSquad(teamId, minute);
 

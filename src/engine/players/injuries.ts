@@ -1,6 +1,8 @@
 import { Player, Injury, InjurySeverity, Suspension, PlayerTeamSeasonStats } from '../../types/player';
 import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
+import type { CoachFormation } from '../../types/coach';
+import { getFormationShape } from '../coaches/tactics';
 
 /**
  * Phase G — injury / suspension engine.
@@ -234,14 +236,14 @@ export interface MatchdaySelection {
   unavailablePlayerIds: Set<string>;
 }
 
-function selectBalancedTop14(players: Player[]): Player[] {
+function selectBalancedTop14(players: Player[], formation: CoachFormation): Player[] {
   const sorted = [...players].sort((a, b) => b.rating - a.rating || a.uuid.localeCompare(b.uuid));
   const selected: Player[] = [];
   const selectedIds = new Set<string>();
-  const starterShape = { GK: 1, DF: 4, MF: 3, FW: 3 } as const;
+  const starterShape = getFormationShape(formation);
 
-  // Preserve a playable 4-3-3 before filling the three highest-rated bench
-  // places. A pure top-14 cut can accidentally remove most defenders.
+  // Preserve the selected formation before filling the three highest-rated
+  // bench places. A pure top-14 cut can remove a required fifth DF or MF.
   for (const position of ['GK', 'DF', 'MF', 'FW'] as const) {
     for (const player of sorted.filter(entry => entry.position === position).slice(0, starterShape[position])) {
       selected.push(player);
@@ -260,6 +262,7 @@ function selectBalancedTop14(players: Player[]): Player[] {
 export function selectMatchday(
   squad: Player[] | undefined,
   currentWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): MatchdaySelection | undefined {
   if (!squad) return undefined;
 
@@ -286,14 +289,14 @@ export function selectMatchday(
   if (available.length < 11) {
     // Emergency floor: too many unavailable to field 11 — relax restrictions.
     return {
-      players: selectBalancedTop14(squad),
+      players: selectBalancedTop14(squad, formation),
       emergencyFloor: true,
       availableCount: available.length,
       unavailablePlayerIds,
     };
   }
   return {
-    players: selectBalancedTop14(available),
+    players: selectBalancedTop14(available, formation),
     emergencyFloor: false,
     availableCount: available.length,
     unavailablePlayerIds,
@@ -303,8 +306,9 @@ export function selectMatchday(
 export function pickMatchday(
   squad: Player[] | undefined,
   currentWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): Player[] | undefined {
-  return selectMatchday(squad, currentWindowIdx)?.players;
+  return selectMatchday(squad, currentWindowIdx, formation)?.players;
 }
 
 /**

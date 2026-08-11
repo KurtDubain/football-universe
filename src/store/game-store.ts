@@ -38,6 +38,7 @@ import { getCurrentKeyNodeGuard, planNextKeyNode } from '../engine/observation/k
 import {
   type ObservationThemePreference,
 } from '../engine/observation/observation-theme';
+import { FAVORITE_PLAYER_LIMIT } from '../engine/players/star-presence';
 
 const ADVANCE_ERROR_MESSAGE = '本次推进没有完成，本次操作未提交。请重试；若问题持续，请刷新页面。';
 
@@ -70,6 +71,8 @@ interface GameStore {
   favoriteTeamId: string | null;
   /** Multi-favorite list (up to 3 teams). */
   favoriteTeamIds: string[];
+  /** Stable player UUIDs followed across transfers (up to 8). */
+  favoritePlayerIds: string[];
   /** Display-only lens for the current observer route. Never read by simulation. */
   observationThemePreference: ObservationThemePreference;
   /** One transient fixture selected for spoiler-free auto-live (cleared on advance). */
@@ -97,6 +100,7 @@ interface GameStore {
   setPrimaryFavoriteTeam: (teamId: string) => void;
   /** Toggle a team's membership in the favorites list. */
   toggleFavoriteTeam: (teamId: string) => void;
+  toggleFavoritePlayer: (playerId: string) => void;
   setObservationThemePreference: (preference: ObservationThemePreference) => void;
   setPrediction: (champion: string, relegated: string) => void;
   useGodHand: (teamId: string, type: 'boost' | 'nerf') => void;
@@ -126,6 +130,7 @@ type PersistedGameState = Pick<GameStore,
   | 'lastNews'
   | 'favoriteTeamId'
   | 'favoriteTeamIds'
+  | 'favoritePlayerIds'
   | 'observationThemePreference'
 >;
 
@@ -148,6 +153,9 @@ function mergePersistedGameState(
   const persisted = persistedState as PersistedGameState;
   const merged = { ...current, ...persisted };
   const favoriteTeamIds = [...new Set(merged.favoriteTeamIds)].slice(0, 3);
+  const favoritePlayerIds = [...new Set(merged.favoritePlayerIds ?? [])]
+    .filter(Boolean)
+    .slice(0, FAVORITE_PLAYER_LIMIT);
   const primaryId = merged.favoriteTeamId && favoriteTeamIds.includes(merged.favoriteTeamId)
     ? merged.favoriteTeamId
     : favoriteTeamIds[0] ?? null;
@@ -158,6 +166,7 @@ function mergePersistedGameState(
     ...merged,
     favoriteTeamId: primaryId,
     favoriteTeamIds: orderedFavorites,
+    favoritePlayerIds,
     observationThemePreference: merged.observationThemePreference ?? 'auto',
     lastResults: reconstructLastResults(merged.world),
     lastNews: merged.world?.newsLog.slice(-30) ?? [],
@@ -206,6 +215,7 @@ export const useGameStore = create<GameStore>()(
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      favoritePlayerIds: [],
       observationThemePreference: 'auto',
       starredFixtureIds: [],
       newAchievements: [],
@@ -241,6 +251,7 @@ export const useGameStore = create<GameStore>()(
           advanceTick: 0,
           favoriteTeamId: favoriteTeamIds[0] ?? null,
           favoriteTeamIds,
+          favoritePlayerIds: [],
           observationThemePreference: options?.observationThemePreference ?? 'auto',
           starredFixtureIds: [],
           newAchievements: [],
@@ -555,6 +566,16 @@ export const useGameStore = create<GameStore>()(
         set({ favoriteTeamIds: ordered, favoriteTeamId: primary });
       },
 
+      toggleFavoritePlayer: (playerId: string) => {
+        const current = get().favoritePlayerIds;
+        if (current.includes(playerId)) {
+          set({ favoritePlayerIds: current.filter(id => id !== playerId) });
+          return;
+        }
+        if (current.length >= FAVORITE_PLAYER_LIMIT) return;
+        set({ favoritePlayerIds: [...current, playerId] });
+      },
+
       setObservationThemePreference: (preference) => {
         set({ observationThemePreference: preference });
       },
@@ -818,6 +839,7 @@ export const useGameStore = create<GameStore>()(
           advanceTick: 0,
           favoriteTeamId: null,
           favoriteTeamIds: [],
+          favoritePlayerIds: [],
           observationThemePreference: 'auto',
           starredFixtureIds: [],
           newAchievements: [],
@@ -867,6 +889,7 @@ export const useGameStore = create<GameStore>()(
         lastNews: EMPTY_PERSISTED_NEWS,
         favoriteTeamId: state.favoriteTeamId,
         favoriteTeamIds: state.favoriteTeamIds,
+        favoritePlayerIds: state.favoritePlayerIds,
         observationThemePreference: state.observationThemePreference,
       }),
       merge: mergePersistedGameState,

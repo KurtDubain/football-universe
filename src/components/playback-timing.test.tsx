@@ -12,7 +12,9 @@ import NewsTicker from './NewsTicker';
 import { setFeedbackPreferences } from '../feedback/preferences';
 
 vi.mock('./PitchCanvas', () => ({
-  default: () => <div data-testid="pitch" />,
+  default: ({ featuredPlayerIds = [] }: { featuredPlayerIds?: readonly string[] }) => (
+    <div data-testid="pitch" data-featured-player-ids={featuredPlayerIds.join(',')} />
+  ),
 }));
 
 vi.mock('./CanvasEffects', () => ({
@@ -372,6 +374,43 @@ describe('MatchLive playback state machine', () => {
     expect(document.body.textContent).toContain('普通进攻播报 14');
     expect(document.body.textContent).toContain('比赛开球，双方开始试探');
     expect(document.body.querySelector('[aria-label="本场完整播报"]')?.className).toContain('overflow-y-auto');
+  });
+
+  it('shows frozen tactics and carries at most five focus players into the broadcast', () => {
+    const result = makeResult('live-tactics-focus', [
+      { minute: 8, type: 'goal', teamId: 'home', playerId: 'star-home', playerName: '主队核心', description: '主队核心破门' },
+    ], {
+      homeTactics: {
+        formation: '4-3-3', approach: 'pressing', reason: 'coach_identity', execution: 'elite',
+        attackDelta: 1, midfieldDelta: 1, defenseDelta: 0, tags: ['前场施压'],
+      },
+      awayTactics: {
+        formation: '5-4-1', approach: 'low_block', reason: 'underdog_response', execution: 'coherent',
+        attackDelta: -1, midfieldDelta: 0, defenseDelta: 2, tags: ['压缩空间', '以弱抗强'],
+      },
+      featuredPlayers: [
+        {
+          playerId: 'star-home', playerName: '主队核心', teamId: 'home', position: 'FW',
+          ratingAtKickoff: 90, marginalUnitImpact: 1.8, impactUnit: 'attack', reason: 'finisher',
+        },
+        {
+          playerId: 'star-away', playerName: '客队铁闸', teamId: 'away', position: 'DF',
+          ratingAtKickoff: 88, marginalUnitImpact: 1.6, impactUnit: 'defense', reason: 'defensive_anchor',
+        },
+      ],
+    });
+
+    render(<MatchLive result={result} teamBases={teamBases} onClose={() => undefined} />);
+
+    expect(document.body.querySelector('[data-testid="live-tactics-strip"]')?.textContent).toContain('4-3-3');
+    expect(document.body.querySelector('[data-testid="live-tactics-strip"]')?.textContent).toContain('5-4-1');
+    expect(document.body.querySelector('[data-testid="live-featured-players"]')?.textContent).toContain('矛盾对决');
+    expect(document.body.querySelector('[data-testid="pitch"]')?.getAttribute('data-featured-player-ids'))
+      .toBe('star-home,star-away');
+
+    act(() => button('跳过').click());
+    expect(document.body.querySelector('[data-testid="live-featured-review"]')?.textContent).toContain('1球');
+    expect(document.body.querySelector('[data-testid="live-featured-review"]')?.textContent).toContain('赛前边际 +1.8');
   });
 });
 

@@ -1,14 +1,25 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import MatchLive from '../../src/components/MatchLive';
+import type { CoachFormation } from '../../src/types/coach';
 import type { MatchdaySnapshot, MatchEvent, MatchResult } from '../../src/types/match';
 import type { TeamBase } from '../../src/types/team';
 import '../../src/index.css';
 
-const positions = ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'] as const;
+const formationPositions: Record<CoachFormation, MatchdaySnapshot['players'][number]['position'][]> = {
+  '4-3-3': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'],
+  '4-2-3-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'MF', 'FW'],
+  '4-4-2': ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'],
+  '5-4-1': ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'],
+};
 
-function snapshot(prefix: string, dismissedSlot?: number, duration: 90 | 120 = 90): MatchdaySnapshot {
-  const players: MatchdaySnapshot['players'] = positions.map((position, index) => ({
+function snapshot(
+  prefix: string,
+  formation: CoachFormation,
+  dismissedSlot?: number,
+  duration: 90 | 120 = 90,
+): MatchdaySnapshot {
+  const players: MatchdaySnapshot['players'] = formationPositions[formation].map((position, index) => ({
     playerId: `${prefix}-${index + 1}`,
     playerNumber: index + 1,
     playerName: `${prefix.toUpperCase()} ${index + 1}`,
@@ -31,6 +42,7 @@ function snapshot(prefix: string, dismissedSlot?: number, duration: 90 | 120 = 9
     });
   }
   return {
+    formation,
     players,
     substitutions: prefix === 'home'
       ? [{ minute: 48, playerInId: 'home-12', playerOutId: 'home-9' }]
@@ -77,8 +89,62 @@ const regularResult = {
   competitionType: 'league',
   competitionName: '动画回归赛',
   roundLabel: '事件驱动预览',
-  homeMatchday: snapshot('home'),
-  awayMatchday: snapshot('away', 1),
+  homeMatchday: snapshot('home', '4-3-3'),
+  awayMatchday: snapshot('away', '5-4-1', 1),
+  homeTactics: {
+    formation: '4-3-3',
+    approach: 'pressing',
+    reason: 'control_favorite',
+    execution: 'elite',
+    attackDelta: 1.9,
+    midfieldDelta: 0.8,
+    defenseDelta: -0.7,
+    tags: ['主动争夺球权', '边路保持宽度'],
+  },
+  awayTactics: {
+    formation: '5-4-1',
+    approach: 'low_block',
+    reason: 'underdog_response',
+    execution: 'coherent',
+    attackDelta: -1.8,
+    midfieldDelta: -0.7,
+    defenseDelta: 2.4,
+    tags: ['压缩禁区空间', '等待反击机会'],
+  },
+  featuredPlayers: [
+    {
+      playerId: 'home-10',
+      playerName: 'HOME 10',
+      teamId: 'home',
+      position: 'FW',
+      ratingAtKickoff: 92,
+      seasonScoreAtKickoff: 87,
+      marginalUnitImpact: 3.1,
+      impactUnit: 'attack',
+      reason: 'finisher',
+    },
+    {
+      playerId: 'away-2',
+      playerName: 'AWAY 2',
+      teamId: 'away',
+      position: 'DF',
+      ratingAtKickoff: 90,
+      seasonScoreAtKickoff: 84,
+      marginalUnitImpact: 2.8,
+      impactUnit: 'defense',
+      reason: 'defensive_anchor',
+    },
+    {
+      playerId: 'home-1',
+      playerName: 'HOME 1',
+      teamId: 'home',
+      position: 'GK',
+      ratingAtKickoff: 90,
+      marginalUnitImpact: 2.5,
+      impactUnit: 'defense',
+      reason: 'defensive_anchor',
+    },
+  ],
 } satisfies MatchResult;
 
 const shootoutEvents: MatchEvent[] = [
@@ -137,8 +203,8 @@ const shootoutResult = {
   competitionType: 'league_cup',
   competitionName: '宇宙冠军杯',
   roundLabel: '决赛',
-  homeMatchday: snapshot('home', undefined, 120),
-  awayMatchday: snapshot('away', undefined, 120),
+  homeMatchday: snapshot('home', '4-3-3', undefined, 120),
+  awayMatchday: snapshot('away', '5-4-1', undefined, 120),
 } satisfies MatchResult;
 
 const params = new URLSearchParams(window.location.search);
@@ -150,7 +216,24 @@ const competitionResult = competition === 'world'
     : competition === 'domestic'
       ? { ...regularResult, competitionType: 'league_cup' as const, competitionName: '联赛杯', roundLabel: '1/4 决赛', isNeutralVenue: true }
       : regularResult;
-const result = params.has('shootout') ? shootoutResult : competitionResult;
+const selectedResult = params.has('shootout') ? shootoutResult : competitionResult;
+const result = params.get('shape') === 'alternate'
+  ? {
+      ...selectedResult,
+      homeMatchday: snapshot('home', '4-2-3-1', undefined, selectedResult.extraTime ? 120 : 90),
+      awayMatchday: snapshot('away', '4-4-2', undefined, selectedResult.extraTime ? 120 : 90),
+      homeTactics: {
+        ...selectedResult.homeTactics!,
+        formation: '4-2-3-1' as const,
+        approach: 'control' as const,
+      },
+      awayTactics: {
+        ...selectedResult.awayTactics!,
+        formation: '4-4-2' as const,
+        approach: 'counter' as const,
+      },
+    }
+  : selectedResult;
 
 const teamBases = {
   home: { id: 'home', name: '赤焰竞技', shortName: '赤焰', color: '#ef4444' } as TeamBase,

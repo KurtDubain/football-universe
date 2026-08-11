@@ -7,6 +7,12 @@ import {
   formatForm,
 } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
+import {
+  APPROACH_LABELS,
+  TACTICAL_IDENTITY,
+  derivePreferredApproach,
+  derivePreferredFormation,
+} from '../engine/coaches/tactics';
 import { formatMoney } from '../engine/economy/finance';
 import { computePlayerBoostReport } from '../engine/players/player-boosts';
 import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
@@ -39,6 +45,7 @@ export default function TeamDetail() {
   const records = world.teamSeasonRecords[id] ?? [];
   // Coach is derived from coachStates (single source of truth post-v7).
   const coachId = getTeamCoachId(world.coachStates, id);
+  const currentCoach = coachId ? world.coachBases[coachId] : undefined;
 
   return (
     <PageShell width="standard" className="tabular-nums">
@@ -124,15 +131,34 @@ export default function TeamDetail() {
           {/* Coach */}
           <Panel>
             <h2 className="mb-2 text-sm font-semibold text-slate-200">现任教练</h2>
-            {coachId ? (
-              <div className="flex items-center gap-3">
-                <Link to={`/coach/${coachId}`} className="text-blue-400 hover:text-blue-300">
-                  {getCoachName(coachId, world.coachBases)}
-                </Link>
-                {world.coachBases[coachId] && <span className="text-xs text-slate-400">评分: {world.coachBases[coachId].rating}</span>}
-                <FireCoachButton teamId={id!} />
-              </div>
-            ) : <span className="text-sm text-slate-500">暂无教练</span>}
+            {coachId && currentCoach ? (() => {
+              const formation = derivePreferredFormation(currentCoach);
+              const approach = derivePreferredApproach(currentCoach.style);
+              const identity = TACTICAL_IDENTITY[formation];
+              return (
+                <div data-testid="team-tactical-identity" className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to={`/coach/${coachId}`} className="text-blue-400 hover:text-blue-300">
+                      {getCoachName(coachId, world.coachBases)}
+                    </Link>
+                    <span className="text-xs text-slate-400">评分 {currentCoach.rating}</span>
+                    <span className="rounded bg-amber-950/50 px-2 py-0.5 font-mono text-xs text-amber-300">{formation}</span>
+                    <span className="text-xs text-slate-300">{APPROACH_LABELS[approach]}</span>
+                    <FireCoachButton teamId={id!} />
+                  </div>
+                  <div className="grid gap-2 border-t border-slate-700/50 pt-3 text-xs sm:grid-cols-2">
+                    <p className="border-l-2 border-emerald-500/50 pl-2 text-slate-400">
+                      <span className="text-emerald-300">优势</span> · {identity.strength}
+                    </p>
+                    <p className="border-l-2 border-amber-500/40 pl-2 text-slate-400">
+                      <span className="text-amber-300">代价</span> · {identity.tradeoff}
+                    </p>
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="text-sm text-slate-500">暂无教练 · 临时使用 4-3-3 均衡部署</div>
+            )}
           </Panel>
 
           <FinancePanel teamId={id} />

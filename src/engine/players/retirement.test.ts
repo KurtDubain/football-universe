@@ -6,6 +6,8 @@ import {
   MAX_RETIREMENTS_PER_TEAM,
   HARD_AGE_CAP,
   COACH_POOL_CAP,
+  capYouthPeakByTalentTier,
+  rollYouthTalentTier,
 } from './retirement';
 import type { GameWorld } from '../season/season-manager';
 import type { Player, PlayerPosition } from '../../types/player';
@@ -273,6 +275,26 @@ describe('processRetirements — position preservation', () => {
 // ── 3. Youth generation ────────────────────────────────────────
 
 describe('generateYouthReplacement — basic shape', () => {
+  it('reserves 90+ potential for the rare elite tier', () => {
+    expect(capYouthPeakByTalentTier('regular', 97)).toBe(84);
+    expect(capYouthPeakByTalentTier('prospect', 97)).toBe(89);
+    expect(capYouthPeakByTalentTier('elite', 97)).toBe(97);
+  });
+
+  it('keeps elite talent rare while leaving regular graduates as the clear majority', () => {
+    const rng = new SeededRNG(20260812);
+    const counts = { regular: 0, prospect: 0, elite: 0 };
+    for (let index = 0; index < 20_000; index++) {
+      counts[rollYouthTalentTier(50, rng)]++;
+    }
+
+    expect(counts.regular / 20_000).toBeGreaterThan(0.78);
+    expect(counts.prospect / 20_000).toBeGreaterThan(0.13);
+    expect(counts.prospect / 20_000).toBeLessThan(0.2);
+    expect(counts.elite / 20_000).toBeGreaterThan(0.012);
+    expect(counts.elite / 20_000).toBeLessThan(0.03);
+  });
+
   it('age in [18, 22], peakAge in [24, 29]', () => {
     const team = makeTeam('t1');
     const rng = new SeededRNG(1234);
@@ -289,14 +311,14 @@ describe('generateYouthReplacement — basic shape', () => {
     }
   });
 
-  it('peakRating clamped to [35, 92]', () => {
+  it('peakRating clamped to [35, 98]', () => {
     const team = makeTeam('t1', { overall: 99, reputation: 99 });
     const rng = new SeededRNG(5555);
     const nextUuid = { value: 100 };
     for (let i = 0; i < 30; i++) {
       const y = generateYouthReplacement(team, 'FW', 9, new Set(), new Set(), rng, nextUuid);
       expect(y.peakRating).toBeGreaterThanOrEqual(35);
-      expect(y.peakRating).toBeLessThanOrEqual(92);
+      expect(y.peakRating).toBeLessThanOrEqual(98);
     }
   });
 

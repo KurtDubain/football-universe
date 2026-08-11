@@ -97,13 +97,16 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 - **沙盒模式** — 配合自定义球队编辑器
 
 ### ⚽ 深度模拟引擎
-泊松分布进球采样 + 多因素加权：OVR · 教练buff · 士气 · 疲劳 · 主场 · 动量 · 德比加成 · 弱队补正。世界杯东道主拥有独立赛会氛围，不与普通主场优势混用。**Seeded PRNG** 同种子 100% 可复现。
+泊松分布进球采样 + 多因素加权：OVR · 实际首发 · 教练能力 · 自动阵型与策略 · 士气 · 疲劳 · 主场 · 动量 · 德比。弱队通过有代价的低位防守或快速反击应战，不获得隐藏固定补正。世界杯东道主拥有独立赛会氛围，不与普通主场优势混用。**Seeded PRNG** 同种子 100% 可复现。
 
 ### 📺 Canvas 2D 比赛直播
-22 名真实比赛阵容球员实时传球跑动 · 高 DPI 固定帧率画布 · 扑救/封堵/射偏定向演出 · 加时与点球阶段 · 可选声音 · 文字解说
+22 名真实比赛阵容球员实时传球跑动 · 四种真实阵型与五种比赛策略 · 焦点球员克制标记 · 高 DPI 固定帧率画布 · 扑救/封堵/射偏定向演出 · 加时与点球阶段 · 可选声音 · 文字解说
 
 ### 👔 教练生态
-36 名教练 × 5 种风格 × 6 项 buff · 压力下课 + 合同到期 + 急流勇退 · 名帅殿堂排行榜 · 战术偏好分析
+36 名教练 × 5 种风格 × 4 种首选阵型 · 根据实力差、体能与赛事阶段自动选择策略 · 预测/赛果/回放冻结同一部署 · 压力下课 + 合同到期 + 急流勇退 · 名帅殿堂排行榜
+
+### 球星观察
+世界焦点完整收录所有达标现役球员 · U23 新星雷达 · 最多关注 8 名球员并跨转会追踪 · 每场直播最多 5 名真实首发焦点 · 四个位置共用本场影响与最佳球员通道，不公开隐藏潜力或额外“球星分”
 
 ### 📊 长期历史 + 编年史
 赛季回顾（含叙事文案）· 历史奖杯榜 · 趣味纪录 · **30+ 成就**（首次类/纪录类/数据类/王朝类/黑马类）· 编年史多赛季回顾 · 跨赛季交手记录。为控制浏览器存档体积，完整交手、球员赛季数据和球队赛季记录分别保留最近 3、25、40 个赛季，奖杯与核心荣誉继续长期累计。
@@ -149,6 +152,7 @@ pnpm build        # TypeScript + 生产/PWA 构建
 pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
 pnpm audit:advance-performance # 移动端推进、重复点击与存档恢复
+pnpm audit:coach-stars         # 战术分布、长期球星供给、MOTM、性能与存档增量
 pnpm verify:pwa-update         # 远端版本识别与自动更新
 pnpm verify:pwa-transition     # 真实旧构建到新构建的 Service Worker 切换
 pnpm verify:route-recovery     # 分包失败、慢速网络与离线恢复
@@ -177,7 +181,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-~55,300 production TypeScript lines · 210 production source files · 115 test files · 41 browser/simulation audit commands
+~58,000 production TypeScript lines · 216 production source files · 122 test files · 42 browser/simulation audit commands
 
 生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 

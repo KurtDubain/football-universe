@@ -6,12 +6,27 @@ import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
 import { setPiecePlayerTarget } from './set-pieces';
 import {
   BASE_FORMATION,
+  type FormationSlot,
   type PassPhase,
   type PlayerState,
   type PresentationPlayPattern,
   type PresentationPlayStage,
   type Role,
 } from './types';
+
+export interface PitchFormationLayouts {
+  home: FormationSlot[];
+  away: FormationSlot[];
+}
+
+const DEFAULT_FORMATIONS: PitchFormationLayouts = {
+  home: BASE_FORMATION,
+  away: BASE_FORMATION,
+};
+
+function formationForTeam(isHomeTeam: boolean, formations: PitchFormationLayouts): FormationSlot[] {
+  return isHomeTeam ? formations.home : formations.away;
+}
 
 /**
  * Where a player should be standing in their formation slot, given the
@@ -22,8 +37,9 @@ export function getBaseSlot(
   formIdx: number,
   isHomeTeam: boolean,
   shift: number,
+  formation: FormationSlot[] = BASE_FORMATION,
 ): { x: number; y: number; role: Role } {
-  const base = BASE_FORMATION[formIdx];
+  const base = formation[formIdx] ?? BASE_FORMATION[formIdx];
   const s = isHomeTeam ? shift : -shift;
   const bx = isHomeTeam ? base.x + s : 1 - base.x - s;
   return { x: clamp(bx, 0.03, 0.97), y: base.y, role: base.role };
@@ -159,21 +175,24 @@ export function selectMarkingTarget(
   markerIndex: number,
   defendingHome: boolean,
   activePlayerIndices?: ReadonlySet<number>,
+  formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
 ): number | undefined {
   const defendingOffset = defendingHome ? 0 : 11;
   const attackingOffset = defendingHome ? 11 : 0;
   const markerSlot = markerIndex - defendingOffset;
-  const markerRole = BASE_FORMATION[markerSlot]?.role;
+  const defendingFormation = formationForTeam(defendingHome, formations);
+  const attackingFormation = formationForTeam(!defendingHome, formations);
+  const markerRole = defendingFormation[markerSlot]?.role;
   if (markerRole !== 'DF' && markerRole !== 'MF') return undefined;
 
-  const markers = BASE_FORMATION
+  const markers = defendingFormation
     .map((slot, slotIndex) => ({ slot, index: defendingOffset + slotIndex }))
     .filter(candidate => (
       (candidate.slot.role === 'DF' || candidate.slot.role === 'MF')
       && (!activePlayerIndices || activePlayerIndices.has(candidate.index))
     ))
     .sort((a, b) => a.slot.y - b.slot.y);
-  const threats = BASE_FORMATION
+  const threats = attackingFormation
     .map((slot, slotIndex) => ({ slot, index: attackingOffset + slotIndex }))
     .filter(candidate => (
       (candidate.slot.role === 'FW' || candidate.slot.role === 'MF')
@@ -196,9 +215,10 @@ export function selectDefensiveRoles(
   ballNX: number,
   ballNY: number,
   activePlayerIndices?: ReadonlySet<number>,
+  formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
 ): DefensiveRoles {
   const offset = defendingHome ? 0 : 11;
-  const candidates = BASE_FORMATION
+  const candidates = formationForTeam(defendingHome, formations)
     .map((slot, slotIndex) => ({ slot, index: offset + slotIndex }))
     .filter(candidate => candidate.slot.role !== 'GK' && (!activePlayerIndices || activePlayerIndices.has(candidate.index)));
   const byBall = [...candidates].sort((a, b) =>
@@ -221,14 +241,17 @@ export function buildTacticalAssignments(
   pressureX: number,
   pressureY: number,
   activePlayerIndices?: ReadonlySet<number>,
+  formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
 ): TacticalAssignments {
-  const roles = selectDefensiveRoles(playerPos, defendingHome, pressureX, pressureY, activePlayerIndices);
+  const roles = selectDefensiveRoles(playerPos, defendingHome, pressureX, pressureY, activePlayerIndices, formations);
   const offset = defendingHome ? 0 : 11;
   const markingTargets: Record<number, number> = {};
-  for (let slotIndex = 1; slotIndex <= 7; slotIndex++) {
+  const defendingFormation = formationForTeam(defendingHome, formations);
+  for (let slotIndex = 0; slotIndex < defendingFormation.length; slotIndex++) {
+    if (defendingFormation[slotIndex].role !== 'DF' && defendingFormation[slotIndex].role !== 'MF') continue;
     const playerIndex = offset + slotIndex;
     if (activePlayerIndices && !activePlayerIndices.has(playerIndex)) continue;
-    const target = selectMarkingTarget(playerPos, playerIndex, defendingHome, activePlayerIndices);
+    const target = selectMarkingTarget(playerPos, playerIndex, defendingHome, activePlayerIndices, formations);
     if (target !== undefined) markingTargets[playerIndex] = target;
   }
   return { ...roles, defendingHome, markingTargets };
@@ -325,6 +348,7 @@ export interface AttackingShapeInput {
   ballNY: number;
   pattern: PresentationPlayPattern;
   stage?: PresentationPlayStage;
+  formation?: FormationSlot[];
 }
 
 export interface AttackingShapeTarget {
@@ -340,7 +364,8 @@ export interface AttackingShapeTarget {
  */
 export function computeAttackingShapeTarget(input: AttackingShapeInput): AttackingShapeTarget {
   const { formIdx, isHomeTeam, shift, ballNX, ballNY, pattern, stage } = input;
-  const slot = getBaseSlot(formIdx, isHomeTeam, shift);
+  const formation = input.formation ?? BASE_FORMATION;
+  const slot = getBaseSlot(formIdx, isHomeTeam, shift, formation);
   const attackDirection = isHomeTeam ? 1 : -1;
   const ahead = (x: number, amount: number) => x + attackDirection * amount;
   const behind = (x: number, amount: number) => x - attackDirection * amount;
@@ -349,9 +374,11 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
   const sameFlank = slot.y !== 0.5 && slotUpper === upperSide;
   const wideY = upperSide ? 0.13 : 0.87;
   const farWideY = upperSide ? 0.87 : 0.13;
-  const isFullback = formIdx === 1 || formIdx === 4;
-  const isWideMidfielder = formIdx === 5 || formIdx === 7;
-  const isWinger = formIdx === 8 || formIdx === 10;
+  const isFullback = slot.role === 'DF' && Math.abs(slot.y - 0.5) >= 0.28;
+  const isWideMidfielder = slot.role === 'MF' && Math.abs(slot.y - 0.5) >= 0.22;
+  const isWinger = slot.role === 'FW' && Math.abs(slot.y - 0.5) >= 0.2;
+  const isCentralMidfielder = slot.role === 'MF' && Math.abs(slot.y - 0.5) < 0.14;
+  const isCentralForward = slot.role === 'FW' && Math.abs(slot.y - 0.5) < 0.18;
   let x = slot.x;
   let y = slot.y;
   let sprint = 0;
@@ -370,10 +397,10 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         x = ahead(slot.x, isFullback ? 0.035 : 0.008);
         y = isFullback ? (slotUpper ? 0.11 : 0.89) : lerp(slot.y, 0.5, 0.08);
       } else if (slot.role === 'MF') {
-        x = formIdx === 6 ? behind(ballNX, 0.11) : behind(ballNX, 0.04);
-        y = formIdx === 6 ? 0.5 : lerp(slot.y, ballNY, 0.22);
+        x = isCentralMidfielder ? behind(ballNX, 0.11) : behind(ballNX, 0.04);
+        y = isCentralMidfielder ? 0.5 : lerp(slot.y, ballNY, 0.22);
       } else {
-        x = ahead(ballNX, formIdx === 9 ? 0.16 : 0.11);
+        x = ahead(ballNX, isCentralForward ? 0.16 : 0.11);
         y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
       }
       break;
@@ -390,7 +417,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         x = ahead(ballNX, 0.11);
         y = lerp(wideY, 0.5, 0.14);
         sprint = 0.68;
-      } else if (formIdx === 9) {
+      } else if (isCentralForward) {
         x = ahead(ballNX, 0.13);
         y = 0.5;
         sprint = stage === 'create' ? 0.72 : 0.35;
@@ -408,10 +435,10 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         x = behind(ballNX, 0.02);
         y = slotUpper ? 0.1 : 0.9;
       } else if (slot.role === 'MF') {
-        const side = formIdx === 5 ? -1 : formIdx === 7 ? 1 : 0;
-        x = formIdx === 6 ? behind(ballNX, 0.11) : behind(ballNX, 0.035);
+        const side = slot.y < 0.43 ? -1 : slot.y > 0.57 ? 1 : 0;
+        x = isCentralMidfielder ? behind(ballNX, 0.11) : behind(ballNX, 0.035);
         y = 0.5 + side * 0.13;
-      } else if (formIdx === 9) {
+      } else if (isCentralForward) {
         x = ahead(ballNX, 0.12);
         y = 0.5;
         sprint = stage === 'create' ? 0.72 : 0.38;
@@ -429,8 +456,8 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         y = farWideY;
         sprint = isWinger ? 0.62 : 0.34;
       } else if (slot.role === 'MF') {
-        x = behind(ballNX, formIdx === 6 ? 0.12 : 0.045);
-        y = lerp(slot.y, farWideY, formIdx === 6 ? 0.18 : 0.3);
+        x = behind(ballNX, isCentralMidfielder ? 0.12 : 0.045);
+        y = lerp(slot.y, farWideY, isCentralMidfielder ? 0.18 : 0.3);
       } else if (sameFlank && (isFullback || isWinger)) {
         x = behind(ballNX, isFullback ? 0.12 : 0.04);
         y = wideY;
@@ -441,13 +468,13 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
 
     case 'counter':
       if (slot.role === 'FW') {
-        x = ahead(ballNX, formIdx === 9 ? 0.16 : 0.13);
-        y = formIdx === 9 ? lerp(0.5, ballNY, 0.22) : lerp(slot.y, ballNY, 0.18);
+        x = ahead(ballNX, isCentralForward ? 0.16 : 0.13);
+        y = isCentralForward ? lerp(0.5, ballNY, 0.22) : lerp(slot.y, ballNY, 0.18);
         sprint = 1;
-      } else if (slot.role === 'MF' && (formIdx === 6 || sameFlank)) {
-        x = behind(ballNX, formIdx === 6 ? 0.12 : 0.045);
+      } else if (slot.role === 'MF' && (isCentralMidfielder || sameFlank)) {
+        x = behind(ballNX, isCentralMidfielder ? 0.12 : 0.045);
         y = lerp(slot.y, ballNY, 0.3);
-        sprint = formIdx === 6 ? 0.28 : 0.7;
+        sprint = isCentralMidfielder ? 0.28 : 0.7;
       } else {
         x = slot.role === 'DF' ? slot.x : ahead(slot.x, 0.025);
         y = lerp(slot.y, 0.5, 0.08);
@@ -459,10 +486,10 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         x = behind(ballNX, isFullback ? 0.13 : 0.2);
         y = isFullback ? (slotUpper ? 0.1 : 0.9) : lerp(slot.y, 0.5, 0.06);
       } else if (slot.role === 'MF') {
-        x = behind(ballNX, formIdx === 6 ? 0.13 : 0.06);
-        y = formIdx === 6 ? 0.5 : lerp(slot.y, farWideY, 0.2);
+        x = behind(ballNX, isCentralMidfielder ? 0.13 : 0.06);
+        y = isCentralMidfielder ? 0.5 : lerp(slot.y, farWideY, 0.2);
       } else {
-        x = ahead(ballNX, formIdx === 9 ? 0.12 : 0.08);
+        x = ahead(ballNX, isCentralForward ? 0.12 : 0.08);
         y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
       }
       break;
@@ -483,9 +510,10 @@ export function resolvePhasePoints(
   phase: PassPhase,
   shift: number,
   P: number, fw: number, fh: number,
+  formation: FormationSlot[] = BASE_FORMATION,
 ): { source: { x: number; y: number }; dx: number; dy: number } {
-  const passerSlot = getBaseSlot(phase.passerIdx, phase.attackingHome, shift);
-  const recvSlot = phase.targetOverride ?? getBaseSlot(phase.receiverIdx, phase.attackingHome, shift);
+  const passerSlot = getBaseSlot(phase.passerIdx, phase.attackingHome, shift, formation);
+  const recvSlot = phase.targetOverride ?? getBaseSlot(phase.receiverIdx, phase.attackingHome, shift, formation);
   const sourceSlot = phase.sourceOverride ?? passerSlot;
   const source = { x: P + sourceSlot.x * fw, y: P + sourceSlot.y * fh };
   return { source, dx: recvSlot.x - passerSlot.x, dy: recvSlot.y - passerSlot.y };
@@ -512,12 +540,13 @@ export function updatePlayerPositions(
   activePlayerIndices?: ReadonlySet<number>,
   phaseProgress = 0,
   tacticalAssignments?: TacticalAssignments,
+  formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
 ): void {
   const isAttHome = currentPhase.attackingHome;
   const defendingHome = !isAttHome;
   const defensiveRoles = tacticalAssignments?.defendingHome === defendingHome
     ? tacticalAssignments
-    : buildTacticalAssignments(playerPos, defendingHome, ballNX, ballNY, activePlayerIndices);
+    : buildTacticalAssignments(playerPos, defendingHome, ballNX, ballNY, activePlayerIndices, formations);
   for (let i = 0; i < 22; i++) {
     const isHomeTeam = i < 11;
     const formIdx = i % 11;
@@ -527,10 +556,11 @@ export function updatePlayerPositions(
       && phaseState === 'passing';
     const teamHasBall = (isHomeTeam && isAttHome) || (!isHomeTeam && !isAttHome);
 
-    const slot = getBaseSlot(formIdx, isHomeTeam, shift);
+    const formation = formationForTeam(isHomeTeam, formations);
+    const slot = getBaseSlot(formIdx, isHomeTeam, shift, formation);
     let targetX_n = slot.x;
     let targetY_n = slot.y;
-    const setPieceTarget = setPiecePlayerTarget(i, isHomeTeam, slot.role, currentPhase);
+    const setPieceTarget = setPiecePlayerTarget(i, isHomeTeam, slot.role, currentPhase, formation);
 
     // ── Tactical adjustments ──
     if (isHolder) {
@@ -553,7 +583,7 @@ export function updatePlayerPositions(
       // Commit to the destination instead of chasing the moving ball back
       // toward the passer. Directed chances therefore produce a real run.
       const destination = currentPhase.targetOverride
-        ?? getBaseSlot(currentPhase.receiverIdx, isHomeTeam, shift);
+        ?? getBaseSlot(currentPhase.receiverIdx, isHomeTeam, shift, formation);
       targetX_n = destination.x;
       targetY_n = destination.y;
       playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.7);
@@ -570,6 +600,7 @@ export function updatePlayerPositions(
           ballNY,
           pattern: currentPhase.pattern,
           stage: currentPhase.stage,
+          formation,
         });
         targetX_n = shape.x;
         targetY_n = shape.y;
@@ -580,19 +611,25 @@ export function updatePlayerPositions(
         const advance = 0.035 + (slot.role === 'FW' ? 0.06 : slot.role === 'MF' ? 0.035 : slot.role === 'DF' ? 0.015 : 0);
         targetX_n = slot.x + advance * attackDir;
         if (slot.role === 'MF') {
-          const supportDepth = formIdx === 6 ? 0.1 : 0.065;
+          const supportDepth = Math.abs(slot.y - 0.5) < 0.14 ? 0.1 : 0.065;
           targetX_n = lerp(targetX_n, ballNX - attackDir * supportDepth, 0.44);
           targetY_n = lerp(slot.y, laneSide === 0 ? 0.5 : ballNY + laneSide * 0.13, 0.48);
         } else if (slot.role === 'FW') {
-          targetX_n = lerp(targetX_n, ballNX + attackDir * (formIdx === 9 ? 0.13 : 0.1), 0.58);
-          targetY_n = lerp(slot.y, formIdx === 9 ? 0.5 : ballNY + laneSide * 0.2, 0.48);
+          const centralForward = Math.abs(slot.y - 0.5) < 0.18;
+          targetX_n = lerp(targetX_n, ballNX + attackDir * (centralForward ? 0.13 : 0.1), 0.58);
+          targetY_n = lerp(slot.y, centralForward ? 0.5 : ballNY + laneSide * 0.2, 0.48);
         }
       }
     } else {
       // One player presses, a second protects the route to goal, and the
       // remaining block shifts together instead of swarming the ball.
       const passDestination = currentPhase.targetOverride
-        ?? getBaseSlot(currentPhase.receiverIdx, isAttHome, shift);
+        ?? getBaseSlot(
+          currentPhase.receiverIdx,
+          isAttHome,
+          shift,
+          formationForTeam(isAttHome, formations),
+        );
       const pressureX = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.x : ballNX;
       const pressureY = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.y : ballNY;
       const defendingReleasedShot = currentPhase.kind === 'shot' && phaseState !== 'holding' && slot.role !== 'GK';
@@ -601,9 +638,9 @@ export function updatePlayerPositions(
         const lineDepth = slot.role === 'DF' ? 0.085 : slot.role === 'MF' ? 0.17 : 0.28;
         targetX_n = ownGoalX + (isHomeTeam ? lineDepth : -lineDepth);
         targetY_n = slot.role === 'DF'
-          ? 0.27 + (formIdx - 1) * 0.15
+          ? lerp(slot.y, 0.5, 0.2)
           : slot.role === 'MF'
-            ? 0.33 + (formIdx - 5) * 0.17
+            ? lerp(slot.y, 0.5, 0.3)
             : lerp(slot.y, 0.5, 0.16);
       } else if (i === defensiveRoles.presserIndex) {
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
@@ -627,7 +664,7 @@ export function updatePlayerPositions(
 
         const markingTargetIndex = tacticalAssignments?.defendingHome === isHomeTeam
           ? tacticalAssignments.markingTargets[i]
-          : selectMarkingTarget(playerPos, i, isHomeTeam, activePlayerIndices);
+          : selectMarkingTarget(playerPos, i, isHomeTeam, activePlayerIndices, formations);
         const markingTarget = markingTargetIndex === undefined ? undefined : playerPos[markingTargetIndex];
         const defendingDanger = isHomeTeam ? ballNX < 0.62 : ballNX > 0.38;
         if (markingTarget && defendingDanger && (slot.role === 'DF' || slot.role === 'MF')) {

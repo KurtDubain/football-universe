@@ -2,6 +2,12 @@ import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel, getTrophyLabel } from '../utils/format';
 import { computeCoachRivalries } from '../engine/coaches/coach-rivalries';
+import {
+  APPROACH_LABELS,
+  TACTICAL_IDENTITY,
+  derivePreferredApproach,
+  derivePreferredFormation,
+} from '../engine/coaches/tactics';
 
 export default function CoachDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +30,9 @@ export default function CoachDetail() {
     : null;
 
   const ratingTier = base.rating >= 85 ? 'from-amber-600 to-amber-500' : base.rating >= 70 ? 'from-blue-600 to-blue-500' : 'from-slate-600 to-slate-500';
+  const preferredFormation = derivePreferredFormation(base);
+  const preferredApproach = derivePreferredApproach(base.style);
+  const tacticalIdentity = TACTICAL_IDENTITY[preferredFormation];
 
   const styleColor: Record<string, string> = {
     attacking: 'text-red-400 bg-red-900/30',
@@ -56,6 +65,9 @@ export default function CoachDetail() {
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <span className={`text-xs px-2 py-0.5 rounded ${styleColor[base.style] ?? ''}`}>
                 {getCoachStyleLabel(base.style)}
+              </span>
+              <span className="rounded bg-amber-950/50 px-2 py-0.5 font-mono text-xs text-amber-300">
+                {preferredFormation}
               </span>
               {state.retired ? (
                 <>
@@ -101,6 +113,25 @@ export default function CoachDetail() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      <div data-testid="coach-tactical-identity" className="border-y border-slate-700/60 bg-slate-900/35 px-4 py-3">
+        <div className="grid gap-3 text-xs sm:grid-cols-[auto_1fr_1fr] sm:items-center">
+          <div>
+            <div className="text-[10px] text-slate-500">常规部署</div>
+            <div className="mt-0.5 font-semibold text-slate-200">
+              {preferredFormation} · {APPROACH_LABELS[preferredApproach]}
+            </div>
+          </div>
+          <div className="border-l-2 border-emerald-500/50 pl-3">
+            <div className="text-[10px] text-slate-500">主要优势</div>
+            <div className="mt-0.5 text-emerald-300">{tacticalIdentity.strength}</div>
+          </div>
+          <div className="border-l-2 border-amber-500/40 pl-3">
+            <div className="text-[10px] text-slate-500">明确代价</div>
+            <div className="mt-0.5 text-amber-200/80">{tacticalIdentity.tradeoff}</div>
+          </div>
         </div>
       </div>
 

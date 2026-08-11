@@ -29,6 +29,7 @@ interface FocusMatchAudit {
 interface SeedAudit {
   seed: number;
   score: number;
+  firstExperienceReady: boolean;
   upsetCount: number;
   closeMatchCount: number;
   naturallyFocusedWindows: number;
@@ -128,6 +129,9 @@ function auditSeed(seed: number): SeedAudit {
 
   const universeScore = upsetCount * 5 + closeMatchCount + naturallyFocusedWindows * 3;
   const challenger = firstFocusMatches.find(entry => entry.lens === 'challenger');
+  const firstExperienceReady = firstFocusMatches.length === 3
+    && firstFocusMatches.every(entry => entry.goals >= 2)
+    && Boolean(challenger && challenger.lateGoals >= 1 && challenger.margin <= 1);
   const firstExperienceScore = firstFocusMatches.reduce(
     (total, entry) => total + entry.dramaScore * (entry.lens === 'challenger' ? 3 : 1),
     challenger && challenger.goals >= 2 ? 20 : challenger && challenger.goals > 0 ? 8 : 0,
@@ -136,6 +140,7 @@ function auditSeed(seed: number): SeedAudit {
   return {
     seed,
     score: universeScore + firstExperienceScore,
+    firstExperienceReady,
     upsetCount,
     closeMatchCount,
     naturallyFocusedWindows,
@@ -148,6 +153,8 @@ function auditSeed(seed: number): SeedAudit {
 
 const audits = OBSERVER_SEED_CANDIDATES
   .map(auditSeed)
-  .sort((a, b) => b.score - a.score || a.seed - b.seed);
+  .sort((a, b) => Number(b.firstExperienceReady) - Number(a.firstExperienceReady)
+    || b.score - a.score
+    || a.seed - b.seed);
 
 console.log(JSON.stringify({ selected: audits[0], candidates: audits }, null, 2));

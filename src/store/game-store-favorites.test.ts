@@ -14,6 +14,7 @@ describe('observer focus ordering', () => {
       initialized: false,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      favoritePlayerIds: [],
       observationThemePreference: 'auto',
     });
   });
@@ -53,6 +54,20 @@ describe('observer focus ordering', () => {
     expect(useGameStore.getState().observationThemePreference).toBe('player_growth');
     useGameStore.getState().setObservationThemePreference('disabled');
     expect(useGameStore.getState().observationThemePreference).toBe('disabled');
+  });
+
+  it('follows at most eight stable player UUIDs without replacing earlier choices', () => {
+    for (let index = 0; index < 9; index++) {
+      useGameStore.getState().toggleFavoritePlayer(`player-${index}`);
+    }
+    expect(useGameStore.getState().favoritePlayerIds).toEqual(
+      Array.from({ length: 8 }, (_, index) => `player-${index}`),
+    );
+
+    useGameStore.getState().toggleFavoritePlayer('player-3');
+    expect(useGameStore.getState().favoritePlayerIds).not.toContain('player-3');
+    useGameStore.getState().toggleFavoritePlayer('player-8');
+    expect(useGameStore.getState().favoritePlayerIds.at(-1)).toBe('player-8');
   });
 
   it('initializes the observer focus and lens atomically with a new universe', async () => {

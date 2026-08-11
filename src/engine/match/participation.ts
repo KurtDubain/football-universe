@@ -1,14 +1,9 @@
 import type { MatchdaySnapshot, MatchEvent } from '../../types/match';
-import type { Player, PlayerPosition } from '../../types/player';
+import type { CoachFormation } from '../../types/coach';
+import type { Player } from '../../types/player';
 import type { MatchdaySelection } from '../players/injuries';
+import { getFormationShape } from '../coaches/tactics';
 import { SeededRNG } from './rng';
-
-const STARTER_SHAPE: Record<PlayerPosition, number> = {
-  GK: 1,
-  DF: 4,
-  MF: 3,
-  FW: 3,
-};
 
 export const MAX_NORMAL_SUBSTITUTIONS = 3;
 
@@ -16,7 +11,11 @@ function byRatingThenId(a: Player, b: Player): number {
   return b.rating - a.rating || a.uuid.localeCompare(b.uuid);
 }
 
-export function selectStartingEleven(players: Player[], unavailablePlayerIds: Set<string> = new Set()): Player[] {
+export function selectStartingEleven(
+  players: Player[],
+  unavailablePlayerIds: Set<string> = new Set(),
+  formation: CoachFormation = '4-3-3',
+): Player[] {
   const selected: Player[] = [];
   const selectedIds = new Set<string>();
   const sorted = [...players].sort((a, b) => {
@@ -24,9 +23,10 @@ export function selectStartingEleven(players: Player[], unavailablePlayerIds: Se
     return availability || byRatingThenId(a, b);
   });
 
+  const shape = getFormationShape(formation);
   for (const position of ['GK', 'DF', 'MF', 'FW'] as const) {
     const candidates = sorted.filter(player => player.position === position);
-    for (const player of candidates.slice(0, STARTER_SHAPE[position])) {
+    for (const player of candidates.slice(0, shape[position])) {
       selected.push(player);
       selectedIds.add(player.uuid);
     }
@@ -47,13 +47,41 @@ export interface MatchParticipation {
   bench: Player[];
 }
 
+/** Extend the same selected XI into extra time without re-rolling substitutions. */
+export function extendMatchParticipation(
+  participation: MatchParticipation | undefined,
+  durationMinutes: 120,
+): MatchParticipation | undefined {
+  if (!participation) return undefined;
+  const previousDuration = participation.snapshot.durationMinutes ?? 90;
+  if (previousDuration >= durationMinutes) return participation;
+  return {
+    starters: participation.starters,
+    bench: participation.bench,
+    snapshot: {
+      ...participation.snapshot,
+      durationMinutes,
+      players: participation.snapshot.players.map(player => {
+        if (player.exitedMinute !== previousDuration || player.enteredMinute == null) return { ...player };
+        return {
+          ...player,
+          exitedMinute: durationMinutes,
+          minutesPlayed: durationMinutes - player.enteredMinute,
+        };
+      }),
+      substitutions: participation.snapshot.substitutions?.map(substitution => ({ ...substitution })),
+    },
+  };
+}
+
 export function buildMatchParticipation(
   selection: MatchdaySelection | undefined,
   durationMinutes: 90 | 120,
   rng: SeededRNG,
+  formation: CoachFormation = '4-3-3',
 ): MatchParticipation | undefined {
   if (!selection) return undefined;
-  const starters = selectStartingEleven(selection.players, selection.unavailablePlayerIds);
+  const starters = selectStartingEleven(selection.players, selection.unavailablePlayerIds, formation);
   const starterIds = new Set(starters.map(player => player.uuid));
   const bench = selection.players.filter(player => !starterIds.has(player.uuid)).sort(byRatingThenId);
   const activeOutIds = new Set<string>();
@@ -111,6 +139,7 @@ export function buildMatchParticipation(
     starters,
     bench,
     snapshot: {
+      formation,
       players,
       substitutions,
       durationMinutes,

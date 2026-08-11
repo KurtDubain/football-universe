@@ -9,7 +9,7 @@ import {
 } from '../../types';
 import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
-import { Player } from '../../types/player';
+import { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import { SeededRNG } from './rng';
 import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
@@ -18,14 +18,17 @@ import { addNotableSetPieceEvents, generateMatchEvents, applyDenyPipeline } from
 import { selectMatchday } from '../players/injuries';
 import {
   buildMatchParticipation,
+  extendMatchParticipation,
   applyDismissalsToSnapshot,
   createSubstitutionEvents,
   playersOnField,
-  selectStartingEleven,
 } from './participation';
 import type { AdjustedStrengths } from './model';
 import { calculateMatchModel, competitionRandomness, computeMatchdayModelReport, expectedGoals, forecastFromModel } from './model';
 import { simulatePenaltyShootout } from './penalty-shootout';
+import { deriveMatchTacticsPair } from '../coaches/tactics';
+import { selectMatchMotm } from '../players/match-player-impact';
+import { buildMatchFeaturedLineups } from '../players/star-presence';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
@@ -43,6 +46,9 @@ export interface SimulationContext {
   awaySquad?: Player[];
   /** Global window index — used to filter injured/suspended players from boosts. */
   globalWindowIdx?: number;
+  playerStats?: Record<string, PlayerSeasonStats>;
+  playerStatSegments?: Record<string, PlayerTeamSeasonStats>;
+  seasonStartLevels?: Record<string, 1 | 2 | 3>;
 }
 
 export interface SimulationResult {
@@ -280,64 +286,14 @@ function updateFormArray(
 
 // ── Main simulation ────────────────────────────────────────────────
 
-/**
- * Compute Man of the Match from generated events.
- * Weights: goal=3, assist=2, save=0.5, yellow=-1, red=-2.
- * Players on the winning side get a 1.2× multiplier. `penalty_goal` is
- * reserved for shootouts and never contributes to MotM; regulation/ET
- * penalties are emitted as normal `goal` events. Threshold of 3 means at
- * least one goal-equivalent contribution is required.
- */
+/** Compatibility wrapper used by focused tests and legacy callers. */
 export function pickMotm(
   events: MatchEvent[],
   winnerTeamId: string | null,
   defensiveContributions?: MatchResult['defensiveContributions'],
   players?: Map<string, Player>,
 ): MatchResult['motm'] {
-  const candidates = new Map<string, { playerName: string; teamId: string; score: number }>();
-  for (const e of events) {
-    if (e.minute > 120) continue; // skip shootout
-    if (!e.playerId || !e.playerName) continue;
-    let delta = 0;
-    if (e.type === 'goal') delta = 3;
-    else if (e.type === 'assist') delta = 2;
-    else if (e.type === 'save') delta = 0.5;
-    else if (e.type === 'yellow_card') delta = -1;
-    else if (e.type === 'red_card') delta = -2;
-    else continue;
-    // Bonus if on winning side
-    if (winnerTeamId && e.teamId === winnerTeamId) delta *= 1.2;
-    const current = candidates.get(e.playerId);
-    candidates.set(e.playerId, {
-      playerName: current?.playerName ?? e.playerName,
-      teamId: current?.teamId ?? e.teamId,
-      score: (current?.score ?? 0) + delta,
-    });
-  }
-  for (const contribution of Object.values(defensiveContributions ?? {})) {
-    const player = players?.get(contribution.playerId);
-    if (!player || !contribution.routineSaves) continue;
-    const multiplier = winnerTeamId === contribution.teamId ? 1.2 : 1;
-    const current = candidates.get(contribution.playerId);
-    candidates.set(contribution.playerId, {
-      playerName: current?.playerName ?? player.name,
-      teamId: current?.teamId ?? contribution.teamId,
-      score: (current?.score ?? 0) + contribution.routineSaves * 0.5 * multiplier,
-    });
-  }
-  let best: MatchResult['motm'];
-  let bestScore = 0;
-  for (const [playerId, candidate] of candidates) {
-    if (candidate.score > bestScore) {
-      bestScore = candidate.score;
-      best = {
-        playerId,
-        playerName: candidate.playerName,
-        teamId: candidate.teamId,
-      };
-    }
-  }
-  return bestScore >= 3 ? best : undefined; // need at least 1 goal-equivalent
+  return selectMatchMotm({ events, defensiveContributions, winnerTeamId }, players);
 }
 
 export function simulateMatch(
@@ -346,14 +302,45 @@ export function simulateMatch(
 ): SimulationResult {
   const { homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, rng } = ctx;
   const globalWindowIdx = ctx.globalWindowIdx ?? 0;
-  const homeSelection = selectMatchday(ctx.homeSquad, globalWindowIdx);
-  const awaySelection = selectMatchday(ctx.awaySquad, globalWindowIdx);
-  const homeStarters = selectStartingEleven(homeSelection?.players ?? [], homeSelection?.unavailablePlayerIds);
-  const awayStarters = selectStartingEleven(awaySelection?.players ?? [], awaySelection?.unavailablePlayerIds);
+  const tactics = deriveMatchTacticsPair(
+    {
+      coach: homeCoach,
+      team: homeTeam,
+      opponent: awayTeam,
+      state: homeState,
+      opponentState: awayState,
+      fixture,
+      squad: ctx.homeSquad,
+      globalWindowIdx,
+    },
+    {
+      coach: awayCoach,
+      team: awayTeam,
+      opponent: homeTeam,
+      state: awayState,
+      opponentState: homeState,
+      fixture,
+      squad: ctx.awaySquad,
+      globalWindowIdx,
+    },
+  );
+  const homeSelection = selectMatchday(ctx.homeSquad, globalWindowIdx, tactics.home.formation);
+  const awaySelection = selectMatchday(ctx.awaySquad, globalWindowIdx, tactics.away.formation);
+  const { homeStarters, awayStarters, featuredPlayers } = buildMatchFeaturedLineups({
+    homeSquad: ctx.homeSquad,
+    awaySquad: ctx.awaySquad,
+    homeSelection,
+    awaySelection,
+    homeFormation: tactics.home.formation,
+    awayFormation: tactics.away.formation,
+    playerStats: ctx.playerStats ?? {},
+    playerStatSegments: ctx.playerStatSegments,
+    seasonStartLevels: ctx.seasonStartLevels,
+  });
 
   // Phase 1B — derive per-squad buffs (filters out injured / suspended)
-  const homeReport = computeMatchdayModelReport(ctx.homeSquad, globalWindowIdx);
-  const awayReport = computeMatchdayModelReport(ctx.awaySquad, globalWindowIdx);
+  const homeReport = computeMatchdayModelReport(ctx.homeSquad, globalWindowIdx, tactics.home.formation);
+  const awayReport = computeMatchdayModelReport(ctx.awaySquad, globalWindowIdx, tactics.away.formation);
   const homeBoosts = homeReport.boosts;
   const awayBoosts = awayReport.boosts;
 
@@ -362,6 +349,8 @@ export function simulateMatch(
     fixture, homeBoosts, awayBoosts,
     homeAbsenceLoss: homeReport.absenceLoss,
     awayAbsenceLoss: awayReport.absenceLoss,
+    homeTactics: tactics.home,
+    awayTactics: tactics.away,
   });
   const homeAdj = model.home;
   const awayAdj = model.away;
@@ -389,60 +378,30 @@ export function simulateMatch(
     awayNoise,
   );
 
-  // 4. Sample goals from Poisson
-  let homeGoals = poissonSample(homeExpGoals, rng);
-  let awayGoals = poissonSample(awayExpGoals, rng);
-
-  // These track regulation-time goals for the MatchResult. Mutated by
-  // the deny pipeline below — if a goal is denied we have to lower the
-  // count, so these MUST be `let` not `const`.
-  let regHomeGoals = homeGoals;
-  let regAwayGoals = awayGoals;
-
-  let extraTime = false;
-  let etHomeGoals: number | undefined;
-  let etAwayGoals: number | undefined;
-  let penalties = false;
-  let penaltyHome: number | undefined;
-  let penaltyAway: number | undefined;
-  let penaltyShootout: PenaltyShootoutResult | undefined;
-
-  // 5. Handle knockout logic
-  if (ctx.isKnockout && homeGoals === awayGoals) {
-    extraTime = true;
-
-    // Extra time: 30 minutes, reduce expected goals by 60%
-    const etHomeExp = clamp(homeExpGoals * 0.4 * (30 / 90), 0.1, 2.0);
-    const etAwayExp = clamp(awayExpGoals * 0.4 * (30 / 90), 0.1, 2.0);
-
-    etHomeGoals = poissonSample(etHomeExp, rng);
-    etAwayGoals = poissonSample(etAwayExp, rng);
-
-    // Combined total for event generation and penalty check
-    homeGoals += etHomeGoals;
-    awayGoals += etAwayGoals;
-
-    // Still level? Penalties.
-    if (homeGoals === awayGoals) {
-      penalties = true;
-      penaltyShootout = simulatePenaltyShootout(rng);
-      penaltyHome = penaltyShootout.homeScore;
-      penaltyAway = penaltyShootout.awayScore;
-    }
-  }
-
-  const durationMinutes: 90 | 120 = extraTime ? 120 : 90;
-  const homeParticipation = buildMatchParticipation(homeSelection, durationMinutes, rng.fork());
-  const awayParticipation = buildMatchParticipation(awaySelection, durationMinutes, rng.fork());
+  // 4. Select one regulation lineup. If the reconciled score is tied, the
+  // same participation snapshot is extended into extra time; substitutions
+  // are never re-rolled after the score is known.
+  let homeParticipation = buildMatchParticipation(
+    homeSelection,
+    90,
+    rng.fork(),
+    tactics.home.formation,
+  );
+  let awayParticipation = buildMatchParticipation(
+    awaySelection,
+    90,
+    rng.fork(),
+    tactics.away.formation,
+  );
   const homePlayersAtMinute = (minute: number) => playersOnField(
     ctx.homeSquad,
     homeParticipation?.snapshot,
-    Math.min(minute, durationMinutes - 1),
+    Math.min(minute, (homeParticipation?.snapshot.durationMinutes ?? 90) - 1),
   );
   const awayPlayersAtMinute = (minute: number) => playersOnField(
     ctx.awaySquad,
     awayParticipation?.snapshot,
-    Math.min(minute, durationMinutes - 1),
+    Math.min(minute, (awayParticipation?.snapshot.durationMinutes ?? 90) - 1),
   );
   const homeScheduledOut = new Set(homeParticipation?.snapshot.substitutions?.map(sub => sub.playerOutId) ?? []);
   const awayScheduledOut = new Set(awayParticipation?.snapshot.substitutions?.map(sub => sub.playerOutId) ?? []);
@@ -453,7 +412,8 @@ export function simulateMatch(
     .filter(player => !awayScheduledOut.has(player.uuid))
     .filter(player => awayParticipation?.snapshot.players.find(entry => entry.playerId === player.uuid)?.enteredMinute !== minute);
 
-  // 6. Generate match events
+  // 5. Generate and reconcile regulation before deciding extra time. This
+  // keeps key saves and goal-line blocks authoritative in knockout matches.
   // v18 — flag "big match" so clutch-tagged players get a +30% weight on
   // the goal-scorer roll. Big match = cup final OR derby. Stays loose
   // (just biases who scores; doesn't change the outcome itself).
@@ -461,74 +421,138 @@ export function simulateMatch(
     fixture.roundLabel === 'Final' ||
     fixture.roundLabel === '决赛' ||
     isDerby(homeTeam.id, awayTeam.id);
-  const generatedEvents = generateMatchEvents(
-    regHomeGoals,
-    regAwayGoals,
+  const sampledRegHomeGoals = poissonSample(homeExpGoals, rng);
+  const sampledRegAwayGoals = poissonSample(awayExpGoals, rng);
+  const regulationRawEvents = generateMatchEvents(
+    sampledRegHomeGoals,
+    sampledRegAwayGoals,
     homeTeam.id,
     awayTeam.id,
     ctx.competitionType,
     rng.fork(),
-    extraTime,
-    penaltyShootout?.kicks,
+    false,
+    undefined,
     homeStarters,
     awayStarters,
-    etHomeGoals ?? 0,
-    etAwayGoals ?? 0,
+    0,
+    0,
     isBigMatch,
     homePlayersAtMinute,
     awayPlayersAtMinute,
     homeRedCardCandidatesAtMinute,
     awayRedCardCandidatesAtMinute,
+    'regulation',
+    { home: tactics.home.approach, away: tactics.away.approach },
   );
-  applyDismissalsToSnapshot(homeParticipation?.snapshot, generatedEvents, homeTeam.id);
-  applyDismissalsToSnapshot(awayParticipation?.snapshot, generatedEvents, awayTeam.id);
-  const rawEvents = [
-    ...generatedEvents,
-    ...createSubstitutionEvents(homeParticipation?.snapshot, ctx.homeSquad, homeTeam.id),
-    ...createSubstitutionEvents(awayParticipation?.snapshot, ctx.awaySquad, awayTeam.id),
-  ].sort((a, b) => a.minute - b.minute
-    || Number(b.type === 'substitution') - Number(a.type === 'substitution'));
-
-  // v22 — Apply deny pipeline. Goals that get denied are removed from
-  // the events list and replaced with `gk_save` / `df_block` events. We
-  // then RE-DERIVE the regulation / ET goal counts from the surviving
-  // events so the scoreline and the events array stay consistent (the
-  // invariant `homeGoals === count(events where type=='goal' &&
-  // teamId===home)` is critical for stats-pipeline correctness).
-  //
-  // CAVEAT: skip deny for knockout matches. The current pipeline runs
-  // AFTER ET / penalty-shootout decisions are made; if deny changed a
-  // pre-tied regulation into a decisive one (or vice versa) we'd end up
-  // with a knockout match that's "missing" ET or has a shootout that
-  // shouldn't have happened. League / group-stage matches don't have
-  // this problem (ties are valid outcomes) so deny is safe there.
-  let events = ctx.isKnockout
-    ? rawEvents
-    : applyDenyPipeline(
-        rawEvents,
-        homeTeam.id,
-        awayTeam.id,
-        homeStarters,
-        awayStarters,
-        rng.fork(),
-        homePlayersAtMinute,
-        awayPlayersAtMinute,
-      );
+  let events = applyDenyPipeline(
+    regulationRawEvents,
+    homeTeam.id,
+    awayTeam.id,
+    homeStarters,
+    awayStarters,
+    rng.fork(),
+    homePlayersAtMinute,
+    awayPlayersAtMinute,
+  );
+  applyDismissalsToSnapshot(homeParticipation?.snapshot, events, homeTeam.id);
+  applyDismissalsToSnapshot(awayParticipation?.snapshot, events, awayTeam.id);
   const isHomeGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === homeTeam.id;
   const isAwayGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === awayTeam.id;
-  regHomeGoals = events.filter(e => isHomeGoal(e) && e.minute <= 90).length;
-  regAwayGoals = events.filter(e => isAwayGoal(e) && e.minute <= 90).length;
-  if (extraTime) {
-    etHomeGoals = events.filter(e => isHomeGoal(e) && e.minute > 90 && e.minute <= 120).length;
-    etAwayGoals = events.filter(e => isAwayGoal(e) && e.minute > 90 && e.minute <= 120).length;
+  const regHomeGoals = events.filter(e => isHomeGoal(e) && e.minute <= 90).length;
+  const regAwayGoals = events.filter(e => isAwayGoal(e) && e.minute <= 90).length;
+
+  let extraTime = false;
+  let etHomeGoals: number | undefined;
+  let etAwayGoals: number | undefined;
+  let penalties = false;
+  let penaltyHome: number | undefined;
+  let penaltyAway: number | undefined;
+  let penaltyShootout: PenaltyShootoutResult | undefined;
+
+  if (ctx.isKnockout && regHomeGoals === regAwayGoals) {
+    extraTime = true;
+    homeParticipation = extendMatchParticipation(homeParticipation, 120);
+    awayParticipation = extendMatchParticipation(awayParticipation, 120);
+
+    const etHomeExp = clamp(homeExpGoals * 0.4 * (30 / 90), 0.1, 2);
+    const etAwayExp = clamp(awayExpGoals * 0.4 * (30 / 90), 0.1, 2);
+    const sampledEtHomeGoals = poissonSample(etHomeExp, rng);
+    const sampledEtAwayGoals = poissonSample(etAwayExp, rng);
+    const extraTimeRawEvents = generateMatchEvents(
+      0,
+      0,
+      homeTeam.id,
+      awayTeam.id,
+      ctx.competitionType,
+      rng.fork(),
+      true,
+      undefined,
+      homeStarters,
+      awayStarters,
+      sampledEtHomeGoals,
+      sampledEtAwayGoals,
+      isBigMatch,
+      homePlayersAtMinute,
+      awayPlayersAtMinute,
+      homeRedCardCandidatesAtMinute,
+      awayRedCardCandidatesAtMinute,
+      'extra_time',
+      { home: tactics.home.approach, away: tactics.away.approach },
+    );
+    const reconciledExtraTimeEvents = applyDenyPipeline(
+      extraTimeRawEvents,
+      homeTeam.id,
+      awayTeam.id,
+      homeStarters,
+      awayStarters,
+      rng.fork(),
+      homePlayersAtMinute,
+      awayPlayersAtMinute,
+    );
+    applyDismissalsToSnapshot(homeParticipation?.snapshot, reconciledExtraTimeEvents, homeTeam.id);
+    applyDismissalsToSnapshot(awayParticipation?.snapshot, reconciledExtraTimeEvents, awayTeam.id);
+    events = [...events, ...reconciledExtraTimeEvents];
+    etHomeGoals = reconciledExtraTimeEvents.filter(isHomeGoal).length;
+    etAwayGoals = reconciledExtraTimeEvents.filter(isAwayGoal).length;
+
+    if (regHomeGoals + etHomeGoals === regAwayGoals + etAwayGoals) {
+      penalties = true;
+      penaltyShootout = simulatePenaltyShootout(rng);
+      penaltyHome = penaltyShootout.homeScore;
+      penaltyAway = penaltyShootout.awayScore;
+      events.push(...generateMatchEvents(
+        0,
+        0,
+        homeTeam.id,
+        awayTeam.id,
+        ctx.competitionType,
+        rng.fork(),
+        true,
+        penaltyShootout.kicks,
+        homeStarters,
+        awayStarters,
+        0,
+        0,
+        isBigMatch,
+        homePlayersAtMinute,
+        awayPlayersAtMinute,
+        homeRedCardCandidatesAtMinute,
+        awayRedCardCandidatesAtMinute,
+        'shootout',
+        { home: tactics.home.approach, away: tactics.away.approach },
+      ));
+    }
   }
-  // Also re-derive the running TOTAL goal counters (reg + ET). These feed
-  // generateMatchStats and calculateStateChanges below; if we don't sync,
-  // possession / shots / form deltas will reflect the un-denied scoreline.
-  homeGoals = regHomeGoals + (etHomeGoals ?? 0);
-  awayGoals = regAwayGoals + (etAwayGoals ?? 0);
-  // Note: penalty shootout goals (minute > 120) are produced separately
-  // by the shootout simulator and never touched by deny.
+
+  const durationMinutes: 90 | 120 = extraTime ? 120 : 90;
+  events.push(
+    ...createSubstitutionEvents(homeParticipation?.snapshot, ctx.homeSquad, homeTeam.id),
+    ...createSubstitutionEvents(awayParticipation?.snapshot, ctx.awaySquad, awayTeam.id),
+  );
+  events.sort((a, b) => a.minute - b.minute
+    || Number(b.type === 'substitution') - Number(a.type === 'substitution'));
+  const homeGoals = regHomeGoals + (etHomeGoals ?? 0);
+  const awayGoals = regAwayGoals + (etAwayGoals ?? 0);
 
   // 7. Generate match stats
   const stats = generateMatchStats(
@@ -623,6 +647,9 @@ export function simulateMatch(
     ...(awayParticipation && { awayMatchday: awayParticipation.snapshot }),
     ...(isNeutral && { isNeutralVenue: true }),
     ...(fixture.tournamentHostTeamId ? { tournamentHostTeamId: fixture.tournamentHostTeamId } : {}),
+    homeTactics: tactics.home,
+    awayTactics: tactics.away,
+    ...(featuredPlayers.length > 0 ? { featuredPlayers } : {}),
     prediction: forecastFromModel(model),
   };
 
@@ -636,7 +663,19 @@ export function simulateMatch(
     : null;
   const motmPlayers = new Map([...(ctx.homeSquad ?? []), ...(ctx.awaySquad ?? [])]
     .map(player => [player.uuid, player]));
-  const motm = pickMotm(events, winnerTeamId, defensiveContributions, motmPlayers);
+  const motm = selectMatchMotm({
+    events,
+    defensiveContributions,
+    homeTeamId: homeTeam.id,
+    awayTeamId: awayTeam.id,
+    homeGoals: regHomeGoals,
+    awayGoals: regAwayGoals,
+    etHomeGoals,
+    etAwayGoals,
+    homeMatchday: homeParticipation?.snapshot,
+    awayMatchday: awayParticipation?.snapshot,
+    winnerTeamId,
+  }, motmPlayers);
   if (motm) matchResult.motm = motm;
 
   // 9. Calculate state changes

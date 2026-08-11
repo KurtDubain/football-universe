@@ -25,6 +25,8 @@ export type MatchFactorSource =
   | 'home_advantage'
   | 'world_cup_host'
   | 'coach'
+  | 'tactics'
+  | 'tactical_matchup'
   | 'competition_fit'
   | 'underdog_response'
   | 'derby';
@@ -149,6 +151,21 @@ export interface MatchStats {
   redCards: [number, number];
 }
 
+export type FeaturedPlayerReason = 'ability' | 'form' | 'defensive_anchor' | 'creator' | 'finisher';
+
+/** Frozen pre-match identity; selection itself never grants another buff. */
+export interface FeaturedPlayerSnapshot {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  position: import('./player').PlayerPosition;
+  ratingAtKickoff: number;
+  seasonScoreAtKickoff?: number;
+  marginalUnitImpact: number;
+  impactUnit: 'attack' | 'midfield' | 'defense';
+  reason: FeaturedPlayerReason;
+}
+
 export interface MatchResult {
   fixtureId: string;
   homeTeamId: string;
@@ -193,6 +210,11 @@ export interface MatchResult {
   isNeutralVenue?: boolean;
   /** Frozen World Cup host identity for historical explanation and replay UI. */
   tournamentHostTeamId?: string;
+  /** Frozen tactical identities used by the authoritative match model. */
+  homeTactics?: import('./coach').MatchTacticsSnapshot;
+  awayTactics?: import('./coach').MatchTacticsSnapshot;
+  /** Up to five qualifying starters, with no forced home/away quota. */
+  featuredPlayers?: FeaturedPlayerSnapshot[];
   /** Deterministic pre-match forecast used by predictions, odds, and upset labels. */
   prediction?: {
     homeWinPct: number;
@@ -208,6 +230,8 @@ export interface MatchResult {
 }
 
 export interface MatchdaySnapshot {
+  /** The actual starting shape used to select this XI. */
+  formation?: import('./coach').CoachFormation;
   players: Array<{
     playerId: string;
     playerNumber?: number;

@@ -1,5 +1,7 @@
 import { Player, PlayerPosition } from '../../types/player';
+import type { CoachFormation } from '../../types/coach';
 import { BALANCE } from '../../config/balance';
+import { getFormationShape } from '../coaches/tactics';
 
 /**
  * Player-derived match strength. Team attributes remain the foundation; this
@@ -12,13 +14,6 @@ const BASELINE_RATING = 60;
 // of fielding an otherwise unavailable player.
 const EMERGENCY_RATING = 30;
 const QUALITY_TO_BOOST = 0.45;
-
-const STARTERS_PER_POSITION: Record<PlayerPosition, number> = {
-  GK: 1,
-  DF: 4,
-  MF: 3,
-  FW: 3,
-};
 
 export interface PlayerBoosts {
   attack: number;
@@ -37,8 +32,12 @@ function roundOne(value: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
-function positionQuality(players: Player[], position: PlayerPosition): number {
-  const slots = STARTERS_PER_POSITION[position];
+function positionQuality(
+  players: Player[],
+  position: PlayerPosition,
+  formation: CoachFormation,
+): number {
+  const slots = getFormationShape(formation)[position];
   const ratings = players
     .filter(player => player.position === position)
     .sort((a, b) => b.rating - a.rating)
@@ -49,11 +48,11 @@ function positionQuality(players: Player[], position: PlayerPosition): number {
   return ratings.reduce((sum, rating) => sum + rating, 0) / slots;
 }
 
-function calculateBoosts(players: Player[]): PlayerBoosts {
-  const goalkeeper = positionQuality(players, 'GK');
-  const defense = positionQuality(players, 'DF');
-  const midfield = positionQuality(players, 'MF');
-  const attack = positionQuality(players, 'FW');
+function calculateBoosts(players: Player[], formation: CoachFormation): PlayerBoosts {
+  const goalkeeper = positionQuality(players, 'GK', formation);
+  const defense = positionQuality(players, 'DF', formation);
+  const midfield = positionQuality(players, 'MF', formation);
+  const attack = positionQuality(players, 'FW', formation);
 
   // Each unit is a weighted quality average, so adding more players cannot
   // push every elite team into the cap. Adjacent units still influence play.
@@ -76,6 +75,17 @@ function calculateBoosts(players: Player[]): PlayerBoosts {
   };
 }
 
+/** Authoritative boost for an already-selected lineup; no availability filtering. */
+export function computeSelectedPlayerBoosts(
+  players: Player[],
+  formation: CoachFormation = '4-3-3',
+): PlayerBoosts {
+  if (players.length === 0 || (BALANCE.PLAYER_BOOST_WEIGHT as number) === 0) {
+    return { attack: 0, midfield: 0, defense: 0 };
+  }
+  return calculateBoosts(players, formation);
+}
+
 function isAvailable(player: Player, globalWindowIdx: number): boolean {
   return (player.injuredUntilWindow ?? 0) <= globalWindowIdx
     && (player.suspendedUntilWindow ?? 0) <= globalWindowIdx;
@@ -84,24 +94,26 @@ function isAvailable(player: Player, globalWindowIdx: number): boolean {
 export function computePlayerBoosts(
   squad: Player[] | undefined,
   globalWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): PlayerBoosts {
   if (!squad || squad.length === 0 || (BALANCE.PLAYER_BOOST_WEIGHT as number) === 0) {
     return { attack: 0, midfield: 0, defense: 0 };
   }
-  return calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)));
+  return calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)), formation);
 }
 
 export function computePlayerBoostReport(
   squad: Player[] | undefined,
   globalWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): PlayerBoostReport {
   if (!squad || squad.length === 0 || (BALANCE.PLAYER_BOOST_WEIGHT as number) === 0) {
     const zero = { attack: 0, midfield: 0, defense: 0 };
     return { current: zero, fullStrength: zero, absenceLoss: zero };
   }
 
-  const current = calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)));
-  const fullStrength = calculateBoosts(squad);
+  const current = calculateBoosts(squad.filter(player => isAvailable(player, globalWindowIdx)), formation);
+  const fullStrength = calculateBoosts(squad, formation);
   return {
     current,
     fullStrength,

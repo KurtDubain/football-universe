@@ -18,6 +18,28 @@ import { computePlayerCareerTotals } from './career-totals';
  */
 export const MAX_RETIREMENTS_PER_TEAM = 4;
 
+export type YouthTalentTier = 'regular' | 'prospect' | 'elite';
+
+/**
+ * A bounded mixture keeps most academy graduates ordinary while preserving
+ * a genuinely rare elite tail after the initial squads have retired. Club
+ * reputation nudges the odds, but even the smallest club can roll an elite.
+ */
+export function rollYouthTalentTier(reputation: number, rng: SeededRNG): YouthTalentTier {
+  const normalizedReputation = Math.max(0, Math.min(100, reputation)) / 100;
+  const eliteChance = 0.012 + normalizedReputation * 0.012;
+  const prospectChance = 0.13 + normalizedReputation * 0.05;
+  const roll = rng.next();
+  if (roll < eliteChance) return 'elite';
+  if (roll < eliteChance + prospectChance) return 'prospect';
+  return 'regular';
+}
+
+export function capYouthPeakByTalentTier(tier: YouthTalentTier, peak: number): number {
+  const ceiling = tier === 'elite' ? 98 : tier === 'prospect' ? 89 : 84;
+  return Math.max(35, Math.min(ceiling, peak));
+}
+
 /**
  * Hard age cap. Once a player reaches this age, retirement is forced
  * regardless of the chance roll. Stops the simulation from accreting
@@ -147,17 +169,29 @@ export function generateYouthReplacement(
   const ageA = rng.nextInt(18, 22);
   const ageB = rng.nextInt(18, 22);
   const age = Math.min(ageA, ageB);
-  // Pre-roll uuid + tag so peakAge can react to late_bloomer
+  // Pre-roll uuid + tag so peakAge can react to late_bloomer.
   const uuid = formatPlayerUuid(nextUuid.value++);
   const tag = rollTagForUuid(uuid);
-  const peakAge = tag === 'late_bloomer' ? rng.nextInt(28, 32) : rng.nextInt(24, 29);
+  const talentRng = rng.fork();
+  const talentTier = rollYouthTalentTier(team.reputation ?? 50, talentRng);
+  const peakAge = tag === 'late_bloomer'
+    ? talentRng.nextInt(28, 32)
+    : talentTier === 'elite'
+      ? talentRng.nextInt(23, 27)
+      : talentRng.nextInt(24, 29);
 
-  // Base peak from team strength: 33-50 for weak (overall ~45), up to 55-70
-  // for elite (overall ~90). The +12 noise ceiling lets a kid roll into a
-  // proper star occasionally, but never an instant 99 OVR.
+  // The regular population retains the existing club-strength model. A
+  // bounded prospect band and a rare elite band restore the long-term tail
+  // without lifting the median or guaranteeing elite academies a superstar.
   const basePeak = 45 + (team.overall - 65) * 0.4;
-  const noise = rng.nextInt(-5, 12);
-  let peak = Math.round(basePeak + noise);
+  let peak: number;
+  if (talentTier === 'elite') {
+    peak = talentRng.nextInt(89, 96);
+  } else if (talentTier === 'prospect') {
+    peak = talentRng.nextInt(76, 88);
+  } else {
+    peak = Math.round(basePeak + talentRng.nextInt(-5, 12));
+  }
 
   // Goal scoring base — same brackets as the generator.
   let goalScoring: number;
@@ -176,8 +210,9 @@ export function generateYouthReplacement(
   // Reputation tier
   peak = applyReputationBonus(team.reputation ?? 50, peak);
 
-  // Final clamp [35, 92] — youths can't ship at 99.
-  peak = Math.max(35, Math.min(92, peak));
+  // Reputation and regional flavor may improve the odds or the shape of a
+  // prospect, but only the rare elite tier is allowed to cross 89.
+  peak = capYouthPeakByTalentTier(talentTier, peak);
 
   // Initial rating from curve, plus the regional startBonus (only 东洲 lowers,
   // 大陆 DF/GK raises). Clamp to [35, 99] consistent with computeCurrentRating.

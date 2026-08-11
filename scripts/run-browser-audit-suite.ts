@@ -13,6 +13,7 @@ interface ManagedServer {
   name: string;
   child: ChildProcess;
   log: () => string;
+  readyUrl: string;
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,6 +30,7 @@ const SMOKE_CHECKS: AuditCheck[] = [
   { script: 'verify:cup-bracket' },
   { script: 'verify:tournament-music' },
   { script: 'verify:match-tactics', server: 'fixture' },
+  { script: 'verify:player-team' },
 ];
 
 const FULL_CHECKS: AuditCheck[] = [
@@ -48,7 +50,6 @@ const FULL_CHECKS: AuditCheck[] = [
   { script: 'verify:visual-assets' },
   { script: 'verify:history-summary' },
   { script: 'verify:dashboard' },
-  { script: 'verify:player-team' },
   { script: 'verify:player-performance' },
   { script: 'verify:club-story' },
   { script: 'verify:observer-foundation' },
@@ -90,7 +91,7 @@ async function startServer(name: string, args: string[], readyUrl: string): Prom
   });
   child.stdout?.on('data', chunk => { output = appendTail(output, chunk); });
   child.stderr?.on('data', chunk => { output = appendTail(output, chunk); });
-  const managed = { name, child, log: () => output };
+  const managed = { name, child, log: () => output, readyUrl };
   try {
     await waitForUrl(readyUrl, child);
     return managed;
@@ -100,17 +101,50 @@ async function startServer(name: string, args: string[], readyUrl: string): Prom
   }
 }
 
+function signalServer(server: ManagedServer, signal: NodeJS.Signals): void {
+  try {
+    if (process.platform === 'win32') server.child.kill(signal);
+    else process.kill(-server.child.pid!, signal);
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    if (code === 'ESRCH') return;
+    if (code !== 'EPERM' || process.platform === 'win32') throw error;
+
+    // The detached process-group leader can disappear before its descendants.
+    // Fall back to the tracked child and verify the listening URL below.
+    try {
+      server.child.kill(signal);
+    } catch (fallbackError) {
+      const fallbackCode = fallbackError && typeof fallbackError === 'object' && 'code' in fallbackError
+        ? fallbackError.code
+        : undefined;
+      if (fallbackCode !== 'ESRCH' && fallbackCode !== 'EPERM') throw fallbackError;
+    }
+  }
+}
+
+async function isServerReachable(url: string): Promise<boolean> {
+  try {
+    await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function stopServer(server: ManagedServer): Promise<void> {
   if (server.child.exitCode !== null || !server.child.pid) return;
-  if (process.platform === 'win32') server.child.kill('SIGTERM');
-  else process.kill(-server.child.pid, 'SIGTERM');
+  signalServer(server, 'SIGTERM');
   await Promise.race([
     new Promise<void>(resolveExit => server.child.once('exit', () => resolveExit())),
     new Promise<void>(resolveTimeout => setTimeout(resolveTimeout, 2_000)),
   ]);
-  if (server.child.exitCode === null) {
-    if (process.platform === 'win32') server.child.kill('SIGKILL');
-    else process.kill(-server.child.pid, 'SIGKILL');
+  if (await isServerReachable(server.readyUrl)) {
+    signalServer(server, 'SIGKILL');
+    await new Promise(resolveDelay => setTimeout(resolveDelay, 250));
+  }
+  if (await isServerReachable(server.readyUrl)) {
+    throw new Error(`${server.name} did not stop after SIGKILL.`);
   }
 }
 

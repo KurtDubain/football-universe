@@ -64,12 +64,13 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
   const usedNames = new Set<string>();
   const region = team.region ?? '大陆+其他';
 
-  // Determine star player indices (2-3 stars)
+  // Determine star player indices (2-3 stars). Every position is eligible;
+  // the original midfield/forward-only range made elite defenders and
+  // goalkeepers artificially scarce from the first season onward.
   const starCount = rng.nextInt(2, 3);
   const starIndices = new Set<number>();
   while (starIndices.size < starCount) {
-    // Stars tend to be forwards or midfielders
-    starIndices.add(rng.nextInt(10, 21)); // indices 10-21 are MF and FW
+    starIndices.add(rng.nextInt(0, positions.length - 1));
   }
 
   for (let i = 0; i < positions.length; i++) {

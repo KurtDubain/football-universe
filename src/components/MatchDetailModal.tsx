@@ -16,6 +16,16 @@ import {
   formatForm,
 } from '../utils/format';
 import { shootoutEventLabel } from './match-live/live-commentary';
+import {
+  APPROACH_LABELS,
+  TACTICS_REASON_LABELS,
+} from '../engine/coaches/tactics';
+import {
+  FEATURED_PLAYER_REASON_LABELS,
+  PLAYER_IMPACT_UNIT_LABELS,
+  describeFeaturedMatchup,
+} from '../engine/players/star-presence';
+import { computeMatchPlayerImpacts } from '../engine/players/match-player-impact';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -108,6 +118,9 @@ export default function MatchDetailModal({
             homeSquad={world.squads[fixture.homeTeamId]}
             awaySquad={world.squads[fixture.awayTeamId]}
             globalWindowIdx={world.totalElapsedWindows}
+            playerStats={world.playerStats}
+            playerStatSegments={world.playerStatSegments}
+            seasonStartLevels={world.seasonStartLevels}
           />
         )}
       </div>
@@ -131,6 +144,9 @@ function PreMatchView({
   homeSquad,
   awaySquad,
   globalWindowIdx,
+  playerStats,
+  playerStatSegments,
+  seasonStartLevels,
 }: {
   fixture: MatchFixture;
   homeTeam: TeamBase;
@@ -142,6 +158,9 @@ function PreMatchView({
   homeSquad?: Player[];
   awaySquad?: Player[];
   globalWindowIdx: number;
+  playerStats: GameWorld['playerStats'];
+  playerStatSegments: GameWorld['playerStatSegments'];
+  seasonStartLevels: GameWorld['seasonStartLevels'];
 }) {
   const prediction: MatchPrediction | null = useMemo(() => {
     if (!homeState || !awayState) return null;
@@ -150,8 +169,14 @@ function PreMatchView({
       homeSquad,
       awaySquad,
       globalWindowIdx,
+      playerStats,
+      playerStatSegments,
+      seasonStartLevels,
     });
-  }, [fixture, homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, homeSquad, awaySquad, globalWindowIdx]);
+  }, [
+    fixture, homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
+    homeSquad, awaySquad, globalWindowIdx, playerStats, playerStatSegments, seasonStartLevels,
+  ]);
 
   if (!prediction || !homeState || !awayState) return null;
 
@@ -251,6 +276,51 @@ function PreMatchView({
           )}
         </div>
       </div>
+
+      <div data-testid="pre-match-tactics" className="grid grid-cols-2 border-b border-slate-700/50 bg-slate-900/30">
+        {[
+          { side: 'home', tactics: prediction.homeTactics, color: homeTeam.color },
+          { side: 'away', tactics: prediction.awayTactics, color: awayTeam.color },
+        ].map(({ side, tactics, color }) => (
+          <div
+            key={side}
+            className={`min-w-0 px-3 py-3 sm:px-6 ${side === 'away' ? 'border-l border-slate-700/50 text-right' : ''}`}
+          >
+            <div className={`flex flex-wrap items-center gap-1.5 ${side === 'away' ? 'justify-end' : ''}`}>
+              <span className="font-mono text-sm font-bold text-slate-100">{tactics.formation}</span>
+              <span className="text-xs font-semibold" style={{ color }}>{APPROACH_LABELS[tactics.approach]}</span>
+            </div>
+            <p className="mt-1 truncate text-[10px] text-slate-500" title={`${TACTICS_REASON_LABELS[tactics.reason]} · ${tactics.tags.join(' · ')}`}>
+              {TACTICS_REASON_LABELS[tactics.reason]} · {tactics.tags.join(' · ')}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {prediction.featuredPlayers.length > 0 && (
+        <div data-testid="pre-match-featured" className="border-b border-amber-400/15 bg-amber-400/[0.035] px-3 py-2.5 sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-semibold text-amber-300">本场焦点</span>
+            <span className="truncate text-[10px] text-slate-500">
+              {describeFeaturedMatchup(prediction.featuredPlayers, homeTeam.id, awayTeam.id) ?? '关键球员值得观察'}
+            </span>
+          </div>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-0.5">
+            {prediction.featuredPlayers.map(player => (
+              <Link
+                key={player.playerId}
+                to={`/player/${player.playerId}`}
+                className="shrink-0 border-l-2 border-amber-400/60 pl-2 text-xs text-slate-300 hover:text-amber-200"
+              >
+                <span className="font-semibold">{player.playerName}</span>
+                <span className="ml-1 text-[10px] text-slate-500">
+                  {player.position} · {FEATURED_PLAYER_REASON_LABELS[player.reason]}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ──── Win probability bar ──── */}
       <div className="px-6 py-4">
@@ -458,6 +528,17 @@ function PostMatchView({
   const shootoutEvents = result.events.filter(
     event => event.type === 'penalty_goal' || event.type === 'penalty_miss',
   );
+  const winnerTeamId = homeWon ? fixture.homeTeamId : awayWon ? fixture.awayTeamId : null;
+  const playerMap = new Map(Object.values(world.squads).flat().map(player => [player.uuid, player]));
+  const impactByPlayer = new Map(computeMatchPlayerImpacts({
+    ...result,
+    winnerTeamId,
+  }, playerMap).map(impact => [impact.playerId, impact]));
+  const featuredMatchup = describeFeaturedMatchup(
+    result.featuredPlayers ?? [],
+    fixture.homeTeamId,
+    fixture.awayTeamId,
+  );
 
   return (
     <div>
@@ -549,6 +630,35 @@ function PostMatchView({
         );
       })()}
 
+      {(result.homeTactics || result.awayTactics) && (
+        <div data-testid="post-match-tactics" className="border-b border-slate-700/50 bg-slate-900/25 px-4 py-3 sm:px-6">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="text-xs font-semibold text-slate-400">战术观察</h4>
+            <span className="text-[10px] text-slate-600">冻结于赛前</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            {[
+              { team: homeTeam, tactics: result.homeTactics, shots: result.stats.shots[0], possession: result.stats.possession[0] },
+              { team: awayTeam, tactics: result.awayTactics, shots: result.stats.shots[1], possession: result.stats.possession[1] },
+            ].map(({ team, tactics, shots, possession }) => (
+              <div key={team.id} className="min-w-0 border-l-2 pl-2" style={{ borderColor: team.color }}>
+                <div className="truncate font-semibold text-slate-200" title={team.name}>{team.shortName}</div>
+                {tactics ? (
+                  <>
+                    <div className="mt-0.5 font-mono text-amber-300">{tactics.formation} · {APPROACH_LABELS[tactics.approach]}</div>
+                    <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                      控球 {possession}% · 射门 {shots} 次 · {tactics.tags.join(' · ')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-[10px] text-slate-600">历史比赛未记录部署</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ──── Result explanation ──── */}
       <div className="px-6 py-4 border-b border-slate-700/50">
         <div data-testid="destiny-deviation" className="flex items-start justify-between gap-4">
@@ -590,6 +700,37 @@ function PostMatchView({
           )}
         </div>
       </div>
+
+      {(result.featuredPlayers?.length ?? 0) > 0 && (
+        <div data-testid="post-match-featured" className="border-b border-amber-400/15 bg-amber-400/[0.025] px-4 py-4 sm:px-6">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="text-xs font-semibold text-amber-300">焦点球员表现</h4>
+            {featuredMatchup && <span className="truncate text-[10px] text-slate-500">{featuredMatchup}</span>}
+          </div>
+          <div className="divide-y divide-slate-700/40">
+            {result.featuredPlayers?.map(player => {
+              const impact = impactByPlayer.get(player.playerId);
+              return (
+                <Link
+                  key={player.playerId}
+                  to={`/player/${player.playerId}`}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2 text-xs hover:bg-white/[0.02]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-slate-200">{player.playerName}</div>
+                    <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                      {player.position} · {FEATURED_PLAYER_REASON_LABELS[player.reason]} · {PLAYER_IMPACT_UNIT_LABELS[player.impactUnit]} +{player.marginalUnitImpact.toFixed(1)}
+                    </div>
+                  </div>
+                  <span className={`text-[10px] ${impact?.band === 'decisive' ? 'text-amber-300' : impact?.band === 'excellent' ? 'text-emerald-300' : 'text-slate-400'}`}>
+                    {impact?.summary ?? '本场受到限制'}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ──── Goal timeline ──── */}
       {goalEvents.length > 0 && (

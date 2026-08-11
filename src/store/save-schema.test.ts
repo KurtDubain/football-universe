@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
+import { executeCurrentWindow, initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import {
   __resetSaveRecoveryForTests,
@@ -35,6 +35,7 @@ function makeSave(seasonNumber = 3) {
       lastNews: [],
       favoriteTeamId: null,
       favoriteTeamIds: [favoriteTeamId],
+      favoritePlayerIds: [],
       world,
     },
   };
@@ -58,6 +59,7 @@ function makeSeasonFiveSave() {
       lastNews: [],
       favoriteTeamId: null,
       favoriteTeamIds: [favoriteTeamId],
+      favoritePlayerIds: [],
       world,
     },
   };
@@ -197,6 +199,35 @@ describe('current schema hydration boundary', () => {
       ...makeSave(),
       state: { ...makeSave().state, observationThemePreference: 'score_boost' },
     })],
+    ['invalid favorite player list', JSON.stringify({
+      ...makeSave(),
+      state: { ...makeSave().state, favoritePlayerIds: ['p-1', 'p-1'] },
+    })],
+    ['out-of-range tactical snapshot', (() => {
+      const save = makeSave();
+      save.state.world = executeCurrentWindow(save.state.world).world;
+      const result = save.state.world.seasonState.calendar.flatMap(window => window.results)[0];
+      if (!result?.homeTactics) throw new Error('Expected a completed match with tactics');
+      result.homeTactics.attackDelta = 99;
+      return JSON.stringify(save);
+    })()],
+    ['focus player outside the real starting lineup', (() => {
+      const save = makeSave();
+      save.state.world = executeCurrentWindow(save.state.world).world;
+      const result = save.state.world.seasonState.calendar.flatMap(window => window.results)[0];
+      if (!result) throw new Error('Expected a completed match');
+      result.featuredPlayers = [{
+        playerId: 'not-a-starter',
+        playerName: '伪造焦点',
+        teamId: result.homeTeamId,
+        position: 'FW',
+        ratingAtKickoff: 99,
+        marginalUnitImpact: 3,
+        impactUnit: 'attack',
+        reason: 'ability',
+      }];
+      return JSON.stringify(save);
+    })()],
     ['out-of-range player season score', (() => {
       const save = makeSave();
       const stat = Object.values(save.state.world.playerStats)[0] as typeof save.state.world.playerStats[string] & { seasonScore?: number };

@@ -1,8 +1,11 @@
 // Pass-sequence generator. Pure: same seed → same output; no canvas / refs.
 import { seededRand } from './math';
 import { generateSetPieceSequence } from './set-pieces';
+import type { CoachFormation, MatchApproach } from '../../types/coach';
 import {
   BASE_FORMATION,
+  getTacticalFormationSlots,
+  type FormationSlot,
   type PassPhase,
   type PresentationChanceStyle,
   type PresentationPlayPattern,
@@ -25,6 +28,10 @@ export interface SequenceOptions {
   transition?: boolean;
   chanceStyle?: PresentationChanceStyle;
   restart?: PresentationRestart;
+  homeFormation?: CoachFormation;
+  awayFormation?: CoachFormation;
+  homeApproach?: MatchApproach;
+  awayApproach?: MatchApproach;
 }
 
 export function restartReleaseDelay(restart: PresentationRestart): number {
@@ -56,9 +63,10 @@ function selectPattern(
   playStyle: number,
   startingPlayerIdx: number | undefined,
   transition: boolean,
+  formation: FormationSlot[],
 ): PresentationPlayPattern {
   if (transition) return 'counter';
-  const startingRole = startingPlayerIdx === undefined ? undefined : BASE_FORMATION[startingPlayerIdx]?.role;
+  const startingRole = startingPlayerIdx === undefined ? undefined : formation[startingPlayerIdx]?.role;
   if (startingRole === 'FW') return 'recycle';
   if (playStyle < 0.2) return 'build_up';
   if (playStyle < 0.42) return 'wing_overload';
@@ -67,41 +75,67 @@ function selectPattern(
   return 'recycle';
 }
 
+function nearestSlot(
+  formation: FormationSlot[],
+  roles: FormationSlot['role'][],
+  targetY: number,
+  excluded: number[] = [],
+): number {
+  const candidates = formation
+    .map((slot, index) => ({ slot, index }))
+    .filter(entry => roles.includes(entry.slot.role) && !excluded.includes(entry.index))
+    .sort((left, right) => Math.abs(left.slot.y - targetY) - Math.abs(right.slot.y - targetY)
+      || right.slot.x - left.slot.x
+      || left.index - right.index);
+  return candidates[0]?.index ?? 6;
+}
+
+function roleIndices(formation: FormationSlot[], role: FormationSlot['role']): number[] {
+  return formation.flatMap((slot, index) => slot.role === role ? [index] : []);
+}
+
 function routeForPattern(
   pattern: PresentationPlayPattern,
   startingPlayerIdx: number | undefined,
   upperFlank: boolean,
+  formation: FormationSlot[],
 ): number[] {
-  const fullback = upperFlank ? 1 : 4;
-  const centerBack = upperFlank ? 2 : 3;
-  const midfielder = upperFlank ? 5 : 7;
-  const otherMidfielder = upperFlank ? 7 : 5;
-  const winger = upperFlank ? 8 : 10;
-  const oppositeWinger = upperFlank ? 10 : 8;
+  const flankY = upperFlank ? 0.12 : 0.88;
+  const oppositeY = 1 - flankY;
+  const fullback = nearestSlot(formation, ['DF'], flankY);
+  const centerBack = nearestSlot(formation, ['DF'], upperFlank ? 0.38 : 0.62, [fullback]);
+  const midfielder = nearestSlot(formation, ['MF'], upperFlank ? 0.3 : 0.7);
+  const otherMidfielder = nearestSlot(formation, ['MF'], upperFlank ? 0.7 : 0.3, [midfielder]);
+  const centralMidfielder = nearestSlot(formation, ['MF'], 0.5);
+  const forwards = roleIndices(formation, 'FW');
+  const striker = nearestSlot(formation, ['FW'], 0.5);
+  const wideRoles: FormationSlot['role'][] = forwards.length >= 3 ? ['FW'] : ['MF'];
+  const winger = nearestSlot(formation, wideRoles, flankY);
+  const oppositeWinger = nearestSlot(formation, wideRoles, oppositeY, [winger]);
 
   if (startingPlayerIdx !== undefined) {
-    const role = BASE_FORMATION[startingPlayerIdx]?.role;
+    const role = formation[startingPlayerIdx]?.role;
     if (pattern === 'counter') {
       return compactRoute(role === 'FW'
-        ? [startingPlayerIdx, startingPlayerIdx === 9 ? winger : 9]
-        : [startingPlayerIdx, winger, 9]);
+        ? [startingPlayerIdx, startingPlayerIdx === striker ? winger : striker]
+        : [startingPlayerIdx, winger, striker]);
     }
-    if (role === 'FW') return compactRoute([startingPlayerIdx, midfielder, 6, oppositeWinger]);
+    if (role === 'FW') return compactRoute([startingPlayerIdx, midfielder, centralMidfielder, oppositeWinger]);
     if (role === 'MF') {
       return compactRoute(pattern === 'switch_play'
         ? [startingPlayerIdx, otherMidfielder, oppositeWinger]
-        : [startingPlayerIdx, winger, 9]);
+        : [startingPlayerIdx, winger, striker]);
     }
-    return compactRoute([startingPlayerIdx, 6, midfielder, winger]);
+    return compactRoute([startingPlayerIdx, centralMidfielder, midfielder, winger]);
   }
 
   switch (pattern) {
-    case 'build_up': return [centerBack, 6, midfielder, winger];
-    case 'wing_overload': return [centerBack, midfielder, fullback, winger];
-    case 'central_combination': return [centerBack, 6, midfielder, 9];
-    case 'switch_play': return [fullback, centerBack, 6, otherMidfielder, oppositeWinger];
-    case 'counter': return [6, winger, 9];
-    case 'recycle': return [winger, midfielder, centerBack, upperFlank ? 3 : 2, upperFlank ? 4 : 1];
+    case 'build_up': return compactRoute([centerBack, centralMidfielder, midfielder, winger]);
+    case 'wing_overload': return compactRoute([centerBack, midfielder, fullback, winger]);
+    case 'central_combination': return compactRoute([centerBack, centralMidfielder, midfielder, striker]);
+    case 'switch_play': return compactRoute([fullback, centerBack, centralMidfielder, otherMidfielder, oppositeWinger]);
+    case 'counter': return compactRoute([centralMidfielder, winger, striker]);
+    case 'recycle': return compactRoute([winger, midfielder, centerBack, nearestSlot(formation, ['DF'], 0.5), fullback]);
   }
 }
 
@@ -114,12 +148,13 @@ function targetForPattern(
   attackingHome: boolean,
   upperFlank: boolean,
   seedValue: number,
+  formation: FormationSlot[],
 ): { x: number; y: number } {
   const t = (step + 1) / Math.max(1, stepCount);
   const sourceProgress = attackingHome ? source.x : 1 - source.x;
   const flankY = upperFlank ? 0.18 : 0.82;
   const oppositeY = 1 - flankY;
-  const receiverY = BASE_FORMATION[receiverIdx]?.y ?? 0.5;
+  const receiverY = formation[receiverIdx]?.y ?? 0.5;
   let progress: number;
   let y: number;
 
@@ -193,12 +228,13 @@ function buildOpenPlayPlan(
   startingPlayerIdx: number | undefined,
   sourceOverride: { x: number; y: number } | undefined,
   transition: boolean,
+  formation: FormationSlot[],
 ): OpenPlayPlan {
   const upperFlank = seededRand(seed * 13 + 19) < 0.5;
-  const pattern = selectPattern(playStyle, startingPlayerIdx, transition);
-  const route = routeForPattern(pattern, startingPlayerIdx, upperFlank);
+  const pattern = selectPattern(playStyle, startingPlayerIdx, transition, formation);
+  const route = routeForPattern(pattern, startingPlayerIdx, upperFlank, formation);
   const source = sourceOverride ?? (() => {
-    const slot = BASE_FORMATION[route[0]] ?? BASE_FORMATION[6];
+    const slot = formation[route[0]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
     return { x: attackingHome ? slot.x : 1 - slot.x, y: slot.y };
   })();
   const targets = route.slice(1).map((receiverIdx, step) => targetForPattern(
@@ -210,6 +246,7 @@ function buildOpenPlayPlan(
     attackingHome,
     upperFlank,
     seededRand(seed * 17 + step + 71),
+    formation,
   ));
   return { pattern, route, targets };
 }
@@ -219,8 +256,9 @@ export function buildPassTarget(
   attackingHome: boolean,
   seedValue: number,
   longBall: boolean,
+  formation: FormationSlot[] = BASE_FORMATION,
 ): { x: number; y: number } {
-  const slot = BASE_FORMATION[receiverIdx] ?? BASE_FORMATION[6];
+  const slot = formation[receiverIdx] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
   const attackDirection = attackingHome ? 1 : -1;
   const baseX = attackingHome ? slot.x : 1 - slot.x;
   const roleAdvance = slot.role === 'FW' ? 0.045 : slot.role === 'MF' ? 0.026 : slot.role === 'DF' ? 0.012 : 0;
@@ -240,6 +278,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   const r = (n: number) => seededRand(seed * 7 + n);
   const homePossessionShare = Math.min(0.75, Math.max(0.25, options.homePossessionShare ?? 0.5));
   const isHome = options.attackingHome ?? r(0) < homePossessionShare;
+  const formation = getTacticalFormationSlots(
+    isHome ? options.homeFormation : options.awayFormation,
+    isHome ? options.homeApproach : options.awayApproach,
+  );
   const playStyle = r(1);
   // A shot on the canvas must have an authoritative event behind it. Ordinary
   // possession therefore develops, switches, or recycles instead of creating
@@ -256,6 +298,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       forceShot: options.forceShot ?? false,
       shooterIdx: options.shooterIdx,
       creatorIdx: options.creatorIdx,
+      formation,
     });
   }
 
@@ -265,15 +308,17 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   let directedShotOrigin: { x: number; y: number } | undefined;
   let chanceStyle: PresentationChanceStyle | undefined;
   if (options.forceShot) {
-    const shooter = options.shooterIdx ?? (8 + Math.floor(r(19) * 3));
-    const defaultCreator = 5 + Math.floor(r(4) * 3);
+    const forwards = roleIndices(formation, 'FW');
+    const midfielders = roleIndices(formation, 'MF');
+    const shooter = options.shooterIdx ?? forwards[Math.floor(r(19) * forwards.length)] ?? nearestSlot(formation, ['MF'], 0.5);
+    const defaultCreator = midfielders[Math.floor(r(4) * midfielders.length)] ?? nearestSlot(formation, ['DF'], 0.5);
     const creator = options.creatorIdx !== undefined && options.creatorIdx !== shooter
       ? options.creatorIdx
       : defaultCreator === shooter ? (defaultCreator + 1) % 11 : defaultCreator;
     route = [options.startingPlayerIdx, creator, shooter]
       .filter((slot): slot is number => slot !== undefined)
       .filter((slot, index, slots) => index === 0 || slot !== slots[index - 1]);
-    const shooterY = BASE_FORMATION[shooter]?.y ?? 0.5;
+    const shooterY = formation[shooter]?.y ?? 0.5;
     const styleRoll = r(15);
     chanceStyle = options.chanceStyle ?? (
       styleRoll < 0.24 ? 'cutback'
@@ -292,7 +337,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       : 0.42 + r(18) * 0.16;
     directedShotOrigin = mirrorPoint({ x: shotProgress, y: shotY }, isHome);
     const source = options.sourceOverride ?? (() => {
-      const slot = BASE_FORMATION[route[0]] ?? BASE_FORMATION[6];
+      const slot = formation[route[0]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
     const directedShotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
@@ -325,7 +370,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
           y: 0.42 + (r(24 + index) - 0.5) * 0.16,
         }, isHome);
       }
-      const receiverY = BASE_FORMATION[receiverIdx]?.y ?? directedShotOrigin!.y;
+      const receiverY = formation[receiverIdx]?.y ?? directedShotOrigin!.y;
       return {
         x: source.x + (directedShotOrigin!.x - source.x) * t,
         y: source.y + (directedShotOrigin!.y - source.y) * t * 0.72 + (receiverY - 0.5) * 0.06,
@@ -339,6 +384,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       options.startingPlayerIdx,
       options.sourceOverride,
       options.transition ?? false,
+      formation,
     );
     route = plan.route;
     pattern = plan.pattern;
@@ -347,12 +393,12 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
 
   const phases: PassPhase[] = [];
   for (let i = 0; i < route.length - 1; i++) {
-    const target = passTargets[i] ?? buildPassTarget(route[i + 1], isHome, r(i + 41), false);
+    const target = passTargets[i] ?? buildPassTarget(route[i + 1], isHome, r(i + 41), false, formation);
     const previousTarget = i === 0
       ? options.sourceOverride
       : passTargets[i - 1];
     const source = previousTarget ?? (() => {
-      const slot = BASE_FORMATION[route[i]] ?? BASE_FORMATION[6];
+      const slot = formation[route[i]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
     const longBall = Math.hypot(target.x - source.x, target.y - source.y) > 0.34;

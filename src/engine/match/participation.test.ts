@@ -4,6 +4,7 @@ import type { MatchdaySelection } from '../players/injuries';
 import { SeededRNG } from './rng';
 import {
   buildMatchParticipation,
+  extendMatchParticipation,
   applyDismissalsToSnapshot,
   createSubstitutionEvents,
   playersOnField,
@@ -49,6 +50,26 @@ describe('match participation', () => {
     expect(starters.filter(entry => entry.position === 'GK')).toHaveLength(1);
   });
 
+  it.each([
+    ['4-3-3', { GK: 1, DF: 4, MF: 3, FW: 3 }],
+    ['4-2-3-1', { GK: 1, DF: 4, MF: 5, FW: 1 }],
+    ['4-4-2', { GK: 1, DF: 4, MF: 4, FW: 2 }],
+    ['5-4-1', { GK: 1, DF: 5, MF: 4, FW: 1 }],
+  ] as const)('selects the requested %s shape from the same authoritative XI', (formation, shape) => {
+    const squad = [
+      ...Array.from({ length: 2 }, (_, index) => player(`gk-${index}`, 'GK', 80 - index)),
+      ...Array.from({ length: 6 }, (_, index) => player(`df-${index}`, 'DF', 80 - index)),
+      ...Array.from({ length: 6 }, (_, index) => player(`mf-${index}`, 'MF', 80 - index)),
+      ...Array.from({ length: 5 }, (_, index) => player(`fw-${index}`, 'FW', 80 - index)),
+    ];
+    const starters = selectStartingEleven(squad, new Set(), formation);
+
+    expect(starters).toHaveLength(11);
+    for (const position of ['GK', 'DF', 'MF', 'FW'] as const) {
+      expect(starters.filter(entry => entry.position === position)).toHaveLength(shape[position]);
+    }
+  });
+
   it('uses available players before emergency-floor unavailable players', () => {
     const unavailable = new Set(['p5', 'p6', 'p10', 'p14']);
     const starters = selectStartingEleven(fullSquad, unavailable);
@@ -88,6 +109,15 @@ describe('match participation', () => {
     expect(participation.snapshot.durationMinutes).toBe(120);
     expect(playersOnField(fullSquad, participation.snapshot, 119)).toHaveLength(11);
     expect(participation.snapshot.players.reduce((sum, entry) => sum + (entry.minutesPlayed ?? 0), 0)).toBe(11 * 120);
+  });
+
+  it('extends the same regulation lineup into extra time without re-rolling substitutions', () => {
+    const regulation = buildMatchParticipation(selection(fullSquad), 90, new SeededRNG(12))!;
+    const extended = extendMatchParticipation(regulation, 120)!;
+
+    expect(extended.snapshot.substitutions).toEqual(regulation.snapshot.substitutions);
+    expect(playersOnField(fullSquad, extended.snapshot, 119)).toHaveLength(11);
+    expect(extended.snapshot.players.reduce((sum, entry) => sum + (entry.minutesPlayed ?? 0), 0)).toBe(11 * 120);
   });
 
   it('uses every available player in an emergency short squad without inventing a goalkeeper', () => {

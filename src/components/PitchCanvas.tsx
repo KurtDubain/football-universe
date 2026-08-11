@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useMemo } from 'react';
 import type { MatchdaySnapshot, MatchEvent } from '../types/match';
+import type { CoachFormation, MatchApproach } from '../types/coach';
 import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxonomy';
 import { clamp, lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence';
@@ -26,7 +27,7 @@ import {
   type BroadcastCameraState,
 } from './pitch-canvas/renderer';
 import {
-  BASE_FORMATION,
+  getTacticalFormationSlots,
   type MatchPresentationAtmosphere,
   type MatchPresentationCue,
   type Particle,
@@ -58,6 +59,9 @@ interface Props {
   playbackMode: PlaybackMode;
   shootout?: boolean;
   possession?: [number, number];
+  featuredPlayerIds?: readonly string[];
+  homeApproach?: MatchApproach;
+  awayApproach?: MatchApproach;
   onPlaybackHoldChange?: (holding: boolean) => void;
   onPresentationCue?: (cue: MatchPresentationCue) => void;
   onPresentationAtmosphereChange?: (snapshot: MatchPresentationAtmosphere) => void;
@@ -84,6 +88,10 @@ interface PitchDebugState {
     sceneMinute: number | null;
     queuedScenes: number;
   };
+  formations: {
+    home: { formation: CoachFormation; approach: MatchApproach };
+    away: { formation: CoachFormation; approach: MatchApproach };
+  };
   action: {
     kind: PassPhase['kind'];
     setPiece?: PassPhase['setPiece'];
@@ -96,8 +104,8 @@ interface PitchDebugState {
     targetOverride?: { x: number; y: number };
     progress: number;
   } | null;
-  homeOnField: Array<{ id: string; number: number; slot: number; x: number; y: number }>;
-  awayOnField: Array<{ id: string; number: number; slot: number; x: number; y: number }>;
+  homeOnField: Array<{ id: string; number: number; slot: number; x: number; y: number; featured: boolean }>;
+  awayOnField: Array<{ id: string; number: number; slot: number; x: number; y: number; featured: boolean }>;
   rendering: {
     active: boolean;
     pauseReason: 'none' | 'hidden' | 'covered' | 'paused' | 'break' | 'completed';
@@ -147,6 +155,10 @@ function sequenceOptionsForScene(
   homeRoster: PitchRosterPlayer[],
   awayRoster: PitchRosterPlayer[],
   homePossessionShare: number,
+  homeFormation: CoachFormation,
+  awayFormation: CoachFormation,
+  homeApproach: MatchApproach,
+  awayApproach: MatchApproach,
   continuity?: { source: { x: number; y: number }; startingPlayerIdx: number; transition?: boolean },
 ): SequenceOptions {
   const actors = actorsForEvent(scene.event, events);
@@ -171,6 +183,10 @@ function sequenceOptionsForScene(
       transition: continuity.transition,
     } : {}),
     homePossessionShare,
+    homeFormation,
+    awayFormation,
+    homeApproach,
+    awayApproach,
   };
 }
 
@@ -180,8 +196,17 @@ function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
-    possession = [50, 50], onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
+    possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
+    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   } = props;
+
+  const homeFormation: CoachFormation = homeMatchday?.formation ?? '4-3-3';
+  const awayFormation: CoachFormation = awayMatchday?.formation ?? '4-3-3';
+  const formationLayouts = useMemo(() => ({
+    home: getTacticalFormationSlots(homeFormation, homeApproach),
+    away: getTacticalFormationSlots(awayFormation, awayApproach),
+  }), [awayApproach, awayFormation, homeApproach, homeFormation]);
+  const featuredPlayerIdSet = useMemo(() => new Set(featuredPlayerIds), [featuredPlayerIds]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -220,8 +245,8 @@ function PitchCanvas(props: Props) {
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
   const playerPosRef = useRef<PlayerState[]>(
     Array.from({ length: 22 }, (_, i) => {
-      const base = BASE_FORMATION[i % 11];
       const isHome = i < 11;
+      const base = (isHome ? formationLayouts.home : formationLayouts.away)[i % 11];
       return {
         x: isHome ? base.x : 1 - base.x,
         y: base.y,
@@ -261,6 +286,10 @@ function PitchCanvas(props: Props) {
     ballHolderId: null,
     lastTouchPlayerId: null,
     playback: { holdingClock: false, sceneMinute: null, queuedScenes: 0 },
+    formations: {
+      home: { formation: homeFormation, approach: homeApproach },
+      away: { formation: awayFormation, approach: awayApproach },
+    },
     action: null,
     homeOnField: [],
     awayOnField: [],
@@ -298,18 +327,21 @@ function PitchCanvas(props: Props) {
   const liveRef = useRef({
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
+    homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   });
   useEffect(() => {
     liveRef.current = {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
+      homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
       onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
   }, [
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
+    homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
   ]);
 
@@ -500,7 +532,10 @@ function PitchCanvas(props: Props) {
       tacticalAssignmentsRef.current = null;
       const firstPhase = phases[0];
       if (!firstPhase) return;
-      const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh);
+      const layout = firstPhase.attackingHome
+        ? liveRef.current.formationLayouts.home
+        : liveRef.current.formationLayouts.away;
+      const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh, layout);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
       if ((firstPhase.setPiece || firstPhase.restart) && firstPhase.sourceOverride) {
@@ -567,8 +602,18 @@ function PitchCanvas(props: Props) {
           initialLive.homeRoster,
           initialLive.awayRoster,
           homePossessionShare,
+          initialLive.homeFormation,
+          initialLive.awayFormation,
+          initialLive.homeApproach,
+          initialLive.awayApproach,
         )
-        : { homePossessionShare });
+        : {
+          homePossessionShare,
+          homeFormation: initialLive.homeFormation,
+          awayFormation: initialLive.awayFormation,
+          homeApproach: initialLive.homeApproach,
+          awayApproach: initialLive.awayApproach,
+        });
       loadSequence(generated.phases, initialSeed);
       activeSceneKeyRef.current = initialScene?.key ?? null;
       sequenceSceneRef.current = initialScene;
@@ -583,7 +628,9 @@ function PitchCanvas(props: Props) {
       const {
         minute, maxMinute, homeColor, awayColor, halftime, breakLabel: liveBreakLabel, targetShift,
         eventScene, homeRoster, awayRoster, playbackMode: livePlaybackMode, shootout: liveShootout,
-        possession: livePossession,
+        possession: livePossession, homeFormation: liveHomeFormation, awayFormation: liveAwayFormation,
+        homeApproach: liveHomeApproach, awayApproach: liveAwayApproach,
+        formationLayouts: liveFormationLayouts, featuredPlayerIdSet: liveFeaturedPlayerIds,
       } = live;
       const homePossessionShare = livePossession[0] / 100;
 
@@ -645,7 +692,18 @@ function PitchCanvas(props: Props) {
         };
         const directed = generateSequence(
           sceneToStart.seed,
-          sequenceOptionsForScene(sceneToStart, live.allEvents, homeRoster, awayRoster, homePossessionShare, continuity),
+          sequenceOptionsForScene(
+            sceneToStart,
+            live.allEvents,
+            homeRoster,
+            awayRoster,
+            homePossessionShare,
+            liveHomeFormation,
+            liveAwayFormation,
+            liveHomeApproach,
+            liveAwayApproach,
+            continuity,
+          ),
         );
         loadSequence(directed.phases, sceneToStart.seed);
         activeSceneKeyRef.current = sceneToStart.key;
@@ -798,6 +856,10 @@ function PitchCanvas(props: Props) {
             sourceOverride: restartSource,
             restart,
             homePossessionShare,
+            homeFormation: liveHomeFormation,
+            awayFormation: liveAwayFormation,
+            homeApproach: liveHomeApproach,
+            awayApproach: liveAwayApproach,
           };
           postShotRestingBallRef.current = null;
           shotOutcomeHeldRef.current = false;
@@ -813,6 +875,10 @@ function PitchCanvas(props: Props) {
             startingPlayerIdx: nearestPlayerSlot(nextRoster, playerPosRef.current, nextOffset, ballX, ballY),
             sourceOverride: { x: ballX, y: ballY },
             homePossessionShare,
+            homeFormation: liveHomeFormation,
+            awayFormation: liveAwayFormation,
+            homeApproach: liveHomeApproach,
+            awayApproach: liveAwayApproach,
           };
         }
           const gen = generateSequence(sequenceSeedRef.current, continuationOptions);
@@ -852,6 +918,10 @@ function PitchCanvas(props: Props) {
               sourceOverride: { x: ballNX, y: ballNY },
               homePossessionShare,
               transition: true,
+              homeFormation: liveHomeFormation,
+              awayFormation: liveAwayFormation,
+              homeApproach: liveHomeApproach,
+              awayApproach: liveAwayApproach,
             });
             loadSequence(turnover.phases, sequenceSeedRef.current);
             sequenceSceneRef.current = null;
@@ -890,7 +960,10 @@ function PitchCanvas(props: Props) {
             phaseFrameRef.current = 0;
             if (newPhase) {
               phaseStateRef.current = newPhase.kind === 'shot' ? 'shooting' : 'passing';
-              const resolved = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh);
+              const newPhaseLayout = newPhase.attackingHome
+                ? liveFormationLayouts.home
+                : liveFormationLayouts.away;
+              const resolved = resolvePhasePoints(newPhase, shiftRef.current, P, fw, fh, newPhaseLayout);
               const source = newPhase.sourceOverride ? resolved.source : { ...ballPos.current };
               if (!newPhase.sourceOverride) {
                 newPhase.sourceOverride = {
@@ -900,7 +973,7 @@ function PitchCanvas(props: Props) {
               }
               ballSourceRef.current = source;
               const destination = newPhase.targetOverride
-                ?? getBaseSlot(newPhase.receiverIdx, newPhase.attackingHome, shiftRef.current);
+                ?? getBaseSlot(newPhase.receiverIdx, newPhase.attackingHome, shiftRef.current, newPhaseLayout);
               const sourceNX = (source.x - P) / fw;
               const sourceNY = (source.y - P) / fh;
               // Grass kick on pass start
@@ -918,8 +991,11 @@ function PitchCanvas(props: Props) {
 
       const currentPhase = sequenceRef.current[phaseIdxRef.current] ?? sequenceRef.current[sequenceRef.current.length - 1];
       const isAttHome = currentPhase.attackingHome;
+      const attackingFormationLayout = isAttHome
+        ? liveFormationLayouts.home
+        : liveFormationLayouts.away;
       const receiverSlot = currentPhase.targetOverride
-        ?? getBaseSlot(currentPhase.receiverIdx, isAttHome, shiftRef.current);
+        ?? getBaseSlot(currentPhase.receiverIdx, isAttHome, shiftRef.current, attackingFormationLayout);
 
       const defaultShotTarget = {
         x: isAttHome ? 0.985 : 0.015,
@@ -933,7 +1009,7 @@ function PitchCanvas(props: Props) {
         ? directedShotScene?.target ?? defaultShotTarget
         : null;
       const baseBallTarget = shotTarget ?? receiverSlot;
-      const receiverRole = BASE_FORMATION[currentPhase.receiverIdx]?.role;
+      const receiverRole = attackingFormationLayout[currentPhase.receiverIdx]?.role;
       const maxCarry = receiverRole === 'GK' ? 0.006 : receiverRole === 'DF' ? 0.014 : receiverRole === 'MF' ? 0.022 : 0.026;
       const canCarry = phaseStateRef.current === 'holding'
         && currentPhase.kind === 'pass'
@@ -1105,6 +1181,7 @@ function PitchCanvas(props: Props) {
           pressureTarget.x,
           pressureTarget.y,
           activePlayerIndices,
+          liveFormationLayouts,
         );
       }
       updatePlayerPositions(
@@ -1134,6 +1211,7 @@ function PitchCanvas(props: Props) {
         activePlayerIndices,
         phaseProgress,
         tacticalAssignmentsRef.current ?? undefined,
+        liveFormationLayouts,
       );
       const pinnedPlayerIndices = new Set<number>();
       const holderOffset = isAttHome ? 0 : 11;
@@ -1196,6 +1274,7 @@ function PitchCanvas(props: Props) {
             ? phaseFrameRef.current / receptionFrames
             : isAttacker ? attackerActionProgress : phaseProgress,
           playerVisualScale,
+          liveFeaturedPlayerIds.has(player.playerId),
         );
       }
       for (const player of visibleAway) {
@@ -1227,6 +1306,7 @@ function PitchCanvas(props: Props) {
             ? phaseFrameRef.current / receptionFrames
             : isAttacker ? attackerActionProgress : phaseProgress,
           playerVisualScale,
+          liveFeaturedPlayerIds.has(player.playerId),
         );
       }
 
@@ -1262,6 +1342,10 @@ function PitchCanvas(props: Props) {
           sceneMinute: sequenceSceneRef.current?.event.minute ?? null,
           queuedScenes: queuedScenesRef.current.length,
         },
+        formations: {
+          home: { formation: liveHomeFormation, approach: liveHomeApproach },
+          away: { formation: liveAwayFormation, approach: liveAwayApproach },
+        },
         action: {
           kind: currentPhase.kind,
           setPiece: currentPhase.setPiece,
@@ -1280,6 +1364,7 @@ function PitchCanvas(props: Props) {
           slot: player.slotIndex,
           x: playerPosRef.current[player.slotIndex].x,
           y: playerPosRef.current[player.slotIndex].y,
+          featured: liveFeaturedPlayerIds.has(player.playerId),
         })),
         awayOnField: visibleAway.map(player => ({
           id: player.playerId,
@@ -1287,6 +1372,7 @@ function PitchCanvas(props: Props) {
           slot: player.slotIndex,
           x: playerPosRef.current[11 + player.slotIndex].x,
           y: playerPosRef.current[11 + player.slotIndex].y,
+          featured: liveFeaturedPlayerIds.has(player.playerId),
         })),
         rendering: debugStateRef.current.rendering,
       };

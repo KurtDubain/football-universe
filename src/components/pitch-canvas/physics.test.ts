@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
-import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
+import { BASE_FORMATION, getFormationSlots, type PassPhase, type PlayerState } from './types';
 import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
 
 function initialPlayers(): PlayerState[] {
@@ -18,6 +18,17 @@ function initialPlayers(): PlayerState[] {
 }
 
 describe('pitch player movement', () => {
+  it('keeps formation-specific role counts and mirrored base positions', () => {
+    const defensiveShape = getFormationSlots('5-4-1');
+    const homeFifthDefender = getBaseSlot(5, true, 0, defensiveShape);
+    const awayFifthDefender = getBaseSlot(5, false, 0, defensiveShape);
+
+    expect(homeFifthDefender.role).toBe('DF');
+    expect(awayFifthDefender.role).toBe('DF');
+    expect(homeFifthDefender.x + awayFifthDefender.x).toBeCloseTo(1);
+    expect(getFormationSlots('4-2-3-1').filter(slot => slot.role === 'MF')).toHaveLength(5);
+  });
+
   it('keeps an aerial pass on its ground path while reporting visual elevation separately', () => {
     const ball = computeBallPosition({
       passing: true,

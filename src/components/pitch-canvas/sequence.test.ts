@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPassTarget, generateSequence, restartReleaseDelay } from './sequence';
+import { getFormationSlots, getTacticalFormationSlots } from './types';
 
 describe('pitch possession sequences', () => {
   it('creates deterministic, bounded receiving points rather than fixed formation coordinates', () => {
@@ -139,5 +140,39 @@ describe('pitch possession sequences', () => {
       const targets = sequence.phases.map(phase => phase.targetOverride!.x);
       expect(targets.every((target, index) => index === 0 || target >= targets[index - 1] - 0.025)).toBe(true);
     }
+  });
+
+  it('uses the selected shape when choosing creators and finishers', () => {
+    const formation = getFormationSlots('5-4-1');
+    const sequence = generateSequence(20260812, {
+      attackingHome: true,
+      forceShot: true,
+      homeFormation: '5-4-1',
+      awayFormation: '4-3-3',
+    });
+    const shot = sequence.phases.at(-1)!;
+
+    expect(formation).toHaveLength(11);
+    expect(formation.filter(slot => slot.role === 'DF')).toHaveLength(5);
+    expect(formation.filter(slot => slot.role === 'FW')).toHaveLength(1);
+    expect(formation[shot.receiverIdx].role).toBe('FW');
+    expect(sequence.phases.every(phase => phase.passerIdx >= 0 && phase.passerIdx < 11)).toBe(true);
+  });
+
+  it('turns the frozen approach into a bounded readable team posture', () => {
+    const pressing = getTacticalFormationSlots('4-3-3', 'pressing');
+    const lowBlock = getTacticalFormationSlots('4-3-3', 'low_block');
+    const counter = getTacticalFormationSlots('5-4-1', 'counter');
+
+    expect(pressing[6].x).toBeGreaterThan(lowBlock[6].x);
+    expect(Math.abs(lowBlock[1].y - lowBlock[4].y)).toBeLessThan(
+      Math.abs(pressing[1].y - pressing[4].y),
+    );
+    expect(counter.find(slot => slot.role === 'FW')!.x).toBeGreaterThan(
+      getFormationSlots('5-4-1').find(slot => slot.role === 'FW')!.x,
+    );
+    expect([...pressing, ...lowBlock, ...counter].every(slot =>
+      slot.x >= 0.05 && slot.x <= 0.62 && slot.y >= 0.07 && slot.y <= 0.93
+    )).toBe(true);
   });
 });

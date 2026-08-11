@@ -99,7 +99,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
     },
     {
       key: 'match', title: '比赛模拟', icon: '⚽',
-      content: `影响比赛结果的因素：球队OVR、教练加成、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)、动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)、弱队补正(${(BALANCE.UNDERDOG_BOOST * 100).toFixed(0)}%)。真实主场比赛具有${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%主场优势；世界杯、洲际杯、联赛杯、单回合决赛和升降级附加赛均为中立场，不应用该加成。世界杯东道主仅在自己的比赛中获得独立的${(BALANCE.WORLD_CUP_HOST_ADVANTAGE * 100).toFixed(0)}%赛会氛围加成，不叠加普通主场优势。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
+      content: `影响比赛结果的因素：球队OVR、实际首发、教练加成、自动阵型与策略、士气(${(BALANCE.MORALE_WEIGHT * 100).toFixed(0)}%)、体能(${(BALANCE.FATIGUE_WEIGHT * 100).toFixed(0)}%)和动量(${(BALANCE.MOMENTUM_WEIGHT * 100).toFixed(0)}%)。弱队不会获得隐藏固定补正；教练会结合实力差、体能和赛事阶段选择低位防守或快速反击，优势与代价同时进入比赛模型。真实主场比赛具有${(BALANCE.HOME_ADVANTAGE * 100).toFixed(0)}%主场优势；世界杯、洲际杯、联赛杯、单回合决赛和升降级附加赛均为中立场，不应用该加成。世界杯东道主仅在自己的比赛中获得独立的${(BALANCE.WORLD_CUP_HOST_ADVANTAGE * 100).toFixed(0)}%赛会氛围加成，不叠加普通主场优势。杯赛比联赛更不确定(波动${(BALANCE.CUP_RANDOMNESS * 100).toFixed(0)}% vs ${(BALANCE.LEAGUE_RANDOMNESS * 100).toFixed(0)}%)。进球数基于泊松分布采样。`,
     },
     {
       key: 'coach', title: '教练系统', icon: '👔',

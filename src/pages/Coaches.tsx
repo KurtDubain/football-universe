@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
 import TrophyBreakdown from '../components/TrophyBreakdown';
 import { SegmentedControl } from '../components/ui';
+import { derivePreferredFormation } from '../engine/coaches/tactics';
 
 type SortKey = 'rating' | 'name' | 'trophies' | 'pressure';
 type FilterTab = 'all' | 'employed' | 'unemployed';
@@ -134,6 +135,9 @@ export default function Coaches() {
                     {career.length > 1 && (
                       <span>执教 {career.length} 队</span>
                     )}
+                    <span className="shrink-0 font-mono text-amber-300/80">
+                      {derivePreferredFormation(base)}
+                    </span>
                   </div>
                   {/* Trophy breakdown — only if any */}
                   {trophies.length > 0 && (

@@ -187,6 +187,23 @@ describe('pickMatchday — filtering', () => {
     expect(md[0].rating).toBeGreaterThan(md[13].rating);
   });
 
+  it('preserves every starter role required by the selected formation', () => {
+    const squad = [
+      makePlayer('gk', { position: 'GK', rating: 99 }),
+      ...Array.from({ length: 6 }, (_, index) => makePlayer(`df-${index}`, { position: 'DF', rating: 55 - index })),
+      ...Array.from({ length: 7 }, (_, index) => makePlayer(`mf-${index}`, { position: 'MF', rating: 95 - index })),
+      ...Array.from({ length: 7 }, (_, index) => makePlayer(`fw-${index}`, { position: 'FW', rating: 85 - index })),
+    ];
+
+    const defensive = selectMatchday(squad, 0, '5-4-1')!;
+    const control = selectMatchday(squad, 0, '4-2-3-1')!;
+
+    expect(defensive.players.filter(player => player.position === 'DF').length).toBeGreaterThanOrEqual(5);
+    expect(control.players.filter(player => player.position === 'MF').length).toBeGreaterThanOrEqual(5);
+    expect(defensive.players).toHaveLength(14);
+    expect(control.players).toHaveLength(14);
+  });
+
   it('filters out injured players when enough remain to field a team', () => {
     const squad = buildSquad();
     // Injure top-2 players past window 15

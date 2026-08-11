@@ -14,6 +14,7 @@ const currentSave = {
     lastNews: [],
     favoriteTeamId: null,
     favoriteTeamIds: [],
+    favoritePlayerIds: [],
     world: initializeGameWorld(20260730),
   },
 };

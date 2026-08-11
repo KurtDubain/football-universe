@@ -6,6 +6,7 @@ const seed = 20260719;
 const viewports = [
   { name: 'mobile-compact', width: 320, height: 568, isMobile: true, hasTouch: true },
   { name: 'mobile', width: 390, height: 844, isMobile: true, hasTouch: true },
+  { name: 'mobile-wide', width: 430, height: 932, isMobile: true, hasTouch: true },
   { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
 ] as const;
 
@@ -13,7 +14,7 @@ function captureConsoleError(message: ConsoleMessage, errors: string[]): void {
   if (message.type() === 'error') errors.push(message.text());
 }
 
-async function initializeGame(page: Page): Promise<{ teamId: string; playerId: string; teamName: string; playerName: string }> {
+async function initializeGame(page: Page): Promise<{ teamId: string; playerId: string; coachId: string; teamName: string; playerName: string }> {
   await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as typeof window & { __gameStore?: unknown }).__gameStore));
   return page.evaluate(async (gameSeed) => {
@@ -21,6 +22,7 @@ async function initializeGame(page: Page): Promise<{ teamId: string; playerId: s
       world: {
         teamBases: Record<string, { name: string }>;
         squads: Record<string, Array<{ uuid: string; name?: string; number: number }>>;
+        coachStates: Record<string, { currentTeamId: string | null }>;
       };
       newGame: (seed: number) => Promise<void>;
     };
@@ -30,9 +32,13 @@ async function initializeGame(page: Page): Promise<{ teamId: string; playerId: s
     const state = store.getState();
     const teamId = Object.keys(state.world.teamBases)[0];
     const player = state.world.squads[teamId][0];
+    const coachId = Object.entries(state.world.coachStates)
+      .find(([, coach]) => coach.currentTeamId === teamId)?.[0];
+    if (!coachId) throw new Error(`No active coach found for ${teamId}`);
     return {
       teamId,
       playerId: player.uuid,
+      coachId,
       teamName: state.world.teamBases[teamId].name,
       playerName: player.name ?? `${player.number}号`,
     };
@@ -62,6 +68,33 @@ async function main(): Promise<void> {
       const fixture = await initializeGame(page);
 
       await page.goto(`${baseUrl}/players?audit=1`, { waitUntil: 'networkidle' });
+      await page.getByRole('heading', { name: '球星观察', exact: true }).waitFor({ state: 'visible' });
+      const worldFocusSummary = page.getByText(/\d+ 名世界焦点/).first();
+      const worldFocusText = await worldFocusSummary.innerText();
+      const worldFocusCount = Number.parseInt(worldFocusText, 10);
+      if (!Number.isFinite(worldFocusCount) || worldFocusCount < 9) {
+        throw new Error(`${viewport.name}: world focus does not expose enough qualifying stars (${worldFocusText})`);
+      }
+      const expandFocus = page.getByRole('button', { name: new RegExp(`查看全部 ${worldFocusCount} 人`) });
+      if (worldFocusCount > 10) await expandFocus.click();
+      for (let index = 0; index < 8; index++) {
+        await page.locator('button[aria-label^="关注 "]').first().click();
+      }
+      const ninthFollow = page.locator('button[aria-label^="关注 "]').first();
+      if (!await ninthFollow.isDisabled()) {
+        throw new Error(`${viewport.name}: ninth player can still be followed`);
+      }
+      await page.getByRole('tab', { name: '我的关注', exact: true }).click();
+      await page.getByText('8/8 名关注', { exact: true }).waitFor({ state: 'visible' });
+      const followedRows = await page.locator('button[aria-label^="取消关注 "]').count();
+      if (followedRows !== 8) throw new Error(`${viewport.name}: expected 8 followed players, found ${followedRows}`);
+      const starObservationOverflow = await bodyOverflow(page);
+      if (starObservationOverflow > 1) {
+        throw new Error(`${viewport.name}: star observation overflows by ${starObservationOverflow}px`);
+      }
+      const starObservationScreenshot = `/tmp/football-star-observation-${viewport.name}.png`;
+      await page.screenshot({ path: starObservationScreenshot, animations: 'disabled', fullPage: false });
+
       const playerTabs = page.locator('[aria-label="球员榜单"] [role="tab"]');
       const lastPlayerTab = playerTabs.last();
       await lastPlayerTab.click();
@@ -147,6 +180,23 @@ async function main(): Promise<void> {
         page.waitForURL(url => url.pathname === `/team/${fixture.teamId}`),
         teamRow.click(),
       ]);
+      const teamTactics = page.getByTestId('team-tactical-identity');
+      await teamTactics.waitFor({ state: 'visible' });
+      if (!/4-3-3|4-2-3-1|4-4-2|5-4-1/.test(await teamTactics.innerText())) {
+        throw new Error(`${viewport.name}: team tactical identity is missing its formation`);
+      }
+
+      await page.goto(`${baseUrl}/coach/${fixture.coachId}?audit=1`, { waitUntil: 'networkidle' });
+      const coachTactics = page.getByTestId('coach-tactical-identity');
+      await coachTactics.waitFor({ state: 'visible' });
+      const coachTacticsText = await coachTactics.innerText();
+      if (!/4-3-3|4-2-3-1|4-4-2|5-4-1/.test(coachTacticsText)
+        || !coachTacticsText.includes('主要优势')
+        || !coachTacticsText.includes('明确代价')) {
+        throw new Error(`${viewport.name}: coach tactical identity is incomplete (${coachTacticsText})`);
+      }
+
+      await page.goto(`${baseUrl}/team/${fixture.teamId}?audit=1`, { waitUntil: 'networkidle' });
 
       const detailTabs = page.locator('[aria-label="球队详情分区"] [role="tab"]');
       await detailTabs.first().waitFor({ state: 'visible' });
@@ -189,6 +239,9 @@ async function main(): Promise<void> {
         emptyStateCount,
         headlineCount,
         bodyOverflow: overflow,
+        worldFocusCount,
+        followedRows,
+        starObservationScreenshot,
         playerDetailScreenshot,
         screenshot,
       });

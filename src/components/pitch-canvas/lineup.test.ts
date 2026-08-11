@@ -33,6 +33,26 @@ function fullSnapshot(): MatchdaySnapshot {
   };
 }
 
+function formationSnapshot(): MatchdaySnapshot {
+  const positions = ['GK', 'DF', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'] as const;
+  return {
+    formation: '5-4-1',
+    players: positions.map((position, index) => ({
+      playerId: `shape-${index}`,
+      playerNumber: index + 1,
+      playerName: `阵型球员${index + 1}`,
+      position,
+      role: 'starter',
+      enteredMinute: 0,
+      exitedMinute: 90,
+      minutesPlayed: 90,
+    })),
+    durationMinutes: 90,
+    emergencyFloor: false,
+    availableCount: 11,
+  };
+}
+
 describe('pitch lineup projection', () => {
   it('uses real shirt numbers and keeps substitutions in the outgoing slot', () => {
     const roster = buildPitchRoster(fullSnapshot());
@@ -55,5 +75,15 @@ describe('pitch lineup projection', () => {
 
   it('falls back to a complete visible formation when no snapshot is available', () => {
     expect(activePitchPlayers(buildPitchRoster(), 90)).toHaveLength(11);
+  });
+
+  it('projects every starter into the frozen formation role slots', () => {
+    const roster = buildPitchRoster(formationSnapshot());
+
+    expect(roster).toHaveLength(11);
+    expect(roster.filter(player => player.position === 'DF')).toHaveLength(5);
+    expect(new Set(roster.map(player => player.slotIndex)).size).toBe(11);
+    expect(roster.find(player => player.playerId === 'shape-5')?.slotIndex).toBe(5);
+    expect(roster.find(player => player.playerId === 'shape-10')?.slotIndex).toBe(10);
   });
 });

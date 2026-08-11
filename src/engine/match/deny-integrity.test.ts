@@ -137,11 +137,29 @@ describe('v22 deny pipeline — score / stat integrity', () => {
     }
   });
 
-  it('knockout matches bypass deny (no gk_save / df_block events generated)', () => {
-    const { ctx, fixture } = makeContext(99, /*isKnockout*/ true);
-    const { matchResult } = simulateMatch(ctx, fixture);
-    const denyEvents = matchResult.events.filter(e => e.type === 'gk_save' || e.type === 'df_block');
-    expect(denyEvents.length).toBe(0);
+  it('applies deny before knockout progression and keeps every stage coherent', () => {
+    let denyEventCount = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const { ctx, fixture } = makeContext(seed, true);
+      const { matchResult } = simulateMatch(ctx, fixture);
+      denyEventCount += matchResult.events.filter(e => e.type === 'gk_save' || e.type === 'df_block').length;
+
+      const regulationTied = matchResult.homeGoals === matchResult.awayGoals;
+      expect(matchResult.extraTime).toBe(regulationTied);
+      const totalHome = matchResult.homeGoals + (matchResult.etHomeGoals ?? 0);
+      const totalAway = matchResult.awayGoals + (matchResult.etAwayGoals ?? 0);
+      expect(matchResult.penalties).toBe(totalHome === totalAway);
+      if (matchResult.penalties) {
+        expect(matchResult.penaltyHome).not.toBe(matchResult.penaltyAway);
+      }
+      expect(matchResult.homeGoals).toBe(matchResult.events.filter(event =>
+        event.type === 'goal' && event.teamId === matchResult.homeTeamId && event.minute <= 90,
+      ).length);
+      expect(matchResult.awayGoals).toBe(matchResult.events.filter(event =>
+        event.type === 'goal' && event.teamId === matchResult.awayTeamId && event.minute <= 90,
+      ).length);
+    }
+    expect(denyEventCount).toBeGreaterThanOrEqual(3);
   });
 
   it('league matches DO occasionally generate save/block events', () => {

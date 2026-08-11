@@ -215,6 +215,7 @@ export function drawPlayer(
   action?: 'receive' | 'shot' | 'save' | 'catch' | 'block',
   actionProgress = 0,
   visualScale = 1,
+  featured = false,
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -253,6 +254,24 @@ export function drawPlayer(
   // Soft shadow
   ctx.beginPath(); ctx.ellipse(px, py + 5, 5, 1.8, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+
+  // Featured players keep a quiet broadcast marker throughout the match.
+  // Four short arcs remain legible behind the ball-holder/event rings without
+  // turning five simultaneous focus players into a wall of nameplates.
+  if (featured) {
+    ctx.strokeStyle = 'rgba(251,191,36,0.88)';
+    ctx.lineWidth = 1.15;
+    for (let quadrant = 0; quadrant < 4; quadrant++) {
+      const start = quadrant * Math.PI / 2 - 0.42;
+      ctx.beginPath();
+      ctx.arc(px, py, 11.2, start, start + 0.84);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(px, py - 11.2, 1.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#fde68a';
+    ctx.fill();
+  }
 
   // Ball-holder ring
   if (hasBall) {

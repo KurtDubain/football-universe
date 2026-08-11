@@ -1,5 +1,17 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-12 v4.53.0 Coach Tactics And Star Presence
+
+- Completed the confirmed lightweight coach and star systems without adding manual management. Four formations, five contextual approaches, injury-aware fallback, bounded soft matchups, formation-aware lineups, named marginal impact, prediction, simulation, reporting and replay now share one deterministic pipeline.
+- Removed the old hidden underdog attack compensation. Low blocks and counters have visible benefits and costs, no-coach teams receive no tactical delta, and every result freezes both deployments for honest historical explanation.
+- Restored a sustainable rare youth tail across all four positions, unified event attribution and match-player impact, moved knockout saves/blocks before extra-time decisions, and gave GK/DF meaningful MOTM routes. Focus identity itself never adds a second buff.
+- Added World Focus with no qualifying-player cap, an under-23 radar, an eight-player UUID watchlist, recent factual form, compact ranking groups, pre/post-match star context, and at most five qualifying live starters with no home/away quota. Hidden potential remains private.
+- Canvas now consumes actual formations and approaches, uses restrained focus rings, keeps substitutions and dismissals authoritative, and exposes one compact tactical/focus strip plus real post-match contributions.
+- Full simulation covered 20 seeds × 30 seasons and 5 seeds × 100 seasons: 517,960 matches, 2.587 goals per match, 22.99% draws, every formation/approach used, 0.11 percentage-point maximum calibration gap, and deterministic repeated digests. At S100 the average world retains 36.2 players rated 85+, 7 rated 90+, and 5.4 U23 players rated 80+, with stars in every position.
+- Live focus appeared in 72.96% of matches at only 1.461 players per match. Advancement p50/p95 was 5.945/12.719ms, presentation fields added an estimated 1.671% compressed save size, and validation found zero errors, warnings, missing tactics, or invalid focus snapshots.
+- The S150 audit completed 7,609 advances with a 2,107,348-byte compressed save and 199.7ms browser restore; all S1/S50/S100/S150 reload and next-advance digests matched. Browser workflows passed at 320/390/430/1440 widths with an eight-player follow limit and zero horizontal overflow.
+- Final Node 22.22.2 release gates passed 122 test files / 891 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, bundle/changelog/security gates, the complete smoke suite, match-explanation checks, and 1x/4x CPU animation audits. The smoke rerun caught and fixed a 10px compact cup label plus a process-group shutdown race; a second clean run exited successfully with both audit ports released. Standard game-client snapshots and text state were visually checked for formation shape, focus identity, saves, and nonblank deterministic Canvas output.
+
 ## 2026-08-11 v4.52.0 Broadcast Pitch And Camera Polish
 
 - Current request: continue polishing the live match experience until it feels deliberate and credible on both desktop and mobile, with particular attention to image quality, football movement, and broadcast presentation.
@@ -886,3 +898,26 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Final Node 22.22.2 verification passed 107 test files / 811 tests, ESLint, strict TypeScript, ordinary and audit PWA production builds, changelog and bundle budgets, and a zero-vulnerability production dependency audit. The ordinary entry is 237,468 bytes / 73,815 gzip; the initial graph is 647,499 bytes / 210,897 gzip.
 - Production-browser validation passed semantic UI feedback, persisted sound preferences, reduced-motion behavior, offline revisit, synchronized live audio, commentary scrolling, regular play, saves, blocks, corners, free kicks, shootouts, and 320px/390px/desktop layouts. The standard game client and manual screenshot review found no runtime errors, clipping, or control overflow.
 - Canvas averaged 0.27ms per draw normally and 0.90ms under 4x CPU throttling, with exact final scores, hidden/covered pause behavior, clean reopen/reset behavior, and no runtime errors preserved.
+
+## 2026-08-11 Coach Tactics And Formation Plan
+
+- The user approved the bounded “方案 B” direction for making coaches perceptible through authoritative match numbers, pre/post-match explanation, team and coach identity, stories, and live formation behavior.
+- The implementation baseline is recorded in `docs/coach-tactics-formation-plan.md`: four formations, five contextual approaches, deterministic automatic selection, soft matchup dimensions, a single capped effect budget, frozen match tactics, and one shared source for lineups, simulation, statistics, UI, and Canvas.
+- The plan explicitly excludes manual tactics, detailed player roles, large formation catalogs, and full in-match formation changes. The current underdog attack boost must be replaced rather than stacked with low-block/counter behavior.
+- No gameplay code has been changed yet. Phase 0 remains open until the user's next large feature is discussed, so both systems can share the correct match lifecycle and persistence boundaries before implementation starts.
+
+## 2026-08-12 Star Player Presence Plan
+
+- Audited the current star pipeline across player generation, youth replacement, lineup boosts, event attribution, MOTM, season performance, awards, rankings, player detail, tracking state, and live rendering.
+- The existing cross-position season score remains the correct foundation. A fresh 30-seed × 20-season audit passed with a 1.9-point position median spread, a 2.0-point P90 spread, and no invalid scores or attendance values.
+- The primary correctness issue is long-term star extinction rather than the public score formula. In one real-world run, active 85+ players fell from 63 in S1 to 16 in S10 and zero in S20/S30/S40; a 16,000-youth sample had a potential P95 near 70 and a maximum of 77.
+
+## 2026-08-12 Coach Tactics And Star Presence Implementation
+
+- User-approved constraints are frozen: world focus has no fixed display cap and includes every qualifying active player; rising stars are under 23; player watchlist is capped at 8; live focus is capped at 5 total with no home/away quota.
+- Added the shared tactical foundation: four supported formations, five automatic approaches, deterministic style-based coach identities, injury-aware formation fallback, bounded soft matchup effects, and frozen match tactics types.
+- Starting-XI selection and player-unit boosts now consume the same formation. Prediction and simulation derive the same tactics snapshot; the old anonymous underdog attack compensation has been replaced by an explainable low-block/counter response.
+- Strict TypeScript and seven focused test files passed (87 tests), including all four starting shapes, deterministic decisions, no-coach neutrality, injury fallback, and the <=3-point tactical effect budget.
+- Added `docs/star-player-presence-plan.md` as the reviewable implementation baseline: sustainable rare star generation across all positions, one shared match-impact evaluator, position-neutral MOTM, corrected young-player semantics, restrained live focus players, world-star/youth/watchlist observation, and clearer leaderboard context.
+- Linked the plan to `docs/coach-tactics-formation-plan.md`. The two systems will share one ordered pipeline for coach tactics, formation-aware lineups, unit quality, named player marginal impact, frozen focus snapshots, authoritative events, match reports, and Canvas presentation.
+- No gameplay code has changed. Both plans remain pending final product approval, and checklist items must not be marked complete until implementation plus automated, long-run, browser, mobile, save-size, and performance validation succeeds.

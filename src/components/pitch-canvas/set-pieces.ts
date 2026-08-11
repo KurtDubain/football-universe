@@ -1,5 +1,5 @@
 import { seededRand } from './math';
-import { BASE_FORMATION, type PassPhase, type PresentationSetPiece, type Role } from './types';
+import { BASE_FORMATION, type FormationSlot, type PassPhase, type PresentationSetPiece, type Role } from './types';
 
 export interface SetPieceSequenceOptions {
   attackingHome: boolean;
@@ -9,6 +9,15 @@ export interface SetPieceSequenceOptions {
   forceShot: boolean;
   shooterIdx?: number;
   creatorIdx?: number;
+  formation?: FormationSlot[];
+}
+
+function closestSlot(formation: FormationSlot[], role: Role, targetY: number): number {
+  return formation
+    .map((slot, index) => ({ slot, index }))
+    .filter(entry => entry.slot.role === role)
+    .sort((left, right) => Math.abs(left.slot.y - targetY) - Math.abs(right.slot.y - targetY)
+      || left.index - right.index)[0]?.index ?? 6;
 }
 
 export function generateSetPieceSequence(
@@ -16,11 +25,12 @@ export function generateSetPieceSequence(
   options: SetPieceSequenceOptions,
 ): { phases: PassPhase[]; endsInShot: boolean } {
   const r = (salt: number) => seededRand(seed * 11 + salt);
+  const formation = options.formation ?? BASE_FORMATION;
   const attackDirection = options.attackingHome ? 1 : -1;
   const goalX = options.attackingHome ? 0.985 : 0.015;
 
   if (options.setPiece === 'penalty') {
-    const shooterIdx = options.shooterIdx ?? 9;
+    const shooterIdx = options.shooterIdx ?? closestSlot(formation, 'FW', 0.5);
     return {
       endsInShot: true,
       phases: [{
@@ -45,7 +55,7 @@ export function generateSetPieceSequence(
     : options.side;
 
   if (options.setPiece === 'direct_free_kick') {
-    const takerIdx = options.shooterIdx ?? options.creatorIdx ?? 9;
+    const takerIdx = options.shooterIdx ?? options.creatorIdx ?? closestSlot(formation, 'MF', 0.5);
     const source = {
       x: options.attackingHome ? 0.76 + r(2) * 0.06 : 0.24 - r(2) * 0.06,
       y: 0.42 + r(3) * 0.16,
@@ -75,9 +85,9 @@ export function generateSetPieceSequence(
   }
 
   const isCorner = options.setPiece === 'corner';
-  const fallbackTaker = options.shooterIdx === 7 ? 6 : 7;
+  const fallbackTaker = closestSlot(formation, 'MF', side === 'left' ? 0.22 : 0.78);
   const takerIdx = options.creatorIdx ?? fallbackTaker;
-  const shooterIdx = options.shooterIdx ?? (8 + Math.floor(r(6) * 3));
+  const shooterIdx = options.shooterIdx ?? closestSlot(formation, 'FW', 0.42 + r(6) * 0.16);
   const sourceX = isCorner
     ? (options.attackingHome ? 0.965 : 0.035)
     : (options.attackingHome ? 0.72 + r(7) * 0.05 : 0.28 - r(7) * 0.05);
@@ -138,6 +148,7 @@ export function setPiecePlayerTarget(
   isHomeTeam: boolean,
   role: Role,
   phase: PassPhase,
+  formation: FormationSlot[] = BASE_FORMATION,
 ): { x: number; y: number } | undefined {
   if (!phase.setPiece) return undefined;
   const formIdx = playerIndex % 11;
@@ -145,26 +156,28 @@ export function setPiecePlayerTarget(
   const attackDirection = phase.attackingHome ? 1 : -1;
   const ownGoalX = isHomeTeam ? 0.03 : 0.97;
   const attackGoalX = phase.attackingHome ? 0.97 : 0.03;
-  const source = phase.sourceOverride ?? BASE_FORMATION[phase.passerIdx];
+  const source = phase.sourceOverride ?? formation[phase.passerIdx];
+  const roleIndices = formation.flatMap((slot, index) => slot.role === role ? [index] : []);
+  const roleRank = Math.max(0, roleIndices.indexOf(formIdx));
 
   if (phase.setPiece === 'penalty') {
     if (attackingTeam) {
       if (formIdx === phase.passerIdx) return source;
-      return { x: 0.5 - attackDirection * 0.07, y: BASE_FORMATION[formIdx].y };
+      return { x: 0.5 - attackDirection * 0.07, y: formation[formIdx].y };
     }
     if (role === 'GK') return { x: ownGoalX, y: 0.5 };
-    return { x: 0.5 + attackDirection * 0.07, y: BASE_FORMATION[formIdx].y };
+    return { x: 0.5 + attackDirection * 0.07, y: formation[formIdx].y };
   }
 
   if (phase.setPiece === 'direct_free_kick') {
     if (attackingTeam) {
       if (formIdx === phase.passerIdx) return source;
-      if (role === 'FW') return { x: source.x - attackDirection * 0.04, y: 0.35 + (formIdx - 8) * 0.15 };
+      if (role === 'FW') return { x: source.x - attackDirection * 0.04, y: formation[formIdx].y };
       return undefined;
     }
     if (role === 'GK') return { x: ownGoalX, y: 0.5 + (source.y - 0.5) * 0.18 };
     if (role === 'DF') {
-      const wallRank = Math.max(0, Math.min(3, formIdx - 1));
+      const wallRank = Math.max(0, Math.min(3, roleRank));
       return {
         x: source.x + attackDirection * 0.075,
         y: source.y + (wallRank - 1.5) * 0.035,
@@ -178,9 +191,9 @@ export function setPiecePlayerTarget(
     if (role === 'GK') return undefined;
     if (role === 'DF') return {
       x: attackGoalX - attackDirection * (0.34 + (formIdx % 2) * 0.05),
-      y: BASE_FORMATION[formIdx].y,
+      y: formation[formIdx].y,
     };
-    const lane = formIdx <= 5 ? 0.31 : formIdx <= 7 ? 0.43 + (formIdx - 6) * 0.14 : 0.34 + (formIdx - 8) * 0.16;
+    const lane = 0.28 + ((formIdx * 7) % 5) * 0.11;
     return {
       x: attackGoalX - attackDirection * (0.07 + ((formIdx * 7) % 3) * 0.025),
       y: Math.max(0.24, Math.min(0.76, lane)),
@@ -190,11 +203,12 @@ export function setPiecePlayerTarget(
   if (role === 'GK') return { x: ownGoalX, y: 0.5 };
   if (role === 'FW') return {
     x: ownGoalX + (isHomeTeam ? 0.3 : -0.3),
-    y: BASE_FORMATION[formIdx].y,
+    y: formation[formIdx].y,
   };
-  const laneRank = role === 'DF' ? formIdx - 1 : formIdx - 5;
+  const laneRank = roleRank;
+  const laneCount = Math.max(1, roleIndices.length);
   return {
     x: ownGoalX + (isHomeTeam ? 0.07 + (laneRank % 2) * 0.025 : -0.07 - (laneRank % 2) * 0.025),
-    y: Math.max(0.25, Math.min(0.75, 0.29 + laneRank * 0.12)),
+    y: Math.max(0.24, Math.min(0.76, 0.28 + (laneRank / Math.max(1, laneCount - 1)) * 0.44)),
   };
 }

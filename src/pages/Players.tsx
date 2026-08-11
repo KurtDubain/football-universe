@@ -11,14 +11,24 @@ import {
   getCurrentGoalkeeperRows,
   getCurrentTopAssistRows,
   getCurrentTopScorerRows,
+  getCurrentPlayerStatRow,
   getPlayerRowPerformance,
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
 import { PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
+import { Icon } from '../components/Icon';
+import {
+  buildRecentPlayerForm,
+  FAVORITE_PLAYER_LIMIT,
+  selectStarObservations,
+  type StarObservationEntry,
+} from '../engine/players/star-presence';
 
 type Tab = 'overall' | 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
+type RankingGroup = 'season' | 'position' | 'career';
+type StarView = 'world' | 'rising' | 'following';
 
 const positionLabel: Record<PlayerPosition, string> = {
   GK: '门将',
@@ -43,8 +53,13 @@ const rankBadge = (rank: number) => {
 
 export default function Players() {
   const world = useGameStore((s) => s.world);
+  const favoritePlayerIds = useGameStore((s) => s.favoritePlayerIds);
+  const toggleFavoritePlayer = useGameStore((s) => s.toggleFavoritePlayer);
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('overall');
+  const [rankingGroup, setRankingGroup] = useState<RankingGroup>('season');
+  const [starView, setStarView] = useState<StarView>('world');
+  const [showAllFocus, setShowAllFocus] = useState(false);
 
   const topOverall = useMemo(
     () => (world ? getCurrentOverallRows(world, 30) : []),
@@ -83,6 +98,30 @@ export default function Players() {
     [world],
   );
 
+  const activePlayers = useMemo(
+    () => Object.values(world?.squads ?? {}).flat(),
+    [world?.squads],
+  );
+  const activePlayerMap = useMemo(
+    () => new Map(activePlayers.map(player => [player.uuid, player])),
+    [activePlayers],
+  );
+  const recentForms = useMemo(() => {
+    if (!world) return new Map();
+    const results = world.seasonState.calendar
+      .filter(window => window.completed)
+      .flatMap(window => window.results ?? []);
+    return buildRecentPlayerForm(results, activePlayerMap);
+  }, [world, activePlayerMap]);
+  const starObservations = useMemo(() => {
+    if (!world) return { worldFocus: [], risingStars: [] };
+    return selectStarObservations(activePlayers, {
+      playerStats: world.playerStats,
+      playerStatSegments: world.playerStatSegments,
+      seasonStartLevels: world.seasonStartLevels,
+    }, recentForms);
+  }, [world, activePlayers, recentForms]);
+
   if (!world) {
     return <div className="text-slate-400">正在加载...</div>;
   }
@@ -90,17 +129,93 @@ export default function Players() {
   const seasonNumber = world.seasonState.seasonNumber;
   const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'overall', label: '综合榜' },
-    { key: 'scorers', label: '射手榜' },
-    { key: 'assists', label: '助攻榜' },
-    { key: 'careerScorers', label: '生涯射手' },
-    { key: 'careerAssists', label: '生涯助攻' },
-    { key: 'creation', label: '创造力' },
-    { key: 'defense', label: '防守榜' },
-    { key: 'keepers', label: '门将榜' },
-    { key: 'discipline', label: '纪律' },
-  ];
+  const tabsByGroup: Record<RankingGroup, { key: Tab; label: string }[]> = {
+    season: [
+      { key: 'overall', label: '综合榜' },
+      { key: 'scorers', label: '射手榜' },
+      { key: 'assists', label: '助攻榜' },
+      { key: 'discipline', label: '纪律' },
+    ],
+    position: [
+      { key: 'creation', label: '创造力' },
+      { key: 'defense', label: '防守榜' },
+      { key: 'keepers', label: '门将榜' },
+    ],
+    career: [
+      { key: 'careerScorers', label: '生涯射手' },
+      { key: 'careerAssists', label: '生涯助攻' },
+    ],
+  };
+  const tabs = tabsByGroup[rankingGroup];
+
+  const followedActive = favoritePlayerIds
+    .map(playerId => activePlayerMap.get(playerId))
+    .filter((player): player is NonNullable<typeof player> => Boolean(player));
+  const followedRetired = favoritePlayerIds
+    .map(playerId => world.retirementHistory.find(player => player.uuid === playerId))
+    .filter((player): player is NonNullable<typeof player> => Boolean(player));
+  const selectedStarEntries = starView === 'world'
+    ? starObservations.worldFocus
+    : starView === 'rising'
+      ? starObservations.risingStars
+      : [];
+  const visibleStarEntries = starView === 'world' && !showAllFocus
+    ? selectedStarEntries.slice(0, 10)
+    : selectedStarEntries;
+
+  const renderStarEntry = (entry: StarObservationEntry) => {
+    const { player } = entry;
+    const team = world.teamBases[player.teamId];
+    const followed = favoritePlayerIds.includes(player.uuid);
+    const followLimitReached = !followed && favoritePlayerIds.length >= FAVORITE_PLAYER_LIMIT;
+    const unavailableLabel = (player.injuredUntilWindow ?? 0) > world.totalElapsedWindows
+      ? '伤停中'
+      : (player.suspendedUntilWindow ?? 0) > world.totalElapsedWindows
+        ? '停赛中'
+        : null;
+    const reasonLabel = entry.reason === 'defensive_anchor' ? '防线核心'
+      : entry.reason === 'creator' ? '创造核心'
+        : entry.reason === 'finisher' ? '终结核心'
+          : entry.reason === 'form' ? '状态焦点'
+            : '能力焦点';
+    return (
+      <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1.4fr)_minmax(7rem,0.7fr)_auto]">
+        <Link to={`/player/${player.uuid}`} className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className={`text-xs font-semibold ${positionColor[player.position]}`}>{player.position}</span>
+            <span className="truncate text-sm font-semibold text-slate-100">{player.name}</span>
+            <span className="shrink-0 text-xs font-bold text-amber-300">{player.rating}</span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-slate-500">
+            {team?.shortName ?? player.teamId} · {player.age}岁 · {reasonLabel}{unavailableLabel ? ` · ${unavailableLabel}` : ''}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] text-slate-500 sm:hidden">
+            {unavailableLabel ? `${unavailableLabel} · ` : ''}
+            {entry.seasonScore != null ? `本季 ${entry.seasonScore.toFixed(1)} · ` : ''}
+            {entry.recentForm?.summaries[0] ?? '近期暂无出场'}
+          </span>
+        </Link>
+        <div className="hidden min-w-0 sm:block">
+          <span className="block text-xs text-slate-300">
+            {entry.seasonScore != null ? `赛季 ${entry.seasonScore.toFixed(1)}` : '赛季待观察'}
+          </span>
+          <span className="block truncate text-[11px] text-slate-500">
+            {entry.recentForm?.summaries[0] ?? '近期暂无出场'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => toggleFavoritePlayer(player.uuid)}
+          disabled={followLimitReached}
+          aria-label={followed ? `取消关注 ${player.name}` : `关注 ${player.name}`}
+          title={followLimitReached ? `最多关注 ${FAVORITE_PLAYER_LIMIT} 名球员` : followed ? '取消关注' : '关注球员'}
+          className={`inline-flex h-11 w-11 items-center justify-center rounded-md border transition-colors ${followed ? 'border-amber-500/50 bg-amber-500/12 text-amber-300' : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-200'} disabled:cursor-not-allowed disabled:opacity-35`}
+        >
+          <Icon name="star" size={17} />
+        </button>
+      </div>
+    );
+  };
 
   const renderRow = (
     stat: PlayerStatRow,
@@ -325,7 +440,95 @@ export default function Players() {
           : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
       />
 
-      {/* Tab bar */}
+      <section aria-labelledby="star-observation-heading" className="space-y-2">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 id="star-observation-heading" className="text-sm font-semibold text-slate-100">球星观察</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {starView === 'world'
+                ? `${starObservations.worldFocus.length} 名世界焦点`
+                : starView === 'rising'
+                  ? `${starObservations.risingStars.length} 名 U23 新星`
+                  : `${favoritePlayerIds.length}/${FAVORITE_PLAYER_LIMIT} 名关注`}
+            </p>
+          </div>
+        </div>
+        <SegmentedControl
+          value={starView}
+          onChange={setStarView}
+          ariaLabel="球星观察范围"
+          options={[
+            { value: 'world', label: '世界焦点' },
+            { value: 'rising', label: 'U23 新星' },
+            { value: 'following', label: '我的关注' },
+          ]}
+          stretch
+        />
+        <Panel padded={false} className="overflow-hidden">
+          {starView !== 'following' ? (
+            visibleStarEntries.length > 0 ? visibleStarEntries.map(renderStarEntry) : (
+              <div className="px-4 py-8 text-center text-sm text-slate-500">当前暂无符合资格的球员</div>
+            )
+          ) : followedActive.length > 0 || followedRetired.length > 0 ? (
+            <>
+              {followedActive.map(player => {
+                const entry = [...starObservations.worldFocus, ...starObservations.risingStars]
+                  .find(candidate => candidate.player.uuid === player.uuid) ?? (() => {
+                    const row = getCurrentPlayerStatRow(world, player.uuid);
+                    const performance = row ? getPlayerRowPerformance(world, row) : null;
+                    return {
+                      player,
+                      seasonScore: performance?.eligible ? performance.seasonScore : null,
+                      confidence: performance?.confidence ?? 0,
+                      recentForm: recentForms.get(player.uuid) ?? null,
+                      reason: player.position === 'GK' || player.position === 'DF' ? 'defensive_anchor' as const : 'ability' as const,
+                      priority: 0,
+                    };
+                  })();
+                return renderStarEntry(entry);
+              })}
+              {followedRetired.map(player => (
+                <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0">
+                  <Link to={`/player/${player.uuid}`} className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-300">{player.name}</span>
+                    <span className="text-xs text-slate-500">已退役 · S{player.seasonRetired} · 巅峰 {player.peakRating}</span>
+                  </Link>
+                  <button type="button" onClick={() => toggleFavoritePlayer(player.uuid)} aria-label={`取消关注 ${player.name}`} className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-amber-500/50 bg-amber-500/12 text-amber-300">
+                    <Icon name="star" size={17} />
+                  </button>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="px-4 py-8 text-center text-sm text-slate-500">尚未关注球员</div>
+          )}
+          {starView === 'world' && starObservations.worldFocus.length > 10 && (
+            <button
+              type="button"
+              onClick={() => setShowAllFocus(value => !value)}
+              className="min-h-11 w-full border-t border-slate-700/50 px-3 text-sm font-medium text-blue-300 hover:bg-slate-800/70"
+            >
+              {showAllFocus ? '收起' : `查看全部 ${starObservations.worldFocus.length} 人`}
+            </button>
+          )}
+        </Panel>
+      </section>
+
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+        <SegmentedControl
+          value={rankingGroup}
+          onChange={(group) => {
+            setRankingGroup(group);
+            setTab(tabsByGroup[group][0].key);
+          }}
+          ariaLabel="榜单分组"
+          options={[
+            { value: 'season', label: '本季' },
+            { value: 'position', label: '位置' },
+            { value: 'career', label: '生涯' },
+          ]}
+          stretch
+        />
       <SegmentedControl
         value={tab}
         onChange={setTab}
@@ -334,6 +537,7 @@ export default function Players() {
         stretch
         scrollable
       />
+      </div>
 
       {/* Table */}
       <Panel padded={false} className="overflow-hidden tabular-nums">

@@ -21,6 +21,7 @@ import { processRetirements } from '../players/retirement';
 import { cloneSquadsForMutation } from '../players/injuries';
 import { syncPlayerStatSegments, syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
+import { describeCoachIdentity } from '../coaches/tactics';
 import { applyAnnualRevaluation } from '../economy/market-value';
 import {
   applyIncome as applyFinanceIncome,
@@ -554,14 +555,14 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
           id: createNewsId(seasonNumber, windowIndex, `coach-hire-cand-${hire.coach.id}`),
           seasonNumber, windowIndex, type: 'coach_hired',
           title: `${hire.coach.name} 转型为教练`,
-          description: `传奇球员 ${hire.coach.name} 接手 ${teamName}，开启教练生涯。`,
+          description: `传奇球员 ${hire.coach.name} 接手 ${teamName}，将从 ${describeCoachIdentity(hire.coach)} 开启教练生涯。`,
         });
       } else {
         news.push({
           id: createNewsId(seasonNumber, windowIndex, `coach-hire-fresh-${hire.coach.id}`),
           seasonNumber, windowIndex, type: 'coach_hired',
           title: `${teamName} 任命新帅 ${hire.coach.name}`,
-          description: `${teamName} 完成与新教练 ${hire.coach.name} 的签约。`,
+          description: `${teamName} 完成与新教练 ${hire.coach.name} 的签约，新帅主张 ${describeCoachIdentity(hire.coach)}。`,
         });
       }
       // Mirror the manual coach-firing path: log this as a coach change.
@@ -1017,12 +1018,14 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     coachCareers[firingResult.newCoachId] = [...(coachCareers[firingResult.newCoachId] ?? []), firingResult.newCareerEntry];
 
     const coachName = coach.name;
-    const newCoachName = coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+    const newCoach = coachBases[firingResult.newCoachId];
+    const newCoachName = newCoach?.name ?? firingResult.newCoachId;
+    const successorIdentity = newCoach ? `，并带来 ${describeCoachIdentity(newCoach)} 的新思路` : '';
     news.push({
       id: createNewsId(seasonNumber, windowIndex, `retire-${coachId}`),
       seasonNumber, windowIndex, type: 'coach_fired',
       title: `${coachName} 功成身退，告别${world.teamBases[teamId]?.name}`,
-      description: `${coachName}在率队夺冠后选择急流勇退，留下一段传奇执教生涯。${newCoachName}将接过教鞭。`,
+      description: `${coachName}在率队夺冠后选择急流勇退，留下一段传奇执教生涯。${newCoachName}将接过教鞭${successorIdentity}。`,
     });
 
     coachChangesThisSeason.push({

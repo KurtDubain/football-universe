@@ -1,5 +1,6 @@
 import { CoachBase, CoachStyle } from '../../types/coach';
 import { SeededRNG } from '../match/rng';
+import { derivePreferredFormation } from './tactics';
 
 /**
  * First-name pool for fresh coaches. Western coach names transliterated
@@ -165,6 +166,7 @@ export function generateFreshCoach(
     stabilityBuff: buffs.stabilityBuff,
     age,
   };
+  coach.preferredFormation = derivePreferredFormation(coach);
 
   return { coach, nextCounter: counter + 1 };
 }

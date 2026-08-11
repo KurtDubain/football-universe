@@ -2,11 +2,38 @@ import { Trophy } from './team';
 
 export type CoachStyle = 'attacking' | 'defensive' | 'balanced' | 'possession' | 'counter';
 
+export type CoachFormation = '4-3-3' | '4-2-3-1' | '4-4-2' | '5-4-1';
+
+export type MatchApproach = 'pressing' | 'control' | 'balanced' | 'counter' | 'low_block';
+
+export type TacticsReason =
+  | 'coach_identity'
+  | 'underdog_response'
+  | 'control_favorite'
+  | 'fatigue_management'
+  | 'cup_caution';
+
+/** Frozen before kick-off and shared by simulation, reports, and replay. */
+export interface MatchTacticsSnapshot {
+  formation: CoachFormation;
+  approach: MatchApproach;
+  reason: TacticsReason;
+  /** A broad, public execution band; never a second coach rating. */
+  execution: 'developing' | 'coherent' | 'elite';
+  attackDelta: number;
+  midfieldDelta: number;
+  defenseDelta: number;
+  /** Short, stable explanation codes rendered by the UI. */
+  tags: string[];
+}
+
 export interface CoachBase {
   id: string;
   name: string;
   rating: number;  // 1-100
   style: CoachStyle;
+  /** Optional for legacy/default data; a deterministic style-based fallback is used when absent. */
+  preferredFormation?: CoachFormation;
   attackBuff: number;      // -5 to +15
   defenseBuff: number;     // -5 to +15
   moraleBuff: number;      // -3 to +10

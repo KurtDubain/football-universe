@@ -35,6 +35,9 @@ describe('observer experience configuration', () => {
     expect(focusResults.every(Boolean)).toBe(true);
     expect(focusResults.every(match => match && match.homeGoals + match.awayGoals >= 2)).toBe(true);
     const challengerResult = focusResults[lenses.findIndex(option => option.id === 'challenger')];
+    expect(Math.abs(
+      (challengerResult?.homeGoals ?? 0) - (challengerResult?.awayGoals ?? 0),
+    )).toBeLessThanOrEqual(1);
     expect(challengerResult?.events.some(event => (
       (event.type === 'goal' || event.type === 'own_goal') && event.minute >= 75
     ))).toBe(true);

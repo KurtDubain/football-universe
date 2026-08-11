@@ -1,5 +1,5 @@
 import type { MatchdaySnapshot } from '../../types/match';
-import { BASE_FORMATION, type Role } from './types';
+import { getFormationSlots, type Role } from './types';
 
 export interface PitchRosterPlayer {
   playerId: string;
@@ -11,13 +11,15 @@ export interface PitchRosterPlayer {
   exitedMinute: number;
 }
 
-const ROLE_SLOTS = BASE_FORMATION.reduce<Record<Role, number[]>>((slots, entry, index) => {
-  slots[entry.role].push(index);
-  return slots;
-}, { GK: [], DF: [], MF: [], FW: [] });
+function roleSlots(snapshot?: MatchdaySnapshot): Record<Role, number[]> {
+  return getFormationSlots(snapshot?.formation).reduce<Record<Role, number[]>>((slots, entry, index) => {
+    slots[entry.role].push(index);
+    return slots;
+  }, { GK: [], DF: [], MF: [], FW: [] });
+}
 
-function fallbackRoster(): PitchRosterPlayer[] {
-  return BASE_FORMATION.map((entry, slotIndex) => ({
+function fallbackRoster(snapshot?: MatchdaySnapshot): PitchRosterPlayer[] {
+  return getFormationSlots(snapshot?.formation).map((entry, slotIndex) => ({
     playerId: `slot-${slotIndex}`,
     playerNumber: slotIndex + 1,
     position: entry.role,
@@ -28,15 +30,17 @@ function fallbackRoster(): PitchRosterPlayer[] {
 }
 
 export function buildPitchRoster(snapshot?: MatchdaySnapshot): PitchRosterPlayer[] {
-  if (!snapshot) return fallbackRoster();
+  if (!snapshot) return fallbackRoster(snapshot);
 
+  const formation = getFormationSlots(snapshot.formation);
+  const slotsByRole = roleSlots(snapshot);
   const slotByPlayer = new Map<string, number>();
   const occupiedStarterSlots = new Set<number>();
   const starters = snapshot.players.filter(player => player.enteredMinute === 0);
 
   for (const starter of starters) {
-    const roleSlot = ROLE_SLOTS[starter.position].find(slot => !occupiedStarterSlots.has(slot));
-    const fallbackSlot = BASE_FORMATION.findIndex((_, slot) => !occupiedStarterSlots.has(slot));
+    const roleSlot = slotsByRole[starter.position].find(slot => !occupiedStarterSlots.has(slot));
+    const fallbackSlot = formation.findIndex((_, slot) => !occupiedStarterSlots.has(slot));
     const slot = roleSlot ?? fallbackSlot;
     if (slot < 0) continue;
     occupiedStarterSlots.add(slot);
@@ -50,7 +54,7 @@ export function buildPitchRoster(snapshot?: MatchdaySnapshot): PitchRosterPlayer
 
   for (const player of snapshot.players) {
     if (player.enteredMinute == null || slotByPlayer.has(player.playerId)) continue;
-    const roleSlot = ROLE_SLOTS[player.position][0];
+    const roleSlot = slotsByRole[player.position][0];
     if (roleSlot !== undefined) slotByPlayer.set(player.playerId, roleSlot);
   }
 

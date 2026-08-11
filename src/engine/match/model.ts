@@ -1,6 +1,6 @@
 import { BALANCE } from '../../config/balance';
 import { getDerbyBoost, isDerby } from '../../config/derbies';
-import type { CoachBase } from '../../types/coach';
+import type { CoachBase, CoachFormation, MatchTacticsSnapshot } from '../../types/coach';
 import type { CompetitionType, MatchFactor, MatchFixture } from '../../types/match';
 import type { Player } from '../../types/player';
 import type { TeamBase, TeamState } from '../../types/team';
@@ -27,6 +27,8 @@ export interface MatchModelInput {
   awayBoosts?: PlayerBoosts;
   homeAbsenceLoss?: PlayerBoosts;
   awayAbsenceLoss?: PlayerBoosts;
+  homeTactics?: MatchTacticsSnapshot;
+  awayTactics?: MatchTacticsSnapshot;
 }
 
 export interface MatchModel {
@@ -55,21 +57,23 @@ export interface MatchdayModelReport {
 export function computeMatchdayPlayerBoosts(
   squad: Player[] | undefined,
   globalWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): PlayerBoosts {
-  const selection = selectMatchday(squad, globalWindowIdx);
+  const selection = selectMatchday(squad, globalWindowIdx, formation);
   const starters = selection
-    ? selectStartingEleven(selection.players, selection.unavailablePlayerIds)
+    ? selectStartingEleven(selection.players, selection.unavailablePlayerIds, formation)
     : undefined;
-  return computePlayerBoosts(starters, globalWindowIdx);
+  return computePlayerBoosts(starters, globalWindowIdx, formation);
 }
 
 export function computeMatchdayModelReport(
   squad: Player[] | undefined,
   globalWindowIdx: number,
+  formation: CoachFormation = '4-3-3',
 ): MatchdayModelReport {
   return {
-    boosts: computeMatchdayPlayerBoosts(squad, globalWindowIdx),
-    absenceLoss: computePlayerBoostReport(squad, globalWindowIdx).absenceLoss,
+    boosts: computeMatchdayPlayerBoosts(squad, globalWindowIdx, formation),
+    absenceLoss: computePlayerBoostReport(squad, globalWindowIdx, formation).absenceLoss,
   };
 }
 
@@ -106,7 +110,7 @@ export function forecastFromModel(model: MatchModel): MatchForecastSnapshot {
 }
 
 interface RankedMatchFactor extends MatchFactor {
-  category: 'strength' | 'availability' | 'condition' | 'context' | 'coach';
+  category: 'strength' | 'availability' | 'condition' | 'context' | 'coach' | 'tactics';
   rank: number;
 }
 
@@ -124,7 +128,7 @@ function factorImportance(rank: number): 1 | 2 | 3 {
 function buildMatchFactors(input: MatchModelInput): MatchFactor[] {
   const {
     homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach, fixture,
-    homeBoosts, awayBoosts, homeAbsenceLoss, awayAbsenceLoss,
+    homeBoosts, awayBoosts, homeAbsenceLoss, awayAbsenceLoss, homeTactics, awayTactics,
   } = input;
   const candidates: RankedMatchFactor[] = [];
   const addComparison = (
@@ -238,17 +242,35 @@ function buildMatchFactors(input: MatchModelInput): MatchFactor[] {
     side => `${side === 'home' ? homeTeam.shortName : awayTeam.shortName}教练在此类赛事中的适性更突出。`,
   );
 
-  const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);
-  if (overallGap > 8) {
-    const side = homeTeam.overall < awayTeam.overall ? 'home' : 'away';
-    const team = side === 'home' ? homeTeam : awayTeam;
-    const rank = BALANCE.UNDERDOG_BOOST * overallGap * 2;
+  const tacticalEdgeSide = homeTactics?.tags.includes('对位占优')
+    ? 'home'
+    : awayTactics?.tags.includes('对位占优')
+      ? 'away'
+      : null;
+  if (tacticalEdgeSide) {
+    const team = tacticalEdgeSide === 'home' ? homeTeam : awayTeam;
     candidates.push({
-      source: 'underdog_response', category: 'context', beneficiary: side, direction: 'positive',
-      importance: factorImportance(rank), label: `${team.shortName}以弱抗强`,
-      detail: `${team.shortName}在实力悬殊的对局中获得额外的对抗动力。`,
-      evidenceValue: Math.round(overallGap), rank,
+      source: 'tactical_matchup', category: 'tactics', beneficiary: tacticalEdgeSide, direction: 'positive',
+      importance: 1, label: `${team.shortName}战术对位稍占上风`,
+      detail: `${team.shortName}的阵型宽度、压迫与转换方式更适合这组对位。`,
+      evidenceValue: 1, rank: 3.8,
     });
+  } else {
+    const responseSide = homeTactics?.reason === 'underdog_response'
+      ? 'home'
+      : awayTactics?.reason === 'underdog_response'
+        ? 'away'
+        : null;
+    if (responseSide) {
+      const team = responseSide === 'home' ? homeTeam : awayTeam;
+      const tactics = responseSide === 'home' ? homeTactics : awayTactics;
+      candidates.push({
+        source: 'tactics', category: 'tactics', beneficiary: responseSide, direction: 'positive',
+        importance: 1, label: `${team.shortName}主动调整`,
+        detail: `${team.shortName}选择${tactics?.approach === 'low_block' ? '低位防守' : '快速反击'}应对实力差距。`,
+        evidenceValue: Math.round(Math.abs(homeTeam.overall - awayTeam.overall)), rank: 3.4,
+      });
+    }
   }
 
   const derbyBases = { [homeTeam.id]: homeTeam, [awayTeam.id]: awayTeam } as Record<string, TeamBase>;
@@ -291,6 +313,7 @@ function adjustedStrengths(
   coach: CoachBase | null,
   isHome: boolean,
   playerBoosts?: PlayerBoosts,
+  tactics?: MatchTacticsSnapshot,
 ): AdjustedStrengths {
   const homeBonus = isHome ? BALANCE.HOME_ADVANTAGE * 100 : 0;
   const homeSmallBonus = isHome ? 3 : 0;
@@ -303,6 +326,7 @@ function adjustedStrengths(
       team.attack
         + coachAttackBuff
         + (playerBoosts?.attack ?? 0)
+        + (tactics?.attackDelta ?? 0)
         + homeBonus
         + state.momentum * 1.5
         - state.fatigue * 0.15
@@ -312,6 +336,7 @@ function adjustedStrengths(
       20,
       team.midfield
         + (playerBoosts?.midfield ?? 0)
+        + (tactics?.midfieldDelta ?? 0)
         + homeSmallBonus
         + state.momentum
         - state.fatigue * 0.08,
@@ -321,6 +346,7 @@ function adjustedStrengths(
       team.defense
         + coachDefenseBuff
         + (playerBoosts?.defense ?? 0)
+        + (tactics?.defenseDelta ?? 0)
         + homeSmallBonus
         - state.fatigue * 0.1
         + team.stability * 0.1,
@@ -358,11 +384,11 @@ export function expectedGoals(
 export function calculateMatchModel(input: MatchModelInput): MatchModel {
   const {
     homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
-    fixture, homeBoosts, awayBoosts,
+    fixture, homeBoosts, awayBoosts, homeTactics, awayTactics,
   } = input;
   const neutral = !!fixture.isNeutralVenue;
-  const home = adjustedStrengths(homeTeam, homeState, homeCoach, !neutral, homeBoosts);
-  const away = adjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts);
+  const home = adjustedStrengths(homeTeam, homeState, homeCoach, !neutral, homeBoosts, homeTactics);
+  const away = adjustedStrengths(awayTeam, awayState, awayCoach, false, awayBoosts, awayTactics);
   const isWorldCup = fixture.competitionType === 'world_cup'
     || fixture.competitionType === 'world_cup_group';
   const hostStrengths = isWorldCup && fixture.tournamentHostTeamId === fixture.homeTeamId
@@ -375,14 +401,6 @@ export function calculateMatchModel(input: MatchModelInput): MatchModel {
     hostStrengths.attack *= multiplier;
     hostStrengths.midfield *= multiplier;
     hostStrengths.defense *= multiplier;
-  }
-
-  const overallGap = Math.abs(homeTeam.overall - awayTeam.overall);
-  if (overallGap > 8) {
-    const boost = BALANCE.UNDERDOG_BOOST * overallGap;
-    const underdog = homeTeam.overall < awayTeam.overall ? home : away;
-    underdog.attack += boost;
-    underdog.midfield += boost * 0.5;
   }
 
   const derbyBases = { [homeTeam.id]: homeTeam, [awayTeam.id]: awayTeam } as Record<string, TeamBase>;

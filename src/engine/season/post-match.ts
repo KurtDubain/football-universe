@@ -8,6 +8,7 @@ import { applyRestRecovery } from '../state-updater';
 import { updateCoachPressure } from '../coaches/coach-pressure';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
+import { describeCoachIdentity } from '../coaches/tactics';
 import { maybeGenerateEvent, applyEventEffect, SeasonEvent } from '../events';
 import {
   getAllTeamIds, createNewsId,
@@ -175,7 +176,8 @@ export function runPostMatchProcessing(
         reason: fireResult.fireReason ?? 'Pressure too high',
       });
 
-      const newCoachName = world.coachBases[firingResult.newCoachId]?.name ?? firingResult.newCoachId;
+      const newCoach = world.coachBases[firingResult.newCoachId];
+      const newCoachName = newCoach?.name ?? firingResult.newCoachId;
       const firedCoachName = world.coachBases[coachId]?.name ?? coachId;
 
       news.push({
@@ -192,7 +194,9 @@ export function runPostMatchProcessing(
         windowIndex,
         type: 'coach_hired',
         title: `${teamBase.name} 聘用新帅 ${newCoachName}`,
-        description: `${newCoachName} 正式执教 ${teamBase.name}.`,
+        description: newCoach
+          ? `${newCoachName} 正式执教 ${teamBase.name}，其 ${describeCoachIdentity(newCoach)} 理念将成为球队的新起点。`
+          : `${newCoachName} 将以临时主帅身份带领 ${teamBase.name}。`,
       });
     }
   }

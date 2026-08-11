@@ -1,9 +1,12 @@
-import type { CoachBase } from '../../types/coach';
-import type { MatchFixture } from '../../types/match';
-import type { Player } from '../../types/player';
+import type { CoachBase, MatchTacticsSnapshot } from '../../types/coach';
+import type { FeaturedPlayerSnapshot, MatchFixture } from '../../types/match';
+import type { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import type { TeamBase, TeamState } from '../../types/team';
 import type { MatchFactor } from '../../types/match';
 import { calculateMatchModel, computeMatchdayModelReport, forecastFromModel } from './model';
+import { deriveMatchTacticsPair } from '../coaches/tactics';
+import { selectMatchday } from '../players/injuries';
+import { buildMatchFeaturedLineups } from '../players/star-presence';
 
 export interface MatchPrediction {
   homeTeamId: string;
@@ -18,13 +21,20 @@ export interface MatchPrediction {
   verdict: string;
   hotTip: string | null;
   factors: MatchFactor[];
+  homeTactics: MatchTacticsSnapshot;
+  awayTactics: MatchTacticsSnapshot;
+  featuredPlayers: FeaturedPlayerSnapshot[];
 }
 
 export interface MatchPredictionOptions {
-  fixture?: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue' | 'tournamentHostTeamId'>;
+  fixture?: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue' | 'tournamentHostTeamId'>
+    & Partial<Pick<MatchFixture, 'id' | 'roundLabel' | 'leg'>>;
   homeSquad?: Player[];
   awaySquad?: Player[];
   globalWindowIdx?: number;
+  playerStats?: Record<string, PlayerSeasonStats>;
+  playerStatSegments?: Record<string, PlayerTeamSeasonStats>;
+  seasonStartLevels?: Record<string, 1 | 2 | 3>;
 }
 
 export interface MatchOdds {
@@ -61,8 +71,43 @@ export function predictMatch(
     awayTeamId: awayTeam.id,
     competitionType: 'league' as const,
   };
-  const homeReport = computeMatchdayModelReport(options.homeSquad, globalWindowIdx);
-  const awayReport = computeMatchdayModelReport(options.awaySquad, globalWindowIdx);
+  const tactics = deriveMatchTacticsPair(
+    {
+      coach: homeCoach,
+      team: homeTeam,
+      opponent: awayTeam,
+      state: homeState,
+      opponentState: awayState,
+      fixture,
+      squad: options.homeSquad,
+      globalWindowIdx,
+    },
+    {
+      coach: awayCoach,
+      team: awayTeam,
+      opponent: homeTeam,
+      state: awayState,
+      opponentState: homeState,
+      fixture,
+      squad: options.awaySquad,
+      globalWindowIdx,
+    },
+  );
+  const homeReport = computeMatchdayModelReport(options.homeSquad, globalWindowIdx, tactics.home.formation);
+  const awayReport = computeMatchdayModelReport(options.awaySquad, globalWindowIdx, tactics.away.formation);
+  const homeSelection = selectMatchday(options.homeSquad, globalWindowIdx, tactics.home.formation);
+  const awaySelection = selectMatchday(options.awaySquad, globalWindowIdx, tactics.away.formation);
+  const { featuredPlayers } = buildMatchFeaturedLineups({
+    homeSquad: options.homeSquad,
+    awaySquad: options.awaySquad,
+    homeSelection,
+    awaySelection,
+    homeFormation: tactics.home.formation,
+    awayFormation: tactics.away.formation,
+    playerStats: options.playerStats ?? {},
+    playerStatSegments: options.playerStatSegments,
+    seasonStartLevels: options.seasonStartLevels,
+  });
   const model = calculateMatchModel({
     homeTeam,
     awayTeam,
@@ -75,6 +120,8 @@ export function predictMatch(
     awayBoosts: awayReport.boosts,
     homeAbsenceLoss: homeReport.absenceLoss,
     awayAbsenceLoss: awayReport.absenceLoss,
+    homeTactics: tactics.home,
+    awayTactics: tactics.away,
   });
   const forecast = forecastFromModel(model);
   const homeStrength = Math.round((model.home.attack + model.home.midfield + model.home.defense) / 3);
@@ -111,5 +158,8 @@ export function predictMatch(
     verdict,
     hotTip,
     factors: forecast.factors,
+    homeTactics: tactics.home,
+    awayTactics: tactics.away,
+    featuredPlayers,
   };
 }

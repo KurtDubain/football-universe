@@ -38,6 +38,9 @@ export function buildSimulationContext(
     homeSquad: world.squads[fixture.homeTeamId],
     awaySquad: world.squads[fixture.awayTeamId],
     globalWindowIdx: currentWindowIdx,
+    playerStats: world.playerStats,
+    playerStatSegments: world.playerStatSegments,
+    seasonStartLevels: world.seasonStartLevels,
   };
 }
 

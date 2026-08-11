@@ -40,6 +40,7 @@ export function createPersistedSaveEnvelope(world: GameWorld) {
       lastNews: [],
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      favoritePlayerIds: [],
     },
   };
 }

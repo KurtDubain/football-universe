@@ -50,6 +50,7 @@ import { advanceStorylines } from './storylines';
 import { computeSegmentedPlayerPerformance } from '../players/player-performance';
 import { snapshotPlayerStatCounters } from '../players/player-stat-fields';
 import { getCurrentWindow } from './world-selectors';
+import { derivePreferredFormation } from '../coaches/tactics';
 
 export { getCurrentWindow, isSeasonFullyComplete } from './world-selectors';
 
@@ -448,7 +449,10 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
   // 3. Coach bases
   const coachBases: Record<string, CoachBase> = {};
   for (const coach of defaultCoaches) {
-    coachBases[coach.id] = coach;
+    coachBases[coach.id] = {
+      ...coach,
+      preferredFormation: derivePreferredFormation(coach),
+    };
   }
 
   // 4. Coach states

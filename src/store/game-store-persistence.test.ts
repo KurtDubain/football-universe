@@ -16,6 +16,7 @@ function makeCurrentSave(seed: number) {
       lastNews: [],
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      favoritePlayerIds: [],
     },
   };
 }
@@ -31,6 +32,7 @@ beforeEach(() => {
     lastNews: [],
     favoriteTeamId: null,
     favoriteTeamIds: [],
+    favoritePlayerIds: [],
   });
   compressedStorage.removeItem(SAVE_STORAGE_KEY);
 });

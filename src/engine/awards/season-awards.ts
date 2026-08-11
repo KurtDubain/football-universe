@@ -11,7 +11,7 @@ import { computePlayerPerformance, computeSegmentedPlayerPerformance } from '../
  * - Golden Boot: most goals across all leagues
  * - Best Defender / Goalkeeper: highest individual position score among
  *   top-league players with actual minutes
- * - Young Player: top scorer from a low-OVR team (team OVR < 70)
+ * - Young Player: best eligible under-23 season performance
  */
 export function computeSeasonAwards(
   seasonNumber: number,
@@ -134,26 +134,31 @@ export function computeSeasonAwards(
   }
 
   // ── Young Player (最佳新星) ──────────────────────────────────
-  // Top scorer from a team with overall < 70 (proxy for "young/underdog")
-  // Skip MVP / Golden Boot winners to avoid duplicates
+  // True age eligibility. Keep the existing no-duplicate presentation rule,
+  // then compare the same attendance-aware season score used elsewhere.
   const exclude = new Set(awards.map((a) => a.playerId));
-  let youngTopGoals = 0;
   let youngTopStat: PlayerSeasonStats | null = null;
+  let youngTopScore = -1;
+  let youngTopAge = 0;
   for (const s of allStats) {
     if (exclude.has(s.playerId)) continue;
-    const team = teamBases[s.teamId];
-    if (!team || team.overall >= 70) continue;
-    if (s.goals > youngTopGoals) {
-      youngTopGoals = s.goals;
+    const player = findPlayer(s.playerId, s.teamId);
+    if (!player || player.age >= 23) continue;
+    const performance = performanceFor(player, s);
+    if (!performance.eligible) continue;
+    if (performance.seasonScore > youngTopScore) {
+      youngTopScore = performance.seasonScore;
       youngTopStat = s;
+      youngTopAge = player.age;
     }
   }
-  if (youngTopStat && youngTopGoals >= 5) {
+  if (youngTopStat) {
+    const roundedScore = Math.round(youngTopScore * 10) / 10;
     const a = buildAward(
       'young_player',
       youngTopStat,
-      youngTopGoals,
-      `弱队${youngTopGoals}球`,
+      roundedScore,
+      `${youngTopAge}岁 · 赛季综合评分 ${roundedScore.toFixed(1)}`,
     );
     if (a) awards.push(a);
   }

@@ -23,8 +23,12 @@ interface PitchState {
     sourceOverride?: { x: number; y: number };
     progress: number;
   } | null;
-  homeOnField: Array<{ id: string; x: number; y: number }>;
-  awayOnField: Array<{ id: string; x: number; y: number }>;
+  formations: {
+    home: { formation: string; approach: string };
+    away: { formation: string; approach: string };
+  };
+  homeOnField: Array<{ id: string; x: number; y: number; featured: boolean }>;
+  awayOnField: Array<{ id: string; x: number; y: number; featured: boolean }>;
 }
 
 async function verifyViewport(name: string, width: number, height: number) {
@@ -81,6 +85,29 @@ async function verifyViewport(name: string, width: number, height: number) {
   try {
     await page.goto(`${baseUrl}/scripts/fixtures/animation-preview.html`, { waitUntil: 'networkidle' });
     const dialog = page.getByRole('dialog', { name: '比赛直播回放' });
+    const initialState = await readState();
+    if (initialState.formations.home.formation !== '4-3-3'
+      || initialState.formations.home.approach !== 'pressing'
+      || initialState.formations.away.formation !== '5-4-1'
+      || initialState.formations.away.approach !== 'low_block') {
+      throw new Error(`${name}: canvas did not consume the frozen tactical snapshots`);
+    }
+    const featuredIds = [...initialState.homeOnField, ...initialState.awayOnField]
+      .filter(player => player.featured)
+      .map(player => player.id)
+      .sort();
+    if (featuredIds.join(',') !== 'away-2,home-1,home-10') {
+      throw new Error(`${name}: canvas focus identities drifted (${featuredIds.join(',')})`);
+    }
+    const tacticsText = await page.getByTestId('live-tactics-strip').innerText();
+    if (!tacticsText.includes('4-3-3') || !tacticsText.includes('5-4-1')
+      || !tacticsText.includes('主动压迫') || !tacticsText.includes('低位防守')) {
+      throw new Error(`${name}: live tactical strip is incomplete (${tacticsText})`);
+    }
+    const focusText = await page.getByTestId('live-featured-players').innerText();
+    if (!focusText.includes('HOME 10') || !focusText.includes('AWAY 2') || !focusText.includes('HOME 1')) {
+      throw new Error(`${name}: live focus strip is incomplete (${focusText})`);
+    }
     await dialog.getByRole('button', { name: '精华', exact: true }).click();
 
     await waitForActors('gk_save', 'away-9', 'away-7', 'home-1');
@@ -131,8 +158,28 @@ async function verifyViewport(name: string, width: number, height: number) {
     if (goalState.attackingSide !== 'home') throw new Error(`${name}: goal scene attacks from ${goalState.attackingSide}`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors ${errors.join(' | ')}`);
 
+    await page.goto(`${baseUrl}/scripts/fixtures/animation-preview.html?shape=alternate`, { waitUntil: 'networkidle' });
+    const alternateState = await readState();
+    if (alternateState.formations.home.formation !== '4-2-3-1'
+      || alternateState.formations.home.approach !== 'control'
+      || alternateState.formations.away.formation !== '4-4-2'
+      || alternateState.formations.away.approach !== 'counter') {
+      throw new Error(`${name}: alternate formation pair did not reach Canvas`);
+    }
+    const alternateTacticsText = await page.getByTestId('live-tactics-strip').innerText();
+    if (!alternateTacticsText.includes('4-2-3-1') || !alternateTacticsText.includes('4-4-2')) {
+      throw new Error(`${name}: alternate live tactical strip is incomplete (${alternateTacticsText})`);
+    }
+    const alternateScreenshot = `/tmp/football-match-tactics-alternate-${name}.png`;
+    await page.screenshot({ path: alternateScreenshot, animations: 'disabled' });
+    if (errors.length > 0) throw new Error(`${name}: alternate runtime errors ${errors.join(' | ')}`);
+
     return {
       viewport: `${width}x${height}`,
+      formations: initialState.formations,
+      alternateFormations: alternateState.formations,
+      featuredIds,
+      alternateScreenshot,
       save: {
         attacker: saveState.event?.attackerId,
         creator: saveState.event?.creatorId,
@@ -171,6 +218,7 @@ async function verifyViewport(name: string, width: number, height: number) {
 
 const results = [
   await verifyViewport('desktop', 1440, 900),
+  await verifyViewport('mobile-compact', 320, 568),
   await verifyViewport('mobile', 390, 844),
 ];
 

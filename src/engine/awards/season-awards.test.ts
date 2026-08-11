@@ -35,6 +35,7 @@ function makePlayer(
   number: number,
   position: PlayerPosition,
   rating = 80,
+  age = 26,
 ): Player {
   return {
     uuid: `${teamId}-${number}`,
@@ -50,7 +51,7 @@ function makePlayer(
     peakAge: 27,
     goalScoring: 50,
     marketValue: 10,
-    age: 26,
+    age,
   };
 }
 
@@ -101,7 +102,7 @@ describe('computeSeasonAwards', () => {
     const squads: Record<string, Player[]> = {
       teamA: [makePlayer('teamA', 9, 'FW'), makePlayer('teamA', 4, 'DF', 85)],
       teamB: [makePlayer('teamB', 9, 'FW'), makePlayer('teamB', 4, 'DF', 78)],
-      youngTeam: [makePlayer('youngTeam', 9, 'FW')],
+      youngTeam: [makePlayer('youngTeam', 9, 'FW', 80, 21)],
     };
     const stats: Record<string, PlayerSeasonStats> = {
       'teamA-9': makeStat('teamA-9', 'teamA', 25, 12),
@@ -174,14 +175,13 @@ describe('computeSeasonAwards', () => {
     expect(bd?.statLabel).toContain('赛季综合评分');
   });
 
-  it('Young Player only fires for a team with overall < 70 AND a player with 5+ goals', () => {
+  it('Young Player uses true under-23 eligibility rather than team strength or a goal threshold', () => {
     const youngTeam = makeTeam('young', 65);
     const elite = makeTeam('elite', 88);
     const squads = {
-      young: [makePlayer('young', 9, 'FW')],
+      young: [makePlayer('young', 9, 'FW', 80, 22)],
       elite: [makePlayer('elite', 9, 'FW')],
     };
-    // Young player has only 4 goals (< 5) → no young_player award
     const lowGoalStats = {
       'young-9': makeStat('young-9', 'young', 4, 0),
       'elite-9': makeStat('elite-9', 'elite', 25, 5),
@@ -189,23 +189,16 @@ describe('computeSeasonAwards', () => {
     const standings = [makeStanding('elite', 30, 20)];
 
     const lowAwards = computeSeasonAwards(1, lowGoalStats, squads, { young: youngTeam, elite }, standings);
-    expect(lowAwards.find((a) => a.type === 'young_player')).toBeUndefined();
+    expect(lowAwards.find((a) => a.type === 'young_player')?.playerId).toBe('young-9');
+    expect(lowAwards.find((a) => a.type === 'young_player')?.statLabel).toContain('22岁');
 
-    // With 6 goals it should fire
-    const okStats = {
-      ...lowGoalStats,
-      'young-9': makeStat('young-9', 'young', 6, 0),
-    };
-    const okAwards = computeSeasonAwards(1, okStats, squads, { young: youngTeam, elite }, standings);
-    expect(okAwards.find((a) => a.type === 'young_player')?.teamId).toBe('young');
-
-    // If young team's overall >= 70, no young_player award even with 10 goals
-    const notYoung = makeTeam('young', 70);
+    // Team strength is irrelevant, but turning 23 closes eligibility.
+    squads.young[0] = { ...squads.young[0], age: 23 };
     const noAwards = computeSeasonAwards(
       1,
-      { ...okStats, 'young-9': makeStat('young-9', 'young', 10) },
+      { ...lowGoalStats, 'young-9': makeStat('young-9', 'young', 10) },
       squads,
-      { young: notYoung, elite },
+      { young: makeTeam('young', 92), elite },
       standings,
     );
     expect(noAwards.find((a) => a.type === 'young_player')).toBeUndefined();
