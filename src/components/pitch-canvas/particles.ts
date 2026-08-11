@@ -4,12 +4,23 @@
 // All spawn* helpers RETURN a fresh Particle[]; the caller is
 // responsible for pushing them into its own particle pool. This keeps
 // the helpers free of refs and React state so they can be tested in
-// isolation. (Math.random() is still used internally — that's fine; it
-// matches the original behaviour and tests can stub Math.random.)
+// isolation. Optional seeds make replay and capture effects reproducible.
 
 import type { Particle } from './types';
 
 const PARTICLE_CAP = 350;
+
+function createRandomSource(seed?: number): () => number {
+  if (seed === undefined) return Math.random;
+  let state = (Math.trunc(seed) >>> 0) || 0x6d2b79f5;
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 export function newParticle(
   p: Partial<Particle> & Pick<Particle, 'x' | 'y' | 'vx' | 'vy' | 'color'>,
@@ -40,20 +51,27 @@ export function newParticle(
  *   3) gold glow puffs (additive, stationary-ish)
  *   4) confetti rain (rectangles dropping from above the canvas)
  */
-export function spawnGoalBurst(goalX: number, goalY: number, color: string, floor: number): Particle[] {
+export function spawnGoalBurst(
+  goalX: number,
+  goalY: number,
+  color: string,
+  floor: number,
+  seed?: number,
+): Particle[] {
   const out: Particle[] = [];
+  const random = createRandomSource(seed);
 
   // ── Wave 1: chunky team-colored disc burst (radial, normal blend) ─
   for (let i = 0; i < 18; i++) {
-    const angle = (i / 18) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
-    const speed = 2.5 + Math.random() * 3.5;
+    const angle = (i / 18) * Math.PI * 2 + (random() - 0.5) * 0.3;
+    const speed = 2.5 + random() * 3.5;
     out.push(newParticle({
       x: goalX, y: goalY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 1.2,
       color,
-      size: 2 + Math.random() * 1.8,
-      life: 60 + Math.random() * 30,
+      size: 2 + random() * 1.8,
+      life: 60 + random() * 30,
       gravity: 0.12,
       drag: 0.025,
       bounces: 1,
@@ -64,16 +82,16 @@ export function spawnGoalBurst(goalX: number, goalY: number, color: string, floo
 
   // ── Wave 2: bright streaks (additive, fast) ────────────────────────
   for (let i = 0; i < 14; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 4 + Math.random() * 4;
+    const angle = random() * Math.PI * 2;
+    const speed = 4 + random() * 4;
     out.push(newParticle({
-      x: goalX + (Math.random() - 0.5) * 6,
-      y: goalY + (Math.random() - 0.5) * 6,
+      x: goalX + (random() - 0.5) * 6,
+      y: goalY + (random() - 0.5) * 6,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 1.8,
       color: '#fff8c0',
-      size: 1.4 + Math.random() * 1.2,
-      life: 22 + Math.random() * 14,
+      size: 1.4 + random() * 1.2,
+      life: 22 + random() * 14,
       gravity: 0.06,
       drag: 0.04,
       shape: 'streak',
@@ -83,15 +101,15 @@ export function spawnGoalBurst(goalX: number, goalY: number, color: string, floo
 
   // ── Wave 3: glow puff (single bright additive disc that fades) ────
   for (let i = 0; i < 5; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = random() * Math.PI * 2;
     out.push(newParticle({
       x: goalX + Math.cos(angle) * 4,
       y: goalY + Math.sin(angle) * 4,
       vx: Math.cos(angle) * 0.6,
       vy: Math.sin(angle) * 0.6,
       color: '#ffe680',
-      size: 6 + Math.random() * 3,
-      life: 18 + Math.random() * 8,
+      size: 6 + random() * 3,
+      life: 18 + random() * 8,
       gravity: 0,
       drag: 0.05,
       shape: 'circle',
@@ -102,21 +120,21 @@ export function spawnGoalBurst(goalX: number, goalY: number, color: string, floo
   // ── Wave 4: confetti rain (tumbling rectangles from ABOVE) ────────
   const confettiPalette = [color, '#fbbf24', '#f87171', '#60a5fa', '#34d399', '#ffffff'];
   for (let i = 0; i < 32; i++) {
-    const startX = goalX + (Math.random() - 0.5) * 140;
+    const startX = goalX + (random() - 0.5) * 140;
     // Spawn just above the canvas; cull threshold is y < -60, so all of
     // these survive the first frame and visibly drop in.
-    const startY = -5 - Math.random() * 18;
+    const startY = -5 - random() * 18;
     out.push(newParticle({
       x: startX, y: startY,
-      vx: (Math.random() - 0.5) * 1.8,
-      vy: 1.2 + Math.random() * 1.5,
+      vx: (random() - 0.5) * 1.8,
+      vy: 1.2 + random() * 1.5,
       color: confettiPalette[i % confettiPalette.length],
-      size: 1.6 + Math.random() * 1.4,
-      life: 130 + Math.random() * 50,
+      size: 1.6 + random() * 1.4,
+      life: 130 + random() * 50,
       gravity: 0.06,
       drag: 0.012,
-      rotation: Math.random() * Math.PI * 2,
-      angularVel: (Math.random() - 0.5) * 0.35,
+      rotation: random() * Math.PI * 2,
+      angularVel: (random() - 0.5) * 0.35,
       shape: 'rect',
       bounces: 1, // one soft bounce off the floor for satisfying landings
       bounceY: floor + 6,
@@ -129,19 +147,20 @@ export function spawnGoalBurst(goalX: number, goalY: number, color: string, floo
 /**
  * Tackle / interception sparks — streaky impact lines + tiny dust dots.
  */
-export function spawnTackleSparks(cx: number, cy: number): Particle[] {
+export function spawnTackleSparks(cx: number, cy: number, seed?: number): Particle[] {
   const out: Particle[] = [];
+  const random = createRandomSource(seed);
   // Streaky impact lines
   for (let i = 0; i < 5; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 2.5 + Math.random() * 2.5;
+    const angle = random() * Math.PI * 2;
+    const speed = 2.5 + random() * 2.5;
     out.push(newParticle({
       x: cx, y: cy,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 0.4,
       color: '#fff8c0',
-      size: 1.2 + Math.random() * 0.6,
-      life: 14 + Math.random() * 8,
+      size: 1.2 + random() * 0.6,
+      life: 14 + random() * 8,
       shape: 'streak',
       blend: 'add',
       gravity: 0.05,
@@ -150,15 +169,15 @@ export function spawnTackleSparks(cx: number, cy: number): Particle[] {
   }
   // Tiny dust dots
   for (let i = 0; i < 6; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 1 + Math.random() * 1.5;
+    const angle = random() * Math.PI * 2;
+    const speed = 1 + random() * 1.5;
     out.push(newParticle({
       x: cx, y: cy,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - 0.6,
       color: '#cccccc',
-      size: 0.6 + Math.random() * 0.5,
-      life: 18 + Math.random() * 10,
+      size: 0.6 + random() * 0.5,
+      life: 18 + random() * 10,
       gravity: 0.18,
       drag: 0.04,
     }));
@@ -170,23 +189,24 @@ export function spawnTackleSparks(cx: number, cy: number): Particle[] {
  * Grass kick on pass arrival / start — chunks fly opposite to ball direction.
  * (dx, dy) describes the ball's outgoing direction; chunks fan backward.
  */
-export function spawnGrassKick(cx: number, cy: number, dx: number, dy: number): Particle[] {
+export function spawnGrassKick(cx: number, cy: number, dx: number, dy: number, seed?: number): Particle[] {
   const out: Particle[] = [];
+  const random = createRandomSource(seed);
   // Grass chunks fly opposite to ball direction in a fan
   const len = Math.hypot(dx, dy) || 1;
   const nx = dx / len, ny = dy / len;
   // Tangent for fan spread
   const tx = -ny, ty = nx;
   for (let i = 0; i < 5; i++) {
-    const fan = (Math.random() - 0.5) * 0.8;
-    const back = 0.4 + Math.random() * 0.7;
+    const fan = (random() - 0.5) * 0.8;
+    const back = 0.4 + random() * 0.7;
     out.push(newParticle({
       x: cx, y: cy + 1.5,
       vx: -nx * back + tx * fan,
       vy: -ny * back + ty * fan - 0.4,
       color: '#5a7a3e',
-      size: 0.7 + Math.random() * 0.6,
-      life: 14 + Math.random() * 8,
+      size: 0.7 + random() * 0.6,
+      life: 14 + random() * 8,
       gravity: 0.22,
       drag: 0.05,
     }));
@@ -194,13 +214,13 @@ export function spawnGrassKick(cx: number, cy: number, dx: number, dy: number): 
   // Two soft dust puffs (additive)
   for (let i = 0; i < 2; i++) {
     out.push(newParticle({
-      x: cx + (Math.random() - 0.5) * 4,
+      x: cx + (random() - 0.5) * 4,
       y: cy + 1,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: -0.3 - Math.random() * 0.3,
+      vx: (random() - 0.5) * 0.4,
+      vy: -0.3 - random() * 0.3,
       color: '#dcd0a8',
-      size: 3 + Math.random() * 2,
-      life: 14 + Math.random() * 6,
+      size: 3 + random() * 2,
+      life: 14 + random() * 6,
       gravity: 0,
       drag: 0.08,
       blend: 'add',

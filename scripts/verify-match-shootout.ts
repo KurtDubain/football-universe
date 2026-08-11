@@ -38,8 +38,8 @@ async function verifyViewport(name: string, width: number, height: number) {
     const state = await page.evaluate(() => JSON.parse(
       (window as typeof window & { render_game_to_text: () => string }).render_game_to_text(),
     ) as {
-      homeOnField: unknown[];
-      awayOnField: unknown[];
+      homeOnField: Array<{ id: string; x: number; y: number }>;
+      awayOnField: Array<{ id: string; x: number; y: number }>;
       ballHolderId: string | null;
       lastTouchPlayerId: string | null;
       event: { outcome: string; attackerId?: string; defenderId?: string } | null;
@@ -64,6 +64,18 @@ async function verifyViewport(name: string, width: number, height: number) {
     if (state.homeOnField.length + state.awayOnField.length !== 2) {
       throw new Error(`${name}: shootout scene rendered ${state.homeOnField.length + state.awayOnField.length} players`);
     }
+    const visiblePlayers = [...state.homeOnField, ...state.awayOnField];
+    const taker = visiblePlayers.find(player => player.id === state.event.attackerId);
+    const goalkeeper = visiblePlayers.find(player => player.id === state.event.defenderId);
+    if (!taker || !goalkeeper) throw new Error(`${name}: shootout actors are not visible`);
+    const goalkeeperGoalLineDistance = Math.min(goalkeeper.x, 1 - goalkeeper.x);
+    const actorSeparation = Math.hypot(taker.x - goalkeeper.x, taker.y - goalkeeper.y);
+    if (goalkeeperGoalLineDistance > 0.07) {
+      throw new Error(`${name}: goalkeeper started ${goalkeeperGoalLineDistance.toFixed(3)} pitch units off the goal line`);
+    }
+    if (actorSeparation < 0.065) {
+      throw new Error(`${name}: taker and goalkeeper overlap (${actorSeparation.toFixed(3)})`);
+    }
     if (controlsOverflow > 1) throw new Error(`${name}: controls overflow by ${controlsOverflow}px`);
     if (undersizedButtons.length > 0) throw new Error(`${name}: undersized buttons ${undersizedButtons.join(', ')}`);
     if (!dialogBox || dialogBox.width > width || dialogBox.height > height) throw new Error(`${name}: dialog exceeds viewport`);
@@ -76,6 +88,8 @@ async function verifyViewport(name: string, width: number, height: number) {
       shotOutcome: state.event.outcome,
       taker: state.event.attackerId,
       goalkeeper: state.event.defenderId,
+      actorSeparation,
+      goalkeeperGoalLineDistance,
       controlsOverflow,
       screenshot,
     };

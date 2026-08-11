@@ -2,6 +2,7 @@
 // Operates entirely in normalized (0-1) field coordinates.
 
 import { clamp, dist, lerp, seededRand } from './math';
+import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
 import { setPiecePlayerTarget } from './set-pieces';
 import {
   BASE_FORMATION,
@@ -76,6 +77,22 @@ export function computeDefensiveReactionProgress(
   return clamp((phaseProgress - delay) / 0.32, 0, 1);
 }
 
+export function defensiveReactionDelay(
+  playerIndex: number,
+  role: Role,
+  stage: PresentationPlayStage | undefined,
+): number {
+  if (role === 'GK') return 0;
+  const roleDelay = role === 'DF' ? 0.012 : role === 'MF' ? 0.026 : 0.042;
+  const laneDelay = ((playerIndex * 7) % 5) * 0.009;
+  const stageMultiplier = stage === 'transition' ? 0.55
+    : stage === 'finish' ? 0.72
+      : stage === 'create' ? 0.85
+        : stage === 'build' ? 1.1
+          : 1;
+  return (roleDelay + laneDelay) * stageMultiplier;
+}
+
 export interface DefensiveRoles {
   presserIndex: number;
   coverIndex: number;
@@ -103,7 +120,7 @@ export function separateActivePlayers(
   minimumScreenDistance = 0.022,
 ): void {
   const indices = [...activePlayerIndices].filter(index => playerPos[index] !== undefined);
-  const pitchAspect = 0.52;
+  const pitchAspect = NORMALIZED_PITCH_SCREEN_ASPECT;
 
   for (let iteration = 0; iteration < 2; iteration++) {
     for (let firstIndex = 0; firstIndex < indices.length; firstIndex++) {
@@ -673,12 +690,28 @@ export function updatePlayerPositions(
     }
 
     if (!teamHasBall && defensiveAction?.playerIndex !== i) {
+      const primaryDefender = i === defensiveRoles.presserIndex || i === defensiveRoles.coverIndex;
+      const recoveringReleasedShot = currentPhase.kind === 'shot'
+        && phaseState !== 'holding'
+        && slot.role !== 'GK';
+      const delayedProgress = clamp(
+        phaseProgress - (primaryDefender || recoveringReleasedShot
+          ? 0
+          : defensiveReactionDelay(i, slot.role, currentPhase.stage)),
+        0,
+        1,
+      );
       const reaction = computeDefensiveReactionProgress(
         currentPhase.stage,
         phaseState,
-        phaseProgress,
+        delayedProgress,
       );
-      const minimumRead = slot.role === 'GK' ? 1 : 0.18;
+      const minimumRead = slot.role === 'GK' ? 1
+        : recoveringReleasedShot ? 0.42
+          : primaryDefender ? 0.2
+          : slot.role === 'DF' ? 0.09
+            : slot.role === 'MF' ? 0.07
+              : 0.05;
       const reactionBlend = minimumRead + (1 - minimumRead) * reaction;
       targetX_n = lerp(playerPos[i].x, targetX_n, reactionBlend);
       targetY_n = lerp(playerPos[i].y, targetY_n, reactionBlend);
@@ -697,13 +730,26 @@ export function updatePlayerPositions(
     const directedRecoveryBoost = defensiveAction?.playerIndex === i && slot.role !== 'GK'
       ? currentPhase.kind === 'pass' ? 1.7 : 1.3
       : 1;
-    const maxSpeed = (slot.role === 'GK' ? 0.0026 : 0.0036) * sprintBoost * directedRecoveryBoost;
+    const roleMotion = slot.role === 'GK'
+      ? { speed: 0.00255, acceleration: 0.00028 }
+      : slot.role === 'DF'
+        ? { speed: 0.0034, acceleration: 0.00038 }
+        : slot.role === 'MF'
+          ? { speed: 0.00365, acceleration: 0.00043 }
+          : { speed: 0.0038, acceleration: 0.00046 };
+    const maxSpeed = roleMotion.speed * sprintBoost * directedRecoveryBoost;
     const desiredSpeed = Math.min(maxSpeed, distance * 0.11);
     const desiredVx = distance > 0.0001 ? dx / distance * desiredSpeed : 0;
     const desiredVy = distance > 0.0001 ? dy / distance * desiredSpeed : 0;
-    const maxAcceleration = (slot.role === 'GK' ? 0.0003 : 0.00042)
+    const currentSpeed = Math.hypot(p.vx, p.vy);
+    const alignment = currentSpeed > 0.0001 && desiredSpeed > 0.0001
+      ? clamp((p.vx * desiredVx + p.vy * desiredVy) / (currentSpeed * desiredSpeed), -1, 1)
+      : 1;
+    const turnFactor = 0.68 + (alignment + 1) * 0.16;
+    const maxAcceleration = roleMotion.acceleration
       * sprintBoost
-      * Math.min(1.4, directedRecoveryBoost);
+      * Math.min(1.4, directedRecoveryBoost)
+      * turnFactor;
     p.vx += clamp(desiredVx - p.vx, -maxAcceleration, maxAcceleration);
     p.vy += clamp(desiredVy - p.vy, -maxAcceleration, maxAcceleration);
     p.x += p.vx;

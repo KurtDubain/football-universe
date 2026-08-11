@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, type PassPhase, type PlayerState } from './types';
+import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
 
 function initialPlayers(): PlayerState[] {
   return Array.from({ length: 22 }, (_, index) => {
@@ -78,6 +79,13 @@ describe('pitch player movement', () => {
     expect(computeDefensiveReactionProgress('finish', 'holding', 0)).toBe(1);
   });
 
+  it('staggers off-ball defensive reactions deterministically by role and lane', () => {
+    expect(defensiveReactionDelay(2, 'DF', 'build')).toBeGreaterThan(0);
+    expect(defensiveReactionDelay(2, 'DF', 'build')).toBe(defensiveReactionDelay(2, 'DF', 'build'));
+    expect(defensiveReactionDelay(7, 'MF', 'build')).toBeGreaterThan(defensiveReactionDelay(2, 'DF', 'transition'));
+    expect(defensiveReactionDelay(0, 'GK', 'create')).toBe(0);
+  });
+
   it('adds a bounded visual bend to shots without changing their endpoints', () => {
     const middle = computeBallPosition({
       passing: true,
@@ -145,8 +153,8 @@ describe('pitch player movement', () => {
     separateActivePlayers(players, new Set([8, 9, 10]), pinned);
 
     expect(players[9]).toMatchObject({ x: 0.84, y: 0.5 });
-    expect(Math.hypot(players[8].x - players[9].x, (players[8].y - players[9].y) * 0.52)).toBeGreaterThan(0.018);
-    expect(Math.hypot(players[10].x - players[9].x, (players[10].y - players[9].y) * 0.52)).toBeGreaterThan(0.018);
+    expect(Math.hypot(players[8].x - players[9].x, (players[8].y - players[9].y) * NORMALIZED_PITCH_SCREEN_ASPECT)).toBeGreaterThan(0.018);
+    expect(Math.hypot(players[10].x - players[9].x, (players[10].y - players[9].y) * NORMALIZED_PITCH_SCREEN_ASPECT)).toBeGreaterThan(0.018);
     expect(players.every(player => player.x >= 0.03 && player.x <= 0.97)).toBe(true);
     expect(players.every(player => player.y >= 0.05 && player.y <= 0.95)).toBe(true);
   });

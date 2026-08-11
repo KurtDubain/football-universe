@@ -86,8 +86,11 @@ async function verifyViewport(name: string, width: number, height: number) {
     }
     const wallSpread = Math.max(...wall.map(player => player.y)) - Math.min(...wall.map(player => player.y));
     if (wallSpread < 0.07) throw new Error(`${name}: direct free-kick wall is not visibly formed`);
-    if (width < 600 && Math.abs(freeKick.camera.zoom - 1) > 0.002) {
-      throw new Error(`${name}: mobile set-piece camera should remain fixed (${freeKick.camera.zoom})`);
+    if (width < 600 && (freeKick.camera.zoom <= 1.005 || freeKick.camera.zoom > 1.08)) {
+      throw new Error(`${name}: mobile set-piece camera left its restrained focus range (${freeKick.camera.zoom})`);
+    }
+    if (width >= 600 && (freeKick.camera.zoom <= 1.01 || freeKick.camera.zoom > 1.12)) {
+      throw new Error(`${name}: desktop set-piece camera left its restrained focus range (${freeKick.camera.zoom})`);
     }
     if (errors.length > 0) throw new Error(`${name}: runtime errors ${errors.join(' | ')}`);
 

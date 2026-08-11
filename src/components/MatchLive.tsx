@@ -683,8 +683,11 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           >
             <DecorativeImage
               src={openerArtwork}
+              eager
+              width={1440}
+              height={630}
               testId="key-match-opener-art"
-              className="absolute inset-0 h-full w-full object-cover"
+              className="broadcast-opener-art absolute inset-0 h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.1),rgba(2,6,23,0.42)_50%,rgba(2,6,23,0.96))]" aria-hidden="true" />
             <button
@@ -918,7 +921,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   if (atTop) setUnseenEventCount(0);
                 }}
                 aria-label="本场完整播报"
-                className="h-36 touch-pan-y overflow-y-auto overscroll-y-contain px-4 py-2 lg:h-[228px]"
+                className="h-36 touch-pan-y overflow-y-auto overscroll-y-contain px-4 py-2 lg:h-[348px]"
               >
                 {commentaryEntries.map((entry, index) => (
                   <div

@@ -157,22 +157,37 @@ describe('MatchLive playback state machine', () => {
   });
 
   it('holds a featured match behind a spoiler-free opener before starting the clock', () => {
-    render(<MatchLive
-      result={makeResult('featured-live', goalEvents)}
-      teamBases={teamBases}
-      onClose={() => undefined}
-      featured
-    />);
+    const originalHardwareConcurrency = Object.getOwnPropertyDescriptor(navigator, 'hardwareConcurrency');
+    Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: 8 });
+    try {
+      render(<MatchLive
+        result={makeResult('featured-live', goalEvents)}
+        teamBases={teamBases}
+        onClose={() => undefined}
+        featured
+      />);
 
-    expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
-    expect(document.body.textContent).toContain('比分未揭晓');
-    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
-    advance(2199);
-    expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
-    advance(1);
-    expect(document.body.querySelector('[data-testid="key-match-opener"]')).toBeNull();
-    advance(480);
-    expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+      expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
+      const openerArtwork = document.body.querySelector<HTMLImageElement>('[data-testid="key-match-opener-art"]');
+      expect(openerArtwork?.getAttribute('loading')).toBe('eager');
+      expect(openerArtwork?.getAttribute('decoding')).toBe('sync');
+      expect(openerArtwork?.width).toBe(1440);
+      expect(openerArtwork?.height).toBe(630);
+      expect(document.body.textContent).toContain('比分未揭晓');
+      expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("0'");
+      advance(2199);
+      expect(document.body.querySelector('[data-testid="key-match-opener"]')).not.toBeNull();
+      advance(1);
+      expect(document.body.querySelector('[data-testid="key-match-opener"]')).toBeNull();
+      advance(480);
+      expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
+    } finally {
+      if (originalHardwareConcurrency) {
+        Object.defineProperty(navigator, 'hardwareConcurrency', originalHardwareConcurrency);
+      } else {
+        Reflect.deleteProperty(navigator, 'hardwareConcurrency');
+      }
+    }
   });
 
   it('can enable global sound from the live-local control', () => {

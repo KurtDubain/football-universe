@@ -843,6 +843,17 @@ body {
   box-shadow: 0 24px 64px rgb(0 0 0 / 52%);
 }
 
+.broadcast-opener {
+  background:
+    radial-gradient(circle at 50% 54%, rgb(31 82 48 / 24%), transparent 44%),
+    #07100b;
+}
+
+.broadcast-opener-art {
+  object-position: center 43%;
+  filter: saturate(0.9) contrast(1.05);
+}
+
 .broadcast-opener::after,
 .broadcast-scoreboard::after {
   position: absolute;
@@ -870,6 +881,10 @@ body {
 .broadcast-commentary :where([class*='text-[9px]'], [class*='text-[10px]']) {
   font-family: 'DIN Alternate', 'Arial Narrow', 'Inter', sans-serif;
   letter-spacing: 0.04em;
+}
+
+@media (max-width: 639px) {
+  .broadcast-opener-art { object-position: center 50%; }
 }
 
 @keyframes identity-enter {

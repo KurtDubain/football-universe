@@ -1,5 +1,15 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-11 v4.52.0 Broadcast Pitch And Camera Polish
+
+- Current request: continue polishing the live match experience until it feels deliberate and credible on both desktop and mobile, with particular attention to image quality, football movement, and broadcast presentation.
+- Replaced the old 500x260 playing field with a cached 500x324 field whose visible proportions match 105x68. Penalty areas, goal areas, spots, arcs, corner marks, goal mouths, and net depth now derive from metric geometry instead of unrelated percentages.
+- Added one scene-aware camera director for wide play, build-up, attack, set pieces, finishes, and outcomes. Compact devices receive a smaller bounded focus rather than losing the camera entirely; reduced-motion mode remains centered at 1x. Outcome labels are projected back into screen space so pan and zoom cannot clip them.
+- Refined top-down player silhouettes, facing, role-specific movement, turn response, defensive reaction staggering, ball readability, and deterministic event particles. Released shots now trigger immediate box recovery rather than leaving defenders in their earlier read delay.
+- Fixed a shootout staging defect found during visual review: the taker was reset to the spot while the goalkeeper could still be returning from an old position. Every penalty scene now resets both actors, and browser verification requires the goalkeeper near the line with non-overlapping actor spacing.
+- Featured-match artwork now loads eagerly with its correct 1440x630 intrinsic ratio and separate mobile framing. Static pitch detail is rendered to a size-aware cache; sampled Canvas cost measured about 0.33 ms normally and 1.17 ms under 4x CPU while preserving pause, cover, reopen, and result consistency behavior.
+- Final Node 22.22.2 verification passed 118 test files / 855 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog/script/bundle gates, and a zero-vulnerability production audit. Browser checks passed opener/live framing, tactical saves/blocks/goals, corners/free kicks, shootouts at 320/390/1440, and automatic deployment update detection; the final ordinary bundle contains no game-store or update-audit bridge.
+
 ## 2026-08-11 v4.51.0 Football Annual Art Direction
 
 - Current request: continue submission-level visual polish after reviewing Tencent's previous entries, give the project a recognizable authored style, and avoid a generic AI-generated-dashboard look across UI and imagery.

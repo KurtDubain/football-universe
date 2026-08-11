@@ -9,6 +9,8 @@ interface Props {
   className?: string;
   eager?: boolean;
   testId?: string;
+  width?: number;
+  height?: number;
 }
 
 export function DecorativeImage({
@@ -16,6 +18,8 @@ export function DecorativeImage({
   className = '',
   eager = false,
   testId,
+  width,
+  height,
 }: Props) {
   const [available, setAvailable] = useState(
     () => !shouldSuppressDecorativeArtwork(readVisualAssetEnvironment()),
@@ -28,11 +32,11 @@ export function DecorativeImage({
       src={src}
       alt=""
       aria-hidden="true"
-      width={eager ? 1440 : undefined}
-      height={eager ? 960 : undefined}
+      width={width ?? (eager ? 1440 : undefined)}
+      height={height ?? (eager ? 960 : undefined)}
       loading={eager ? 'eager' : 'lazy'}
       fetchPriority={eager ? 'high' : 'auto'}
-      decoding="async"
+      decoding={eager ? 'sync' : 'async'}
       draggable={false}
       data-testid={testId}
       className={`decorative-artwork ${className}`}

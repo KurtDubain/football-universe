@@ -113,10 +113,10 @@ async function verifyViewport(name: string, width: number, height: number) {
     if (saveState.event?.outcome !== 'save' || saveState.ball.x < 0.03 || saveState.ball.elevation <= 0) {
       throw new Error(`${name}: saved shot did not produce a visible second ball`);
     }
-    if (width < 600 && Math.abs(saveState.camera.zoom - 1) > 0.002) {
-      throw new Error(`${name}: mobile danger camera should remain fixed (${saveState.camera.zoom})`);
+    if (width < 600 && (saveState.camera.zoom <= 1.01 || saveState.camera.zoom > 1.08)) {
+      throw new Error(`${name}: mobile save camera left its restrained focus range (${saveState.camera.zoom})`);
     }
-    if (width >= 600 && (saveState.camera.zoom <= 1 || saveState.camera.zoom > 1.04)) {
+    if (width >= 600 && (saveState.camera.zoom <= 1.025 || saveState.camera.zoom > 1.12)) {
       throw new Error(`${name}: desktop save camera did not enter a restrained danger focus (${saveState.camera.zoom})`);
     }
     const creditedBlocker = blockState.awayOnField.find(player => player.id === 'away-2');

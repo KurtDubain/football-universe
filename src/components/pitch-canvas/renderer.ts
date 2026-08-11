@@ -8,6 +8,7 @@
 import { clamp, hexToRgbStr } from './math';
 import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
+import { createPitchGeometry } from './geometry';
 
 // Mutable {current: number} shape — matches React.MutableRefObject<number>
 // without importing React, so this module stays UI-framework neutral.
@@ -24,6 +25,14 @@ export interface BroadcastCameraState {
   zoom: number;
 }
 
+export interface BroadcastCameraTransform {
+  offX: number;
+  offY: number;
+  panX: number;
+  panY: number;
+  zoom: number;
+}
+
 /**
  * Grass + stripes + lines + pa/ga boxes + corner arcs + vignette.
  * Should be the first thing drawn each frame (it fills the whole canvas).
@@ -32,52 +41,141 @@ export function drawPitch(
   ctx: CanvasRenderingContext2D,
   W: number, H: number,
   P: number,
-  fw: number, fh: number,
 ): void {
-  // ── Grass with subtle gradient ──
-  ctx.fillStyle = '#1a472a';
-  ctx.fillRect(0, 0, W, H);
-  const sw = fw / 12;
-  for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = i % 2 === 0 ? '#1d5231' : '#1a472a';
-    ctx.fillRect(P + i * sw, P, sw, fh);
-  }
-  // Subtle vignette
-  const vignette = ctx.createRadialGradient(W / 2, H / 2, fh * 0.3, W / 2, H / 2, fh * 0.9);
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, 'rgba(0,0,0,0.25)');
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, W, H);
+  const pitch = createPitchGeometry(W, H, P);
+  const {
+    fieldWidth: fw,
+    fieldHeight: fh,
+    centerX,
+    centerY,
+    penaltyAreaDepth,
+    penaltyAreaSpan,
+    goalAreaDepth,
+    goalAreaSpan,
+    goalMouthSpan,
+    goalDepth,
+    penaltySpotOffset,
+    penaltyArcRadiusX,
+    penaltyArcRadiusY,
+    cornerRadiusX,
+    cornerRadiusY,
+  } = pitch;
 
-  // ── Pitch lines ──
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(P, P, fw, fh);
-  ctx.beginPath(); ctx.moveTo(W / 2, P); ctx.lineTo(W / 2, H - P); ctx.stroke();
-  ctx.beginPath(); ctx.arc(W / 2, H / 2, fh * 0.16, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(W / 2, H / 2, 2, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
-  const paW = fw * 0.14, paH = fh * 0.52, paY = (H - paH) / 2;
-  ctx.strokeRect(P, paY, paW, paH);
-  ctx.strokeRect(W - P - paW, paY, paW, paH);
-  const gaW = fw * 0.05, gaH = fh * 0.26, gaY = (H - gaH) / 2;
-  ctx.strokeRect(P, gaY, gaW, gaH);
-  ctx.strokeRect(W - P - gaW, gaY, gaW, gaH);
-  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-  const gH = fh * 0.14, gY = (H - gH) / 2;
-  ctx.strokeRect(P - 6, gY, 6, gH);
-  ctx.strokeRect(W - P, gY, 6, gH);
-  ctx.lineWidth = 0.4; ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  for (let i = 0; i < 5; i++) {
-    const ny = gY + i * gH / 4;
-    ctx.beginPath(); ctx.moveTo(P - 6, ny); ctx.lineTo(P, ny); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W - P, ny); ctx.lineTo(W - P + 6, ny); ctx.stroke();
+  // Dark surround gives the nets physical depth and separates the field from
+  // the modal chrome without spending pixels on decorative stadium scenery.
+  ctx.fillStyle = '#091b11';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(P - 3, P - 3, fw + 6, fh + 6);
+
+  ctx.fillStyle = '#194c2c';
+  ctx.fillRect(P, P, fw, fh);
+  const stripeCount = 10;
+  const stripeWidth = fw / stripeCount;
+  for (let index = 0; index < stripeCount; index++) {
+    ctx.fillStyle = index % 2 === 0 ? '#1d5532' : '#194c2c';
+    ctx.fillRect(P + index * stripeWidth, P, stripeWidth, fh);
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.beginPath(); ctx.arc(P + fw * 0.1, H / 2, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(W - P - fw * 0.1, H / 2, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-  for (const [cx, cy, sa, ea] of [[P, P, 0, Math.PI / 2], [W - P, P, Math.PI / 2, Math.PI], [P, H - P, -Math.PI / 2, 0], [W - P, H - P, Math.PI, Math.PI * 1.5]] as const) {
-    ctx.beginPath(); ctx.arc(cx, cy, 8, sa, ea); ctx.stroke();
+
+  // Fine deterministic mowing grain. This lives on the cached pitch layer,
+  // so the extra material detail has no recurring animation cost.
+  ctx.lineWidth = 0.35;
+  for (let index = 1; index < 34; index++) {
+    const y = P + index * fh / 34;
+    ctx.strokeStyle = index % 2 === 0 ? 'rgba(238,255,239,0.025)' : 'rgba(0,0,0,0.025)';
+    ctx.beginPath();
+    ctx.moveTo(P, y);
+    ctx.lineTo(P + fw, y);
+    ctx.stroke();
+  }
+
+  const light = ctx.createLinearGradient(P, P, P + fw, P + fh);
+  light.addColorStop(0, 'rgba(255,255,255,0.035)');
+  light.addColorStop(0.52, 'rgba(255,255,255,0)');
+  light.addColorStop(1, 'rgba(0,0,0,0.09)');
+  ctx.fillStyle = light;
+  ctx.fillRect(P, P, fw, fh);
+
+  const vignette = ctx.createRadialGradient(centerX, centerY, fh * 0.34, centerX, centerY, fh * 0.76);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.2)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(P, P, fw, fh);
+
+  const lineColor = 'rgba(244,248,238,0.62)';
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1.25;
+  ctx.strokeRect(P, P, fw, fh);
+  ctx.beginPath();
+  ctx.moveTo(centerX, P);
+  ctx.lineTo(centerX, H - P);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY, pitch.centerCircleRadiusX, pitch.centerCircleRadiusY, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 1.7, 0, Math.PI * 2);
+  ctx.fillStyle = lineColor;
+  ctx.fill();
+
+  const penaltyY = centerY - penaltyAreaSpan / 2;
+  const goalAreaY = centerY - goalAreaSpan / 2;
+  ctx.strokeRect(P, penaltyY, penaltyAreaDepth, penaltyAreaSpan);
+  ctx.strokeRect(W - P - penaltyAreaDepth, penaltyY, penaltyAreaDepth, penaltyAreaSpan);
+  ctx.strokeRect(P, goalAreaY, goalAreaDepth, goalAreaSpan);
+  ctx.strokeRect(W - P - goalAreaDepth, goalAreaY, goalAreaDepth, goalAreaSpan);
+
+  const leftSpotX = P + penaltySpotOffset;
+  const rightSpotX = W - P - penaltySpotOffset;
+  ctx.beginPath();
+  ctx.arc(leftSpotX, centerY, 1.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(rightSpotX, centerY, 1.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  const arcAngle = Math.acos((penaltyAreaDepth - penaltySpotOffset) / penaltyArcRadiusX);
+  ctx.beginPath();
+  ctx.ellipse(leftSpotX, centerY, penaltyArcRadiusX, penaltyArcRadiusY, 0, -arcAngle, arcAngle);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(rightSpotX, centerY, penaltyArcRadiusX, penaltyArcRadiusY, 0, Math.PI - arcAngle, Math.PI + arcAngle);
+  ctx.stroke();
+
+  const goalY = centerY - goalMouthSpan / 2;
+  const drawGoal = (frontX: number, direction: -1 | 1) => {
+    const backX = frontX + direction * goalDepth;
+    ctx.fillStyle = 'rgba(230,238,228,0.035)';
+    ctx.fillRect(Math.min(frontX, backX), goalY, goalDepth, goalMouthSpan);
+    ctx.strokeStyle = 'rgba(244,248,238,0.72)';
+    ctx.lineWidth = 1.65;
+    ctx.strokeRect(Math.min(frontX, backX), goalY, goalDepth, goalMouthSpan);
+    ctx.strokeStyle = 'rgba(244,248,238,0.16)';
+    ctx.lineWidth = 0.45;
+    for (let row = 1; row < 5; row++) {
+      const y = goalY + row * goalMouthSpan / 5;
+      ctx.beginPath(); ctx.moveTo(frontX, y); ctx.lineTo(backX, y); ctx.stroke();
+    }
+    for (let column = 1; column < 3; column++) {
+      const x = frontX + direction * column * goalDepth / 3;
+      ctx.beginPath(); ctx.moveTo(x, goalY); ctx.lineTo(x, goalY + goalMouthSpan); ctx.stroke();
+    }
+  };
+  drawGoal(P, -1);
+  drawGoal(W - P, 1);
+
+  ctx.strokeStyle = 'rgba(244,248,238,0.5)';
+  ctx.lineWidth = 0.85;
+  const corners = [
+    [P, P, 0, Math.PI / 2],
+    [W - P, P, Math.PI / 2, Math.PI],
+    [P, H - P, -Math.PI / 2, 0],
+    [W - P, H - P, Math.PI, Math.PI * 1.5],
+  ] as const;
+  for (const [cx, cy, start, end] of corners) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cornerRadiusX, cornerRadiusY, 0, start, end);
+    ctx.stroke();
   }
 }
 
@@ -116,6 +214,7 @@ export function drawPlayer(
   facingTarget?: { x: number; y: number },
   action?: 'receive' | 'shot' | 'save' | 'catch' | 'block',
   actionProgress = 0,
+  visualScale = 1,
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -128,6 +227,11 @@ export function drawPlayer(
   const facingLength = Math.hypot(facingX, facingY);
   const directionX = facingLength > 0.01 ? facingX / facingLength : 0;
   const directionY = facingLength > 0.01 ? facingY / facingLength : 0;
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(visualScale, visualScale);
+  ctx.translate(-px, -py);
 
   // Restrained stride marks preserve a sense of pace without the arcade-like
   // after-images that previously followed fast players.
@@ -249,13 +353,13 @@ export function drawPlayer(
       : 0;
   ctx.save();
   ctx.translate(px, py);
-  if ((action === 'save' || action === 'receive') && facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
+  if (facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
   ctx.beginPath();
   ctx.ellipse(
     0,
     0,
-    action === 'save' ? 5.5 + actionWave * 2.5 : action === 'receive' ? 5.5 + actionWave * 0.7 : 5.5,
-    action === 'save' ? 5.5 - actionWave * 1.4 : action === 'receive' ? 5.5 - actionWave * 0.5 : 5.5,
+    action === 'save' ? 5.7 + actionWave * 2.5 : action === 'receive' ? 5.7 + actionWave * 0.7 : 5.7,
+    action === 'save' ? 4.8 - actionWave * 1.2 : action === 'receive' ? 4.8 - actionWave * 0.45 : 4.8,
     0,
     0,
     Math.PI * 2,
@@ -296,6 +400,7 @@ export function drawPlayer(
     ctx.lineCap = 'round';
     ctx.stroke();
   }
+  ctx.restore();
 }
 
 /**
@@ -307,16 +412,26 @@ export function drawBall(
   bx: number, by: number,
   ballArcLift: number,
   ballSpin: number,
+  visualScale = 1,
 ): void {
+  const radius = 3.5 * visualScale;
   const shadowSpread = 1 + ballArcLift * 0.05;
   ctx.beginPath();
-  ctx.ellipse(bx, by + 4, 4 / shadowSpread, 1.5 / shadowSpread, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    bx,
+    by + 4 * visualScale,
+    4 * visualScale / shadowSpread,
+    1.5 * visualScale / shadowSpread,
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fillStyle = `rgba(0,0,0,${0.3 / shadowSpread})`; ctx.fill();
   // Ball with pentagon panel rotation
   ctx.save();
   ctx.translate(bx, by - ballArcLift);
   ctx.rotate(ballSpin * 0.15);
-  ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.fillStyle = '#fff'; ctx.fill();
   ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.5; ctx.stroke();
   // Pentagonal panel detail
@@ -324,7 +439,7 @@ export function drawBall(
   ctx.beginPath();
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-    const r = 1.4;
+    const r = 1.4 * visualScale;
     const x = Math.cos(a) * r;
     const y = Math.sin(a) * r;
     if (i === 0) ctx.moveTo(x, y);
@@ -332,7 +447,7 @@ export function drawBall(
   }
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath(); ctx.arc(-0.8, -0.8, 1.1, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(-0.8 * visualScale, -0.8 * visualScale, 1.1 * visualScale, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
   ctx.restore();
 }
@@ -430,7 +545,6 @@ export function drawShotOutcome(
   targetX: number,
   targetY: number,
   attackingHome: boolean,
-  canvasWidth: number,
 ): void {
   const progress = 1 - remainingFrames / SHOT_OUTCOME_MAX_FRAMES;
   const alpha = Math.max(0, 1 - progress);
@@ -471,12 +585,43 @@ export function drawShotOutcome(
     ctx.setLineDash([]);
   }
 
+  ctx.restore();
+}
+
+/** Draw outcome copy in screen space so camera pan and zoom cannot clip it. */
+export function drawShotOutcomeLabel(
+  ctx: CanvasRenderingContext2D,
+  remainingFrames: number,
+  outcome: Exclude<ShotOutcome, 'goal'>,
+  targetX: number,
+  targetY: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): void {
+  const progress = 1 - remainingFrames / SHOT_OUTCOME_MAX_FRAMES;
+  const alpha = Math.max(0, Math.min(1, (1 - progress) * 1.45));
   const label = outcome === 'save' ? '扑救' : outcome === 'block' ? '封堵' : '偏出';
-  ctx.font = 'bold 9px sans-serif';
+  const color = outcome === 'save' ? '#bfdbfe' : outcome === 'block' ? '#fde68a' : '#e2e8f0';
+  const border = outcome === 'save' ? '#60a5fa' : outcome === 'block' ? '#fbbf24' : '#94a3b8';
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = '700 10px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillStyle = outcome === 'save' ? '#bfdbfe' : outcome === 'block' ? '#fde68a' : '#e2e8f0';
-  const safeLabelX = Math.max(42, Math.min(canvasWidth - 42, targetX));
-  ctx.fillText(label, safeLabelX, Math.max(14, targetY - 13 - progress * 5));
+  ctx.textBaseline = 'middle';
+  const width = ctx.measureText(label).width + 14;
+  const height = 19;
+  const x = clamp(targetX, width / 2 + 8, canvasWidth - width / 2 - 8);
+  const y = clamp(targetY - 22 - progress * 5, height / 2 + 7, canvasHeight - height / 2 - 7);
+  ctx.beginPath();
+  ctx.roundRect(x - width / 2, y - height / 2, width, height, 4);
+  ctx.fillStyle = 'rgba(3,10,7,0.86)';
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(label, x, y + 0.4);
   ctx.restore();
 }
 
@@ -491,7 +636,7 @@ export function applyCameraShake(
   shakeMaxRef: MutNum,
   W: number, H: number,
   camera: BroadcastCameraState = { focusX: W / 2, focusY: H / 2, zoom: 1 },
-): { offX: number; offY: number } {
+): BroadcastCameraTransform {
   let offX = 0, offY = 0;
   if (shakeRef.current > 0) {
     const t = 1 - shakeRef.current / shakeMaxRef.current;
@@ -503,15 +648,28 @@ export function applyCameraShake(
   }
   ctx.save();
   ctx.clearRect(0, 0, W, H);
-  const zoom = clamp(camera.zoom, 1, 1.04);
+  const zoom = clamp(camera.zoom, 1, 1.12);
   const overscanX = Math.max(0, (zoom - 1) * W / 2 - 1);
   const overscanY = Math.max(0, (zoom - 1) * H / 2 - 1);
-  const panX = clamp((W / 2 - camera.focusX) * 0.1, -overscanX, overscanX);
-  const panY = clamp((H / 2 - camera.focusY) * 0.08, -overscanY, overscanY);
+  const panX = clamp((W / 2 - camera.focusX) * 0.22, -overscanX, overscanX);
+  const panY = clamp((H / 2 - camera.focusY) * 0.18, -overscanY, overscanY);
   ctx.translate(W / 2 + panX + offX, H / 2 + panY + offY);
   ctx.scale(zoom, zoom);
   ctx.translate(-W / 2, -H / 2);
-  return { offX, offY };
+  return { offX, offY, panX, panY, zoom };
+}
+
+export function cameraPointToScreen(
+  x: number,
+  y: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  transform: BroadcastCameraTransform,
+): { x: number; y: number } {
+  return {
+    x: (x - canvasWidth / 2) * transform.zoom + canvasWidth / 2 + transform.panX + transform.offX,
+    y: (y - canvasHeight / 2) * transform.zoom + canvasHeight / 2 + transform.panY + transform.offY,
+  };
 }
 
 /**
