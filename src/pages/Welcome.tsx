@@ -15,7 +15,7 @@ import {
 } from '../config/observer-experience';
 import type { ObservationThemePreference } from '../engine/observation/observation-theme';
 import { playGameFeedback } from '../feedback/game-feedback';
-import welcomeUniverseArtwork from '../assets/visual/welcome-universe-v1.webp';
+import welcomeUniverseArtwork from '../assets/visual/welcome-annual-v2.webp';
 import { DecorativeImage } from '../components/DecorativeImage';
 
 type StartPath = 'recommended' | 'custom';
@@ -83,7 +83,7 @@ export default function Welcome() {
   }
 
   return (
-    <div className="welcome-stage relative min-h-screen overflow-x-hidden text-slate-100">
+    <div className="welcome-stage relative min-h-screen overflow-x-hidden text-slate-100" data-art-direction="football-annual">
       <DecorativeImage
         src={welcomeUniverseArtwork}
         eager
@@ -91,44 +91,51 @@ export default function Welcome() {
         className="welcome-universe-art absolute inset-0 h-full w-full object-cover"
       />
       <div className="welcome-art-shade absolute inset-0" aria-hidden="true" />
-      <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-8 sm:py-8">
-        <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-4 sm:px-8 sm:py-6">
+        <header className="welcome-masthead flex items-center justify-between gap-4 pb-3">
           <div className="flex min-w-0 items-center gap-3">
-            <Logo size={48} />
+            <Logo size={44} />
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-black text-slate-50 sm:text-2xl" title="足球联赛宇宙">足球联赛宇宙</h1>
-              <p className="text-xs text-slate-500">Football Universe Simulator</p>
+              <p className="welcome-masthead-label">FOOTBALL UNIVERSE</p>
+              <p className="welcome-masthead-subtitle">赛季观察档案</p>
             </div>
           </div>
-          <span className="shrink-0 text-xs tabular-nums text-slate-400">v{APP_VERSION}</span>
+          <div className="welcome-issue-index" aria-label={`版本 ${APP_VERSION}`}>
+            <span>ISSUE</span>
+            <strong>{APP_VERSION}</strong>
+          </div>
         </header>
 
-        <div className="grid flex-1 items-start gap-6 py-5 lg:grid-cols-[0.8fr_1.2fr] lg:gap-10 lg:py-10">
-          <section className="space-y-4 lg:pt-4">
-            <div className="inline-flex items-center gap-2 rounded border border-emerald-800/60 bg-emerald-950/40 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+        <div className="grid flex-1 items-start gap-5 py-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(25rem,1.1fr)] lg:gap-12 lg:py-8">
+          <section className="welcome-editorial-copy space-y-4 lg:pt-5">
+            <div className="welcome-kicker inline-flex items-center gap-2 text-xs font-semibold text-emerald-200">
               <Icon name="eye" size={14} />
-              上帝视角观察者
+              上帝视角 · 长期演化
             </div>
             <div>
-              <h2 className="max-w-xl text-2xl font-bold leading-tight text-slate-50 sm:text-3xl">
+              <h1 className="welcome-title max-w-xl text-3xl font-black leading-none text-[#f3efe2] sm:text-5xl" title="足球联赛宇宙">
+                足球联赛宇宙
+              </h1>
+              <h2 className="welcome-tagline mt-3 max-w-xl text-xl font-bold leading-tight text-slate-100 sm:text-2xl">
                 不执教一支球队，见证整个足球世界。
               </h2>
-              <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-300">
+              <p className="welcome-intro mt-3 max-w-lg text-sm leading-relaxed text-slate-300">
                 选择一条关注线索，做出赛前判断，然后让球队、球员与王朝在同一种子下自然演化。
               </p>
             </div>
-            <div className="hidden grid-cols-3 gap-3 border-t border-white/10 pt-4 text-xs lg:grid">
+            <div className="welcome-fact-rail hidden grid-cols-3 gap-3 pt-4 text-xs lg:grid">
               <UniverseFact icon="stadium" value="三级联赛" label="持续升降级" />
               <UniverseFact icon="trophy" value="多项赛事" label="冠军写入历史" />
               <UniverseFact icon="refresh" value="无限赛季" label="同种子可复现" />
             </div>
           </section>
 
-          <section className="welcome-start-panel rounded-lg border border-white/15 p-4 shadow-2xl shadow-black/40 sm:p-5" aria-labelledby="start-heading">
+          <section className="welcome-start-panel border border-white/15 p-4 shadow-2xl shadow-black/40 sm:p-5" aria-labelledby="start-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 id="start-heading" className="text-base font-bold text-slate-100">开始观察</h2>
-                <p className="mt-0.5 text-xs text-slate-500">推荐体验可直接进入，自选宇宙保留完整设置。</p>
+                <div className="welcome-panel-index">01 / NEW UNIVERSE</div>
+                <h2 id="start-heading" className="mt-1 text-base font-bold text-slate-100">开始观察</h2>
+                <p className="welcome-panel-description mt-0.5 text-xs text-slate-500">推荐体验可直接进入，自选宇宙保留完整设置。</p>
               </div>
               <Icon name="ball" size={24} className="text-amber-300" />
             </div>
@@ -166,7 +173,7 @@ export default function Welcome() {
                         type="button"
                         aria-pressed={selected}
                         onClick={() => setLens(option.id)}
-                        className={`min-h-[76px] rounded border p-2.5 text-left transition-colors ${selected
+                        className={`welcome-lens-option min-h-[76px] rounded border p-2.5 text-left transition-colors ${selected
                           ? 'border-emerald-500 bg-emerald-950/70 text-slate-100'
                           : 'border-slate-700 bg-slate-900/65 text-slate-300 hover:border-slate-500'
                         }`}
@@ -176,12 +183,12 @@ export default function Welcome() {
                           <span>{option.label}</span>
                           {team && <span className="ml-auto truncate text-[11px] font-normal text-slate-500" title={team.name}>{team.shortName}</span>}
                         </div>
-                        <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{option.description}</p>
+                        <p className="welcome-lens-description mt-1.5 text-[11px] leading-snug text-slate-500">{option.description}</p>
                       </button>
                     );
                   })}
                 </div>
-                <div className="flex min-h-9 items-center gap-2 border-y border-slate-800 py-2 text-xs text-slate-400" aria-live="polite">
+                <div className="welcome-selected-lens flex min-h-9 items-center gap-2 border-y border-slate-800 py-2 text-xs text-slate-400" aria-live="polite">
                   <Icon name={selectedLensTeam ? 'target' : 'eye'} size={15} className="text-emerald-400" />
                   {selectedLensTeam
                     ? <span>主要观察：<strong className="font-semibold text-slate-200">{selectedLensTeam.name}</strong></span>
@@ -273,7 +280,7 @@ export default function Welcome() {
           </section>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 py-3 text-[11px] text-slate-500">
+        <footer className="welcome-footer flex flex-wrap items-center justify-between gap-2 py-3 text-[11px] text-slate-400">
           <span>纯前端 · 离线可玩 · 同种子同宇宙</span>
           <a href="https://github.com/KurtDubain/football-universe" target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-slate-500 sm:min-h-0">GitHub</a>
         </footer>

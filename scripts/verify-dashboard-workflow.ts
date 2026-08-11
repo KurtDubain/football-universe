@@ -47,6 +47,10 @@ async function main(): Promise<void> {
 
       await page.getByTestId('dashboard').waitFor({ state: 'visible' });
       await page.getByTestId('focus-matches').waitFor({ state: 'visible' });
+      await page.getByRole('heading', { name: '第 1 赛季观察台' }).waitFor({ state: 'visible' });
+      await page.getByRole('tab', { name: '战报' }).click();
+      await page.getByText('宇宙刚刚建立，本赛季的开幕动态如下。').waitFor({ state: 'visible' });
+      await page.getByRole('tab', { name: '比赛日' }).click();
       const primaryAdvance = page.getByTestId('dashboard-advance');
       const primaryCount = await primaryAdvance.count();
       const hierarchy = await page.evaluate(() => {
@@ -59,6 +63,8 @@ async function main(): Promise<void> {
           tabsTop: matchdayTab?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
           focusTop: focus?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
           focusInFirstViewport: (focus?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY) < innerHeight,
+          nestedInteractive: document.querySelectorAll('button button, [role="button"] button, button [role="button"]').length,
+          backwardTabTransition: document.querySelector('[data-tab-direction="backward"]') !== null,
         };
       });
       const noticeCount = await page.locator('[data-testid="secondary-match-notices"] > div').count();
@@ -93,6 +99,8 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: invalid dashboard hierarchy ${JSON.stringify(hierarchy)}`);
       }
       if (viewport.isMobile && !hierarchy.focusInFirstViewport) throw new Error('mobile: focus matches are below the first viewport');
+      if (hierarchy.nestedInteractive !== 0) throw new Error(`${viewport.name}: found nested interactive controls`);
+      if (!hierarchy.backwardTabTransition) throw new Error(`${viewport.name}: backward tab transition was not applied`);
       if (noticeCount > 2) throw new Error(`${viewport.name}: found ${noticeCount} secondary notices`);
       if (!skipBox || skipBox.height < 44) throw new Error(`${viewport.name}: skip target is undersized`);
       if (!favoriteHeadingBox || !sequenceBox || favoriteHeadingBox.y >= sequenceBox.y) {

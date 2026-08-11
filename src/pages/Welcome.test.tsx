@@ -37,6 +37,16 @@ afterEach(() => {
 });
 
 describe('Welcome initialization recovery', () => {
+  it('uses the football-annual identity without embedding game data in the artwork', async () => {
+    await act(async () => {
+      root.render(<MemoryRouter><Welcome /></MemoryRouter>);
+    });
+
+    expect(container.querySelector('[data-art-direction]')?.getAttribute('data-art-direction')).toBe('football-annual');
+    expect(container.querySelector('h1')?.textContent).toBe('足球联赛宇宙');
+    expect(container.querySelector('[data-testid="welcome-universe-art"]')?.getAttribute('src')).toContain('welcome-annual-v2');
+  });
+
   it('restores the start action and explains an initialization failure', async () => {
     useGameStore.setState({
       newGame: () => {

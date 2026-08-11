@@ -34,7 +34,7 @@ export type IconName =
   | 'news'     | 'tie'         | 'trend-up'| 'tophat'
   | 'backpack' | 'refresh'     | 'speech'  | 'outbox'
   | 'inbox'    | 'dice'        | 'coin'    | 'cart'
-  | 'money'    | 'gloves'      | 'boot'    | 'play'      | 'pause'
+  | 'money'    | 'gloves'      | 'boot'    | 'play'      | 'pause'      | 'fast-forward'
   | 'sparkle'  | 'handshake'   | 'eye'     | 'lock'
   | 'gem'      | 'leaf'        | 'mortarboard'
   | 'volume'   | 'volume-off'  | 'flag'      | 'whistle';
@@ -222,6 +222,14 @@ function renderIcon(name: IconName, accent?: string): ReactElement {
         <>
           <path d="M12 5v14" />
           <path d="M5 12l7 7 7-7" />
+        </>
+      );
+    case 'fast-forward':
+      return (
+        <>
+          <path d="m4 6 7 6-7 6z" fill={accent ?? 'none'} />
+          <path d="m11 6 7 6-7 6z" fill={accent ?? 'none'} />
+          <path d="M20 6v12" />
         </>
       );
     case 'medal':

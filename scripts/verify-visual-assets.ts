@@ -3,7 +3,7 @@ import { chromium, type BrowserContext, type ConsoleMessage, type Page } from 'p
 
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const assets = [
-  { file: 'src/assets/visual/welcome-universe-v1.webp', maxBytes: 150 * 1024 },
+  { file: 'src/assets/visual/welcome-annual-v2.webp', maxBytes: 160 * 1024 },
   { file: 'src/assets/visual/story-dark-horse-v2.webp', maxBytes: 12 * 1024 },
   { file: 'src/assets/visual/story-giant-crisis-v2.webp', maxBytes: 12 * 1024 },
   { file: 'src/assets/visual/story-promoted-survival-v2.webp', maxBytes: 12 * 1024 },
@@ -93,12 +93,13 @@ async function verifyWelcome(
     const start = [...document.querySelectorAll('button')]
       .find(button => button.textContent?.trim() === '开始观察');
     const resource = performance.getEntriesByType('resource')
-      .find(entry => entry.name.includes('welcome-universe')) as PerformanceResourceTiming | undefined;
+      .find(entry => entry.name.includes('welcome-annual')) as PerformanceResourceTiming | undefined;
     return {
       naturalWidth: image?.naturalWidth ?? 0,
       naturalHeight: image?.naturalHeight ?? 0,
       artRect: image?.getBoundingClientRect().toJSON(),
       startRect: start?.getBoundingClientRect().toJSON(),
+      viewportHeight: window.innerHeight,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       resourceBytes: resource?.decodedBodySize ?? 0,
       performance: (window as AuditWindow).__visualMetrics,
@@ -108,6 +109,9 @@ async function verifyWelcome(
     throw new Error(`${name}: Welcome art did not decode ${JSON.stringify(metrics)}`);
   }
   if (metrics.overflow > 1) throw new Error(`${name}: Welcome overflows by ${metrics.overflow}px`);
+  if (name === 'mobile-320' && (metrics.startRect?.bottom ?? Number.POSITIVE_INFINITY) > metrics.viewportHeight) {
+    throw new Error(`${name}: Start action is below the first viewport ${JSON.stringify(metrics.startRect)}`);
+  }
   if ((metrics.performance?.cls ?? 0) > 0.05) {
     throw new Error(`${name}: Welcome CLS is ${metrics.performance?.cls}`);
   }
@@ -156,7 +160,7 @@ async function verifyFallbacks(): Promise<Record<string, unknown>> {
     await contrastContext.close();
 
     const failureContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    await failureContext.route('**/*welcome-universe*.webp', route => route.abort());
+    await failureContext.route('**/*welcome-annual*.webp', route => route.abort());
     const failurePage = await failureContext.newPage();
     await failurePage.goto(`${baseUrl}/?audit=1`, { waitUntil: 'domcontentloaded' });
     await failurePage.waitForTimeout(250);
@@ -256,7 +260,7 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
         }],
       });
     }, moment);
-    const feature = page.getByTestId('world-moment-feature');
+    const feature = page.locator(`[data-testid="world-moment-feature"][data-moment-kind="${moment.kind}"]`).last();
     await feature.waitFor({ state: 'visible' });
     const metric = await feature.evaluate((element, expectedKind) => {
       const image = element.querySelector(`[data-testid="world-moment-art-${expectedKind}"]`) as HTMLImageElement | null;

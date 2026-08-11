@@ -27,7 +27,7 @@ const THIRTY_FPS_MS = 1000 / 30;
 
 export function selectRenderBudget(environment: RenderEnvironment): RenderBudget {
   if (environment.reducedMotion) {
-    return { quality: 'reduced', dprCap: 1.5, particleCap: 60, frameStepMs: 250 };
+    return { quality: 'reduced', dprCap: 1.5, particleCap: 60, frameStepMs: SIXTY_FPS_MS };
   }
 
   const constrained = environment.cssWidth <= 480

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useMemo, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
@@ -77,7 +77,10 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const [activeTab, setActiveTab] = useState<TabKey>(() => (
     (location.state as { showLatestResults?: boolean } | null)?.showLatestResults ? 'results' : 'matchday'
   ));
+  const [tabDirection, setTabDirection] = useState<'forward' | 'backward'>('forward');
   const prevAdvanceTick = useRef(advanceTick);
+  const tabContentRef = useRef<HTMLDivElement>(null);
+  const tabScrollPositions = useRef<Record<TabKey, number>>({ matchday: 0, results: 0, overview: 0, review: 0 });
 
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
@@ -120,6 +123,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
       setLiveResult(finalResult);
       setPendingLiveCelebration(nextCelebration);
     } else {
+      setTabDirection('forward');
       setActiveTab('results');
       setPendingLiveCelebration(null);
       if (nextCelebration) setCelebrationType(nextCelebration);
@@ -195,21 +199,41 @@ function DashboardContent({ world }: { world: GameWorld }) {
     ...(hasSeasonReview ? [{ key: 'review' as TabKey, label: `S${lastCompletedSeason}档案` }] : []),
   ];
 
+  const selectTab = (nextTab: TabKey) => {
+    if (nextTab === activeTab) return;
+    tabScrollPositions.current[activeTab] = tabContentRef.current?.scrollTop ?? 0;
+    const currentIndex = tabs.findIndex(tab => tab.key === activeTab);
+    const nextIndex = tabs.findIndex(tab => tab.key === nextTab);
+    setTabDirection(nextIndex >= currentIndex ? 'forward' : 'backward');
+    setActiveTab(nextTab);
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (tabContentRef.current) {
+        tabContentRef.current.scrollTop = tabScrollPositions.current[activeTab] ?? 0;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab]);
+
   // Mobile swipe — left/right between tabs
   const tabSwipeRef = useSwipe<HTMLDivElement>({
     ignoreVertical: true,
     onSwipeLeft: () => {
       const idx = tabs.findIndex(t => t.key === activeTab);
-      if (idx >= 0 && idx < tabs.length - 1) setActiveTab(tabs[idx + 1].key);
+      if (idx >= 0 && idx < tabs.length - 1) selectTab(tabs[idx + 1].key);
     },
     onSwipeRight: () => {
       const idx = tabs.findIndex(t => t.key === activeTab);
-      if (idx > 0) setActiveTab(tabs[idx - 1].key);
+      if (idx > 0) selectTab(tabs[idx - 1].key);
     },
   });
 
   return (
-    <div data-testid="dashboard" className="max-w-6xl flex flex-col h-full tabular-nums">
+    <div data-testid="dashboard" className="dashboard-shell max-w-6xl flex flex-col h-full tabular-nums">
+      <DashboardMasthead world={world} currentWindow={currentWindow} favoriteTeamId={favoriteTeamId} />
+
       {/* ═══════ Favorite Team Cards (up to 3) ═══════ */}
       {favoriteTeamIds.length > 0 && (() => {
         // Surface any negative-cash favorites as a Phase H alert banner.
@@ -240,7 +264,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
         );
       })()}
       {favoriteTeamIds.length > 0 && (
-        <div data-testid="favorite-team-summaries" className="space-y-1.5 mt-1">
+        <section data-testid="favorite-team-summaries" className="observer-club-strip mt-2" aria-label="关注球队">
           {favoriteTeamIds.map((tid) => {
             const fav = world.teamBases[tid];
             const favState = world.teamStates[tid];
@@ -260,20 +284,25 @@ function DashboardContent({ world }: { world: GameWorld }) {
 
             const isPrimary = tid === favoriteTeamId;
             return (
-              <div key={tid} className={`rounded-lg border px-3 ${isPrimary ? 'py-2 border-blue-600/50 bg-blue-950/25' : 'py-1.5 sm:py-2 border-slate-700/40 bg-slate-800/60'}`}>
+              <article
+                key={tid}
+                data-primary={isPrimary}
+                className="observer-club-summary px-3 py-2"
+                style={{ '--club-color': fav.color ?? '#7f9184' } as CSSProperties}
+              >
                 {/* Row 1 — identity + standings + form. Single line on sm+, wraps on mobile. */}
                 <div className="flex items-center gap-2 sm:gap-3 text-xs">
                   <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
                   <Link
                     to={`/team/${tid}`}
-                    className="min-w-0 font-semibold text-slate-200 hover:text-blue-400"
+                    className="min-w-0 font-semibold text-[var(--text-primary)] hover:text-white"
                     title={fav.name}
                   >
                     <span className="sm:hidden">{fav.shortName}</span>
                     <span className="hidden sm:inline">{fav.name}</span>
                   </Link>
-                  {isPrimary && <span className="shrink-0 rounded bg-blue-900/60 px-1.5 py-0.5 text-[11px] font-semibold text-blue-300">主要观察</span>}
-                  <span className="text-slate-500 shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
+                  {isPrimary && <span className="observer-primary-label shrink-0 px-1.5 py-0.5 text-[11px] font-semibold">主要观察</span>}
+                  <span className="text-[var(--text-muted)] shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
                   <div className="flex gap-0.5 shrink-0 ml-auto">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
                       <span key={i} className={`w-4 h-4 rounded text-[11px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
@@ -303,19 +332,19 @@ function DashboardContent({ world }: { world: GameWorld }) {
                     </>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </section>
       )}
 
       {/* ═══════ Tab Bar ═══════ */}
       <SegmentedControl
         value={activeTab}
-        onChange={setActiveTab}
+        onChange={selectTab}
         ariaLabel="主页视图"
         scrollable
-        className="mt-1 w-full"
+        className="dashboard-tabs mt-2 w-full"
         options={tabs.map(tab => ({
           value: tab.key,
           label: (
@@ -330,7 +359,16 @@ function DashboardContent({ world }: { world: GameWorld }) {
       />
 
       {/* ═══════ Tab Content (swipe left/right to switch tabs on mobile) ═══════ */}
-      <div ref={tabSwipeRef} className="flex-1 overflow-auto pt-4 pb-2 animate-tab-enter touch-pan-y" key={activeTab}>
+      <div
+        ref={(node) => {
+          tabSwipeRef.current = node;
+          tabContentRef.current = node;
+        }}
+        data-tab-direction={tabDirection}
+        onScroll={event => { tabScrollPositions.current[activeTab] = event.currentTarget.scrollTop; }}
+        className="dashboard-tab-content flex-1 overflow-auto pt-4 pb-2 touch-pan-y"
+        key={activeTab}
+      >
         {activeTab === 'matchday' && (
           <MatchdayTab
             world={world}
@@ -352,7 +390,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
               setLiveFeatured(false);
               setLiveResult(r);
             }}
-            onSeasonReview={() => setActiveTab('review')}
+            onSeasonReview={() => selectTab('review')}
           />
         )}
 
@@ -375,6 +413,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
           onClose={() => {
             setLiveResult(null);
             setLiveFeatured(false);
+            setTabDirection('forward');
             setActiveTab('results');
             if (pendingLiveCelebration) setCelebrationType(pendingLiveCelebration);
             setPendingLiveCelebration(null);
@@ -401,6 +440,67 @@ function DashboardContent({ world }: { world: GameWorld }) {
         world={world}
       />
     </div>
+  );
+}
+
+function DashboardMasthead({
+  world,
+  currentWindow,
+  favoriteTeamId,
+}: {
+  world: GameWorld;
+  currentWindow: ReturnType<ReturnType<typeof useGameStore.getState>['getCurrentWindow']>;
+  favoriteTeamId: string | null;
+}) {
+  const completedWindows = world.seasonState.calendar.filter(window => window.completed).length;
+  const totalWindows = world.seasonState.calendar.length;
+  const currentNumber = currentWindow
+    ? Math.min(world.seasonState.currentWindowIndex + 1, totalWindows)
+    : totalWindows;
+  const primaryTeam = favoriteTeamId ? world.teamBases[favoriteTeamId] : null;
+  const progress = totalWindows > 0 ? (completedWindows / totalWindows) * 100 : 0;
+
+  return (
+    <section className="season-masthead" aria-labelledby="season-desk-title">
+      <div className="season-masthead-index" aria-label={`第 ${world.seasonState.seasonNumber} 赛季`}>
+        <span>SEASON</span>
+        <strong>{String(world.seasonState.seasonNumber).padStart(2, '0')}</strong>
+      </div>
+      <div className="season-masthead-copy min-w-0">
+        <div className="ui-eyebrow text-[10px] text-[var(--competition-gold)]">
+          OBSERVATION DESK · {currentWindow ? getWindowTypeLabel(currentWindow.type) : 'SEASON FILED'}
+        </div>
+        <h1 id="season-desk-title" className="mt-1 text-base font-bold text-[var(--text-primary)] sm:text-lg">
+          第 {world.seasonState.seasonNumber} 赛季观察台
+        </h1>
+        <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]" title={currentWindow?.label}>
+          {currentWindow?.label ?? '本赛季全部窗口已完成'}
+        </p>
+      </div>
+      <div className="season-masthead-status">
+        {primaryTeam ? (
+          <Link to={`/team/${primaryTeam.id}`} className="season-primary-club" title={`主要观察：${primaryTeam.name}`}>
+            <TeamBadge teamId={primaryTeam.id} shortName={primaryTeam.shortName} color={primaryTeam.color} size={28} />
+            <span>
+              <small>主要观察</small>
+              <strong>{primaryTeam.shortName}</strong>
+            </span>
+          </Link>
+        ) : (
+          <div className="season-primary-club" data-neutral="true">
+            <Icon name="eye" size={18} />
+            <span><small>观察视角</small><strong>全局</strong></span>
+          </div>
+        )}
+        <div className="season-window-counter">
+          <span>窗口</span>
+          <strong>{currentNumber}<small>/{totalWindows}</small></strong>
+        </div>
+      </div>
+      <div className="season-progress-track" aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+    </section>
   );
 }
 
@@ -586,34 +686,30 @@ function MatchdayTab({
                   <div
                     key={fixture.id}
                     data-fixture-id={fixture.id}
-                    role="button"
-                    tabIndex={0}
                     data-secondary={focusIndex > 0 ? 'true' : 'false'}
                     className="matchday-focus-fixture"
-                    onClick={() => onFixtureClick(fixture)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        onFixtureClick(fixture);
-                      }
-                    }}
                   >
-                    <div className="focus-fixture-main mb-1 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playUiFeedback(isStarred ? 'toggle_off' : 'toggle_on');
-                          toggleStarFixture(fixture.id);
-                        }}
-                        data-testid="focus-watch-toggle"
-                        aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
-                        aria-pressed={isStarred}
-                        className={`press-scale -my-2 mr-0.5 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-[color,background-color,border-color,box-shadow] ${isStarred ? 'border-amber-400/60 bg-amber-400/12 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]' : 'border-transparent bg-slate-950/25 text-slate-500 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-200'}`}
-                        title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
-                      >
-                        <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playUiFeedback(isStarred ? 'toggle_off' : 'toggle_on');
+                        toggleStarFixture(fixture.id);
+                      }}
+                      data-testid="focus-watch-toggle"
+                      aria-label={isStarred ? '取消锁定焦点观战' : '锁定本场并在推进后无剧透观战'}
+                      aria-pressed={isStarred}
+                      className={`focus-watch-toggle press-scale inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center border transition-[color,background-color,border-color,box-shadow] ${isStarred ? 'border-amber-400/60 bg-amber-400/12 text-amber-300 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]' : 'border-transparent bg-black/20 text-slate-500 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-200'}`}
+                      title={isStarred ? '已锁定无剧透观战' : '推进后直接进入无剧透直播'}
+                    >
+                      <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      className="focus-fixture-open min-w-0 text-left"
+                      onClick={() => onFixtureClick(fixture)}
+                      aria-label={`查看 ${ht.name} 对 ${at.name} 的赛前信息`}
+                    >
+                      <div className="focus-fixture-main mb-1 flex items-center justify-between">
                       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
                         <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
                         <span className="truncate font-semibold text-slate-100" title={ht.name}>{ht.shortName}</span>
@@ -638,6 +734,7 @@ function MatchdayTab({
                       ))}
                       <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
                     </div>
+                    </button>
                   </div>
                 );
               })}
@@ -1007,7 +1104,11 @@ function ResultsTab({
               onLiveView={onLiveView}
             />
           ) : (
-            <p className="text-xs text-slate-400">本次推进完成了赛季结算，重点动态如下。</p>
+            <p className="text-xs text-slate-400">
+              {world.totalElapsedWindows === 0
+                ? '宇宙刚刚建立，本赛季的开幕动态如下。'
+                : '本次推进完成了赛季结算，重点动态如下。'}
+            </p>
           )}
 
           {(lastNews.length > 0 || world.newsLog.length > 0) && (
@@ -1395,16 +1496,8 @@ function FixtureCard({
 
   return (
     <div
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className={`bg-slate-800 rounded-lg border p-2 hover:border-slate-500 hover:bg-slate-800/80 transition-all cursor-pointer group hover-lift relative ${
+      data-fixture-id={fixture.id}
+      className={`fixture-sheet border transition-all group relative ${
         hasGlow ? 'border-amber-600/50 animate-glow-pulse' : 'border-slate-700'
       }`}
       style={hasGlow ? { color: '#f59e0b' } : undefined}
@@ -1424,6 +1517,13 @@ function FixtureCard({
       >
         <Icon name={isStarred ? 'lock' : 'eye'} size={18} />
       </button>
+
+      <button
+        type="button"
+        onClick={onClick}
+        className="fixture-sheet-open block w-full p-2 pr-3 text-left"
+        aria-label={`查看 ${homeTeam.name} 对 ${awayTeam.name} 的赛前信息`}
+      >
 
       {/* Tags */}
       {tags.length > 0 && (
@@ -1488,6 +1588,7 @@ function FixtureCard({
         <span className="truncate px-1" title={pred.verdict}>{pred.verdict}</span>
         <span className="text-red-400">{pred.awayWinPct}%</span>
       </div>
+      </button>
     </div>
   );
 }

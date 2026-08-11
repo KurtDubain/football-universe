@@ -12,12 +12,12 @@ describe('pitch render budget', () => {
     })).toEqual({ quality: 'constrained', dprCap: 2, particleCap: 180, frameStepMs: 1000 / 60 });
   });
 
-  it('uses a quiet four-frame-per-second budget for reduced motion', () => {
+  it('reduces decorative cost without stretching core match sequences', () => {
     expect(selectRenderBudget({
       cssWidth: 1440,
       devicePixelRatio: 2,
       reducedMotion: true,
-    })).toEqual({ quality: 'reduced', dprCap: 1.5, particleCap: 60, frameStepMs: 250 });
+    })).toEqual({ quality: 'reduced', dprCap: 1.5, particleCap: 60, frameStepMs: 1000 / 60 });
   });
 
   it('degrades only after sustained measured pressure', () => {

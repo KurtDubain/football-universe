@@ -2,12 +2,13 @@
 
 All assets in this register are original project artwork generated with the
 built-in OpenAI image-generation tool. The initial family was created on
-2026-07-31 and the broadcast/world-moment additions on 2026-08-08. Dynamic team names,
+2026-07-31, the broadcast/world-moment additions on 2026-08-08, and the football-annual
+art-direction pass on 2026-08-11. Dynamic team names,
 scores, season numbers, Chinese copy, and commands remain accessible live text.
 
 | Versioned asset | Use | Display source | Dimensions | File budget |
 | --- | --- | --- | ---: | ---: |
-| `welcome-universe-v1.webp` | Welcome full-bleed football universe scene | `call_MirARChuBrACParPjj2rpLWA.png` | 1440x960 | 124 KB / 150 KB first-view budget |
+| `welcome-annual-v2.webp` | Welcome full-bleed football annual cover | `exec-e50d4840-a6cc-4ed1-a01e-bccc53188082.png` | 1440x960 | 147 KB / 160 KB first-view budget |
 | `story-dark-horse-v2.webp` | Dark-horse chapter mark | `exec-a32869b2-a0b1-4873-a446-a4d0cd13099b.png` | 256x256 | 7 KB / 12 KB budget |
 | `story-giant-crisis-v2.webp` | Giant-crisis chapter mark | `exec-4d7fcdad-ff45-40db-a95d-9ae5a4c10b54.png` | 256x256 | 3 KB / 12 KB budget |
 | `story-promoted-survival-v2.webp` | Promoted-survival chapter mark | `exec-23565d41-2c72-45b5-abfa-62fed36b8e82.png` | 256x256 | 8 KB / 12 KB budget |
@@ -29,8 +30,10 @@ session. The project-consumed WebP files live in `src/assets/visual/`.
 
 ## Prompt Intent
 
-- Welcome: a top-down night stadium surrounded by season rings, archival paper,
-  and restrained trophy light, with no embedded interface or text.
+- Welcome v2: a 1970s-1990s East Asian sports-annual cover built from a top-down
+  stadium, match grids, registration marks, matte paper grain, restrained turf,
+  brass, off-white, and signal-red inks. It deliberately avoids photorealism,
+  fantasy scale, embedded interface, logos, and text.
 - Story marks v2: one shared night-documentary family for a collective tunnel
   entrance, an empty directors' box after a crisis, and boots holding the wet
   touchline. Large simple subjects remain readable at 48px without literal
@@ -53,7 +56,7 @@ session. The project-consumed WebP files live in `src/assets/visual/`.
 
 ## Delivery Rules
 
-- The Welcome scene is the only first-view raster and must remain below 150 KB.
+- The Welcome scene is the only first-view raster and must remain below 160 KB.
 - Story, live-score, and archive assets are requested only when their owning
   route or surface mounts. World moments mount at most one artwork per advance,
   selected from authoritative key news or story updates.

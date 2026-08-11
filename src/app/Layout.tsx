@@ -13,7 +13,7 @@ import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget
 import MobileDrawer from '../components/MobileDrawer';
 import FloatingAdvanceButton from '../components/FloatingAdvanceButton';
 import { planNextKeyNode } from '../engine/observation/key-node';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import {
   setFeedbackPreferences,
   useFeedbackPreferences,
@@ -29,37 +29,40 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const navSections = [
+const navSections: Array<{
+  title: string;
+  items: Array<{ to: string; label: string; icon: IconName; end?: boolean }>;
+}> = [
   {
     title: '总览',
     items: [
-      { to: '/', label: '主页', end: true },
-      { to: '/calendar', label: '赛历' },
+      { to: '/', label: '主页', icon: 'eye', end: true },
+      { to: '/calendar', label: '赛历', icon: 'chart' },
     ],
   },
   {
     title: '联赛',
     items: [
-      { to: '/league/1', label: '顶级联赛' },
-      { to: '/league/2', label: '甲级联赛' },
-      { to: '/league/3', label: '乙级联赛' },
+      { to: '/league/1', label: '顶级联赛', icon: 'crown' },
+      { to: '/league/2', label: '甲级联赛', icon: 'medal' },
+      { to: '/league/3', label: '乙级联赛', icon: 'leaf' },
     ],
   },
   {
     title: '杯赛',
     items: [
-      { to: '/cup/league_cup', label: '联赛杯' },
-      { to: '/cup/super_cup', label: '超级杯' },
+      { to: '/cup/league_cup', label: '联赛杯', icon: 'trophy' },
+      { to: '/cup/super_cup', label: '超级杯', icon: 'star' },
     ],
   },
   {
     title: '管理',
     items: [
-      { to: '/teams', label: '球队中心' },
-      { to: '/compare', label: '球队对比' },
-      { to: '/coaches', label: '教练中心' },
-      { to: '/players', label: '球员中心' },
-      { to: '/settings', label: '设置' },
+      { to: '/teams', label: '球队中心', icon: 'shield' },
+      { to: '/compare', label: '球队对比', icon: 'chart' },
+      { to: '/coaches', label: '教练中心', icon: 'tie' },
+      { to: '/players', label: '球员中心', icon: 'ball' },
+      { to: '/settings', label: '设置', icon: 'clipboard' },
     ],
   },
 ];
@@ -187,20 +190,20 @@ export default function Layout({ children }: LayoutProps) {
 
   const navContent = (
     <>
-      <div className="px-4 py-3 border-b border-slate-700/60">
+      <div className="season-nav-status px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-400">第 {seasonNumber} 赛季</span>
+          <span className="ui-eyebrow text-[10px] text-[var(--text-secondary)]">SEASON {String(seasonNumber).padStart(2, '0')}</span>
           {isWorldCupYear && (
-            <span className="rounded bg-sky-900/50 px-1.5 py-0.5 text-[11px] text-sky-400">WC</span>
+            <span className="rounded-sm border border-emerald-600/45 bg-emerald-950/50 px-1.5 py-0.5 text-[11px] text-emerald-300">WC</span>
           )}
         </div>
-        <div className="mt-1.5 w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+        <div className="mt-2 h-1 w-full overflow-hidden bg-black/35">
           <div
-            className="h-full bg-blue-500/80 rounded-full transition-all"
+            className="h-full bg-[var(--action)] transition-all"
             style={{ width: `${calendarLen > 0 ? (completedWindows / calendarLen) * 100 : 0}%` }}
           />
         </div>
-        <span className="mt-0.5 block text-[11px] text-slate-600">{completedWindows}/{calendarLen}</span>
+        <span className="mt-1 block text-[11px] text-[var(--text-disabled)]">{completedWindows}/{calendarLen} 窗口</span>
       </div>
 
       {/* Favorite teams (up to 3) */}
@@ -238,7 +241,7 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="flex-1 py-2 overflow-y-auto">
         {navSections.map((section) => (
           <div key={section.title} className="mb-1">
-            <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500">
+            <div className="app-nav-section-label px-4 py-1.5">
               {section.title}
             </div>
             {section.items.map((item) => (
@@ -247,14 +250,9 @@ export default function Layout({ children }: LayoutProps) {
                 to={item.to}
                 end={'end' in item ? item.end : false}
                 onClick={() => setMobileNavOpen(false)}
-                className={({ isActive }) =>
-                  `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                    isActive
-                      ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-                  }`
-                }
+                className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
               >
+                <Icon name={item.icon} size={15} />
                 {item.label}
               </NavLink>
             ))}
@@ -266,14 +264,9 @@ export default function Layout({ children }: LayoutProps) {
             <NavLink
               to="/cup/world_cup"
               onClick={() => setMobileNavOpen(false)}
-              className={({ isActive }) =>
-                `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                  isActive
-                    ? 'bg-sky-600/90 text-white font-medium shadow-sm'
-                    : 'text-sky-400 hover:bg-sky-900/30 hover:text-sky-300'
-                }`
-              }
+              className={({ isActive }) => `app-nav-link app-nav-link-world mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
             >
+              <Icon name="stadium" size={15} />
               环球冠军杯
             </NavLink>
           </div>
@@ -288,20 +281,15 @@ export default function Layout({ children }: LayoutProps) {
           if (visible.length === 0) return null;
           return (
             <div className="mb-1">
-              <div className="px-4 py-1.5 text-[11px] font-semibold text-orange-500">洲际杯</div>
+              <div className="app-nav-section-label px-4 py-1.5 text-orange-400">洲际杯</div>
               {visible.map(item => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   onClick={() => setMobileNavOpen(false)}
-                  className={({ isActive }) =>
-                    `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                      isActive
-                        ? 'bg-orange-600/90 text-white font-medium shadow-sm'
-                        : 'text-orange-300 hover:bg-orange-900/30 hover:text-orange-200'
-                    }`
-                  }
+                  className={({ isActive }) => `app-nav-link app-nav-link-continental mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
                 >
+                  <Icon name="trophy" size={15} />
                   {item.label}
                 </NavLink>
               ))}
@@ -310,83 +298,53 @@ export default function Layout({ children }: LayoutProps) {
         })()}
 
         <div className="mb-1">
-          <div className="px-4 py-1.5 text-[11px] font-semibold text-slate-500">记录</div>
+          <div className="app-nav-section-label px-4 py-1.5">记录</div>
           <NavLink
             to="/history"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
+            <Icon name="trophy" size={15} />
             历史荣誉
           </NavLink>
           <NavLink
             to="/legends"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
-            <span className="mr-1.5" aria-hidden>🏛️</span>传奇名人堂
+            <Icon name="building" size={15} />
+            传奇名人堂
           </NavLink>
           <NavLink
             to="/chronicle"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
+            <Icon name="clipboard" size={15} />
             编年史
           </NavLink>
           <NavLink
             to="/transfers"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
+            <Icon name="handshake" size={15} />
             转会窗口
           </NavLink>
           <NavLink
             to="/memorable"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
+            <Icon name="fire" size={15} />
             经典战役
           </NavLink>
           <NavLink
             to="/search"
             onClick={() => setMobileNavOpen(false)}
-            className={({ isActive }) =>
-              `mobile-nav-item mx-2 flex items-center px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-blue-600/90 text-white font-medium shadow-sm'
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`
-            }
+            className={({ isActive }) => `app-nav-link mobile-nav-item mx-2 ${isActive ? 'is-active' : ''}`}
           >
+            <Icon name="target" size={15} />
             高级搜索
           </NavLink>
         </div>
@@ -409,13 +367,13 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div data-testid="app-shell" className="h-[100dvh] bg-[var(--surface-page)] flex overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 bg-[var(--surface-panel)] border-r border-[var(--border-subtle)] flex-col shrink-0 relative">
-        <div className="p-3 border-b border-slate-700/60">
+      <aside className="app-sidebar hidden md:flex w-52 bg-[var(--surface-panel)] border-r border-[var(--border-subtle)] flex-col shrink-0 relative">
+        <div className="app-brand-lockup p-3">
           <div className="flex items-center gap-2">
             <Logo size={30} />
             <div>
-              <h1 className="text-sm font-bold text-slate-100 leading-none">足球联赛宇宙</h1>
-              <p className="mt-0.5 text-[11px] text-slate-500">电子斗蛐蛐模拟器</p>
+              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-none">足球联赛宇宙</h1>
+              <p className="ui-eyebrow mt-1 text-[9px] text-[var(--competition-gold)]">SEASON ARCHIVE</p>
             </div>
           </div>
         </div>
@@ -515,18 +473,24 @@ export default function Layout({ children }: LayoutProps) {
               <button
                 onClick={() => setShowFastMenu(!showFastMenu)}
                 disabled={isAdvancing}
+                aria-expanded={showFastMenu}
+                aria-haspopup="menu"
                 aria-label="打开快进菜单"
-                className={`h-[44px] w-[44px] bg-[var(--action)] text-sm text-white transition-colors hover:bg-[var(--action-hover)] disabled:bg-[var(--surface-raised)] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1.5 ${
-                  location.pathname === '/' ? 'rounded-md' : 'rounded-r-md border-l border-white/20'
+                title="推进选项"
+                className={`inline-flex h-[44px] w-[44px] items-center justify-center text-white transition-colors disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-8 sm:w-8 ${
+                  location.pathname === '/'
+                    ? 'rounded-md border border-[var(--border-strong)] bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:bg-[#263029] hover:text-white'
+                    : 'rounded-r-md border-l border-white/20 bg-[var(--action)] hover:bg-[var(--action-hover)]'
                 }`}
               >
-                ▾
+                <Icon name="fast-forward" size={16} />
               </button>
             )}
             {showFastMenu && currentWindow && (
               <div
                 data-testid="advance-menu"
-                className="absolute right-0 top-full z-[60] mt-1 w-[min(19rem,calc(100vw-24px))] overflow-hidden rounded-lg border border-slate-700 bg-slate-800 shadow-xl"
+                role="menu"
+                className="advance-menu-sheet absolute right-0 top-full z-[60] mt-1 w-[min(19rem,calc(100vw-24px))] overflow-hidden border border-[var(--border-strong)] bg-[var(--surface-raised)] shadow-xl"
               >
                 <div className="border-b border-slate-700/70 p-2">
                   <button
@@ -599,7 +563,7 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className="app-route-content tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in" key={location.pathname}>
+        <main className="app-route-content app-workspace tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in" key={location.pathname}>
           {children}
         </main>
       </div>

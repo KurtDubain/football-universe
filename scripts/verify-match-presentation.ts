@@ -20,6 +20,7 @@ interface VerificationResult {
     defaultMode: string;
     liveMinuteDelta: number;
     immersiveMinuteDelta: number;
+    immersiveResumeMs: number;
     controlsOverflow: number;
     commentaryCount: number;
     commentaryScrollable: boolean;
@@ -183,15 +184,36 @@ async function verifyViewport(
       throw new Error(`${name}: immersive mode did not activate`);
     }
     const immersiveStart = await readMinute();
+    const immersiveResumeStartedAt = performance.now();
     await dialog.getByRole('button', { name: '继续', exact: true }).click();
-    await page.waitForTimeout(2000);
+    try {
+      await page.waitForFunction(startMinute => {
+        const minute = Number.parseInt(
+          document.querySelector('[data-testid="live-minute"]')?.textContent ?? '0',
+          10,
+        );
+        return minute > startMinute;
+      }, immersiveStart, { timeout: 5000 });
+    } catch {
+      const diagnostic = await page.evaluate(() => ({
+        minute: document.querySelector('[data-testid="live-minute"]')?.textContent ?? null,
+        pauseAction: [...document.querySelectorAll('button')]
+          .map(button => button.textContent?.trim())
+          .find(text => text === '暂停' || text === '继续') ?? null,
+        canvas: typeof (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text === 'function'
+          ? JSON.parse((window as typeof window & { render_game_to_text: () => string }).render_game_to_text())
+          : null,
+      }));
+      throw new Error(`${name}: immersive playback did not resume: ${JSON.stringify(diagnostic)}`);
+    }
+    const immersiveResumeMs = Math.round(performance.now() - immersiveResumeStartedAt);
     await dialog.getByRole('button', { name: '暂停', exact: true }).click();
     const immersiveMinuteDelta = await readMinute() - immersiveStart;
     if (liveMinuteDelta < 1 || liveMinuteDelta > (reducedMotion === 'reduce' ? 6 : 3)) {
       throw new Error(`${name}: live advanced ${liveMinuteDelta} minutes after resume`);
     }
     if (immersiveMinuteDelta < 1 || immersiveMinuteDelta > (reducedMotion === 'reduce' ? 10 : 4)) {
-      throw new Error(`${name}: immersive advanced ${immersiveMinuteDelta} minutes in 2000ms`);
+      throw new Error(`${name}: immersive advanced ${immersiveMinuteDelta} minutes after resume`);
     }
     await dialog.getByRole('button', { name: '继续', exact: true }).click();
 
@@ -283,6 +305,7 @@ async function verifyViewport(
         defaultMode: 'live',
         liveMinuteDelta,
         immersiveMinuteDelta,
+        immersiveResumeMs,
         controlsOverflow,
         commentaryCount: commentaryMetrics.count,
         commentaryScrollable: commentaryMetrics.scrollable,

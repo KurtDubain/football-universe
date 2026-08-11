@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-11 v4.51.0 Football Annual Art Direction
+
+- Current request: continue submission-level visual polish after reviewing Tencent's previous entries, give the project a recognizable authored style, and avoid a generic AI-generated-dashboard look across UI and imagery.
+- Established “East Asian football annual x live broadcast desk” as the project art direction. Ink surfaces, warm paper type, pitch green, trophy brass, signal red, edition numbers, editorial rules, score typography, and club-color rails now have explicit semantic ownership; the permanent rules live in `docs/art-direction.md`.
+- Rebuilt Welcome around an original 1440x960 flat screen-print annual cover, a compact FLU field mark, issue indexing, and a first-viewport observer setup. The optimized WebP is 150,946 bytes under the 160 KiB first-view budget; dynamic teams, scores, copy, and controls remain accessible HTML rather than baked artwork.
+- Added a season observation masthead, club editorial strip, directional Dashboard tabs with per-tab scroll memory, sibling fixture detail/watch controls, corrected new-universe report copy, indexed navigation, competition-special headers, and a shared broadcast grammar for the live opener, score, ribbon, stage, and commentary.
+- The 320px route audit caught one 10px cup-file label; it was raised to a readable 12px index. A separate reduced-motion live audit exposed a real clock hold: its 4 fps render budget stretched frame-counted goal scenes. Reduced motion now keeps the canonical simulation cadence while retaining lower DPR, fewer particles, no camera shake, and suppressed nonessential CSS motion.
+- Final Node 22.22.2 verification passed 115 test files / 846 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog/script/bundle gates, a zero-vulnerability production audit, and a production scan with no audit bridge. Browser verification passed 126 route/viewport combinations, 108 persistent floating-control cases, classic cup brackets at 320/390/1440, Dashboard hierarchy, UI foundations, visual loading/offline/fallback budgets, and four live modes including reduced motion. The standard game client completed three deterministic Canvas bursts with matching nonblank states, no error artifact, and about 0.25 ms average sampled draw cost.
+
 ## 2026-08-11 v4.50.1 Release Candidate Audit
 
 - Current request: review tournament music, persistent floating advance, route/browser-tab transitions, and competition-specific identities as one release candidate; push only after the complete experience is clean.

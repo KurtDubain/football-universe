@@ -671,7 +671,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       data-fixture-id={result.fixtureId}
       className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
-      <div className={`relative flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
+      <div className={`match-live-shell relative flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
 
@@ -679,7 +679,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           <div
             data-testid="key-match-opener"
             data-opener-kind={openerKind}
-            className="absolute inset-0 z-30 flex min-h-0 flex-col justify-end overflow-hidden bg-slate-950"
+            className="broadcast-opener absolute inset-0 z-30 flex min-h-0 flex-col justify-end overflow-hidden bg-slate-950"
           >
             <DecorativeImage
               src={openerArtwork}
@@ -736,7 +736,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         <div data-testid="live-scroll-region" className="min-h-0 overflow-y-auto overscroll-y-contain">
 
         {/* Header bar */}
-        <div className="bg-slate-800/80 px-4 py-2 flex items-center justify-between">
+        <div className="broadcast-ribbon bg-slate-800/80 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${finished ? 'bg-red-500' : 'bg-green-500 animate-breathe'}`} />
             <span className="truncate text-[11px] text-slate-400">{result.competitionName} · {result.roundLabel}</span>
@@ -751,7 +751,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         </div>
 
         {/* Scoreboard with team colors */}
-        <div className="live-scoreboard relative overflow-hidden"
+        <div className="live-scoreboard broadcast-scoreboard relative overflow-hidden"
           style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}18 0%, #0f172a 40%, #0f172a 60%, ${at?.color ?? '#333'}18 100%)` }}
         >
           <DecorativeImage
@@ -787,13 +787,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
             {/* Score */}
             <div className="flex items-center gap-3 px-4 min-w-[90px] justify-center">
-              <span aria-label="主队比分" className={`text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
+              <span aria-label="主队比分" className={`broadcast-score-type text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
                 playback.homeScore > playback.awayScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'home' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.homeScore}
               </span>
               <span className="text-2xl text-slate-700 font-light">-</span>
-              <span aria-label="客队比分" className={`text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
+              <span aria-label="客队比分" className={`broadcast-score-type text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
                 playback.awayScore > playback.homeScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'away' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.awayScore}
@@ -813,7 +813,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           </div>
           <div
             data-testid="live-stage"
-            className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-sm border border-white/10 bg-black/45 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-300"
+            className="broadcast-stage-label absolute bottom-1 left-1/2 -translate-x-1/2 rounded-sm border border-white/10 bg-black/45 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-300"
           >
             {stageLabel}{paused ? ' · 已暂停' : ''}
           </div>
@@ -883,7 +883,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             )}
           </div>
 
-          <aside className="min-w-0 border-t border-slate-800/70 lg:border-l lg:border-t-0">
+          <aside className="broadcast-commentary min-w-0 border-t border-slate-800/70 lg:border-l lg:border-t-0">
             <div className="min-h-16 border-b border-slate-800/70 px-4 py-3">
               <div className="mb-1 text-[9px] font-semibold text-slate-500">当前播报</div>
               <p className="text-[12px] leading-5 text-emerald-300/90 animate-slide-up" key={commentary}>{commentary}</p>

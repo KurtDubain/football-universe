@@ -81,7 +81,7 @@ export default function Cup() {
     : null;
 
   return (
-    <PageShell width="wide" className="tabular-nums">
+    <PageShell width="wide" className="competition-page tabular-nums" data-competition={type ?? 'unknown'}>
       {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '联赛杯')} />}
       {type === 'super_cup' && <SuperCupView cup={world.superCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '超级杯')} />}
       {type === 'world_cup' && (world.worldCup
@@ -237,7 +237,13 @@ function WorldCupInactive({ editions, seasonNumber, musicEnabled, tb }: {
   const latest = current ?? editions.at(-1);
   return (
     <>
-      <PageHeader icon={<CompetitionMark type="world_cup" size={54} title="环球冠军杯徽记" />} title="环球冠军杯" description="四年一届的世界舞台" />
+      <PageHeader
+        className="competition-page-header"
+        icon={<CompetitionMark type="world_cup" size={54} title="环球冠军杯徽记" />}
+        title="环球冠军杯"
+        description="四年一届的世界舞台"
+        meta={`S${seasonNumber} · WORLD FILE`}
+      />
       {latest && (
         <WorldCupHostFeature
           hostTeamId={latest.hostTeamId}
@@ -276,7 +282,7 @@ function WorldCupHostFeature({ hostTeamId, seasonNumber, playbackSeasonNumber, h
   const host = tb[hostTeamId];
   if (!host) return null;
   return (
-    <section className="relative min-h-48 overflow-hidden rounded-lg border border-emerald-700/45 bg-slate-950" data-testid="world-cup-host-feature">
+    <section className="world-cup-host-feature relative min-h-48 overflow-hidden border border-emerald-700/45 bg-slate-950" data-testid="world-cup-host-feature">
       <img src={worldCupArtwork} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
       <div className="absolute inset-0 bg-slate-950/55" />
       <div className="relative flex min-h-48 flex-col justify-end gap-4 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
@@ -352,9 +358,11 @@ function CupHeader({ type, title, description, winnerId, seasonNumber, tb, music
   const theme = CUP_THEME_CONFIG[type];
   return (
     <PageHeader
+      className="competition-page-header"
       icon={<CompetitionMark type={type} size={54} title={`${title}徽记`} />}
       title={title}
       description={description}
+      meta={`S${seasonNumber} · CUP FILE`}
       actions={(theme || winnerId) ? (
         <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
           {theme && (
@@ -417,7 +425,7 @@ function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Reco
   const [showFix, setShowFix] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
+    <div className="competition-group-table overflow-hidden border border-slate-700 bg-slate-800">
       <div className="px-3 py-2 border-b border-slate-700 bg-slate-700/30">
         <h4 className="text-sm font-semibold text-slate-200">{group.groupName} 组</h4>
       </div>
