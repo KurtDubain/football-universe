@@ -16,6 +16,7 @@ describe('observer focus ordering', () => {
       favoriteTeamIds: [],
       favoritePlayerIds: [],
       observationThemePreference: 'auto',
+      narrativeMemory: [],
     });
   });
 

@@ -88,7 +88,7 @@ async function main(): Promise<void> {
       }
       const initial = await page.evaluate(readRouteSnapshot);
 
-      const focusFixture = page.getByTestId('focus-matches').getByRole('button').first();
+      const focusFixture = page.getByTestId('focus-matches').locator('button[aria-label^="查看 "]').first();
       await focusFixture.click();
       await page.getByRole('dialog').waitFor();
       await page.getByRole('button', { name: '关闭比赛详情' }).click();
@@ -130,9 +130,21 @@ async function main(): Promise<void> {
       if (finalText === initialText || storySnapshot.primaryPlayed <= initial.primaryPlayed) {
         throw new Error(`${viewport.name}: observation evidence did not visibly change`);
       }
-      await page.getByTestId('storyline-signals').waitFor({ timeout: 10_000 });
-      if (!((await page.getByTestId('storyline-signals').textContent()) ?? '').includes('下一观察：')) {
-        throw new Error(`${viewport.name}: route ended without a continuing story hook`);
+      const pulse = page.getByTestId('world-pulse');
+      await pulse.waitFor({ timeout: 10_000 });
+      const pulseBudget = await pulse.evaluate(element => ({
+        features: element.querySelectorAll('[data-testid="narrative-feature"]').length,
+        signals: element.querySelectorAll('[data-testid="narrative-signals"] > [data-narrative-arc]').length,
+        stories: element.querySelectorAll('[data-narrative-source="storyline"]').length,
+        moreInitiallyOpen: element.querySelector('[data-testid="more-world-signals"]')?.hasAttribute('open') ?? false,
+      }));
+      if (
+        pulseBudget.features > 1
+        || pulseBudget.signals > 2
+        || pulseBudget.stories < 1
+        || pulseBudget.moreInitiallyOpen
+      ) {
+        throw new Error(`${viewport.name}: invalid World Pulse state ${JSON.stringify(pulseBudget)}`);
       }
 
       const beforeSwitch = await page.evaluate(readRouteSnapshot);

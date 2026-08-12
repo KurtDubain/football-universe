@@ -63,6 +63,16 @@ export interface NewsItem {
   fixtureId?: string;
   type: 'match_result' | 'coach_fired' | 'coach_hired' | 'promotion' | 'relegation' | 'trophy' | 'upset' | 'streak' | 'retirement' | 'injury' | 'prize_money' | 'fire_sale' | 'rumor' | 'intervention' | 'storyline';
   importance?: 'major' | 'normal' | 'minor';
+  /** Optional structured references for presentation adapters. Legacy news remains valid. */
+  subject?: {
+    arcKey?: string;
+    eventKey?: string;
+    teamIds?: string[];
+    playerIds?: string[];
+    coachIds?: string[];
+    competitionKey?: string;
+    visualKind?: 'stage' | 'rise' | 'fall' | 'legacy' | 'transfer';
+  };
   title: string;
   description: string;
 }

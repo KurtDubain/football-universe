@@ -2,6 +2,8 @@ import type { MatchResult } from '../../types/match';
 import type { GameWorld, NewsItem } from '../season/season-manager';
 import { analyzeDestinyDeviation } from '../match/analysis';
 import type { ObservationSettlement } from './judgment';
+import { buildResultNarrativeDigest } from './narrative-sources';
+import type { NarrativeDigest, NarrativeMemoryEntry } from './narrative-types';
 
 export type AdvanceMode = 'single' | 'batch' | 'cup' | 'season_end' | 'key_node';
 
@@ -42,7 +44,14 @@ export interface AdvanceWorldResponse {
   observationSettlements: ObservationSettlement[];
   storyUpdates: NewsItem[];
   keyNews: NewsItem[];
+  narrative?: NarrativeDigest;
   hasMajorMoment: boolean;
+}
+
+export interface BuildAdvanceWorldResponseOptions {
+  previousWorld?: GameWorld;
+  favoritePlayerIds?: string[];
+  narrativeMemory?: NarrativeMemoryEntry[];
 }
 
 const MAX_FEATURED_RESULTS = 3;
@@ -86,6 +95,7 @@ export function buildAdvanceWorldResponse(
   endWorld: GameWorld,
   favoriteTeamIds: string[],
   primaryFavoriteTeamId: string | null,
+  options: BuildAdvanceWorldResponseOptions = {},
 ): AdvanceWorldResponse | null {
   if (outcomes.length === 0) return null;
   const first = outcomes[0];
@@ -133,9 +143,19 @@ export function buildAdvanceWorldResponse(
     .slice(0, MAX_KEY_NEWS)
     .map(entry => entry.item);
   const completedMatches = outcomes.reduce((total, outcome) => total + outcome.results.length, 0);
+  const narrative = buildResultNarrativeDigest({
+    outcomes,
+    endWorld,
+    previousWorld: options.previousWorld,
+    favoriteTeamIds,
+    favoritePlayerIds: options.favoritePlayerIds ?? [],
+    primaryFavoriteTeamId,
+    memory: options.narrativeMemory ?? [],
+  });
   const hasMajorMoment = allSettlements.length > 0
     || storyUpdates.length > 0
     || keyNews.some(item => item.importance === 'major')
+    || Boolean(narrative.feature?.visualKind)
     || featuredResults.some(item => (
       isDecisiveRound(item.result) || analyzeDestinyDeviation(item.result).isUpset
     ));
@@ -159,6 +179,7 @@ export function buildAdvanceWorldResponse(
     observationSettlements: allSettlements.slice(-1),
     storyUpdates,
     keyNews,
+    narrative,
     hasMajorMoment,
   };
 }

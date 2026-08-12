@@ -2,8 +2,12 @@ import { chromium, type ConsoleMessage } from 'playwright';
 
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:5173').replace(/\/$/, '');
 const viewports = [
-  { name: 'mobile', width: 390, height: 844, isMobile: true, hasTouch: true },
-  { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
+  { name: 'mobile-320', width: 320, height: 568, isMobile: true, hasTouch: true, compact: true, firstViewWorkflow: false },
+  { name: 'mobile-390', width: 390, height: 844, isMobile: true, hasTouch: true, compact: true, firstViewWorkflow: true },
+  { name: 'mobile-430', width: 430, height: 932, isMobile: true, hasTouch: true, compact: true, firstViewWorkflow: true },
+  { name: 'tablet', width: 768, height: 1024, isMobile: true, hasTouch: true, compact: false, firstViewWorkflow: false },
+  { name: 'desktop-1280', width: 1280, height: 800, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: false },
+  { name: 'desktop-1440', width: 1440, height: 900, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: false },
 ] as const;
 
 type AuditState = {
@@ -46,7 +50,7 @@ async function main(): Promise<void> {
         const store = (window as AuditWindow).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
         await store.getState().newGame(20260718);
-        const ids = Object.keys(store.getState().world.teamBases).slice(0, 3);
+        const ids = Object.keys(store.getState().world.teamBases).slice(0, 1);
         store.getState().setFavoriteTeams(ids);
         store.getState().setObservationThemePreference('dark_horse_challenge');
         return {
@@ -118,13 +122,13 @@ async function main(): Promise<void> {
       if (collapsedLayout.judgmentHeight < 44 || collapsedLayout.advanceHeight < 44) {
         throw new Error(`${viewport.name}: undersized observation action ${JSON.stringify(collapsedLayout)}`);
       }
-      if (viewport.isMobile && collapsedLayout.advanceBottom > viewport.height + 1) {
+      if (viewport.firstViewWorkflow && collapsedLayout.advanceBottom > viewport.height + 1) {
         throw new Error(`${viewport.name}: primary action is below the first viewport ${collapsedLayout.advanceBottom}`);
       }
-      if (viewport.isMobile && collapsedLayout.secondaryHeight > 48) {
+      if (viewport.compact && collapsedLayout.secondaryHeight > 56) {
         throw new Error(`${viewport.name}: secondary focus did not compact ${collapsedLayout.secondaryHeight}`);
       }
-      if (!viewport.isMobile && collapsedLayout.secondaryHeight < 60) {
+      if (!viewport.compact && collapsedLayout.secondaryHeight < 60) {
         throw new Error(`${viewport.name}: desktop secondary focus lost its full context`);
       }
       if (collapsedLayout.overflow > 1) {

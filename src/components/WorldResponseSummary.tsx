@@ -7,9 +7,9 @@ import {
 } from '../engine/observation/world-response';
 import {
   analyzeDestinyDeviation,
-  extractMatchTurningPoints,
   resolveMatchOutcome,
 } from '../engine/match/analysis';
+import type { NarrativeFact, NarrativeItem } from '../engine/observation/narrative-types';
 import type { MatchResult } from '../types/match';
 import { getTeamShortName } from '../utils/format';
 import { Icon } from './Icon';
@@ -65,6 +65,133 @@ function ChangeRow({ news }: { news: NewsItem }) {
   );
 }
 
+function NarrativeChangeRow({ item }: { item: NarrativeItem }) {
+  const icon = item.source === 'storyline'
+    ? 'trend-up'
+    : item.source === 'player_highlight'
+      ? 'star-glow'
+      : item.source === 'transfer_rumor'
+        ? 'handshake'
+        : 'news';
+  return (
+    <div data-testid="world-response-narrative-change" className="border-t border-slate-700/45 py-2 first:border-t-0">
+      <div className="flex items-start gap-2">
+        <Icon name={icon} size={15} className="mt-0.5 shrink-0 text-amber-300" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-200">{item.title}</p>
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.summary}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CausalityStep({
+  index,
+  label,
+  facts,
+  fallback,
+}: {
+  index: string;
+  label: string;
+  facts: NarrativeFact[] | undefined;
+  fallback: string;
+}) {
+  const lead = facts?.[0];
+  return (
+    <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 border-t border-slate-700/40 py-1.5 first:border-t-0 sm:py-2">
+      <span className="font-mono text-[11px] text-slate-600">{index}</span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-slate-300">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+          {lead ? <><span className="text-slate-400">{lead.label}</span>{' · '}{lead.detail}</> : fallback}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FactDetails({ facts }: { facts: NarrativeFact[] }) {
+  return (
+    <div className="divide-y divide-slate-700/35">
+      {facts.map(item => (
+        <div key={item.key} className="py-2 text-[11px] leading-4">
+          <p className="font-semibold text-slate-300">{item.label}</p>
+          <p className="mt-0.5 text-slate-500">{item.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ResultCausality({ item }: { item: NarrativeItem }) {
+  const deviation = item.evidence?.filter(entry => entry.key.includes(':deviation')) ?? [];
+  const whyFacts = [...(item.causes ?? []), ...(item.evidence ?? [])];
+  const changedFacts = item.consequences ?? [];
+  return (
+    <section data-testid="result-causality" className="mt-2 border-t border-slate-700/50 pt-2">
+      <div className="flex items-start gap-2 pb-1">
+        <Icon name="chart" size={15} className="mt-0.5 shrink-0 text-blue-300" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-200">{item.title}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{item.summary}</p>
+        </div>
+      </div>
+      <div data-testid="result-causality-sequence">
+        <CausalityStep
+          index="01"
+          label="赛前条件"
+          facts={item.causes}
+          fallback="双方没有冻结到足够显著的单项条件。"
+        />
+        <CausalityStep
+          index="02"
+          label="场上转折"
+          facts={item.turningPoints}
+          fallback="没有可可靠提取的关键转折；比分与比赛数据仍然有效。"
+        />
+        <CausalityStep
+          index="03"
+          label="结果偏离"
+          facts={deviation}
+          fallback="该结果没有足够的赛前分布用于偏离判断。"
+        />
+        <CausalityStep
+          index="04"
+          label="推进后变化"
+          facts={item.consequences}
+          fallback="当前没有可直接记录的排名、压力或奖杯变化。"
+        />
+      </div>
+      <p className="border-t border-slate-700/35 pt-2 text-[11px] leading-4 text-slate-600">
+        赛前条件解释概率倾向，不代表任何单项因素必然造成赛果。
+      </p>
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+        {whyFacts.length > 1 && (
+          <details data-testid="result-why-mattered" className="border-t border-slate-700/35">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-blue-300">
+              <Icon name="eye" size={14} />
+              为什么重要
+              <Icon name="arrow-down" size={13} className="ml-auto details-chevron" />
+            </summary>
+            <FactDetails facts={whyFacts} />
+          </details>
+        )}
+        {changedFacts.length > 0 && (
+          <details data-testid="result-what-changed" className="border-t border-slate-700/35">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-emerald-300">
+              <Icon name="trend-up" size={14} />
+              接下来发生了什么
+              <Icon name="arrow-down" size={13} className="ml-auto details-chevron" />
+            </summary>
+            <FactDetails facts={changedFacts} />
+          </details>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function WorldResponseSummary({
   response,
   world,
@@ -79,13 +206,29 @@ export default function WorldResponseSummary({
   const changes = [...response.storyUpdates, ...response.keyNews]
     .filter((item, index, all) => all.findIndex(entry => entry.id === item.id) === index)
     .slice(0, 3);
-  const worldMoment = changes.find(news => worldMomentKindForNews(news) !== null);
+  const narrativeFeature = response.narrative?.feature;
+  const primaryFixtureId = response.featuredResults[0]?.result.fixtureId;
+  const narrativeItems = [
+    response.narrative?.feature,
+    ...(response.narrative?.signals ?? []),
+    ...(response.narrative?.more ?? []),
+  ].filter((item): item is NarrativeItem => Boolean(item));
+  const causalityItem = narrativeItems.find(item => (
+    item.source === 'match_result' && item.fixtureIds?.includes(primaryFixtureId ?? '')
+  )) ?? narrativeItems.find(item => item.source === 'match_result');
+  const structuredMoment = narrativeFeature?.visualKind ? narrativeFeature : undefined;
+  const worldMoment = structuredMoment
+    ? undefined
+    : changes.find(news => worldMomentKindForNews(news) !== null);
   const secondaryChanges = changes.filter(news => news.id !== worldMoment?.id);
+  const narrativeChanges = [
+    ...(narrativeFeature && narrativeFeature.source !== 'match_result' && !structuredMoment
+      ? [narrativeFeature]
+      : []),
+    ...(response.narrative?.signals ?? []).filter(item => item.source !== 'match_result'),
+  ].slice(0, 3);
   const hiddenMatches = Math.max(0, response.completedMatches - response.featuredResults.length);
   const hiddenNews = Math.max(0, response.totalNews - changes.length);
-  const primaryResult = response.featuredResults[0]?.result;
-  const primaryTurningPoint = primaryResult ? extractMatchTurningPoints(primaryResult)[0] : undefined;
-  const primaryDeviation = primaryResult ? analyzeDestinyDeviation(primaryResult) : undefined;
 
   return (
     <section
@@ -145,11 +288,20 @@ export default function WorldResponseSummary({
         </div>
       )}
 
-      {worldMoment && (
+      {structuredMoment ? (
+        <div className="mt-3">
+          <WorldMomentFeature
+            kind={structuredMoment.visualKind!}
+            title={structuredMoment.title}
+            description={structuredMoment.summary}
+            seasonNumber={structuredMoment.seasonNumber}
+          />
+        </div>
+      ) : worldMoment ? (
         <div className="mt-3">
           <WorldMomentFeature news={worldMoment} />
         </div>
-      )}
+      ) : null}
 
       {response.featuredResults.length > 0 && (
         <div className="mt-2">
@@ -179,20 +331,8 @@ export default function WorldResponseSummary({
         </div>
       )}
 
-      {primaryResult && primaryDeviation && (
-        <div
-          data-testid="world-response-insight"
-          className="flex items-start gap-2 border-t border-slate-700/45 py-2 text-[11px] leading-4 text-slate-500"
-        >
-          <Icon name="chart" size={14} className="mt-0.5 shrink-0 text-blue-300" />
-          <p>
-            <strong className="font-semibold text-slate-300">
-              {primaryTurningPoint?.title ?? primaryDeviation.label}
-            </strong>
-            {' · '}
-            {primaryTurningPoint?.detail ?? primaryDeviation.summary}
-          </p>
-        </div>
+      {causalityItem && (
+        <ResultCausality item={causalityItem} />
       )}
 
       <div className={response.observationSettlements.length > 0 ? 'mt-2' : undefined}>
@@ -203,9 +343,11 @@ export default function WorldResponseSummary({
         />
       </div>
 
-      {secondaryChanges.length > 0 && (
+      {(narrativeChanges.length > 0 || secondaryChanges.length > 0) && (
         <div className="mt-2" data-testid="world-response-changes">
-          {secondaryChanges.map(news => <ChangeRow key={news.id} news={news} />)}
+          {narrativeChanges.length > 0
+            ? narrativeChanges.map(item => <NarrativeChangeRow key={item.id} item={item} />)
+            : secondaryChanges.map(news => <ChangeRow key={news.id} news={news} />)}
         </div>
       )}
 

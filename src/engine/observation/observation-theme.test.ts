@@ -72,7 +72,8 @@ describe('observation themes', () => {
     expect(world).toEqual(before);
     if (type === 'player_growth') {
       expect(theme?.playerId).toBeTruthy();
-      expect(theme?.evidence.join(' ')).toMatch(/评分 \d+\/\d+/);
+      expect(theme?.evidence.join(' ')).toMatch(/当前能力 \d+/);
+      expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toContain('潜力');
     }
   });
 

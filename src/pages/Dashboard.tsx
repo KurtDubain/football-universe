@@ -16,9 +16,7 @@ import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
 import { pickFocusMatches } from '../engine/season/match-importance';
-import { generateStorylineCards } from '../engine/season/storyline-cards';
 import { getFixtureStorylineLabel } from '../engine/season/storylines';
-import { StoryChapterMark } from '../components/StoryChapterMark';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
 import { getTopScorerByTeamFromSegments } from '../engine/players/stats';
 import { buildTeamCoachMap, getTeamCoachId } from '../engine/coaches/coach-lookup';
@@ -27,7 +25,6 @@ import {
   getTeamShortName,
   formatForm,
   getCoachName,
-  getTierLabel,
   getWindowTypeLabel,
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
@@ -39,6 +36,9 @@ import { SegmentedControl } from '../components/ui';
 import { WorldMomentFeature } from '../components/WorldMomentFeature';
 import { worldMomentKindForNews } from '../components/world-moment';
 import { playUiFeedback } from '../feedback/game-feedback';
+import { buildObservationTheme } from '../engine/observation/observation-theme';
+import { buildMatchdayNarrativeDigest } from '../engine/observation/narrative-sources';
+import NarrativeDigest from '../components/NarrativeDigest';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -525,6 +525,8 @@ function MatchdayTab({
   const toggleStarFixture = useGameStore((s) => s.toggleStarFixture);
   const observationThemePreference = useGameStore((s) => s.observationThemePreference);
   const setObservationThemePreference = useGameStore((s) => s.setObservationThemePreference);
+  const favoritePlayerIds = useGameStore((s) => s.favoritePlayerIds);
+  const narrativeMemory = useGameStore((s) => s.narrativeMemory);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
 
@@ -572,6 +574,27 @@ function MatchdayTab({
   // Compute focus matches (top 1-2)
   const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2, favoriteTeamId);
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
+  const observationTheme = buildObservationTheme(
+    world,
+    favoriteTeamId,
+    observationThemePreference,
+  );
+  const narrativeDigest = buildMatchdayNarrativeDigest({
+    world,
+    currentWindow,
+    observationTheme,
+    focusMatches,
+    playerHighlights,
+    favoriteTeamIds,
+    favoritePlayerIds,
+    primaryFavoriteTeamId: favoriteTeamId,
+    memory: narrativeMemory,
+  });
+  const observationRelationFixtureIds = new Set(narrativeDigest.observationRelationFixtureIds);
+  const pulseRelationFixtureIds = new Set([
+    ...(narrativeDigest.feature?.fixtureIds ?? []),
+    ...narrativeDigest.signals.flatMap(item => item.fixtureIds ?? []),
+  ]);
   const actionPresentation = describeDashboardAction({
     phase: 'matchday',
     hasPendingJudgment: Boolean(world.pendingObservationJudgment),
@@ -603,9 +626,13 @@ function MatchdayTab({
     '乙级联赛': 'border-emerald-500',
   };
 
-  // Generate context tips for the whole window
-  const windowTips = generateWindowTips(world, currentWindow.fixtures, focusFixtureIds);
   const primaryTeam = favoriteTeamId ? world.teamBases[favoriteTeamId] : null;
+  const openNarrativeFixture = (fixtureId: string) => {
+    const fixture = world.seasonState.calendar
+      .flatMap(window => window.fixtures)
+      .find(item => item.id === fixtureId);
+    if (fixture) onFixtureClick(fixture);
+  };
 
   return (
     <div className="space-y-5">
@@ -646,7 +673,7 @@ function MatchdayTab({
 
         {/* Focus matches stay inside the same observation flow. */}
         {focusMatches.length > 0 && (
-          <section data-testid="focus-matches" className="border-t border-amber-700/35 px-3 py-2.5">
+          <section data-testid="focus-matches" className="border-t border-amber-700/35 px-3 py-2 sm:py-2.5">
             <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-amber-400">
               <Icon name="fire" size={16} accent="#f97316" /><span>本轮焦点战</span>
             </h3>
@@ -661,6 +688,11 @@ function MatchdayTab({
                   fixture.homeTeamId,
                   fixture.awayTeamId,
                 );
+                const relationLabel = observationRelationFixtureIds.has(fixture.id)
+                  ? '与观察主题同线'
+                  : pulseRelationFixtureIds.has(fixture.id)
+                    ? '与世界脉搏同线'
+                    : null;
                 const observedTeamId = favoriteTeamId
                   && (fixture.homeTeamId === favoriteTeamId || fixture.awayTeamId === favoriteTeamId)
                   ? favoriteTeamId
@@ -678,9 +710,12 @@ function MatchdayTab({
                     ? `${keyPlayer.name} ${observedScorer.goals}球`
                     : `${keyPlayer.name} 评分${keyPlayer.rating}`
                   : null;
+                const displayReasons = relationLabel
+                  ? importance.reasons.filter(reason => !reason.includes('观察球队出战'))
+                  : importance.reasons;
                 const reasonLimit = Math.max(
                   0,
-                  (storylineLabel ? 2 : 3) - (keyPlayerLabel ? 1 : 0),
+                  (storylineLabel || relationLabel ? 2 : 3) - (keyPlayerLabel ? 1 : 0),
                 );
                 return (
                   <div
@@ -719,17 +754,21 @@ function MatchdayTab({
                       </div>
                     </div>
                     <div className="focus-fixture-details flex flex-wrap gap-1">
-                      {storylineLabel && (
+                      {relationLabel ? (
+                        <span className="rounded bg-emerald-900/35 px-1.5 py-0.5 text-[11px] text-emerald-200">
+                          {relationLabel}
+                        </span>
+                      ) : storylineLabel ? (
                         <span className="rounded bg-emerald-900/35 px-1.5 py-0.5 text-[11px] text-emerald-200">
                           {storylineLabel}
                         </span>
-                      )}
+                      ) : null}
                       {keyPlayerLabel && (
                         <span className="rounded bg-sky-900/35 px-1.5 py-0.5 text-[11px] text-sky-200">
                           关键球员 {keyPlayerLabel}
                         </span>
                       )}
-                      {importance.reasons.slice(0, reasonLimit).map((r, i) => (
+                      {displayReasons.slice(0, reasonLimit).map((r, i) => (
                         <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
                       ))}
                       <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
@@ -760,66 +799,11 @@ function MatchdayTab({
         </div>
       </section>
 
-      <FavoriteStoryPanels world={world} favoriteTeamIds={favoriteTeamIds} />
-
-      {/* Player highlights from the previous batch of results */}
-      {playerHighlights.length > 0 && (
-        <section className="rounded-lg border border-slate-700 bg-slate-800 p-3">
-          <h3 className="text-xs font-bold text-purple-300 mb-2 flex items-center gap-1.5">
-            <Icon name="star-glow" size={16} accent="#fbbf24" /><span>本轮焦点球员</span>
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {playerHighlights.map((h) => {
-              const team = world.teamBases[h.teamId];
-              const opponentName = getTeamName(h.opponentTeamId, world.teamBases);
-              return (
-                <Link
-                  key={`${h.playerId}-${h.fixtureId}-${h.label}`}
-                  to={`/player/${h.playerId}`}
-                  className="block bg-slate-900/40 rounded-lg border border-purple-800/30 p-2 hover:border-purple-500/60 transition-colors"
-                >
-                  <div className={`text-[11px] font-semibold mb-1 flex items-center gap-1 ${h.color}`}>
-                    <Icon name="star-glow" size={14} accent="#d7ad55" />
-                    <span>{h.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ backgroundColor: team?.color ?? '#64748b' }}
-                    />
-                    <span className="text-xs font-semibold text-slate-100 truncate" title={h.playerName}>
-                      {h.playerName}
-                    </span>
-                    {h.position && (
-                      <span className="shrink-0 text-[11px] text-slate-500">({h.position})</span>
-                    )}
-                  </div>
-                  <p className="truncate text-[11px] text-slate-400" title={`${h.detail} · vs ${opponentName}`}>
-                    {h.detail} · vs {opponentName}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Context tips banner */}
-      {windowTips.length > 0 && (
-        <div data-testid="secondary-match-notices" className="space-y-1.5">
-          {windowTips.map((tip, i) => (
-            <div
-              key={i}
-              data-fixture-id={tip.fixtureId}
-              className={`px-3 py-2 rounded-lg text-xs border ${tip.style}`}
-            >
-              <span className="font-medium">{tip.tag}</span>
-              <span className="mx-1.5 text-slate-600">|</span>
-              <span>{tip.text}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <NarrativeDigest
+        digest={narrativeDigest}
+        windowLabel={currentWindow.label}
+        onFixtureClick={openNarrativeFixture}
+      />
 
       {/* Grouped fixtures */}
       {sorted.map(([groupName, fixtures]) => (
@@ -844,126 +828,6 @@ function MatchdayTab({
       ))}
     </div>
   );
-}
-
-// Generate contextual tips based on the match context
-function generateWindowTips(
-  world: GameWorld,
-  fixtures: MatchFixture[],
-  excludedFixtureIds: ReadonlySet<string> = new Set(),
-): { fixtureId: string; tag: string; text: string; style: string }[] {
-  const tips: { fixtureId: string; priority: number; tag: string; text: string; style: string }[] = [];
-  const seen = new Set<string>();
-
-  for (const f of fixtures) {
-    if (excludedFixtureIds.has(f.id)) continue;
-    const ht = world.teamBases[f.homeTeamId];
-    const at = world.teamBases[f.awayTeamId];
-    if (!ht || !at) continue;
-
-    const hs = world.teamStates[f.homeTeamId];
-    const as_ = world.teamStates[f.awayTeamId];
-
-    // Title clash: both teams are elite/strong
-    if ((ht.tier === 'elite' || ht.tier === 'strong') && (at.tier === 'elite' || at.tier === 'strong')) {
-      const key = `clash-${f.id}`;
-      if (!seen.has(key)) {
-        tips.push({
-          fixtureId: f.id,
-          priority: 2,
-          tag: '强强对话',
-          text: `${ht.name} vs ${at.name} — ${getTierLabel(ht.tier)}对决${getTierLabel(at.tier)}`,
-          style: 'bg-amber-900/20 border-amber-700/40 text-amber-300',
-        });
-        seen.add(key);
-      }
-    }
-
-    // Upset potential: big overall gap
-    const gap = Math.abs(ht.overall - at.overall);
-    if (gap >= 15) {
-      const strong = ht.overall > at.overall ? ht : at;
-      const weak = ht.overall > at.overall ? at : ht;
-      const key = `upset-${f.id}`;
-      if (!seen.has(key)) {
-        tips.push({
-          fixtureId: f.id,
-          priority: 3,
-          tag: '爆冷预警',
-          text: `${weak.name}(${getTierLabel(weak.tier)}) 挑战 ${strong.name}(${getTierLabel(strong.tier)})，实力差距${gap}`,
-          style: 'bg-purple-900/20 border-purple-700/40 text-purple-300',
-        });
-        seen.add(key);
-      }
-    }
-
-    // Relegation battle: both teams in bottom 3 of their league
-    if (hs && as_ && f.competitionType === 'league') {
-      const standings = hs.leagueLevel === 1 ? world.league1Standings :
-                        hs.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
-      const homePos = standings.findIndex(s => s.teamId === f.homeTeamId) + 1;
-      const awayPos = standings.findIndex(s => s.teamId === f.awayTeamId) + 1;
-      const total = standings.length;
-
-      if (homePos > 0 && awayPos > 0) {
-        if (homePos >= total - 2 && awayPos >= total - 2 && total > 4) {
-          const key = `releg-${f.id}`;
-          if (!seen.has(key)) {
-            tips.push({
-              fixtureId: f.id,
-              priority: 5,
-              tag: '保级生死战',
-              text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 败者形势危急`,
-              style: 'bg-red-900/20 border-red-700/40 text-red-300',
-            });
-            seen.add(key);
-          }
-        }
-
-        // Title race: both top 3
-        if (homePos <= 3 && awayPos <= 3 && standings[0]?.played > 5) {
-          const key = `title-${f.id}`;
-          if (!seen.has(key)) {
-            tips.push({
-              fixtureId: f.id,
-              priority: 5,
-              tag: '争冠焦点',
-              text: `${ht.name}(第${homePos}名) vs ${at.name}(第${awayPos}名) — 冠军争夺直接对话`,
-              style: 'bg-amber-900/20 border-amber-700/40 text-amber-200',
-            });
-            seen.add(key);
-          }
-        }
-      }
-    }
-
-    // Coach under pressure
-    if (hs && hs.coachPressure > 55) {
-      const homeCoachId = getTeamCoachId(world.coachStates, f.homeTeamId);
-      const coach = homeCoachId ? world.coachBases[homeCoachId] : null;
-      const key = `pressure-${f.homeTeamId}`;
-      if (!seen.has(key) && coach) {
-        tips.push({
-          fixtureId: f.id,
-          priority: 4,
-          tag: '下课危机',
-          text: `${ht.name}主帅${coach.name}压力值${hs.coachPressure}，再输恐被解雇`,
-          style: 'bg-red-900/15 border-red-700/30 text-red-400',
-        });
-        seen.add(key);
-      }
-    }
-  }
-
-  const selected: typeof tips = [];
-  const usedFixtures = new Set<string>();
-  for (const tip of tips.sort((a, b) => b.priority - a.priority)) {
-    if (usedFixtures.has(tip.fixtureId)) continue;
-    selected.push(tip);
-    usedFixtures.add(tip.fixtureId);
-    if (selected.length === 2) break;
-  }
-  return selected;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1355,87 +1219,6 @@ function OverviewTab({ world }: { world: GameWorld }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function FavoriteStoryPanels({ world, favoriteTeamIds }: { world: GameWorld; favoriteTeamIds: string[] }) {
-  const cards = generateStorylineCards(world, favoriteTeamIds);
-  const favoriteSet = new Set(favoriteTeamIds);
-  const rumors = (world.transferRumors ?? [])
-    .filter(r => favoriteSet.has(r.fromTeamId) || favoriteSet.has(r.eliteTeamId))
-    .slice(-6)
-    .reverse();
-
-  if (cards.length === 0 && rumors.length === 0) return null;
-
-  return (
-    <div className="space-y-2" data-testid="storyline-signals">
-      {cards.length > 0 && (
-        <section className="border-y border-slate-700/60 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-              <Icon name="eye" size={15} />
-              正在发生
-            </h3>
-            <span className="text-[11px] text-slate-600">来自积分榜与历史记录</span>
-          </div>
-          <div className="divide-y divide-slate-700/40">
-            {cards.map(card => {
-              const tone = card.type === 'dark_horse' ? 'text-emerald-300'
-                : card.type === 'giant_crisis' ? 'text-red-300'
-                : 'text-amber-300';
-              return (
-                <div key={`${card.scope}-${card.teamId}-${card.type}`} className="py-2.5">
-                  <div className="flex items-start gap-2">
-                    <StoryChapterMark type={card.type} className="mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Link to={`/team/${card.teamId}`} className={`text-sm font-semibold hover:text-blue-300 ${tone}`}>
-                          {card.title}
-                        </Link>
-                        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-400">
-                          {card.scope === 'focus' ? '主要观察' : '世界故事'}
-                        </span>
-                        <span className="text-[11px] text-slate-500">{card.phase}</span>
-                      </div>
-                      <p className="mt-0.5 text-xs leading-5 text-slate-400">{card.body}</p>
-                      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
-                        {card.evidence.map(item => <span key={item}>{item}</span>)}
-                        <span className="text-slate-300">下一观察：{card.nextWatch}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {rumors.map((rumor) => {
-        const intensityColor = rumor.intensity === 'high' ? 'border-rose-700/50 bg-rose-900/15'
-          : rumor.intensity === 'medium' ? 'border-amber-700/50 bg-amber-900/15'
-          : 'border-slate-700/60 bg-slate-800/50';
-        const intensityText = rumor.intensity === 'high' ? '紧锣密鼓' : rumor.intensity === 'medium' ? '深入接触' : '初步关注';
-        return (
-          <div key={rumor.id} className={`rounded-lg border px-3 py-2 ${intensityColor}`}>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="shrink-0"><Icon name="megaphone" size={16} /></span>
-              <Link to={`/team/${rumor.eliteTeamId}`} className="font-semibold text-slate-200 hover:text-blue-400">
-                {rumor.eliteTeamName}
-              </Link>
-              <span className="text-slate-500">{intensityText}</span>
-              <Link to={`/player/${rumor.candidateUuid}`} className="truncate font-medium text-slate-100 hover:text-blue-400" title={rumor.candidateName}>
-                {rumor.candidateName}
-              </Link>
-              <span className="ml-auto hidden shrink-0 text-xs text-slate-500 sm:inline">
-                来自 <Link to={`/team/${rumor.fromTeamId}`} className="text-slate-400 hover:text-blue-400">{rumor.fromTeamName}</Link>
-              </span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

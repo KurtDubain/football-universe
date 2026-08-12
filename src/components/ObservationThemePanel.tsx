@@ -79,21 +79,21 @@ export default function ObservationThemePanel({
               {theme.seasonPhase} · {theme.played}/{theme.totalMatches}轮
             </span>
           </div>
-          <p className="mt-1 text-xs leading-5 text-slate-400">{theme.summary}</p>
+          <p className="mt-1 line-clamp-1 text-xs leading-5 text-slate-400 sm:line-clamp-none">{theme.summary}</p>
 
-          <div className="mt-2 h-1 overflow-hidden rounded bg-slate-800" aria-label={`赛季进度 ${Math.round(theme.progress * 100)}%`}>
+          <div className="mt-2 hidden h-1 overflow-hidden rounded bg-slate-800 sm:block" aria-label={`赛季进度 ${Math.round(theme.progress * 100)}%`}>
             <div
               className="h-full rounded bg-emerald-500 transition-[width] motion-reduce:transition-none"
               style={{ width: `${Math.round(theme.progress * 100)}%` }}
             />
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+          <div className="mt-2 hidden flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 sm:flex">
             {theme.evidence.map(item => <span key={item}>{item}</span>)}
           </div>
-          <div className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-300">
+          <div className="mt-1.5 flex min-w-0 items-start gap-1.5 text-xs text-slate-300">
             <Icon name="target" size={14} className="mt-0.5 shrink-0 text-amber-400" />
-            <span>下一观察：{theme.nextWatch}</span>
+            <span className="line-clamp-1 sm:line-clamp-none">下一观察：{theme.nextWatch}</span>
           </div>
         </div>
       ) : (

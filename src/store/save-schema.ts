@@ -59,6 +59,7 @@ const PLAYER_POSITIONS = new Set(['GK', 'DF', 'MF', 'FW']);
 const FEATURED_PLAYER_REASONS = new Set(['ability', 'form', 'defensive_anchor', 'creator', 'finisher']);
 const PLAYER_IMPACT_UNITS = new Set(['attack', 'midfield', 'defense']);
 const FAVORITE_PLAYER_LIMIT = 8;
+const NARRATIVE_MEMORY_LIMIT = 32;
 
 export interface CurrentSaveEnvelope {
   version: typeof SAVE_SCHEMA_VERSION;
@@ -913,6 +914,28 @@ function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
   ) {
     throw new Error('存档字段 observationThemePreference 无效');
   }
+  const narrativeMemory = state.narrativeMemory === undefined
+    ? []
+    : requireArray(state, 'narrativeMemory');
+  if (
+    narrativeMemory.length > NARRATIVE_MEMORY_LIMIT
+    || narrativeMemory.some(entry => (
+      !isRecord(entry)
+      || typeof entry.arcKey !== 'string'
+      || entry.arcKey.length === 0
+      || typeof entry.fingerprint !== 'string'
+      || entry.fingerprint.length === 0
+      || typeof entry.lastChangedAt !== 'number'
+      || !Number.isFinite(entry.lastChangedAt)
+      || entry.lastChangedAt < 0
+      || typeof entry.lastSelectedAt !== 'number'
+      || !Number.isFinite(entry.lastSelectedAt)
+      || entry.lastSelectedAt < 0
+    ))
+    || new Set(narrativeMemory.map(entry => (entry as JsonRecord).arcKey)).size !== narrativeMemory.length
+  ) {
+    throw new Error('存档字段 narrativeMemory 无效');
+  }
 
   const world = validateCurrentWorld(requireRecord(state, 'world'));
 
@@ -924,6 +947,7 @@ function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
       initialized: true,
       world,
       favoritePlayerIds,
+      narrativeMemory,
     },
   };
 }

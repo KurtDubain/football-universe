@@ -48,25 +48,45 @@ async function main(): Promise<void> {
       });
 
       await page.getByRole('tab', { name: '比赛日' }).click();
-      const signals = page.getByTestId('storyline-signals');
-      await signals.waitFor({ state: 'visible', timeout: 10_000 });
-      const storyRows = signals.locator('section > div.divide-y > div');
-      const storyCount = await storyRows.count();
-      const text = (await signals.textContent()) ?? '';
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      if (storyCount < 1 || storyCount > 2) throw new Error(`${viewport.name}: found ${storyCount} storyline rows`);
-      if (!text.includes('下一观察：') || !text.includes('来自积分榜与历史记录')) {
-        throw new Error(`${viewport.name}: storyline evidence hierarchy is incomplete`);
+      const pulse = page.getByTestId('world-pulse');
+      await pulse.waitFor({ state: 'visible', timeout: 10_000 });
+      const featureCount = await pulse.getByTestId('narrative-feature').count();
+      const signalCount = await pulse.locator('[data-testid="narrative-signals"] > div').count();
+      const more = pulse.getByTestId('more-world-signals');
+      const moreCount = await more.count();
+      if (featureCount > 1 || signalCount > 2) {
+        throw new Error(`${viewport.name}: attention budget exceeded (${featureCount}+${signalCount})`);
       }
+      if (moreCount > 0) {
+        const initiallyOpen = await more.evaluate(element => element.hasAttribute('open'));
+        if (initiallyOpen) throw new Error(`${viewport.name}: more signals started expanded`);
+        await more.locator('summary').click();
+        if (!await more.evaluate(element => element.hasAttribute('open'))) {
+          throw new Error(`${viewport.name}: more signals did not expand`);
+        }
+      }
+      const storyCount = await pulse.locator('[data-narrative-source="storyline"]').count();
+      const text = (await pulse.textContent()) ?? '';
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (storyCount < 1) throw new Error(`${viewport.name}: active storyline is missing from World Pulse`);
       for (const invented of ['管理层', '球迷', '更衣室', '下课传闻']) {
         if (text.includes(invented)) throw new Error(`${viewport.name}: storyline includes unsupported copy "${invented}"`);
       }
-      const relationCount = await page.getByText(/黑马试金石|危机转折战|保级关键战/).count();
+      if (/潜力上限|peakRating/.test(text)) {
+        throw new Error(`${viewport.name}: hidden potential leaked into World Pulse`);
+      }
+      const selectedArcs = await pulse.locator(
+        '[data-testid="narrative-feature"], [data-testid="narrative-signals"] > [data-narrative-arc]',
+      ).evaluateAll(elements => elements.map(element => element.getAttribute('data-narrative-arc')));
+      if (new Set(selectedArcs).size !== selectedArcs.length) {
+        throw new Error(`${viewport.name}: selected narrative arcs were duplicated`);
+      }
+      const relationCount = await page.getByText(/与观察主题同线|与世界脉搏同线/).count();
       if (relationCount < 1) throw new Error(`${viewport.name}: active storyline is not connected to a focus fixture`);
       if (overflow > 1) throw new Error(`${viewport.name}: page overflows by ${overflow}px`);
       if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors: ${errors.join(' | ')}`);
 
-      await signals.scrollIntoViewIfNeeded();
+      await pulse.scrollIntoViewIfNeeded();
       const screenshot = `/tmp/football-storyline-signals-${viewport.name}.png`;
       await page.screenshot({ path: screenshot, animations: 'disabled' });
 
@@ -117,6 +137,9 @@ async function main(): Promise<void> {
 
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
+        featureCount,
+        signalCount,
+        moreCount,
         storyCount,
         text: text.replace(/\s+/g, ' ').trim(),
         relationCount,

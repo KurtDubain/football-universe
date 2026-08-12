@@ -18,6 +18,8 @@ export type ObservationThemePreference = 'auto' | 'disabled' | ObservationThemeT
 
 export interface ObservationTheme {
   type: ObservationThemeType;
+  /** Stable structured identity used to avoid repeating the same arc elsewhere. */
+  arcKey: string;
   label: string;
   title: string;
   summary: string;
@@ -122,11 +124,18 @@ function nextFixtureText(world: GameWorld, teamId: string): string | null {
 function prospectForTeam(world: GameWorld, teamId: string): Player | null {
   const squad = world.squads[teamId] ?? [];
   const prospects = squad.filter(player => player.age <= 23);
-  const pool = prospects.length > 0 ? prospects : squad;
-  return [...pool].sort((a, b) => {
-    const aScore = a.rating * 4 + Math.max(0, a.peakRating - a.rating) + Math.max(0, 24 - a.age);
-    const bScore = b.rating * 4 + Math.max(0, b.peakRating - b.rating) + Math.max(0, 24 - b.age);
-    return bScore - aScore || b.peakRating - a.peakRating || a.uuid.localeCompare(b.uuid);
+  return [...prospects].sort((a, b) => {
+    const aStats = world.playerStats[a.uuid];
+    const bStats = world.playerStats[b.uuid];
+    const aContribution = (aStats?.minutesPlayed ?? 0) / 180
+      + (aStats?.goals ?? 0) * 3
+      + (aStats?.assists ?? 0) * 2;
+    const bContribution = (bStats?.minutesPlayed ?? 0) / 180
+      + (bStats?.goals ?? 0) * 3
+      + (bStats?.assists ?? 0) * 2;
+    const aScore = a.rating * 4 + aContribution + Math.max(0, 24 - a.age);
+    const bScore = b.rating * 4 + bContribution + Math.max(0, 24 - b.age);
+    return bScore - aScore || b.rating - a.rating || a.uuid.localeCompare(b.uuid);
   })[0] ?? null;
 }
 
@@ -151,7 +160,7 @@ export function recommendObservationTheme(
   if (team.tier === 'elite' || team.expectation >= 4) return 'giant_defense';
   if (team.tier === 'underdog' || team.expectation <= 2) return 'promotion_survival';
   const prospect = prospectForTeam(world, primaryTeamId);
-  if (prospect && prospect.peakRating - prospect.rating >= 5) {
+  if (prospect && prospect.rating >= 70) {
     return 'player_growth';
   }
   return 'dark_horse_challenge';
@@ -164,6 +173,7 @@ function giantTheme(world: GameWorld, situation: TeamSituation): ObservationThem
   const gap = Math.max(0, leader.points - situation.row.points);
   return {
     type: 'giant_defense',
+    arcKey: `team:${situation.teamId}:season-expectation`,
     label: THEME_LABELS.giant_defense,
     title: `${team.name}能否守住上位区`,
     summary: situation.rank <= expected
@@ -186,6 +196,7 @@ function darkHorseTheme(world: GameWorld, situation: TeamSituation): Observation
   const delta = expected - situation.rank;
   return {
     type: 'dark_horse_challenge',
+    arcKey: `team:${situation.teamId}:story:dark_horse`,
     label: THEME_LABELS.dark_horse_challenge,
     title: `${team.name}挑战既有秩序`,
     summary: delta > 0
@@ -217,6 +228,7 @@ function promotionSurvivalTheme(world: GameWorld, situation: TeamSituation): Obs
       : Math.max(0, (lastSafe?.points ?? situation.row.points) - situation.row.points);
     return {
       type: 'promotion_survival',
+      arcKey: `team:${situation.teamId}:survival`,
       label: THEME_LABELS.promotion_survival,
       title: `${team.name}的顶级联赛生存线`,
       summary: safe ? `球队目前位于安全区，领先降级线${gap}分。` : `球队目前处于降级区，距离安全线${gap}分。`,
@@ -238,6 +250,7 @@ function promotionSurvivalTheme(world: GameWorld, situation: TeamSituation): Obs
     : Math.max(0, (promotionLine?.points ?? situation.row.points) - situation.row.points);
   return {
     type: 'promotion_survival',
+    arcKey: `team:${situation.teamId}:promotion`,
     label: THEME_LABELS.promotion_survival,
     title: `${team.name}的升级路线`,
     summary: inPromotionPlaces ? `球队目前处于直升区，领先区外${gap}分。` : `球队目前距离直升区${gap}分。`,
@@ -259,12 +272,13 @@ function playerGrowthTheme(world: GameWorld, situation: TeamSituation): Observat
   const stats = world.playerStats[player.uuid];
   return {
     type: 'player_growth',
+    arcKey: `player:${player.uuid}:growth`,
     label: THEME_LABELS.player_growth,
     title: `观察${player.name}的成长赛季`,
-    summary: `${player.age}岁的${player.position}当前评分${player.rating}，潜力上限${player.peakRating}；主题只追踪真实出场与赛季数据。`,
+    summary: `${player.age}岁的${player.position}当前能力${player.rating}；观察只依据真实出场、比赛分钟与赛季贡献。`,
     evidence: [
       `${team.shortName} · ${player.position}`,
-      `评分 ${player.rating}/${player.peakRating}`,
+      `当前能力 ${player.rating}`,
       statsEvidence(stats),
     ],
     nextWatch: stats?.appearances
@@ -288,6 +302,7 @@ function pureObservationTheme(world: GameWorld): ObservationTheme {
   if (signal) {
     return {
       type: 'pure_observation',
+      arcKey: `team:${signal.teamId}:story:${signal.type}`,
       label: THEME_LABELS.pure_observation,
       title: signal.title,
       summary: signal.body,
@@ -304,6 +319,7 @@ function pureObservationTheme(world: GameWorld): ObservationTheme {
   const gap = leader && runnerUp ? Math.max(0, leader.points - runnerUp.points) : 0;
   return {
     type: 'pure_observation',
+    arcKey: leader ? `team:${leader.teamId}:league-lead` : 'world:opening',
     label: THEME_LABELS.pure_observation,
     title: played === 0 ? '等待世界建立第一条线索' : `${leaderName}暂居世界中心`,
     summary: played === 0

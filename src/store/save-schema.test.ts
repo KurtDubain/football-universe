@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { executeCurrentWindow, initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
+import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import {
   __resetSaveRecoveryForTests,
@@ -36,6 +37,7 @@ function makeSave(seasonNumber = 3) {
       favoriteTeamId: null,
       favoriteTeamIds: [favoriteTeamId],
       favoritePlayerIds: [],
+      narrativeMemory: [] as NarrativeMemoryEntry[],
       world,
     },
   };
@@ -60,6 +62,7 @@ function makeSeasonFiveSave() {
       favoriteTeamId: null,
       favoriteTeamIds: [favoriteTeamId],
       favoritePlayerIds: [],
+      narrativeMemory: [] as NarrativeMemoryEntry[],
       world,
     },
   };
@@ -147,6 +150,30 @@ describe('current schema hydration boundary', () => {
     expect(getSaveRecoveryMessage()).toBeNull();
   });
 
+  it('accepts bounded presentation memory and defaults older saves to an empty list', async () => {
+    const save = makeSave();
+    save.state.narrativeMemory = [{
+      arcKey: 'team:t1:story:dark_horse',
+      fingerprint: 'fingerprint-1',
+      lastChangedAt: 8,
+      lastSelectedAt: 9,
+    }];
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(save));
+    __flushCompressedStorageForTests();
+
+    const loaded = await createCurrentSavePersistStorage<{ narrativeMemory: NarrativeMemoryEntry[] }>()
+      .getItem(SAVE_STORAGE_KEY);
+    expect(loaded?.state).toMatchObject({ narrativeMemory: save.state.narrativeMemory });
+
+    const olderSave = makeSave();
+    (olderSave.state as { narrativeMemory?: unknown }).narrativeMemory = undefined;
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(olderSave));
+    __flushCompressedStorageForTests();
+    const olderLoaded = await createCurrentSavePersistStorage<{ narrativeMemory: NarrativeMemoryEntry[] }>()
+      .getItem(SAVE_STORAGE_KEY);
+    expect(olderLoaded?.state).toMatchObject({ narrativeMemory: [] });
+  });
+
   it('keeps an in-progress selective continental cup save readable', () => {
     const save = makeSeasonFiveSave();
     const cups = save.state.world.continentalCups;
@@ -202,6 +229,18 @@ describe('current schema hydration boundary', () => {
     ['invalid favorite player list', JSON.stringify({
       ...makeSave(),
       state: { ...makeSave().state, favoritePlayerIds: ['p-1', 'p-1'] },
+    })],
+    ['invalid narrative memory', JSON.stringify({
+      ...makeSave(),
+      state: {
+        ...makeSave().state,
+        narrativeMemory: [{
+          arcKey: 'duplicate',
+          fingerprint: 'a',
+          lastChangedAt: 1,
+          lastSelectedAt: -1,
+        }],
+      },
     })],
     ['out-of-range tactical snapshot', (() => {
       const save = makeSave();

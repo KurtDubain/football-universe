@@ -6,6 +6,8 @@ import {
 import { settleObservationJudgment, type ObservationSettlement } from '../engine/observation/judgment';
 import { buildObservationTheme, type ObservationThemePreference } from '../engine/observation/observation-theme';
 import type { AdvanceWindowOutcome, AdvanceWorldResponse } from '../engine/observation/world-response';
+import { advanceNarrativeMemory } from '../engine/observation/narrative-director';
+import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
 import {
   executeCurrentWindow,
   type GameWorld,
@@ -27,6 +29,7 @@ export interface AdvanceCompletion {
 interface AdvanceQueueState {
   advanceTick: number;
   newAchievements: Achievement[];
+  narrativeMemory: NarrativeMemoryEntry[];
 }
 
 export interface CompletedAdvanceState {
@@ -38,6 +41,7 @@ export interface CompletedAdvanceState {
   isAdvancing: false;
   advanceTick: number;
   newAchievements: Achievement[];
+  narrativeMemory: NarrativeMemoryEntry[];
 }
 
 function getAchievementNotifications(
@@ -73,6 +77,11 @@ export function buildAdvanceCompletionState(
     isAdvancing: false,
     advanceTick: state.advanceTick + 1,
     newAchievements: [...state.newAchievements, ...newAchievements],
+    narrativeMemory: advanceNarrativeMemory(
+      state.narrativeMemory,
+      completion.lastWorldResponse?.narrative,
+      completion.world.totalElapsedWindows ?? 0,
+    ),
   };
 }
 

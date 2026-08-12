@@ -307,6 +307,12 @@ function storylineNews(
     windowIndex: world.seasonState.currentWindowIndex,
     type: 'storyline',
     importance: phase === '高潮' || phase === '落幕' ? 'major' : 'normal',
+    subject: {
+      arcKey: `team:${storyline.teamId}:story:${storyline.type}`,
+      eventKey: `${storyline.id}:${phase}:${storyline.lastUpdatedElapsedWindow}`,
+      teamIds: [storyline.teamId],
+      visualKind: storyline.type === 'giant_crisis' ? 'fall' : 'rise',
+    },
     title: event === 'start'
       ? `故事出现：${teamName} · ${label}`
       : event === 'end'

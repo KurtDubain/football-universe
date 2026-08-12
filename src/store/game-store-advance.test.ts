@@ -35,6 +35,7 @@ describe('game store advance scheduling', () => {
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      narrativeMemory: [],
       starredFixtureIds: [],
       newAchievements: [],
     });
@@ -70,6 +71,8 @@ describe('game store advance scheduling', () => {
       mode: 'single',
       advancedWindows: 1,
     });
+    expect(useGameStore.getState().narrativeMemory.length).toBeGreaterThan(0);
+    expect(useGameStore.getState().narrativeMemory.length).toBeLessThanOrEqual(32);
     expect(useGameStore.getState().advanceError).toBeNull();
   });
 
@@ -134,6 +137,12 @@ describe('game store advance scheduling', () => {
       advanceTick: 8,
       favoriteTeamId: 'old-team',
       favoriteTeamIds: ['old-team'],
+      narrativeMemory: [{
+        arcKey: 'old-arc',
+        fingerprint: 'old-fingerprint',
+        lastChangedAt: 1,
+        lastSelectedAt: 1,
+      }],
       starredFixtureIds: ['old-fixture'],
       newAchievements: [achievement],
     });
@@ -143,12 +152,19 @@ describe('game store advance scheduling', () => {
       advanceTick: 0,
       favoriteTeamId: null,
       favoriteTeamIds: [],
+      narrativeMemory: [],
       starredFixtureIds: [],
       newAchievements: [],
     });
 
     useGameStore.setState({
       advanceTick: 3,
+      narrativeMemory: [{
+        arcKey: 'another-arc',
+        fingerprint: 'another-fingerprint',
+        lastChangedAt: 2,
+        lastSelectedAt: 2,
+      }],
       starredFixtureIds: ['another-fixture'],
       newAchievements: [achievement],
     });
@@ -157,6 +173,7 @@ describe('game store advance scheduling', () => {
       world: null,
       initialized: false,
       advanceTick: 0,
+      narrativeMemory: [],
       starredFixtureIds: [],
       newAchievements: [],
     });

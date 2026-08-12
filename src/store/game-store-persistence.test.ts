@@ -33,6 +33,7 @@ beforeEach(() => {
     favoriteTeamId: null,
     favoriteTeamIds: [],
     favoritePlayerIds: [],
+    narrativeMemory: [],
   });
   compressedStorage.removeItem(SAVE_STORAGE_KEY);
 });
@@ -72,6 +73,7 @@ describe('game store current-save persistence', () => {
     expect(exported.state.lastResults).toEqual([]);
     expect(exported.state.lastNews).toEqual([]);
     expect(exported.state.lastWorldResponse).toBeUndefined();
+    expect(exported.state.narrativeMemory.length).toBeGreaterThan(0);
 
     useGameStore.setState({ world: null, initialized: false, lastResults: [], lastNews: [] });
     replaceCompressedStorageItem(SAVE_STORAGE_KEY, JSON.stringify(exported));
@@ -80,6 +82,7 @@ describe('game store current-save persistence', () => {
     expect(useGameStore.getState().lastResults).toHaveLength(resultCount);
     expect(useGameStore.getState().lastNews).toEqual(useGameStore.getState().world?.newsLog.slice(-30));
     expect(useGameStore.getState().lastWorldResponse).toBeNull();
+    expect(useGameStore.getState().narrativeMemory).toEqual(exported.state.narrativeMemory);
   });
 
   it('preserves the bounded universe intervention record across export and reload', async () => {

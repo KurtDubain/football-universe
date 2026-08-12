@@ -1,5 +1,22 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-12 Narrative Director Planning
+
+- The next major experience project is recorded in `docs/narrative-director-checklist.md`. It targets a complete v4.54.0 Narrative Director release while keeping the observer role, authoritative simulation, determinism, existing visual assets, and storage/performance budgets frozen.
+- The plan is divided into seven cohesive work packages: contracts/director, Matchday World Pulse, result causality, persistent story expansion, derived person/competition signals, detail/history continuity, and integrated release validation. Each package defines its dependency, completion gate, validation scope, and recommended commit boundary so future sessions can work efficiently without re-auditing the whole project.
+- ND-0 through ND-2 were completed in the first efficient implementation batch; ND-3 through ND-6 remain open. The durable checklist contains the exact implementation and verification record.
+
+## 2026-08-12 Narrative Director Batch A (ND-0 to ND-2)
+
+- Added typed Narrative candidate/fact/destination/digest contracts, deterministic semantic merge and scoring, a strict one-feature/two-signal attention budget, and a 32-entry presentation-only memory. Repeated input is byte-equivalent, a representative full memory is 4,215 bytes, and Narrative reads neither mutate the world nor consume simulation RNG.
+- Added structured News subjects where existing Storyline and rumor producers know canonical IDs. Matchday adapters now combine the observation theme, active stories, focus fixtures, factual window signals, player highlights, favorite rumors, coach pressure, and structured News without parsing display prose.
+- Replaced the separate Dashboard story/highlight/tip surfaces with one World Pulse below the complete observation runway. Remaining deduplicated items stay in a collapsed detail surface, related focus fixtures receive one relation badge, and the full fixture list and watch controls remain intact.
+- Player Growth observation copy no longer exposes hidden peak rating. Mobile spacing keeps the real one-team first-run observation flow through its 44px Advance action inside 390x844 before Narrative content begins.
+- Extended the existing WorldResponse with one canonical four-step explanation: frozen pre-match factors, real turning points, result deviation, and factual post-advance consequences. It explicitly avoids deterministic-causation claims, allows one structured World Moment, and leaves complete results/news collapsed with working details, replay, Season Review, and next-advance routes.
+- Compatibility includes optional validated `narrativeMemory` defaults, persistence/export/import, all advance modes, and no parallel result or history store. A full regression caught and corrected the backup test's pre-normalization expectation.
+- Verification passed 126 test files / 910 tests, full ESLint, strict TypeScript, ordinary and audit PWA builds, bundle and portable-script gates, six responsive observation viewports, World Pulse and observation-route audits, single/batch/season-boundary response audits, Dashboard, visual fallback, floating Advance, and the standard deterministic Canvas client. Initial production graph: 493,186 bytes / 162,900 gzip.
+- Next recommended work package: ND-3 Story Expansion (`unbeaten_run` and `cup_giant_killer`) as one engine/calibration batch. Do not start ND-4 source expansion until ND-3 arc identities and lifecycle thresholds are stable.
+
 ## 2026-08-12 v4.53.0 Coach Tactics And Star Presence
 
 - Completed the confirmed lightweight coach and star systems without adding manual management. Four formations, five contextual approaches, injury-aware fallback, bounded soft matchups, formation-aware lineups, named marginal impact, prediction, simulation, reporting and replay now share one deterministic pipeline.

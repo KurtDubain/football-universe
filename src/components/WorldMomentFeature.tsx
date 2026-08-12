@@ -21,10 +21,23 @@ const PRESENTATION: Record<WorldMomentKind, {
   transfer: { artwork: transferArtwork, label: '转会之夜', icon: 'megaphone', accent: 'text-blue-200' },
 };
 
-export function WorldMomentFeature({ news }: { news: NewsItem }) {
-  const kind = worldMomentKindForNews(news);
+type WorldMomentFeatureProps =
+  | { news: NewsItem; kind?: never; title?: never; description?: never; seasonNumber?: never }
+  | {
+      news?: never;
+      kind: WorldMomentKind;
+      title: string;
+      description: string;
+      seasonNumber: number;
+    };
+
+export function WorldMomentFeature(props: WorldMomentFeatureProps) {
+  const kind = props.news ? worldMomentKindForNews(props.news) : props.kind;
   if (!kind) return null;
   const presentation = PRESENTATION[kind];
+  const title = props.news ? props.news.title : props.title;
+  const description = props.news ? props.news.description : props.description;
+  const seasonNumber = props.news ? props.news.seasonNumber : props.seasonNumber;
 
   return (
     <article
@@ -42,10 +55,10 @@ export function WorldMomentFeature({ news }: { news: NewsItem }) {
         <div className={`mb-2 flex items-center gap-1.5 text-[11px] font-semibold ${presentation.accent}`}>
           <Icon name={presentation.icon} size={14} />
           <span>{presentation.label}</span>
-          <span className="text-slate-500">S{news.seasonNumber}</span>
+          <span className="text-slate-500">S{seasonNumber}</span>
         </div>
-        <h4 className="text-base font-bold leading-6 text-white sm:text-lg">{news.title}</h4>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{news.description}</p>
+        <h4 className="text-base font-bold leading-6 text-white sm:text-lg">{title}</h4>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{description}</p>
       </div>
     </article>
   );

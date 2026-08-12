@@ -15,9 +15,12 @@ const currentSave = {
     favoriteTeamId: null,
     favoriteTeamIds: [],
     favoritePlayerIds: [],
+    narrativeMemory: [],
     world: initializeGameWorld(20260730),
   },
 };
+const serializedCurrentSave = JSON.stringify(currentSave);
+const normalizedCurrentSave = JSON.parse(serializedCurrentSave) as typeof currentSave;
 
 beforeEach(() => {
   __flushCompressedStorageForTests();
@@ -26,15 +29,15 @@ beforeEach(() => {
 
 describe('current save backup', () => {
   it('exports compressed runtime storage as readable JSON', () => {
-    compressedStorage.setItem(KEY, JSON.stringify(currentSave));
+    compressedStorage.setItem(KEY, serializedCurrentSave);
     const exported = exportCurrentSave(KEY);
-    expect(JSON.parse(exported)).toEqual(currentSave);
+    expect(JSON.parse(exported)).toEqual(normalizedCurrentSave);
     expect(exported).toContain('\n  "version"');
   });
 
   it('imports valid current JSON and stores it compressed', () => {
-    importCurrentSave(KEY, JSON.stringify(currentSave));
-    expect(JSON.parse(compressedStorage.getItem(KEY) as string)).toEqual(currentSave);
+    importCurrentSave(KEY, serializedCurrentSave);
+    expect(JSON.parse(compressedStorage.getItem(KEY) as string)).toEqual(normalizedCurrentSave);
     expect(localStorage.getItem(KEY)?.startsWith('{')).toBe(false);
   });
 
@@ -47,7 +50,7 @@ describe('current save backup', () => {
 
   it('replaces an older pending write and survives a JSON export/import round-trip', () => {
     compressedStorage.setItem(KEY, JSON.stringify({ stale: true }));
-    importCurrentSave(KEY, JSON.stringify(currentSave));
+    importCurrentSave(KEY, serializedCurrentSave);
     __flushCompressedStorageForTests();
 
     const exported = exportCurrentSave(KEY);
@@ -55,6 +58,6 @@ describe('current save backup', () => {
     importCurrentSave(KEY, exported);
     __flushCompressedStorageForTests();
 
-    expect(JSON.parse(exportCurrentSave(KEY))).toEqual(currentSave);
+    expect(JSON.parse(exportCurrentSave(KEY))).toEqual(normalizedCurrentSave);
   });
 });

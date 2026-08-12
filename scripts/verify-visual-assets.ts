@@ -194,9 +194,21 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
     await store.getState().batchAdvance(12);
   });
   await page.getByRole('tab', { name: '比赛日' }).click();
-  const signals = page.getByTestId('storyline-signals');
+  const signals = page.getByTestId('world-pulse');
   await signals.waitFor({ state: 'visible', timeout: 15_000 });
-  const storyArt = signals.locator('[data-testid^="story-art-"]');
+  const moreSignals = signals.getByTestId('more-world-signals');
+  if (
+    await moreSignals.count() > 0
+    && await moreSignals.locator('[data-narrative-source="storyline"]').count() > 0
+  ) {
+    await moreSignals.locator('summary').click();
+  }
+  const storyArt = signals.locator('[data-narrative-source="storyline"] [data-testid^="story-art-"]');
+  await storyArt.first().waitFor({ state: 'visible', timeout: 15_000 });
+  await page.waitForFunction(() => (
+    [...document.querySelectorAll<HTMLImageElement>('[data-narrative-source="storyline"] [data-testid^="story-art-"]')]
+      .every(image => image.complete && image.naturalWidth > 0)
+  ));
   const storyMetrics = await storyArt.evaluateAll(images => images.map(image => ({
     testId: image.getAttribute('data-testid'),
     naturalWidth: (image as HTMLImageElement).naturalWidth,

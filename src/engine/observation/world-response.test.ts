@@ -105,6 +105,8 @@ describe('advance world response', () => {
     expect(response?.featuredResults.slice(0, 2).map(item => item.result.fixtureId))
       .toEqual(['primary-new', 'primary-old']);
     expect(response?.featuredResults[0].focus).toBe('primary');
+    expect(response?.narrative?.feature?.source).toBe('match_result');
+    expect(response?.narrative?.signals.length).toBeLessThanOrEqual(2);
   });
 
   it('collects one judgment and bounded, deduplicated changes without duplicating match news', () => {
@@ -142,6 +144,7 @@ describe('advance world response', () => {
     expect(response.keyNews.map(item => item.id)).toEqual(['coach', 'injury']);
     expect(response.keyNews.some(item => item.type === 'match_result' || item.type === 'streak')).toBe(false);
     expect(response.hasMajorMoment).toBe(true);
+    expect(response.narrative?.candidateCount).toBeGreaterThan(0);
   });
 
   it('is deterministic, labels modes, and returns an understandable failure message', () => {
@@ -155,5 +158,83 @@ describe('advance world response', () => {
     expect(advanceModeLabel('season_end', 12)).toBe('前往赛季末 · 12轮');
     expect(advanceModeLabel('key_node', 3)).toBe('前往关键节点 · 3轮');
     expect(readableAdvanceError()).toContain('本次操作未提交');
+  });
+
+  it.each([
+    ['single', '推进 1轮'],
+    ['batch', '快速推进 1轮'],
+    ['cup', '前往杯赛 · 1轮'],
+    ['season_end', '前往赛季末 · 1轮'],
+    ['key_node', '前往关键节点 · 1轮'],
+  ] as const)('keeps the %s advance mode explicit', (mode, label) => {
+    const world = initializeGameWorld(20260725);
+    const [home, away] = Object.keys(world.teamBases);
+    const response = buildAdvanceWorldResponse(
+      mode,
+      [outcome(0, [result(`mode-${mode}`, home, away)])],
+      world,
+      [],
+      null,
+    );
+
+    expect(response?.mode).toBe(mode);
+    expect(advanceModeLabel(mode, 1)).toBe(label);
+  });
+
+  it('distinguishes ordinary results, upsets, finals, and a season boundary', () => {
+    const world = initializeGameWorld(20260725);
+    const [home, away] = Object.keys(world.teamBases);
+    const ordinary = buildAdvanceWorldResponse(
+      'single',
+      [outcome(0, [result('ordinary', home, away)])],
+      world,
+      [],
+      null,
+    )!;
+    const upset = buildAdvanceWorldResponse(
+      'single',
+      [outcome(0, [result('upset', home, away, {
+        homeGoals: 0,
+        awayGoals: 2,
+        awayWinPct: 5,
+      })])],
+      world,
+      [],
+      null,
+    )!;
+    const final = buildAdvanceWorldResponse(
+      'cup',
+      [outcome(0, [result('final', home, away, { roundLabel: 'Final' })])],
+      world,
+      [],
+      null,
+    )!;
+    const nextSeasonWorld = {
+      ...world,
+      seasonState: { ...world.seasonState, seasonNumber: 2 },
+    };
+    const boundary = buildAdvanceWorldResponse(
+      'season_end',
+      [outcome(0, [result('boundary', home, away)])],
+      nextSeasonWorld,
+      [],
+      null,
+    )!;
+
+    expect(ordinary.hasMajorMoment).toBe(false);
+    expect(ordinary.narrative?.feature).toBeUndefined();
+    expect(upset.hasMajorMoment).toBe(true);
+    expect([
+      upset.narrative?.feature,
+      ...(upset.narrative?.signals ?? []),
+    ].some(item => item?.fixtureIds?.includes('upset'))).toBe(true);
+    expect(final.hasMajorMoment).toBe(true);
+    expect(final.narrative?.feature).toMatchObject({
+      source: 'match_result',
+      visualKind: 'stage',
+      fixtureIds: ['final'],
+    });
+    expect(boundary.seasonChanged).toBe(true);
+    expect(boundary.nextSeason).toBe(2);
   });
 });

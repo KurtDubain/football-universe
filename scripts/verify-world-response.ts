@@ -1,5 +1,6 @@
 import { chromium, type ConsoleMessage } from 'playwright';
 import { FREE_MARKET_TEAM_ID } from '../src/engine/transfers/transfer-application';
+import type { MatchResult } from '../src/types/match';
 
 const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 const viewports = [
@@ -21,6 +22,30 @@ type AuditStore = {
       advancedWindows: number;
       seasonChanged: boolean;
       nextSeason: number;
+      featuredResults: Array<{ result: MatchResult }>;
+      narrative?: {
+        feature?: {
+          source: string;
+          fixtureIds?: string[];
+          causes?: Array<{ detail: string }>;
+          evidence?: Array<{ key: string; detail: string }>;
+          turningPoints?: Array<{ detail: string }>;
+        };
+        signals: Array<{
+          source: string;
+          fixtureIds?: string[];
+          causes?: Array<{ detail: string }>;
+          evidence?: Array<{ key: string; detail: string }>;
+          turningPoints?: Array<{ detail: string }>;
+        }>;
+        more: Array<{
+          source: string;
+          fixtureIds?: string[];
+          causes?: Array<{ detail: string }>;
+          evidence?: Array<{ key: string; detail: string }>;
+          turningPoints?: Array<{ detail: string }>;
+        }>;
+      };
     } | null;
     newGame: (seed: number) => Promise<void>;
     setFavoriteTeams: (ids: string[]) => void;
@@ -70,6 +95,77 @@ async function main(): Promise<void> {
       if (await page.getByTestId('full-report').count() !== 0) {
         throw new Error(`${viewport.name}: full report should start collapsed`);
       }
+      const causality = page.getByTestId('result-causality-sequence');
+      const causalitySteps = await causality.locator(':scope > div').count();
+      const causalityText = (await causality.textContent()) ?? '';
+      if (
+        causalitySteps !== 4
+        || !['赛前条件', '场上转折', '结果偏离', '推进后变化'].every(label => causalityText.includes(label))
+      ) {
+        throw new Error(`${viewport.name}: incomplete result causality ${causalityText}`);
+      }
+      if (await page.getByTestId('world-moment-feature').count() > 1) {
+        throw new Error(`${viewport.name}: more than one World Moment is visible`);
+      }
+      const explanationDetailsOpen = await page.locator(
+        '[data-testid="result-why-mattered"], [data-testid="result-what-changed"]',
+      ).evaluateAll(elements => elements.some(element => element.hasAttribute('open')));
+      if (explanationDetailsOpen) {
+        throw new Error(`${viewport.name}: result explanations should start collapsed`);
+      }
+      const firstResponseMatch = page.getByTestId('world-response-match').first();
+      const firstResponseFixtureId = await firstResponseMatch.getAttribute('data-fixture-id');
+      const expectedMatchFacts = await page.evaluate((fixtureId) => {
+        const responseState = (window as AuditWindow).__gameStore!.getState().lastWorldResponse;
+        const match = responseState?.featuredResults
+          .find(item => item.result.fixtureId === fixtureId)?.result;
+        const narrativeItems = responseState?.narrative
+          ? [
+              responseState.narrative.feature,
+              ...responseState.narrative.signals,
+              ...responseState.narrative.more,
+            ]
+          : [];
+        const narrative = narrativeItems.find(item => (
+          item?.source === 'match_result' && item.fixtureIds?.includes(fixtureId ?? '')
+        ));
+        return match
+          ? {
+              score: `${match.homeGoals + (match.etHomeGoals ?? 0)}:${match.awayGoals + (match.etAwayGoals ?? 0)}`,
+              cause: narrative?.causes?.[0]?.detail ?? null,
+              forecast: narrative?.evidence?.find(item => item.key.includes(':forecast'))?.detail ?? null,
+              turningPoint: narrative?.turningPoints?.[0]?.detail ?? null,
+              homeFormation: match.homeTactics?.formation ?? null,
+              awayFormation: match.awayTactics?.formation ?? null,
+            }
+          : null;
+      }, firstResponseFixtureId);
+      if (!expectedMatchFacts || !((await firstResponseMatch.textContent()) ?? '').includes(expectedMatchFacts.score)) {
+        throw new Error(`${viewport.name}: featured result score disagrees with response state`);
+      }
+      const causalityFullText = (await page.getByTestId('result-causality').textContent()) ?? '';
+      for (const factText of [
+        expectedMatchFacts.cause,
+        expectedMatchFacts.forecast,
+        expectedMatchFacts.turningPoint,
+      ].filter((item): item is string => Boolean(item))) {
+        if (!causalityFullText.includes(factText)) {
+          throw new Error(`${viewport.name}: result causality disagrees with frozen match facts`);
+        }
+      }
+      await firstResponseMatch.click();
+      const matchDialog = page.getByRole('dialog', { name: '比赛详情' });
+      await matchDialog.waitFor();
+      const matchDialogText = (await matchDialog.textContent()) ?? '';
+      if (!matchDialogText.includes(expectedMatchFacts.score)) {
+        throw new Error(`${viewport.name}: match detail score disagrees with WorldResponse`);
+      }
+      for (const formation of [expectedMatchFacts.homeFormation, expectedMatchFacts.awayFormation]) {
+        if (formation && !matchDialogText.includes(formation)) {
+          throw new Error(`${viewport.name}: match detail lost the frozen tactical snapshot`);
+        }
+      }
+      await matchDialog.getByRole('button', { name: '关闭比赛详情' }).click();
       const singleId = await page.evaluate(() => (
         window as AuditWindow
       ).__gameStore!.getState().lastWorldResponse?.id);
@@ -88,6 +184,10 @@ async function main(): Promise<void> {
       if (singleLayout.overflow > 1) {
         throw new Error(`${viewport.name}: horizontal overflow ${singleLayout.overflow}px`);
       }
+      const nextActionBox = await page.getByTestId('results-next-action').getByTestId('dashboard-advance').boundingBox();
+      if (!nextActionBox || nextActionBox.height < 44) {
+        throw new Error(`${viewport.name}: next Advance action is inaccessible`);
+      }
       await page.screenshot({
         path: `/tmp/football-world-response-${viewport.name}-single.png`,
         animations: 'disabled',
@@ -96,6 +196,14 @@ async function main(): Promise<void> {
 
       await page.getByTestId('toggle-full-report').click();
       await page.getByTestId('full-report').waitFor();
+      const skip = page.getByTestId('skip-result-animation');
+      if (await skip.count() > 0) await skip.click();
+      const replay = page.getByRole('button', { name: '观看直播回放' }).first();
+      await replay.waitFor({ state: 'visible', timeout: 10_000 });
+      await replay.click();
+      const liveDialog = page.getByRole('dialog', { name: '比赛直播回放' });
+      await liveDialog.waitFor({ state: 'visible', timeout: 15_000 });
+      await liveDialog.getByRole('button', { name: '退出', exact: true }).click();
       await page.getByTestId('toggle-full-report').click();
       if (await page.getByTestId('full-report').count() !== 0) {
         throw new Error(`${viewport.name}: full report did not collapse`);
@@ -220,6 +328,10 @@ async function main(): Promise<void> {
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
         singleLayout,
+        causalitySteps,
+        firstResponseFixtureId,
+        expectedScore: expectedMatchFacts.score,
+        nextActionHeight: nextActionBox.height,
         batchState: batchState ? {
           id: batchState.id,
           mode: batchState.mode,

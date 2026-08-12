@@ -39,6 +39,7 @@ import {
   type ObservationThemePreference,
 } from '../engine/observation/observation-theme';
 import { FAVORITE_PLAYER_LIMIT } from '../engine/players/star-presence';
+import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
 
 const ADVANCE_ERROR_MESSAGE = '本次推进没有完成，本次操作未提交。请重试；若问题持续，请刷新页面。';
 
@@ -75,6 +76,8 @@ interface GameStore {
   favoritePlayerIds: string[];
   /** Display-only lens for the current observer route. Never read by simulation. */
   observationThemePreference: ObservationThemePreference;
+  /** Bounded presentation-only memory used to avoid repeating unchanged headlines. */
+  narrativeMemory: NarrativeMemoryEntry[];
   /** One transient fixture selected for spoiler-free auto-live (cleared on advance). */
   starredFixtureIds: string[];
   newAchievements: Achievement[];
@@ -132,6 +135,7 @@ type PersistedGameState = Pick<GameStore,
   | 'favoriteTeamIds'
   | 'favoritePlayerIds'
   | 'observationThemePreference'
+  | 'narrativeMemory'
 >;
 
 const EMPTY_PERSISTED_RESULTS: MatchResult[] = [];
@@ -168,6 +172,7 @@ function mergePersistedGameState(
     favoriteTeamIds: orderedFavorites,
     favoritePlayerIds,
     observationThemePreference: merged.observationThemePreference ?? 'auto',
+    narrativeMemory: (persisted.narrativeMemory ?? []).slice(0, 32),
     lastResults: reconstructLastResults(merged.world),
     lastNews: merged.world?.newsLog.slice(-30) ?? [],
     lastObservationSettlements: [],
@@ -217,6 +222,7 @@ export const useGameStore = create<GameStore>()(
       favoriteTeamIds: [],
       favoritePlayerIds: [],
       observationThemePreference: 'auto',
+      narrativeMemory: [],
       starredFixtureIds: [],
       newAchievements: [],
 
@@ -253,6 +259,7 @@ export const useGameStore = create<GameStore>()(
           favoriteTeamIds,
           favoritePlayerIds: [],
           observationThemePreference: options?.observationThemePreference ?? 'auto',
+          narrativeMemory: [],
           starredFixtureIds: [],
           newAchievements: [],
         });
@@ -282,6 +289,11 @@ export const useGameStore = create<GameStore>()(
             updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
+            {
+              previousWorld: world,
+              favoritePlayerIds: get().favoritePlayerIds,
+              narrativeMemory: get().narrativeMemory,
+            },
           );
 
           set(state => buildAdvanceCompletionState(state, {
@@ -351,6 +363,11 @@ export const useGameStore = create<GameStore>()(
             updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
+            {
+              previousWorld,
+              favoritePlayerIds: get().favoritePlayerIds,
+              narrativeMemory: get().narrativeMemory,
+            },
           );
           set(state => buildAdvanceCompletionState(state, {
             previousWorld,
@@ -419,6 +436,11 @@ export const useGameStore = create<GameStore>()(
             updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
+            {
+              previousWorld,
+              favoritePlayerIds: get().favoritePlayerIds,
+              narrativeMemory: get().narrativeMemory,
+            },
           );
           set(state => buildAdvanceCompletionState(state, {
             previousWorld,
@@ -504,6 +526,11 @@ export const useGameStore = create<GameStore>()(
             updatedWorld,
             favoriteTeamIds,
             get().favoriteTeamId,
+            {
+              previousWorld,
+              favoritePlayerIds: get().favoritePlayerIds,
+              narrativeMemory: get().narrativeMemory,
+            },
           );
           set(state => buildAdvanceCompletionState(state, {
             previousWorld,
@@ -841,6 +868,7 @@ export const useGameStore = create<GameStore>()(
           favoriteTeamIds: [],
           favoritePlayerIds: [],
           observationThemePreference: 'auto',
+          narrativeMemory: [],
           starredFixtureIds: [],
           newAchievements: [],
         });
@@ -891,6 +919,7 @@ export const useGameStore = create<GameStore>()(
         favoriteTeamIds: state.favoriteTeamIds,
         favoritePlayerIds: state.favoritePlayerIds,
         observationThemePreference: state.observationThemePreference,
+        narrativeMemory: state.narrativeMemory,
       }),
       merge: mergePersistedGameState,
     }

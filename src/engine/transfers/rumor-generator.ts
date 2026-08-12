@@ -124,6 +124,13 @@ export function generateRumors(world: GameWorld, rng: SeededRNG): { rumors: Tran
       seasonNumber: season,
       windowIndex,
       type: 'rumor',
+      subject: {
+        arcKey: `transfer:${cand.player.uuid}:${elite.id}`,
+        eventKey: rumor.id,
+        teamIds: [cand.teamId, elite.id],
+        playerIds: [cand.player.uuid],
+        visualKind: 'transfer',
+      },
       title: `📢 ${elite.name} ${intensityLabel} ${cand.player.name ?? cand.player.number}`,
       description: `据可靠消息，${elite.name}近日对${cand.teamName}的${cand.player.name}（${cand.player.position}）表现出${intensityLabel}的兴趣。`,
     });
