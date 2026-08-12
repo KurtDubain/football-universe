@@ -6,9 +6,13 @@ export type NarrativeSource =
   | 'focus_fixture'
   | 'window_signal'
   | 'player_highlight'
+  | 'player_story'
   | 'coach_pressure'
+  | 'coach_story'
   | 'transfer_rumor'
+  | 'transfer'
   | 'competition'
+  | 'record'
   | 'match_result'
   | 'news';
 
@@ -105,4 +109,3 @@ export interface NarrativeSelectionContext {
   favoriteTeamIds?: readonly string[];
   favoritePlayerIds?: readonly string[];
 }
-

@@ -34,7 +34,10 @@ async function main(): Promise<void> {
         await store?.getState().newGame(20260718);
       });
       await page.getByTestId('focus-matches').waitFor({ state: 'visible' });
-      await page.locator('[data-testid="focus-matches"] > div [role="button"]').first().click();
+      await page.getByTestId('focus-matches')
+        .locator('button[aria-label^="查看 "]')
+        .first()
+        .click();
 
       const preDialog = page.getByRole('dialog', { name: '赛前预测' });
       await preDialog.waitFor({ state: 'visible' });

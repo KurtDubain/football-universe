@@ -5,6 +5,7 @@ import {
   describeStoryline,
   detectStorylineSignals,
   expectedStoryPosition,
+  getStorylineArcKey,
 } from '../season/storylines';
 
 export type ObservationThemeType =
@@ -302,7 +303,7 @@ function pureObservationTheme(world: GameWorld): ObservationTheme {
   if (signal) {
     return {
       type: 'pure_observation',
-      arcKey: `team:${signal.teamId}:story:${signal.type}`,
+      arcKey: getStorylineArcKey(signal.teamId, signal.type, signal.competitionName),
       label: THEME_LABELS.pure_observation,
       title: signal.title,
       summary: signal.body,

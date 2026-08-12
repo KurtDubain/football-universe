@@ -156,7 +156,9 @@ function incrementDelta(
 ): void {
   if (!playerId) return;
   const delta = deltas.get(playerId) ?? emptyPlayerStatDelta(playerId, teamId);
-  for (const field of PLAYER_STAT_COUNTER_FIELDS) delta[field] += updates[field] ?? 0;
+  for (const field of Object.keys(updates) as PlayerStatCounterField[]) {
+    delta[field] += updates[field] ?? 0;
+  }
   deltas.set(playerId, delta);
 }
 
@@ -327,6 +329,41 @@ export function updatePlayerStatsFromResults(
   }
 
   return stats;
+}
+
+/**
+ * Update player-wide totals and club segments from one shared event scan.
+ * The season engine always needs both views, so collecting match deltas once
+ * avoids resolving lineups and defensive events twice on every advance.
+ */
+export function updatePlayerStatsAndSegmentsFromResults(
+  currentStats: Record<string, PlayerSeasonStats>,
+  currentSegments: Record<string, PlayerTeamSeasonStats>,
+  results: MatchResult[],
+  squads: Record<string, Player[]>,
+  globalWindowIdx: number = 0,
+): {
+  playerStats: Record<string, PlayerSeasonStats>;
+  playerStatSegments: Record<string, PlayerTeamSeasonStats>;
+} {
+  const playerStats = { ...currentStats };
+  const playerStatSegments = { ...currentSegments };
+
+  for (const result of results) {
+    for (const delta of buildMatchStatDeltas(result, squads, globalWindowIdx).values()) {
+      const stat = playerStats[delta.playerId];
+      if (stat) playerStats[delta.playerId] = applyStatDelta(stat, delta);
+      const segment = ensureSegment(playerStatSegments, delta.playerId, delta.teamId);
+      if (segment) {
+        playerStatSegments[playerTeamStatKey(delta.playerId, delta.teamId)] = applyStatDelta(
+          segment,
+          delta,
+        );
+      }
+    }
+  }
+
+  return { playerStats, playerStatSegments };
 }
 
 /**

@@ -82,7 +82,7 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: theme archive is incomplete ${JSON.stringify(archived)}`);
       }
 
-      await page.getByRole('button', { name: /S1回顾/ }).click();
+      await page.getByRole('tab', { name: `S${archived.seasonNumber}档案`, exact: true }).click();
       const themeResult = page.getByTestId('observer-theme-result');
       await themeResult.waitFor({ timeout: 15_000 });
       const resultText = ((await themeResult.textContent()) ?? '').replace(/\s+/g, ' ').trim();

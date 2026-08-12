@@ -18,7 +18,11 @@ export const NARRATIVE_SIGNAL_THRESHOLD = 34;
 const SOURCE_AUTHORITY: Record<NarrativeSource, number> = {
   match_result: 100,
   storyline: 90,
+  record: 88,
+  transfer: 86,
   observation_theme: 85,
+  player_story: 82,
+  coach_story: 82,
   focus_fixture: 80,
   player_highlight: 78,
   coach_pressure: 75,

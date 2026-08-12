@@ -16,17 +16,17 @@ interface FocusPriority {
   marquee: number;
 }
 
-function getKnockoutRoundRank(roundLabel: string): number {
+export function getKnockoutRoundRank(roundLabel: string): number {
   const lower = roundLabel.toLowerCase();
   const upper = roundLabel.trim().toUpperCase();
-  if (lower.includes('quarter') || roundLabel.includes('1/4') || upper === 'QF') return 2;
-  if (lower.includes('semi') || roundLabel.includes('半决') || upper === 'SF') return 3;
+  if (lower.includes('quarter') || roundLabel.includes('1/4') || upper.startsWith('QF')) return 2;
+  if (lower.includes('semi') || roundLabel.includes('半决') || upper.startsWith('SF')) return 3;
   if (
     lower.includes('round of 16')
     || lower.includes('round-of-16')
     || roundLabel.includes('1/8')
     || roundLabel.includes('淘汰')
-    || upper === 'R16'
+    || upper.startsWith('R16')
   ) return 1;
   if (lower.trim() === 'final' || roundLabel.trim() === '决赛') return 4;
   return 0;

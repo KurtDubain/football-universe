@@ -14,9 +14,13 @@ const SOURCE_PRESENTATION: Record<NarrativeSource, { label: string; icon: IconNa
   focus_fixture: { label: '焦点赛程', icon: 'stadium', tone: 'text-amber-300' },
   window_signal: { label: '本轮信号', icon: 'bolt', tone: 'text-sky-300' },
   player_highlight: { label: '球员时刻', icon: 'star-glow', tone: 'text-amber-300' },
+  player_story: { label: '球员近况', icon: 'star-glow', tone: 'text-amber-300' },
   coach_pressure: { label: '教练席', icon: 'tie', tone: 'text-rose-300' },
+  coach_story: { label: '教练轨迹', icon: 'tie', tone: 'text-violet-300' },
   transfer_rumor: { label: '转会观察', icon: 'handshake', tone: 'text-blue-300' },
+  transfer: { label: '转会落点', icon: 'handshake', tone: 'text-cyan-300' },
   competition: { label: '赛事格局', icon: 'trophy', tone: 'text-amber-300' },
+  record: { label: '纪录追逐', icon: 'medal', tone: 'text-amber-200' },
   match_result: { label: '比赛结果', icon: 'ball', tone: 'text-sky-300' },
   news: { label: '世界动态', icon: 'news', tone: 'text-slate-300' },
 };
@@ -103,6 +107,28 @@ function SignalRow({
   );
 }
 
+function FactGroup({
+  label,
+  facts,
+}: {
+  label: string;
+  facts: NarrativeItem['evidence'];
+}) {
+  if (!facts || facts.length === 0) return null;
+  return (
+    <div>
+      <div className="text-[10px] font-semibold text-slate-500">{label}</div>
+      <div className="mt-1 space-y-1">
+        {facts.slice(0, 4).map(item => (
+          <p key={item.key} className="text-[11px] leading-5 text-slate-400">
+            <span className="font-medium text-slate-300">{item.label}</span> · {item.detail}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function NarrativeDigest({
   digest,
   windowLabel,
@@ -182,6 +208,24 @@ export default function NarrativeDigest({
                       />
                     ))}
                   </div>
+                )}
+                {(digest.feature.causes?.length
+                  || digest.feature.evidence?.length
+                  || digest.feature.turningPoints?.length
+                  || digest.feature.consequences?.length) && (
+                  <details data-testid="narrative-later" className="mt-2 border-t border-slate-700/45 pt-1.5">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200">
+                      <Icon name="clipboard" size={14} />
+                      <span>展开故事脉络</span>
+                      <Icon name="arrow-down" size={13} className="ml-auto details-chevron" />
+                    </summary>
+                    <div className="space-y-2.5 pb-1">
+                      <FactGroup label="赛前背景" facts={digest.feature.causes} />
+                      <FactGroup label="已有证据" facts={digest.feature.evidence} />
+                      <FactGroup label="关键转折" facts={digest.feature.turningPoints} />
+                      <FactGroup label="随后发生" facts={digest.feature.consequences} />
+                    </div>
+                  </details>
                 )}
               </div>
             </div>

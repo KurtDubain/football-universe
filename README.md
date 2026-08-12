@@ -33,6 +33,7 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 - 🏆 Dynasties rise and crumble across infinite seasons
 - 💥 Underdog cup runs and shocking upsets
 - 👔 Coaches get fired under pressure, then resurrect at new clubs
+- 📰 A deterministic Narrative Director connects causes, turning points, and long-term consequences
 - 📈 Team OVR drifts naturally with mean reversion
 - 🎲 Deterministic seeded RNG — share your "universe" with one number
 
@@ -108,6 +109,9 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 ### 球星观察
 世界焦点完整收录所有达标现役球员 · U23 新星雷达 · 最多关注 8 名球员并跨转会追踪 · 每场直播最多 5 名真实首发焦点 · 四个位置共用本场影响与最佳球员通道，不公开隐藏潜力或额外“球星分”
 
+### 世界叙事导演
+比赛日“世界脉搏”以 1 条主故事 + 最多 2 条短信号控制注意力，其余去重事实默认折叠。联赛不败、杯赛巨人杀手、四位置球员近况、换帅反弹、重大转会、争冠升降级、洲际舞台和可靠纪录都来自现有权威数据；“故事脉络”、赛季版图、实体档案线、赛季回顾与历史摘要共用稳定 arc 身份。叙事层不消费模拟 RNG，也不写入或改判比赛结果。
+
 ### 📊 长期历史 + 编年史
 赛季回顾（含叙事文案）· 历史奖杯榜 · 趣味纪录 · **30+ 成就**（首次类/纪录类/数据类/王朝类/黑马类）· 编年史多赛季回顾 · 跨赛季交手记录。为控制浏览器存档体积，完整交手、球员赛季数据和球队赛季记录分别保留最近 3、25、40 个赛季，奖杯与核心荣誉继续长期累计。
 
@@ -153,11 +157,13 @@ pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
 pnpm audit:advance-performance # 移动端推进、重复点击与存档恢复
 pnpm audit:coach-stars         # 战术分布、长期球星供给、MOTM、性能与存档增量
+pnpm audit:narrative           # 叙事来源频率、选择平衡、性能与模拟基线对照
 pnpm verify:pwa-update         # 远端版本识别与自动更新
 pnpm verify:pwa-transition     # 真实旧构建到新构建的 Service Worker 切换
 pnpm verify:route-recovery     # 分包失败、慢速网络与离线恢复
 pnpm verify:mobile-routes      # 全路由移动端、平板与桌面矩阵
 pnpm verify:cup-bracket       # 晋级图、视图切换与移动端杯赛体验
+pnpm verify:narrative-director # 世界脉搏、故事脉络、实体线程、总览与历史
 pnpm verify:smoke             # 自动构建并运行提交级浏览器回归
 pnpm verify:full              # 自动构建并运行每周完整浏览器矩阵
 pnpm scripts:check            # 禁止审计脚本依赖个人电脑绝对路径
@@ -181,7 +187,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-~58,000 production TypeScript lines · 216 production source files · 122 test files · 42 browser/simulation audit commands
+61,581 production TypeScript lines · 224 production source files · 130 test files · 45 browser/simulation audit commands
 
 生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 
@@ -201,6 +207,7 @@ src/
 │   ├── cups/         — League Cup, Super Cup, regional Continental Cups, World Cup
 │   ├── coaches/      — Coaching effects, pressure, hiring, contracts
 │   ├── players/      — Player generation, stats tracking
+│   ├── observation/  — Read-only Narrative Director, observer themes, trajectories
 │   ├── honors/       — Trophy tracking
 │   ├── achievements.ts — 30+ unlockable achievements
 │   └── events.ts     — Random season events
@@ -228,6 +235,7 @@ src/
 - [x] 球员成长 & 退役
 - [x] 俱乐部分段球员统计（转会前后贡献拆分）
 - [x] 赛季观察档案 PNG 分享图
+- [x] 可追溯世界脉搏与跨页面故事线
 
 ---
 
@@ -251,6 +259,8 @@ pnpm build      # 检查构建是否通过
 <summary>展开查看完整日志</summary>
 
 ### Latest
+- 世界脉搏 + 结果因果链 + 赛季版图 + 实体档案线
+- 联赛不败、杯赛巨人杀手与球员/教练/转会/赛事派生信号
 - 4 游戏模式 + 球队编辑器 + PWA 支持
 - 30+ 成就系统 + 解锁动画
 - 编年史多赛季回顾 + 叙事文案生成

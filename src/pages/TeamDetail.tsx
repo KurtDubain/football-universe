@@ -22,6 +22,8 @@ import TeamBadge from '../components/TeamBadge';
 import { Icon, type IconName } from '../components/Icon';
 import { OutcomeMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
 import { PageShell, Panel, SegmentedControl } from '../components/ui';
+import NarrativeThread from '../components/NarrativeThread';
+import { buildTeamNarrativeThread } from '../engine/observation/narrative-threads';
 
 type TeamSection = 'overview' | 'squad' | 'history';
 
@@ -167,6 +169,8 @@ export default function TeamDetail() {
 
       {section === 'history' && (
         <>
+
+      <NarrativeThread thread={buildTeamNarrativeThread(world, id)} />
 
       {/* Coach history for this team */}
       {(() => {

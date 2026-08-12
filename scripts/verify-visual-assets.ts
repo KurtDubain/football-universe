@@ -203,19 +203,31 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
   ) {
     await moreSignals.locator('summary').click();
   }
-  const storyArt = signals.locator('[data-narrative-source="storyline"] [data-testid^="story-art-"]');
-  await storyArt.first().waitFor({ state: 'visible', timeout: 15_000 });
-  await page.waitForFunction(() => (
-    [...document.querySelectorAll<HTMLImageElement>('[data-narrative-source="storyline"] [data-testid^="story-art-"]')]
-      .every(image => image.complete && image.naturalWidth > 0)
-  ));
+  const storyMarks = signals.locator('[data-narrative-source="storyline"] [data-story-type]');
+  await storyMarks.first().waitFor({ state: 'visible', timeout: 15_000 });
+  const storyArt = storyMarks.locator('[data-testid^="story-art-"]');
+  if (await storyArt.count() > 0) {
+    await page.waitForFunction(() => (
+      [...document.querySelectorAll<HTMLImageElement>('[data-narrative-source="storyline"] [data-testid^="story-art-"]')]
+        .every(image => image.complete && image.naturalWidth > 0)
+    ));
+  }
   const storyMetrics = await storyArt.evaluateAll(images => images.map(image => ({
     testId: image.getAttribute('data-testid'),
     naturalWidth: (image as HTMLImageElement).naturalWidth,
     rect: image.getBoundingClientRect().toJSON(),
   })));
-  if (storyMetrics.length === 0 || storyMetrics.some(item => item.naturalWidth !== 256)) {
+  if (storyMetrics.some(item => item.naturalWidth !== 256)) {
     throw new Error(`Story artwork did not decode ${JSON.stringify(storyMetrics)}`);
+  }
+  const storyTypes = await storyMarks.evaluateAll(marks => (
+    marks.map(mark => mark.getAttribute('data-story-type'))
+  ));
+  if (
+    storyMetrics.length === 0
+    && storyTypes.some(type => !['unbeaten_run', 'cup_giant_killer'].includes(type ?? ''))
+  ) {
+    throw new Error(`Existing story family lost its chapter artwork ${JSON.stringify(storyTypes)}`);
   }
   await signals.scrollIntoViewIfNeeded();
   const storyScreenshot = '/tmp/football-visual-story-mobile.png';
@@ -352,6 +364,7 @@ async function verifyStoryAndLive(context: BrowserContext): Promise<Record<strin
   if (errors.length > 0) throw new Error(`Story/live runtime errors ${errors.join(' | ')}`);
   await page.close();
   return {
+    storyTypes,
     storyMetrics,
     momentMetrics,
     focusButtonMetrics,

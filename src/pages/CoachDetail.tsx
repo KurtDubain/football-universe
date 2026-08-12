@@ -8,6 +8,8 @@ import {
   derivePreferredApproach,
   derivePreferredFormation,
 } from '../engine/coaches/tactics';
+import NarrativeThread from '../components/NarrativeThread';
+import { buildCoachNarrativeThread } from '../engine/observation/narrative-threads';
 
 export default function CoachDetail() {
   const { id } = useParams<{ id: string }>();
@@ -134,6 +136,8 @@ export default function CoachDetail() {
           </div>
         </div>
       </div>
+
+      <NarrativeThread thread={buildCoachNarrativeThread(world, id)} />
 
       {/* Coaching stats */}
       {(() => {

@@ -25,6 +25,8 @@ import {
   FAVORITE_PLAYER_LIMIT,
   selectStarObservations,
 } from '../engine/players/star-presence';
+import NarrativeThread from '../components/NarrativeThread';
+import { buildPlayerNarrativeThread } from '../engine/observation/narrative-threads';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -220,6 +222,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   const headlineMetrics = getPositionHeadlineMetrics(player.position, stats);
   const isFollowed = favoritePlayerIds.includes(uuid);
   const followLimitReached = !isFollowed && favoritePlayerIds.length >= FAVORITE_PLAYER_LIMIT;
+  const narrativeThread = buildPlayerNarrativeThread(world, uuid);
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -284,6 +287,8 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
           </button>
         </div>
       </div>
+
+      <NarrativeThread thread={narrativeThread} />
 
       {appearances === 0 ? (
         <Panel padded={false}>
@@ -861,6 +866,7 @@ function RetiredPlayerView({
   const careerTotals = world ? computePlayerCareerTotals(world, retired.uuid) : null;
   const careerGoals = Math.max(retired.careerGoals ?? 0, careerTotals?.goals ?? stats?.goals ?? 0);
   const trophyCount = retired.careerTrophies?.length ?? 0;
+  const narrativeThread = world ? buildPlayerNarrativeThread(world, retired.uuid) : null;
   return (
     <div className="max-w-2xl space-y-5">
       <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-xl border border-slate-700/60 p-5">
@@ -907,6 +913,8 @@ function RetiredPlayerView({
           <span className="text-slate-500">退役 S{retired.seasonRetired} · {retired.age}岁 · 巅峰 {retired.peakRating}</span>
         </div>
       </div>
+
+      <NarrativeThread thread={narrativeThread} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatBox label="生涯出场" value={careerTotals?.appearances ?? stats?.appearances ?? 0} />

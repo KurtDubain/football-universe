@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { StandingEntry } from '../../types/league';
+import type { CompetitionType, MatchFixture, MatchResult } from '../../types/match';
 import type { SeasonRecord, TeamBase, TeamState } from '../../types/team';
 import type { GameWorld } from './season-manager';
 import {
   advanceStorylines,
   detectTeamStorylineSignals,
   getFixtureStorylineLabel,
+  getStorylineArcKey,
   STORYLINE_COOLDOWN_WINDOWS,
   MAX_STORYLINES_PER_SEASON,
+  STORYLINES_PER_TYPE_PER_SEASON,
+  UNBEATEN_RUN_TRIGGER_LONG,
+  UNBEATEN_RUN_TRIGGER_SHORT,
   type Storyline,
   type StorylineType,
 } from './storylines';
@@ -43,9 +48,9 @@ function record(overrides: Partial<SeasonRecord> = {}): SeasonRecord {
   };
 }
 
-function table(rank: number, played: number): StandingEntry[] {
+function table(rank: number, played: number, teamCount = 8): StandingEntry[] {
   let other = 0;
-  return Array.from({ length: 8 }, (_, index) => {
+  return Array.from({ length: teamCount }, (_, index) => {
     if (index === rank - 1) return standing('target', 40 - index * 3, played);
     return standing(`other-${other++}`, 40 - index * 3, played);
   });
@@ -100,6 +105,96 @@ function move(worldValue: GameWorld, rank: number, played: number, season = worl
   };
 }
 
+function result(params: {
+  id: string;
+  competitionType?: CompetitionType;
+  competitionName?: string;
+  roundLabel?: string;
+  outcome?: 'win' | 'draw' | 'loss';
+  targetWinProbability?: number;
+}): MatchResult {
+  const outcome = params.outcome ?? 'win';
+  const targetProbability = params.targetWinProbability ?? 60;
+  return {
+    fixtureId: params.id,
+    homeTeamId: 'target',
+    awayTeamId: 'other-0',
+    homeGoals: outcome === 'win' ? 2 : 0,
+    awayGoals: outcome === 'loss' ? 1 : 0,
+    extraTime: false,
+    penalties: false,
+    events: [],
+    stats: {
+      possession: [50, 50], shots: [8, 8], shotsOnTarget: [3, 3], corners: [4, 4],
+      fouls: [8, 8], yellowCards: [1, 1], redCards: [0, 0],
+    },
+    competitionType: params.competitionType ?? 'league',
+    competitionName: params.competitionName ?? '顶级联赛',
+    roundLabel: params.roundLabel ?? params.id,
+    prediction: {
+      homeWinPct: targetProbability,
+      drawPct: 20,
+      awayWinPct: 80 - targetProbability,
+      homeExpectedGoals: 1.2,
+      awayExpectedGoals: 1.2,
+    },
+  };
+}
+
+function withTimeline(
+  source: GameWorld,
+  results: MatchResult[],
+  upcoming?: MatchFixture,
+): GameWorld {
+  const completed = results.map((match, index) => ({
+    id: index,
+    type: match.competitionType,
+    label: match.roundLabel,
+    description: match.competitionName,
+    fixtures: [],
+    completed: true,
+    results: [match],
+  }));
+  const calendar = upcoming
+    ? [...completed, {
+      id: completed.length,
+      type: upcoming.competitionType,
+      label: upcoming.roundLabel,
+      description: upcoming.competitionName,
+      fixtures: [upcoming],
+      completed: false,
+      results: [],
+    }]
+    : completed;
+  return {
+    ...source,
+    seasonState: {
+      ...source.seasonState,
+      currentWindowIndex: completed.length,
+      calendar,
+    },
+    totalElapsedWindows: completed.length,
+  };
+}
+
+function leagueRun(length: number, outcome: 'win' | 'draw' = 'win'): MatchResult[] {
+  return Array.from({ length }, (_, index) => result({
+    id: `league-${index + 1}`,
+    outcome: index % 4 === 3 ? 'draw' : outcome,
+  }));
+}
+
+function cupUpset(id: string, roundLabel: string, outcome: 'win' | 'loss' = 'win'): MatchResult {
+  return result({
+    id,
+    competitionType: 'league_cup',
+    competitionName: '联赛杯',
+    roundLabel,
+    outcome,
+    targetWinProbability: 12,
+  });
+}
+
 function activeStory(type: StorylineType, seasonNumber = 1): Storyline {
   return {
     id: `story-${type}`,
@@ -151,6 +246,247 @@ describe('storyline trigger boundaries', () => {
   ])('checks promoted-survival scenario: %s', (_name, params, expected) => {
     expect(detectTeamStorylineSignals(world(params), 'target')
       .some(signal => signal.type === 'promoted_survival')).toBe(expected);
+  });
+});
+
+describe('chronological unbeaten stories', () => {
+  it('requires a meaningful run and adapts the threshold to league length', () => {
+    const shortFive = withTimeline(
+      world({ expectation: 3, rank: 4, played: 5 }),
+      leagueRun(UNBEATEN_RUN_TRIGGER_SHORT - 1),
+    );
+    const shortSix = withTimeline(
+      world({ expectation: 3, rank: 4, played: 6 }),
+      leagueRun(UNBEATEN_RUN_TRIGGER_SHORT),
+    );
+    const longSix = withTimeline(
+      world({ expectation: 3, rank: 6, played: 6 }),
+      leagueRun(UNBEATEN_RUN_TRIGGER_LONG - 1),
+    );
+    longSix.league1Standings = table(6, 6, 16);
+    const longSeven = withTimeline(
+      world({ expectation: 3, rank: 6, played: 7 }),
+      leagueRun(UNBEATEN_RUN_TRIGGER_LONG),
+    );
+    longSeven.league1Standings = table(6, 7, 16);
+
+    expect(detectTeamStorylineSignals(shortFive, 'target')
+      .some(signal => signal.type === 'unbeaten_run')).toBe(false);
+    expect(detectTeamStorylineSignals(shortSix, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'unbeaten_run', phase: '出现' }));
+    expect(detectTeamStorylineSignals(longSix, 'target')
+      .some(signal => signal.type === 'unbeaten_run')).toBe(false);
+    expect(detectTeamStorylineSignals(longSeven, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'unbeaten_run', phase: '出现' }));
+  });
+
+  it('reconstructs only the trailing league run in chronological window order', () => {
+    const timeline = [
+      result({ id: 'opening-loss', outcome: 'loss' }),
+      ...leagueRun(7),
+      result({ id: 'cup-noise', competitionType: 'league_cup', competitionName: '联赛杯', outcome: 'loss' }),
+    ];
+    const current = withTimeline(world({ expectation: 3, rank: 4, played: 8 }), timeline);
+    const signal = detectTeamStorylineSignals(current, 'target')
+      .find(item => item.type === 'unbeaten_run');
+
+    expect(signal).toMatchObject({ phase: '出现' });
+    expect(signal?.evidence).toContain('联赛连续7场不败');
+  });
+
+  it('moves through development and climax from authoritative league results', () => {
+    const development = withTimeline(
+      world({ expectation: 3, rank: 4, played: 9 }),
+      leagueRun(9),
+    );
+    const climax = withTimeline(
+      world({ expectation: 3, rank: 4, played: 12 }),
+      leagueRun(12),
+    );
+
+    expect(detectTeamStorylineSignals(development, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'unbeaten_run', phase: '发展' }));
+    expect(detectTeamStorylineSignals(climax, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'unbeaten_run', phase: '高潮' }));
+  });
+
+  it('concludes immediately on defeat, preserves the peak, and honors cooldown across seasons', () => {
+    const started = advanceStorylines(withTimeline(
+      world({ expectation: 3, rank: 4, played: 6 }),
+      leagueRun(6),
+    )).world;
+    expect(started.activeStorylines).toContainEqual(expect.objectContaining({ type: 'unbeaten_run' }));
+
+    const interrupted = advanceStorylines(withTimeline(
+      move(started, 4, 7),
+      [...leagueRun(6), result({ id: 'run-ending-loss', outcome: 'loss' })],
+    )).world;
+    expect(interrupted.activeStorylines?.some(item => item.type === 'unbeaten_run')).toBe(false);
+    expect(interrupted.storylineHistory?.at(-1)).toMatchObject({
+      type: 'unbeaten_run',
+      phase: '落幕',
+      conclusion: expect.stringContaining('定格在6场'),
+    });
+
+    const coolingUntil = interrupted.storylineCooldowns?.at(-1)?.untilElapsedWindow ?? 0;
+    const nextSeason = withTimeline(
+      move(interrupted, 4, 6, 2),
+      leagueRun(6),
+    );
+    nextSeason.totalElapsedWindows = coolingUntil - 1;
+    expect(advanceStorylines(nextSeason).world.activeStorylines).toHaveLength(0);
+
+    const cooled = { ...nextSeason, totalElapsedWindows: coolingUntil };
+    expect(advanceStorylines(cooled).world.activeStorylines)
+      .toContainEqual(expect.objectContaining({ type: 'unbeaten_run', seasonNumber: 2 }));
+  });
+
+  it('writes a factual season-boundary conclusion', () => {
+    const current = withTimeline(
+      world({ expectation: 3, rank: 4, played: 9 }),
+      leagueRun(9),
+    );
+    const started = advanceStorylines(current).world;
+    const finalized = advanceStorylines(started, { finalizeSeason: true }).world;
+    expect(finalized.storylineHistory?.find(item => item.type === 'unbeaten_run')).toMatchObject({
+      outcome: 'success',
+      conclusion: expect.stringContaining('本赛季联赛不败最终定格在9场'),
+    });
+  });
+});
+
+describe('cup giant-killer stories', () => {
+  it('rejects one low-stage upset and accepts repeated or high-stage upsets', () => {
+    const singleEarly = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-r16', 'R16')],
+    );
+    const repeated = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-r16', 'R16'), cupUpset('cup-qf', 'QF')],
+    );
+    const highStage = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-sf', 'SF')],
+    );
+    const unsupported = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [result({
+        id: 'cup-normal-sf', competitionType: 'league_cup', competitionName: '联赛杯',
+        roundLabel: 'SF', outcome: 'win', targetWinProbability: 60,
+      })],
+    );
+
+    expect(detectTeamStorylineSignals(singleEarly, 'target')
+      .some(signal => signal.type === 'cup_giant_killer')).toBe(false);
+    expect(detectTeamStorylineSignals(repeated, 'target'))
+      .toContainEqual(expect.objectContaining({
+        type: 'cup_giant_killer', phase: '出现', competitionName: '联赛杯',
+      }));
+    expect(detectTeamStorylineSignals(highStage, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'cup_giant_killer', phase: '发展' }));
+    expect(detectTeamStorylineSignals(unsupported, 'target')
+      .some(signal => signal.type === 'cup_giant_killer')).toBe(false);
+  });
+
+  it('reaches a climax only when the giant-killing campaign wins the final', () => {
+    const current = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-sf', 'SF'), cupUpset('cup-final', '决赛')],
+    );
+    expect(detectTeamStorylineSignals(current, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'cup_giant_killer', phase: '高潮' }));
+  });
+
+  it('describes a rounded zero forecast as below one percent, not impossible', () => {
+    const nearImpossible = result({
+      id: 'cup-near-impossible',
+      competitionType: 'league_cup',
+      competitionName: '联赛杯',
+      roundLabel: 'R16',
+      outcome: 'win',
+      targetWinProbability: 0,
+    });
+    const current = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [nearImpossible, cupUpset('cup-qf', 'QF')],
+    );
+    const signal = detectTeamStorylineSignals(current, 'target')
+      .find(item => item.type === 'cup_giant_killer');
+
+    expect(signal?.evidence.join(' ')).toContain('低于1%');
+    expect(signal?.evidence.join(' ')).not.toContain('约0%');
+  });
+
+  it('does not treat a first-leg defeat as elimination when a return leg exists', () => {
+    const upcoming: MatchFixture = {
+      id: 'cup-sf-leg-2',
+      homeTeamId: 'other-0',
+      awayTeamId: 'target',
+      competitionType: 'league_cup',
+      competitionName: '联赛杯',
+      roundLabel: 'SF 次回合',
+      leg: 2,
+    };
+    const current = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [
+        cupUpset('cup-r16', 'R16'),
+        cupUpset('cup-qf', 'QF'),
+        cupUpset('cup-sf-leg-1', 'SF 首回合', 'loss'),
+      ],
+      upcoming,
+    );
+    expect(detectTeamStorylineSignals(current, 'target'))
+      .toContainEqual(expect.objectContaining({ type: 'cup_giant_killer' }));
+  });
+
+  it('concludes on elimination, enters cooldown, and keeps its competition context', () => {
+    const qualifying = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-r16', 'R16'), cupUpset('cup-qf', 'QF')],
+    );
+    const started = advanceStorylines(qualifying).world;
+    expect(started.activeStorylines).toContainEqual(expect.objectContaining({
+      type: 'cup_giant_killer', competitionName: '联赛杯',
+    }));
+
+    const eliminated = advanceStorylines(withTimeline(
+      started,
+      [
+        cupUpset('cup-r16', 'R16'),
+        cupUpset('cup-qf', 'QF'),
+        cupUpset('cup-sf-loss', 'SF', 'loss'),
+      ],
+    )).world;
+    expect(eliminated.activeStorylines?.some(item => item.type === 'cup_giant_killer')).toBe(false);
+    expect(eliminated.storylineHistory?.at(-1)).toMatchObject({
+      type: 'cup_giant_killer',
+      competitionName: '联赛杯',
+      phase: '落幕',
+      conclusion: expect.stringContaining('联赛杯'),
+    });
+    expect(eliminated.storylineCooldowns?.at(-1)?.key).toContain('cup_giant_killer');
+  });
+
+  it('records a champion conclusion at the season boundary', () => {
+    const current = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-sf', 'SF'), cupUpset('cup-final', '决赛')],
+    );
+    const started = advanceStorylines(current).world;
+    const finalized = advanceStorylines(started, { finalizeSeason: true }).world;
+    expect(finalized.storylineHistory?.find(item => item.type === 'cup_giant_killer')).toMatchObject({
+      outcome: 'success',
+      conclusion: expect.stringContaining('最终夺冠'),
+    });
+  });
+
+  it('keeps competition-specific arc identities structured and stable', () => {
+    expect(getStorylineArcKey('target', 'cup_giant_killer', '联赛杯'))
+      .toBe(getStorylineArcKey('target', 'cup_giant_killer', '联赛杯'));
+    expect(getStorylineArcKey('target', 'cup_giant_killer', '联赛杯'))
+      .not.toBe(getStorylineArcKey('target', 'cup_giant_killer', '大陆杯'));
   });
 });
 
@@ -263,9 +599,35 @@ describe('storyline lifecycle', () => {
     expect(result.news).toEqual([]);
   });
 
+  it('keeps type quotas inside the eight-story season budget', () => {
+    expect(Object.values(STORYLINES_PER_TYPE_PER_SEASON)
+      .reduce((total, cap) => total + cap, 0)).toBe(MAX_STORYLINES_PER_SEASON);
+    const initial = world({ rank: 2, played: 8 });
+    initial.storylineHistory = Array.from(
+      { length: STORYLINES_PER_TYPE_PER_SEASON.dark_horse },
+      (_, index) => ({
+        ...activeStory('dark_horse'),
+        id: `archived-dark-horse-${index}`,
+        teamId: `archived-team-${index}`,
+        phase: '落幕' as const,
+        outcome: 'failure' as const,
+        conclusion: '已结束',
+      }),
+    );
+
+    const advanced = advanceStorylines(initial);
+    expect(advanced.world.activeStorylines?.some(item => item.type === 'dark_horse')).toBe(false);
+  });
+
   it('names the team in a focus-fixture story relation', () => {
     const current = world();
     current.activeStorylines = [activeStory('giant_crisis')];
     expect(getFixtureStorylineLabel(current, 'target', 'other-0')).toBe('目标危机转折战');
+
+    current.activeStorylines = [activeStory('unbeaten_run')];
+    expect(getFixtureStorylineLabel(current, 'target', 'other-0')).toBe('目标不败延续战');
+
+    current.activeStorylines = [{ ...activeStory('cup_giant_killer'), competitionName: '联赛杯' }];
+    expect(getFixtureStorylineLabel(current, 'target', 'other-0')).toBe('目标巨人杀手征程');
   });
 });

@@ -1,8 +1,8 @@
 # Narrative Director Implementation Checklist
 
-Status: in progress; ND-0 through ND-2 complete  
+Status: complete; ND-0 through ND-6 complete
 Target release: v4.54.0  
-Last updated: 2026-08-12  
+Last updated: 2026-08-13
 Source of truth: this checklist supersedes conversational planning when a future session resumes the work.
 
 ## 0. Product Goal And Frozen Rules
@@ -44,18 +44,18 @@ The objective is to make the existing simulation depth perceptible through causa
 
 ### Overview
 
-- [ ] Show season shape rather than latest-window noise.
-- [ ] Keep the observed-team trajectory.
-- [ ] Add compact title, promotion, and relegation landscapes.
-- [ ] Show at most three sustained Narrative arcs.
-- [ ] Surface meaningful changes to followed players without turning the page into a player database.
+- [x] Show season shape rather than latest-window noise.
+- [x] Keep the observed-team trajectory.
+- [x] Add compact title, promotion, and relegation landscapes.
+- [x] Show at most three sustained Narrative arcs.
+- [x] Surface meaningful changes to followed players without turning the page into a player database.
 
 ### Detail And History
 
-- [ ] Add a compact, collapsible current context or career-thread block to Team, Player, and Coach detail pages.
-- [ ] Derive detail timelines from canonical season records, transfers, awards, injuries, careers, trophies, and Storyline history.
-- [ ] Connect resolved arcs to Season Review and season-history summaries.
-- [ ] Avoid a second long-term event store unless a fact cannot be reconstructed reliably.
+- [x] Add a compact, collapsible current context or career-thread block to Team, Player, and Coach detail pages.
+- [x] Derive detail timelines from canonical season records, transfers, awards, injuries, careers, trophies, and Storyline history.
+- [x] Connect resolved arcs to Season Review and season-history summaries.
+- [x] Avoid a second long-term event store unless a fact cannot be reconstructed reliably.
 
 ## 2. Target Architecture
 
@@ -106,7 +106,7 @@ Authoritative simulation facts
 - [x] Ensure changing or clearing Narrative memory cannot change matches, transfers, injuries, tables, or RNG.
 - [x] Validate save-size impact before accepting the field (representative 32-entry payload: 4,215 bytes).
 
-### Implemented Ownership Map (ND-0 to ND-2)
+### Implemented Ownership Map (ND-0 to ND-6)
 
 - Authoritative outcomes remain in `season-manager`, `MatchResult`, standings, player/team state, Storylines, transfer records, and News. Narrative adapters only read these values.
 - `narrative-sources.ts` is the bounded translation layer. It caps each source family before constructing typed candidates and never parses Chinese display text to recover IDs.
@@ -119,18 +119,18 @@ Authoritative simulation facts
 
 ### First-Class Sources
 
-- [ ] Observation Theme.
-- [ ] Existing active and resolved Storylines.
-- [ ] Focus fixtures and locked watch fixtures.
-- [ ] Match prediction factors and frozen pre-match tactics.
-- [ ] Destiny Deviation and real MatchResult turning points.
-- [ ] Player match highlights and season leaders.
-- [ ] Followed players and U23 breakout candidates.
-- [ ] Coach pressure, dismissal, hiring, and credible turnaround signals.
-- [ ] Major transfer rumors, completed major transfers, and post-transfer performance.
-- [ ] Trophies, finals, promotion, relegation, continental cups, and the World Cup.
-- [ ] Reliable records and season-history events.
-- [ ] Structured high-importance News items not already represented by another source.
+- [x] Observation Theme.
+- [x] Existing active and resolved Storylines.
+- [x] Focus fixtures and locked watch fixtures.
+- [x] Match prediction factors and frozen pre-match tactics.
+- [x] Destiny Deviation and real MatchResult turning points.
+- [x] Player match highlights and season leaders.
+- [x] Followed players and U23 breakout candidates.
+- [x] Coach pressure, dismissal, hiring, and credible turnaround signals.
+- [x] Major transfer rumors, completed major transfers, and post-transfer performance.
+- [x] Trophies, finals, promotion, relegation, continental cups, and the World Cup.
+- [x] Reliable records and season-history events.
+- [x] Structured high-importance News items not already represented by another source.
 
 ### Explicitly Deferred Or Rejected Sources
 
@@ -144,36 +144,36 @@ Authoritative simulation facts
 
 ### Existing Persistent Team Stories
 
-- [ ] Preserve `dark_horse` lifecycle and improve its dedupe with Observation Theme.
-- [ ] Preserve `giant_crisis` lifecycle and connect coach-pressure consequences.
-- [ ] Preserve `promoted_survival` lifecycle and connect promotion/relegation history.
-- [ ] Keep bounded active stories, history, cooldowns, and per-season limits.
+- [x] Preserve `dark_horse` lifecycle and improve its dedupe with Observation Theme.
+- [x] Preserve `giant_crisis` lifecycle and connect coach-pressure consequences.
+- [x] Preserve `promoted_survival` lifecycle and connect promotion/relegation history.
+- [x] Keep bounded active stories, history, cooldowns, and per-season limits.
 
 ### New Persistent Stories
 
-- [ ] Add `unbeaten_run` only after a meaningful threshold; a normal three-match run stays a signal.
-- [ ] Add trigger, development, climax, end, cooldown, and season-boundary tests for `unbeaten_run`.
-- [ ] Add `cup_giant_killer` only after repeated or high-stage upsets supported by frozen prediction data.
-- [ ] Add trigger, development, climax, end, cooldown, and season-boundary tests for `cup_giant_killer`.
-- [ ] Keep title contention as a multi-team Competition Arc rather than duplicating one persistent story for every contender.
+- [x] Add `unbeaten_run` only after a meaningful threshold; a normal three-match run stays a signal.
+- [x] Add trigger, development, climax, end, cooldown, and season-boundary tests for `unbeaten_run`.
+- [x] Add `cup_giant_killer` only after repeated or high-stage upsets supported by frozen prediction data.
+- [x] Add trigger, development, climax, end, cooldown, and season-boundary tests for `cup_giant_killer`.
+- [x] Keep title contention as a multi-team Competition Arc rather than duplicating one persistent story for every contender.
 
 ### Derived Player Signals
 
-- [ ] U23 breakout based on age, minutes, current performance, and real contribution.
-- [ ] Scoring or contribution streak based on chronological completed matches.
-- [ ] Current season leader based on canonical rankings.
-- [ ] Veteran resurgence based on age and actual season performance.
-- [ ] Major injury as a Moment; only connect it to an Arc when subsequent factual change exists.
-- [ ] Record chase only when the target record and distance are authoritative.
-- [ ] Never predict a last dance before a real retirement or declared final-season fact exists.
+- [x] U23 breakout based on age, minutes, current performance, and real contribution.
+- [x] Scoring or contribution streak based on chronological completed matches.
+- [x] Current season leader based on canonical rankings.
+- [x] Veteran resurgence based on age and actual season performance.
+- [x] Major injury as a Moment; only connect it to an Arc when subsequent factual change exists.
+- [x] Record chase only when the target record and distance are authoritative.
+- [x] Never predict a last dance before a real retirement or declared final-season fact exists.
 
 ### Derived Coach Signals
 
-- [ ] High pressure based on current pressure and factual recent form.
-- [ ] Pressure rising only when a real previous value or event delta is available.
-- [ ] Dismissal and hiring from canonical coach events.
-- [ ] New-coach turnaround only after sufficient before/after match samples.
-- [ ] Connect tactical identity to match explanation without claiming tactics alone caused the outcome.
+- [x] High pressure based on current pressure and factual recent form.
+- [x] Pressure rising only when a real previous value or event delta is available.
+- [x] Dismissal and hiring from canonical coach events.
+- [x] New-coach turnaround only after sufficient before/after match samples.
+- [x] Connect tactical identity to match explanation without claiming tactics alone caused the outcome.
 
 ## 5. Visual Contract
 
@@ -192,7 +192,7 @@ The packages below are the recommended Codex session boundaries. Files that shar
 
 ### ND-0: Baseline And Contracts
 
-Status: complete (2026-08-12)  
+Status: complete (2026-08-12)
 Recommended commit boundary: yes  
 Why grouped: types, structured references, memory, and deterministic selection must agree before any UI consumes them.
 
@@ -259,103 +259,103 @@ Done only when:
 
 ### ND-3: Story Expansion
 
-Status: pending  
+Status: complete (2026-08-12)
 Depends on: ND-0 and ND-2  
 Recommended commit boundary: yes  
 Why grouped: persistent Storyline thresholds, lifecycle, News, season conclusions, and History mappings should be calibrated as one engine-only change.
 
-- [ ] Implement chronological streak reconstruction from completed authoritative fixtures.
-- [ ] Add `unbeaten_run` detection and lifecycle.
-- [ ] Add `cup_giant_killer` detection using frozen forecast probability and competition stage.
-- [ ] Add bounded phase milestones only if current fields cannot support `Later` honestly.
-- [ ] Update StoryChapter/WorldMoment mapping without generating new art.
-- [ ] Update Season Review and season-history summary labels and conclusions.
-- [ ] Calibrate thresholds over multiple leagues and competition formats.
+- [x] Implement chronological streak reconstruction from completed authoritative fixtures.
+- [x] Add `unbeaten_run` detection and lifecycle.
+- [x] Add `cup_giant_killer` detection using frozen forecast probability and competition stage.
+- [x] Confirm current chronological fixtures, phases, and conclusions support `Later` without a second milestone store.
+- [x] Update StoryChapter/WorldMoment mapping without generating new art.
+- [x] Update Season Review and season-history summary labels and conclusions.
+- [x] Calibrate thresholds over multiple leagues and competition formats.
 
 Done only when:
 
-- [ ] Trigger, non-trigger, development, climax, interruption, cooldown, conclusion, and season-boundary tests pass for both new stories.
-- [ ] Ordinary short runs and single low-stage upsets do not create persistent stories.
-- [ ] Active/history/cooldown caps remain effective.
-- [ ] Multi-seed audits show believable frequency without crowding out existing stories.
+- [x] Trigger, non-trigger, development, climax, interruption, cooldown, conclusion, and season-boundary tests pass for both new stories.
+- [x] Ordinary short runs and single low-stage upsets do not create persistent stories.
+- [x] Active/history/cooldown caps remain effective.
+- [x] Multi-seed audits show believable frequency without crowding out existing stories.
 
 ### ND-4: Player, Coach, Transfer, Competition, And Record Signals
 
-Status: pending  
+Status: complete (2026-08-13)
 Depends on: ND-0, preferably after ND-3  
 Recommended commit boundary: yes  
 Why grouped: these remain derived signals and can share one bounded world-scan, ranking cache, and source-adapter test harness.
 
-- [ ] Implement the approved Player signals.
-- [ ] Implement the approved Coach signals.
-- [ ] Implement major rumor, completed transfer, and post-transfer resurgence signals.
-- [ ] Implement title race, promotion/relegation decider, final, continental, and World Cup Competition arcs.
-- [ ] Implement record signals only for records with canonical targets.
-- [ ] Apply favorite-team and eight-player watchlist relevance.
-- [ ] Ensure every position can appear in Player Narrative signals.
-- [ ] Cap each adapter before merging so the Director never receives an unbounded pool.
+- [x] Implement the approved Player signals.
+- [x] Implement the approved Coach signals.
+- [x] Implement major rumor, completed transfer, and post-transfer resurgence signals.
+- [x] Implement title race, promotion/relegation decider, final, continental, and World Cup Competition arcs.
+- [x] Implement record signals only for records with canonical targets.
+- [x] Apply favorite-team and eight-player watchlist relevance.
+- [x] Ensure every position can appear in Player Narrative signals.
+- [x] Cap each adapter before merging so the Director never receives an unbounded pool.
 
 Done only when:
 
-- [ ] Source tests cover true, false, threshold-edge, transfer-segment, injury, firing, hiring, and competition-stage cases.
-- [ ] No signal exposes hidden potential.
-- [ ] No source parses Chinese prose to recover IDs.
-- [ ] One world build and one digest build stay within the agreed performance budget.
-- [ ] Long simulations show all intended source families without one family monopolizing selection.
+- [x] Source tests cover true, false, threshold-edge, transfer-segment, injury, firing, hiring, and competition-stage cases.
+- [x] No signal exposes hidden potential.
+- [x] No source parses Chinese prose to recover IDs.
+- [x] One world build and one digest build stay within the agreed performance budget.
+- [x] Long simulations show all intended source families without one family monopolizing selection.
 
 ### ND-5: Later, Detail Threads, Overview, And History
 
-Status: pending  
+Status: complete (2026-08-13)
 Depends on: ND-1 through ND-4  
 Recommended commit boundary: yes  
 Why grouped: these surfaces consume the now-stable arc identities and should reuse one timeline derivation layer.
 
-- [ ] Add `Later` or `Story Thread` expansion to active and resolved Narrative features.
-- [ ] Build compact Team thread derivation from season records, trophies, movement, Storylines, and dynasty labels.
-- [ ] Build compact Player thread derivation from season snapshots, transfers, awards, injuries, and retirement history.
-- [ ] Build compact Coach thread derivation from careers, trophies, dismissal, hiring, and factual turnaround samples.
-- [ ] Add the compact thread to existing detail pages without redesigning them.
-- [ ] Add sustained arcs and competition landscapes to Overview.
-- [ ] Connect resolved high-weight arcs to Season Review and season-history summaries.
-- [ ] Keep all timelines bounded and derived wherever possible.
+- [x] Add `Later` or `Story Thread` expansion to active and resolved Narrative features.
+- [x] Build compact Team thread derivation from season records, trophies, movement, Storylines, and dynasty labels.
+- [x] Build compact Player thread derivation from season snapshots, transfers, awards, injuries, and retirement history.
+- [x] Build compact Coach thread derivation from careers, trophies, dismissal, hiring, and factual turnaround samples.
+- [x] Add the compact thread to existing detail pages without redesigning them.
+- [x] Add sustained arcs and competition landscapes to Overview.
+- [x] Connect resolved high-weight arcs to Season Review and season-history summaries.
+- [x] Keep all timelines bounded and derived wherever possible.
 
 Done only when:
 
-- [ ] Timeline facts link back to canonical entities or matches where available.
-- [ ] Missing/pruned detail produces a truthful summary-only state.
-- [ ] Detail pages remain usable at 320/390/430/1440 widths.
-- [ ] History reconstruction tests pass for sparse, mature, transferred, retired, fired, rehired, promoted, relegated, and dynasty cases.
+- [x] Timeline facts link back to canonical entities or matches where available.
+- [x] Missing/pruned detail produces a truthful summary-only state.
+- [x] Detail pages remain usable at 320/390/430/1440 widths.
+- [x] History reconstruction tests pass for sparse, mature, transferred, retired, fired, rehired, promoted, relegated, and dynasty cases.
 
 ### ND-6: Integrated Release Validation
 
-Status: pending  
+Status: complete (2026-08-13)
 Depends on: all previous packages  
 Recommended commit boundary: final release commit  
 Why grouped: full simulation, save-size, PWA, bundle, and end-to-end audits are expensive and should run once after all Narrative behavior stabilizes.
 
-- [ ] Add v4.54.0 changelog and update README feature/architecture descriptions.
-- [ ] Update this checklist only after each verified package is genuinely complete.
-- [ ] Run all unit tests, ESLint, strict TypeScript, production build, PWA build, bundle budget, changelog checks, script portability, and production dependency audit.
-- [ ] Scan the ordinary production bundle for audit bridges.
-- [ ] Run deterministic repeated-digest tests.
-- [ ] Run at least 20 seeds x 30 seasons for Narrative frequency and balance.
-- [ ] Run at least 5 seeds x 100 seasons for long-term continuity.
-- [ ] Run S150 save, restore, and next-advance determinism audit.
-- [ ] Compare simulation digests against a pre-Narrative baseline for unchanged authoritative outcomes.
-- [ ] Run the complete browser smoke suite.
-- [ ] Run focused browser checks for Matchday Pulse, Results causality, More This Window, Later, details, Overview, Season Review, and History.
-- [ ] Run the standard web-game client and inspect live Canvas screenshots and text state.
+- [x] Add v4.54.0 changelog and update README feature/architecture descriptions.
+- [x] Update this checklist only after each verified package is genuinely complete.
+- [x] Run all unit tests, ESLint, strict TypeScript, production build, PWA build, bundle budget, changelog checks, script portability, and production dependency audit.
+- [x] Scan the ordinary production bundle for audit bridges.
+- [x] Run deterministic repeated-digest tests.
+- [x] Run at least 20 seeds x 30 seasons for Narrative frequency and balance.
+- [x] Run at least 5 seeds x 100 seasons for long-term continuity.
+- [x] Run S150 save, restore, and next-advance determinism audit.
+- [x] Compare simulation digests against a pre-Narrative baseline for unchanged authoritative outcomes.
+- [x] Run the complete browser smoke suite.
+- [x] Run focused browser checks for Matchday Pulse, Results causality, More This Window, Later, details, Overview, Season Review, and History.
+- [x] Run the standard web-game client and inspect live Canvas screenshots and text state.
 
 Release is blocked unless:
 
-- [ ] Simulation outcomes remain unchanged for baseline seeds.
-- [ ] Narrative has no NaN, invalid destination, duplicate arc, or unbounded list.
-- [ ] Slot B is never forced below its quality threshold.
-- [ ] Slot C never exceeds two signals.
-- [ ] One advance never displays more than one World Moment image.
-- [ ] 390x844 retains the complete first-view observation workflow.
-- [ ] S150 remains under the storage budget and reloads deterministically.
-- [ ] Production performance, initial bundle, and PWA budgets remain within existing gates.
+- [x] Simulation outcomes remain unchanged for baseline seeds.
+- [x] Narrative has no NaN, invalid destination, duplicate arc, or unbounded list.
+- [x] Slot B is never forced below its quality threshold.
+- [x] Slot C never exceeds two signals.
+- [x] One advance never displays more than one World Moment image.
+- [x] 390x844 retains the complete first-view observation workflow.
+- [x] S150 remains under the storage budget and reloads deterministically.
+- [x] Production performance, initial bundle, and PWA budgets remain within existing gates.
 
 ## 7. Validation Economy For Future Sessions
 
@@ -391,10 +391,19 @@ Rules for every future session:
 - [x] ND-0 complete: typed contracts, deterministic Director, semantic merge, bounded memory, save validation, and mutation/RNG safety.
 - [x] ND-1 complete: one Matchday World Pulse, relation badges, collapsed remainder, hidden-potential cleanup, and six-viewport observation workflow.
 - [x] ND-2 complete: factual four-stage result causality, one World Moment maximum, collapsed full report, and canonical detail/replay/Season Review links.
-- [ ] ND-3 not started.
-- [ ] ND-4 not started.
-- [ ] ND-5 not started.
-- [ ] ND-6 not started.
+- [x] ND-3 complete: authoritative fixture reconstruction, unbeaten and cup-upset arcs, bounded per-type capacity, and calibrated Story/Review/History presentation.
+- [x] ND-4 complete: bounded Player, Coach, Transfer, Competition, and canonical Record adapters with watchlist-aware relevance.
+- [x] ND-5 complete: `Later`, bounded Team/Player/Coach threads, season-shape Overview, and resolved-arc Review/History continuity.
+- [x] ND-6 complete: deterministic long runs, S150 storage/reload, full browser, PWA, performance, bundle, security, and standard game-client gates.
+
+### Final Release Verification Record (2026-08-13)
+
+- Node 22.22.2: 130 test files and 941 tests passed; full ESLint and strict TypeScript passed.
+- The complete browser suite passed mobile/desktop Matchday, Results, More, Later, detail threads, Overview, Season Review, History, live match, audio, PWA update, offline, and route workflows with no runtime errors.
+- Narrative calibration passed 20 seeds x 30 seasons (30,380 windows) and 5 seeds x 100 seasons (25,355 windows). Every intended source family appeared, no source monopolized selection, and authoritative world digests remained identical to the pre-Narrative baseline.
+- S150 completed 7,609 advances with zero errors or warnings. S1/S50/S100/S150 reload and next-advance digests matched; compressed storage was 2,109,420 bytes before cleanup and 1,668,106 bytes after cleanup, below the 4MiB gate.
+- Advance P95 was 30.2ms normally and 79.5ms at 4x CPU. The ordinary entry is 241,915 bytes / 75,523 gzip and the initial graph is 493,846 bytes / 163,399 gzip; all existing performance and bundle budgets passed.
+- The ordinary production bundle contains no audit bridge markers, the production dependency audit reports zero known vulnerabilities, and the standard game client completed three inspected immersive Canvas iterations without console or page errors.
 
 ### Batch A Verification Record (2026-08-12)
 
@@ -405,4 +414,11 @@ Rules for every future session:
 - Results checks passed single advance, five-window batch, season boundary, result/detail score agreement, frozen forecast/turning-point/tactical facts, full-report expansion, live replay, Season Review, and the next Advance action.
 - Visual checks passed story marks, all five World Moment families, Save-Data/high-contrast/failure fallback, offline loading, and the unchanged live-match assets.
 - The standard game client completed three deterministic live-Canvas bursts. Text state and inspected frames agreed on formation, featured players, ball movement, and a corner sequence; no console-error artifact was produced.
-- Expensive Narrative frequency calibration, long continuity runs, S150 storage/determinism, complete smoke, production audit-bridge scan, and release metadata remain intentionally deferred to ND-6.
+- Narrative frequency calibration, long continuity runs, S150 storage/determinism, complete smoke, production audit-bridge scan, and release metadata were intentionally deferred at this checkpoint and are completed in the final release record above.
+
+### ND-3 Verification Record (2026-08-12)
+
+- The two new arcs are reconstructed from canonical completed fixtures. `unbeaten_run` uses league-only chronological results; `cup_giant_killer` uses frozen forecast deviations, competition stage, and real knockout progression. Neither path writes match outcomes, stores duplicate results, or consumes simulation RNG.
+- Lifecycle coverage includes thresholds, short-run and single-upset rejection, development, climax, two-legged survival, interruption, conclusion, cooldown, season rollover, stable arc identity, and old Storyline compatibility.
+- Per-type creation limits reserve capacity for the three existing stories while keeping the existing eight-active/eight-per-season global ceilings. A 12-seed x 3-season audit produced 72 dark-horse, 72 giant-crisis, 24 survival, 72 unbeaten, and 16 cup-upset stories with no cap, phase, or non-negative-value violations; a separate 20-seed x 3-season run remained within the same bounds.
+- Full verification passed 126 test files / 924 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, bundle/script gates, and focused mobile/desktop Storyline, Season Review, History, and visual-fallback browser checks. Advance performance remained within the existing normal and 4x CPU budgets.

@@ -43,7 +43,7 @@ import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types
 
 const ADVANCE_ERROR_MESSAGE = '本次推进没有完成，本次操作未提交。请重试；若问题持续，请刷新页面。';
 
-async function loadAdvanceRuntime() {
+async function importAdvanceRuntime() {
   const [orchestration, worldResponse, storageLimits] = await Promise.all([
     import('./advance-orchestration'),
     import('../engine/observation/world-response'),
@@ -54,6 +54,22 @@ async function loadAdvanceRuntime() {
     ...worldResponse,
     ...storageLimits,
   };
+}
+
+let advanceRuntimePromise: ReturnType<typeof importAdvanceRuntime> | null = null;
+
+function loadAdvanceRuntime() {
+  if (!advanceRuntimePromise) {
+    advanceRuntimePromise = importAdvanceRuntime().catch((error) => {
+      advanceRuntimePromise = null;
+      throw error;
+    });
+  }
+  return advanceRuntimePromise;
+}
+
+function preloadAdvanceRuntime(): void {
+  void loadAdvanceRuntime().catch(() => undefined);
 }
 
 interface GameStore {
@@ -237,6 +253,7 @@ export const useGameStore = create<GameStore>()(
         observationThemePreference?: ObservationThemePreference;
       }) => {
         const { initializeGameWorld } = await import('../engine/season/season-manager');
+        preloadAdvanceRuntime();
         const actualSeed = seed ?? Math.floor(Math.random() * 1000000);
         const world = initializeGameWorld(actualSeed, {
           ...(options?.gameMode ? { gameMode: options.gameMode } : {}),
@@ -922,6 +939,9 @@ export const useGameStore = create<GameStore>()(
         narrativeMemory: state.narrativeMemory,
       }),
       merge: mergePersistedGameState,
+      onRehydrateStorage: () => (state) => {
+        if (state?.initialized) preloadAdvanceRuntime();
+      },
     }
   )
 );

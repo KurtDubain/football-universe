@@ -50,6 +50,11 @@ async function restoreBaseline(page: Page, baseline: string): Promise<void> {
   }, baseline);
   await page.reload({ waitUntil: 'networkidle' });
   await waitForAuditStore(page);
+  await page.getByTestId('dashboard').waitFor({ state: 'visible' });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
 }
 
 async function runSample(page: Page): Promise<AdvanceSample> {

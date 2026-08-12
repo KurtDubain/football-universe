@@ -245,6 +245,45 @@ describe('season history summary', () => {
     expect(deviation?.links.some(link => link.kind === 'match')).toBe(false);
   });
 
+  it('archives the new persistent story families with explicit labels', () => {
+    const storyBase = {
+      teamId: 'a',
+      seasonNumber: 4,
+      startedWindow: 8,
+      startedElapsedWindow: 8,
+      phase: '落幕' as const,
+      evidence: ['权威赛果重建'],
+      lastUpdatedWindow: 30,
+      lastUpdatedElapsedWindow: 30,
+      quietWindows: 0,
+      outcome: 'success' as const,
+    };
+    const summary = buildSeasonHistorySummary(source({
+      honorHistory: [honor(4, 'a')],
+      storylineHistory: [
+        {
+          ...storyBase,
+          id: 'unbeaten-story',
+          type: 'unbeaten_run',
+          conclusion: '联赛连续12场不败。',
+        },
+        {
+          ...storyBase,
+          id: 'giant-killer-story',
+          type: 'cup_giant_killer',
+          competitionName: '联赛杯',
+          conclusion: '联赛杯巨人杀手征程。',
+        },
+      ],
+    }), 4)!;
+
+    expect(summary.events.filter(event => event.type === 'story').map(event => event.title))
+      .toEqual(expect.arrayContaining([
+        '故事落幕：联赛不败征程',
+        '故事落幕：杯赛巨人杀手',
+      ]));
+  });
+
   it('marks only substantial three-season decline', () => {
     const base = source({
       honorHistory: [honor(1, 'a'), honor(2, 'b'), honor(3, 'b')],

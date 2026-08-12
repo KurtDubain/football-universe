@@ -48,6 +48,8 @@ const STORY_LABELS: Record<StorylineType, string> = {
   dark_horse: '黑马崛起',
   giant_crisis: '豪门危机',
   promoted_survival: '升班马求生',
+  unbeaten_run: '联赛不败征程',
+  cup_giant_killer: '杯赛巨人杀手',
 };
 
 const AWARD_PRIORITY: Record<string, number> = {

@@ -113,14 +113,14 @@ async function main(): Promise<void> {
       await page.screenshot({ path: `/tmp/football-squad-boost-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText('v4.33.0', { exact: true }).first().waitFor({ state: 'visible' });
-      await page.getByText('比赛更加连贯，洲际舞台向所有球队开放', { exact: true }).first()
+      await page.getByText('v4.54.0', { exact: true }).first().waitFor({ state: 'visible' });
+      await page.getByText('每一段足球故事，都开始有来处和后续', { exact: true }).first()
         .waitFor({ state: 'visible' });
-      await page.getByText(/大陆杯扩展为大陆全部16队参加/).first().waitFor({ state: 'visible' });
-      await page.getByText(/近五季俱乐部积分改为分组分档和同分排序依据/).first()
+      await page.getByText(/比赛日新增统一的“世界脉搏”/).first().waitFor({ state: 'visible' });
+      await page.getByText(/总览新增赛季版图/).first()
         .waitFor({ state: 'visible' });
       await assertNoOverflow(page, `${viewport.name} changelog`);
-      await page.getByText('比赛更加连贯，洲际舞台向所有球队开放', { exact: true }).first()
+      await page.getByText('每一段足球故事，都开始有来处和后续', { exact: true }).first()
         .scrollIntoViewIfNeeded();
       await page.screenshot({ path: `/tmp/football-changelog-${viewport.name}.png`, animations: 'disabled' });
 

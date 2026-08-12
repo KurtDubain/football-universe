@@ -9,6 +9,7 @@ import {
   selectMatchday,
   appendInjuryHistory,
   cloneSquadsForMutation,
+  cloneSquadsForTeamMutation,
   hasActiveLongTermInjury,
   resetDisciplineForNewSeason,
   processInjuriesAndSuspensions,
@@ -465,6 +466,35 @@ describe('resetDisciplineForNewSeason', () => {
     // currentWindowIdx now 60 → long-term has expired → cleared
     resetDisciplineForNewSeason(squads, 60);
     expect(squads.t1[0].injuredUntilWindow).toBe(0);
+  });
+});
+
+describe('cloneSquadsForTeamMutation', () => {
+  it('isolates participating players while sharing untouched squads', () => {
+    const source = {
+      t1: [makePlayer('p-1', {
+        injuredUntilWindow: 4,
+        injuryHistory: [{
+          type: 'minor', startSeason: 1, startWindow: 1,
+          durationMatches: 2, reason: '肌肉拉伤',
+        }],
+      })],
+      t2: [makePlayer('p-2', { teamId: 't2' })],
+    };
+    const sourceBefore = structuredClone(source);
+
+    const writable = cloneSquadsForTeamMutation(source, ['t1', 't1']);
+    writable.t1[0].injuredUntilWindow = 12;
+    writable.t1[0].injuryHistory = appendInjuryHistory(writable.t1[0].injuryHistory, {
+      type: 'major', startSeason: 1, startWindow: 8,
+      durationMatches: 6, reason: '膝伤',
+    });
+
+    expect(source).toEqual(sourceBefore);
+    expect(writable).not.toBe(source);
+    expect(writable.t1).not.toBe(source.t1);
+    expect(writable.t1[0]).not.toBe(source.t1[0]);
+    expect(writable.t2).toBe(source.t2);
   });
 });
 

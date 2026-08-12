@@ -118,7 +118,7 @@ async function main(): Promise<void> {
       await page.goto(`${baseUrl}/?audit=1`, { waitUntil: 'networkidle' });
       await getStore(page);
       await page.getByTestId('dashboard').waitFor({ state: 'visible' });
-      await page.getByRole('button', { name: '总览', exact: true }).click();
+      await page.getByRole('tab', { name: '总览', exact: true }).click();
       const experimentButton = page.getByRole('button', { name: /命运实验/ });
       await experimentButton.scrollIntoViewIfNeeded();
       await experimentButton.click();

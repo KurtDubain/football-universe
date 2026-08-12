@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.53.0",
+  "version": "4.54.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -29,6 +29,8 @@
     "audit:animation-performance": "tsx scripts/audit-animation-performance.ts",
     "audit:long-save": "tsx scripts/audit-long-save.ts",
     "audit:observer-seeds": "tsx scripts/audit-observer-seeds.ts",
+    "audit:storylines": "tsx scripts/audit-storyline-frequency.ts",
+    "audit:narrative": "tsx scripts/audit-narrative-director.ts",
     "audit:player-defense": "tsx scripts/audit-player-defense.ts",
     "audit:player-performance": "tsx scripts/audit-player-performance.ts",
     "audit:coach-stars": "tsx scripts/audit-coach-stars.ts",
@@ -60,6 +62,7 @@
     "verify:observation-judgment": "tsx scripts/verify-observation-judgment.ts",
     "verify:storyline-signals": "tsx scripts/verify-storyline-signals.ts",
     "verify:world-response": "tsx scripts/verify-world-response.ts",
+    "verify:narrative-director": "tsx scripts/verify-narrative-director.ts",
     "verify:key-node": "tsx scripts/verify-key-node-time-control.ts",
     "verify:observation-route": "tsx scripts/verify-observation-theme-route.ts",
     "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts",

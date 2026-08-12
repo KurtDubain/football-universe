@@ -185,6 +185,13 @@ export function runPostMatchProcessing(
         seasonNumber,
         windowIndex,
         type: 'coach_fired',
+        subject: {
+          arcKey: `team:${teamId}:coach-cycle`,
+          eventKey: `coach-fired:${seasonNumber}:${windowIndex}:${teamId}:${coachId}`,
+          teamIds: [teamId],
+          coachIds: [coachId, firingResult.newCoachId],
+          visualKind: 'fall',
+        },
         title: `${firedCoachName} 被解雇 — ${teamBase.name}`,
         description: `${firedCoachName} 已被解雇。原因: ${fireResult.fireReason}`,
       });
@@ -193,6 +200,13 @@ export function runPostMatchProcessing(
         seasonNumber,
         windowIndex,
         type: 'coach_hired',
+        subject: {
+          arcKey: `team:${teamId}:coach-cycle`,
+          eventKey: `coach-hired:${seasonNumber}:${windowIndex}:${teamId}:${firingResult.newCoachId}`,
+          teamIds: [teamId],
+          coachIds: [firingResult.newCoachId],
+          visualKind: 'rise',
+        },
         title: `${teamBase.name} 聘用新帅 ${newCoachName}`,
         description: newCoach
           ? `${newCoachName} 正式执教 ${teamBase.name}，其 ${describeCoachIdentity(newCoach)} 理念将成为球队的新起点。`

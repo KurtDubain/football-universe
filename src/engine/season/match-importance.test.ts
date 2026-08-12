@@ -172,5 +172,15 @@ describe('observer fixture importance', () => {
       world,
       [],
     ).reasons).toContain('淘汰赛');
+    expect(computeFixtureImportance(
+      { ...template, roundLabel: 'SF 首回合' },
+      world,
+      [],
+    ).reasons).toContain('半决赛');
+    expect(computeFixtureImportance(
+      { ...template, roundLabel: 'QF 次回合' },
+      world,
+      [],
+    ).reasons).toContain('1/4决赛');
   });
 });

@@ -91,5 +91,25 @@ describe('NarrativeDigest', () => {
     act(() => action?.click());
     expect(onFixtureClick).toHaveBeenCalledWith('fixture:feature');
   });
-});
 
+  it('keeps the full factual thread available in a collapsed Later surface', () => {
+    const feature = item('feature', 'storyline');
+    feature.causes = [{ key: 'cause', label: '赛前背景', detail: '连续三场不败', source: 'storyline' }];
+    feature.turningPoints = [{ key: 'turn', label: '关键转折', detail: '第88分钟绝杀', source: 'match_result' }];
+    feature.consequences = [{ key: 'after', label: '随后发生', detail: '升至积分榜第二', source: 'competition' }];
+    const digest: NarrativeDigestData = {
+      feature,
+      signals: [],
+      more: [],
+      observationRelationFixtureIds: [],
+      candidateCount: 1,
+    };
+    act(() => root.render(<MemoryRouter><NarrativeDigest digest={digest} windowLabel="第10轮" /></MemoryRouter>));
+
+    const later = container.querySelector<HTMLDetailsElement>('[data-testid="narrative-later"]');
+    expect(later?.open).toBe(false);
+    expect(later?.textContent).toContain('连续三场不败');
+    expect(later?.textContent).toContain('第88分钟绝杀');
+    expect(later?.textContent).toContain('升至积分榜第二');
+  });
+});

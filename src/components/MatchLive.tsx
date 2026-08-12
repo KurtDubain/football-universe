@@ -766,7 +766,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           </div>
         )}
 
-        <div data-testid="live-scroll-region" className="min-h-0 overflow-y-auto overscroll-y-contain">
+        <div
+          data-testid="live-scroll-region"
+          aria-hidden={showOpener || undefined}
+          inert={showOpener || undefined}
+          className="min-h-0 overflow-y-auto overscroll-y-contain"
+        >
 
         {/* Header bar */}
         <div className="broadcast-ribbon bg-slate-800/80 px-4 py-2 flex items-center justify-between">
@@ -1069,6 +1074,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {/* Controls */}
         <div
           data-testid="live-controls"
+          aria-hidden={showOpener || undefined}
+          inert={showOpener || undefined}
           className="grid shrink-0 grid-cols-1 gap-2 border-t border-slate-800/60 bg-slate-900 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="flex min-w-0 gap-1">

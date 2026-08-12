@@ -7,6 +7,7 @@ import type { GameWorld, NewsItem } from '../season/season-manager';
 import {
   describeStoryline,
   detectStorylineSignals,
+  getStorylineArcKey,
   type Storyline,
   type StorylineSignal,
 } from '../season/storylines';
@@ -14,6 +15,7 @@ import type { TransferRumor } from '../transfers/rumor-generator';
 import { analyzeDestinyDeviation, extractMatchTurningPoints, resolveMatchOutcome } from '../match/analysis';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { createNarrativeFingerprint, directNarrative } from './narrative-director';
+import { buildWorldNarrativeCandidates } from './narrative-world-scan';
 import type { ObservationTheme } from './observation-theme';
 import type { AdvanceWindowOutcome } from './world-response';
 import type {
@@ -69,10 +71,6 @@ function fixtureDestination(fixtureId: string): NarrativeDestination {
   return { key: `fixture:${fixtureId}`, label: '查看比赛', fixtureId };
 }
 
-function storylineArc(teamId: string, type: StorylineSignal['type']): string {
-  return `team:${teamId}:story:${type}`;
-}
-
 function storyVisual(type: StorylineSignal['type']): NarrativeVisualKind {
   return type === 'giant_crisis' ? 'fall' : 'rise';
 }
@@ -80,7 +78,9 @@ function storyVisual(type: StorylineSignal['type']): NarrativeVisualKind {
 function activeStorySignals(world: GameWorld): Array<{ signal: StorylineSignal; story?: Storyline }> {
   const active = (world.activeStorylines ?? [])
     .map(story => ({ story, signal: describeStoryline(world, story) }))
-    .filter((entry): entry is { story: Storyline; signal: StorylineSignal } => Boolean(entry.signal));
+    .filter((entry): entry is { story: Storyline; signal: StorylineSignal } => Boolean(entry.signal))
+    .sort((left, right) => right.signal.priority - left.signal.priority
+      || left.story.id.localeCompare(right.story.id));
   if (active.length > 0) return active;
   return detectStorylineSignals(world).slice(0, 8).map(signal => ({ signal }));
 }
@@ -123,9 +123,9 @@ function observationThemeCandidate(
 }
 
 function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
-  return activeStorySignals(world).slice(0, 8).map(({ signal, story }) => ({
+  const active = activeStorySignals(world).slice(0, 8).map(({ signal, story }) => ({
     id: `story:${signal.teamId}:${signal.type}`,
-    arcKey: storylineArc(signal.teamId, signal.type),
+    arcKey: getStorylineArcKey(signal.teamId, signal.type, signal.competitionName),
     eventKey: story?.id ?? `derived:${signal.teamId}:${signal.type}`,
     source: 'storyline' as const,
     subjectType: 'team' as const,
@@ -156,6 +156,65 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       historical: signal.phase === '高潮' ? 75 : 25,
     },
   }));
+  const labels: Record<Storyline['type'], string> = {
+    dark_horse: '黑马崛起',
+    giant_crisis: '豪门危机',
+    promoted_survival: '升班马求生',
+    unbeaten_run: '联赛不败征程',
+    cup_giant_killer: '杯赛巨人杀手',
+  };
+  const resolved = (world.storylineHistory ?? [])
+    .filter(story =>
+      story.phase === '落幕'
+      && story.seasonNumber === world.seasonState.seasonNumber
+      && Boolean(story.conclusion),
+    )
+    .sort((left, right) =>
+      (right.endedWindow ?? right.lastUpdatedWindow) - (left.endedWindow ?? left.lastUpdatedWindow)
+      || left.id.localeCompare(right.id),
+    )
+    .slice(0, 2)
+    .map(story => ({
+      id: `story-resolved:${story.id}`,
+      arcKey: getStorylineArcKey(story.teamId, story.type, story.competitionName),
+      eventKey: `resolved:${story.id}`,
+      source: 'storyline' as const,
+      subjectType: 'team' as const,
+      subjectIds: [story.teamId],
+      seasonNumber: story.seasonNumber,
+      seasonPhase: '落幕',
+      storylineType: story.type,
+      title: `${labels[story.type]} · ${story.outcome === 'success' ? '成章' : '定格'}`,
+      summary: story.conclusion!,
+      evidence: story.evidence.map((detail, index) => (
+        fact('storyline', `story:${story.id}:resolved-evidence:${index}`, '历程证据', detail)
+      )),
+      consequences: [fact(
+        'storyline',
+        `story:${story.id}:conclusion`,
+        '故事结局',
+        story.conclusion!,
+      )],
+      nextWatch: story.outcome === 'success'
+        ? '这段故事已进入赛季档案，下一阶段由真实赛程继续书写'
+        : '这段故事已经结束，只有新的事实达到门槛才会重新开启',
+      destinations: [teamDestination(story.teamId)],
+      visualKind: storyVisual(story.type),
+      fingerprint: createNarrativeFingerprint([
+        story.id,
+        story.outcome,
+        story.conclusion,
+        story.evidence,
+      ]),
+      changedAt: story.lastUpdatedElapsedWindow,
+      weights: {
+        importance: story.outcome === 'success' ? 86 : 72,
+        relevance: 20,
+        continuity: 88,
+        historical: story.outcome === 'success' ? 72 : 40,
+      },
+    }));
+  return [...active, ...resolved];
 }
 
 function relatedStoryArc(world: GameWorld, fixture: MatchFixture): string | null {
@@ -166,7 +225,9 @@ function relatedStoryArc(world: GameWorld, fixture: MatchFixture): string | null
       || left.id.localeCompare(right.id)
     ));
   const story = stories[0];
-  return story ? storylineArc(story.teamId, story.type) : null;
+  return story
+    ? getStorylineArcKey(story.teamId, story.type, story.competitionName)
+    : null;
 }
 
 function focusFixtureCandidates(options: MatchdayNarrativeOptions): NarrativeCandidate[] {
@@ -415,10 +476,17 @@ function playerHighlightCandidates(options: MatchdayNarrativeOptions): Narrative
 
 function rumorCandidates(options: MatchdayNarrativeOptions): NarrativeCandidate[] {
   const favoriteTeams = new Set(options.favoriteTeamIds);
+  const favoritePlayers = new Set(options.favoritePlayerIds);
   return (options.world.transferRumors ?? [])
-    .filter(rumor => favoriteTeams.has(rumor.fromTeamId) || favoriteTeams.has(rumor.eliteTeamId))
-    .slice(-6)
+    .filter(rumor =>
+      rumor.intensity === 'high'
+      || favoritePlayers.has(rumor.candidateUuid)
+      || favoriteTeams.has(rumor.fromTeamId)
+      || favoriteTeams.has(rumor.eliteTeamId),
+    )
+    .slice(-8)
     .reverse()
+    .slice(0, 4)
     .map((rumor: TransferRumor) => ({
       id: `rumor:${rumor.id}`,
       arcKey: `transfer:${rumor.candidateUuid}:${rumor.eliteTeamId}`,
@@ -447,7 +515,11 @@ function rumorCandidates(options: MatchdayNarrativeOptions): NarrativeCandidate[
       changedAt: options.world.totalElapsedWindows ?? 0,
       weights: {
         importance: rumor.intensity === 'high' ? 78 : rumor.intensity === 'medium' ? 65 : 52,
-        relevance: 58,
+        relevance: favoritePlayers.has(rumor.candidateUuid)
+          || favoriteTeams.has(rumor.fromTeamId)
+          || favoriteTeams.has(rumor.eliteTeamId)
+          ? 58
+          : 12,
         continuity: 45,
         historical: 15,
       },
@@ -535,10 +607,25 @@ export function buildMatchdayNarrativeDigest(options: MatchdayNarrativeOptions):
     ...windowSignalCandidates(options, focusFixtureIds),
     ...playerHighlightCandidates(options),
     ...rumorCandidates(options),
+    ...buildWorldNarrativeCandidates({
+      world: options.world,
+      currentWindow: options.currentWindow,
+      favoriteTeamIds: options.favoriteTeamIds,
+      favoritePlayerIds: options.favoritePlayerIds,
+    }),
     ...newsCandidates(
       options.world,
       options.world.newsLog,
-      new Set(['match_result', 'upset', 'streak', 'storyline', 'rumor']),
+      new Set([
+        'match_result',
+        'upset',
+        'streak',
+        'storyline',
+        'rumor',
+        'coach_fired',
+        'coach_hired',
+        'injury',
+      ]),
     ),
   ];
   return directNarrative(candidates, options.memory, {

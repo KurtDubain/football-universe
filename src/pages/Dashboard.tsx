@@ -39,6 +39,7 @@ import { playUiFeedback } from '../feedback/game-feedback';
 import { buildObservationTheme } from '../engine/observation/observation-theme';
 import { buildMatchdayNarrativeDigest } from '../engine/observation/narrative-sources';
 import NarrativeDigest from '../components/NarrativeDigest';
+import SeasonNarrativeOverview from '../components/SeasonNarrativeOverview';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -554,6 +555,48 @@ function MatchdayTab({
     [world.playerStatSegments, world.playerStats],
   );
 
+  // Advancing first toggles `isAdvancing` so feedback can paint before the
+  // simulation starts. Keep the bounded world scan out of that feedback-only
+  // render; none of its inputs change until a new world is committed.
+  const matchdayNarrative = useMemo(() => {
+    if (!currentWindow) return null;
+    const focusMatches = pickFocusMatches(
+      currentWindow.fixtures,
+      world,
+      favoriteTeamIds,
+      2,
+      favoriteTeamId,
+    );
+    const observationTheme = buildObservationTheme(
+      world,
+      favoriteTeamId,
+      observationThemePreference,
+    );
+    return {
+      focusMatches,
+      digest: buildMatchdayNarrativeDigest({
+        world,
+        currentWindow,
+        observationTheme,
+        focusMatches,
+        playerHighlights,
+        favoriteTeamIds,
+        favoritePlayerIds,
+        primaryFavoriteTeamId: favoriteTeamId,
+        memory: narrativeMemory,
+      }),
+    };
+  }, [
+    currentWindow,
+    favoritePlayerIds,
+    favoriteTeamId,
+    favoriteTeamIds,
+    narrativeMemory,
+    observationThemePreference,
+    playerHighlights,
+    world,
+  ]);
+
   if (!currentWindow) {
     return (
       <div className="text-center py-12">
@@ -571,25 +614,9 @@ function MatchdayTab({
     );
   }
 
-  // Compute focus matches (top 1-2)
-  const focusMatches = pickFocusMatches(currentWindow.fixtures, world, favoriteTeamIds, 2, favoriteTeamId);
+  // `currentWindow` guarantees a derived narrative payload above.
+  const { focusMatches, digest: narrativeDigest } = matchdayNarrative!;
   const focusFixtureIds = new Set(focusMatches.map((f) => f.fixture.id));
-  const observationTheme = buildObservationTheme(
-    world,
-    favoriteTeamId,
-    observationThemePreference,
-  );
-  const narrativeDigest = buildMatchdayNarrativeDigest({
-    world,
-    currentWindow,
-    observationTheme,
-    focusMatches,
-    playerHighlights,
-    favoriteTeamIds,
-    favoritePlayerIds,
-    primaryFavoriteTeamId: favoriteTeamId,
-    memory: narrativeMemory,
-  });
   const observationRelationFixtureIds = new Set(narrativeDigest.observationRelationFixtureIds);
   const pulseRelationFixtureIds = new Set([
     ...(narrativeDigest.feature?.fixtureIds ?? []),
@@ -1022,6 +1049,8 @@ function ResultsTab({
 // ══════════════════════════════════════════════════════════════════════
 
 function OverviewTab({ world }: { world: GameWorld }) {
+  const favoriteTeamId = useGameStore((state) => state.favoriteTeamId);
+  const favoritePlayerIds = useGameStore((state) => state.favoritePlayerIds);
   const leagues = [
     { standings: world.league1Standings, name: '顶级联赛', level: 1 },
     { standings: world.league2Standings, name: '甲级联赛', level: 2 },
@@ -1075,6 +1104,12 @@ function OverviewTab({ world }: { world: GameWorld }) {
           {world.worldCup?.winnerId && <span className="text-xs text-amber-400">冠军: {getTeamName(world.worldCup.winnerId, world.teamBases)}</span>}
         </div>
       )}
+
+      <SeasonNarrativeOverview
+        world={world}
+        primaryTeamId={favoriteTeamId}
+        favoritePlayerIds={favoritePlayerIds}
+      />
 
       {/* Season buffs */}
       {(world.seasonBuffs ?? []).length > 0 && (

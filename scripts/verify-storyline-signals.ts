@@ -124,7 +124,7 @@ async function main(): Promise<void> {
         seasonStoryCount < 1
         || seasonStoryCount > 8
         || !seasonText.includes('赛季故事结局')
-        || !/兑现|回落|化解|延续|保级|降级/.test(seasonText)
+        || !/兑现|回落|化解|延续|保级|降级|成章|定格|止步/.test(seasonText)
       ) {
         throw new Error(`${viewport.name}: season story endings are incomplete`);
       }

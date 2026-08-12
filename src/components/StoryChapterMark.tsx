@@ -5,7 +5,7 @@ import promotedSurvivalArtwork from '../assets/visual/story-promoted-survival-v2
 import { DecorativeImage } from './DecorativeImage';
 import { Icon, type IconName } from './Icon';
 
-const STORY_ARTWORK: Record<StorylineType, string> = {
+const STORY_ARTWORK: Partial<Record<StorylineType, string>> = {
   dark_horse: darkHorseArtwork,
   giant_crisis: giantCrisisArtwork,
   promoted_survival: promotedSurvivalArtwork,
@@ -15,6 +15,8 @@ const STORY_FALLBACK: Record<StorylineType, { icon: IconName; className: string 
   dark_horse: { icon: 'trend-up', className: 'text-emerald-300' },
   giant_crisis: { icon: 'warning', className: 'text-red-300' },
   promoted_survival: { icon: 'shield', className: 'text-amber-300' },
+  unbeaten_run: { icon: 'fire', className: 'text-sky-300' },
+  cup_giant_killer: { icon: 'trophy', className: 'text-amber-300' },
 };
 
 export function StoryChapterMark({
@@ -25,6 +27,7 @@ export function StoryChapterMark({
   className?: string;
 }) {
   const fallback = STORY_FALLBACK[type];
+  const artwork = STORY_ARTWORK[type];
   return (
     <span
       className={`story-chapter-mark ${className}`}
@@ -34,11 +37,13 @@ export function StoryChapterMark({
       <span className={`absolute inset-0 grid place-items-center ${fallback.className}`}>
         <Icon name={fallback.icon} size={18} />
       </span>
-      <DecorativeImage
-        src={STORY_ARTWORK[type]}
-        className="absolute inset-0 h-full w-full object-cover brightness-110 contrast-110"
-        testId={`story-art-${type}`}
-      />
+      {artwork && (
+        <DecorativeImage
+          src={artwork}
+          className="absolute inset-0 h-full w-full object-cover brightness-110 contrast-110"
+          testId={`story-art-${type}`}
+        />
+      )}
     </span>
   );
 }

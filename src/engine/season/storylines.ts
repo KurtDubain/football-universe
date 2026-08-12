@@ -1,7 +1,15 @@
 import type { StandingEntry } from '../../types/league';
+import type { MatchResult } from '../../types/match';
+import { analyzeDestinyDeviation, resolveMatchOutcome } from '../match/analysis';
+import { getKnockoutRoundRank } from './match-importance';
 import type { GameWorld, NewsItem } from './season-manager';
 
-export type StorylineType = 'dark_horse' | 'giant_crisis' | 'promoted_survival';
+export type StorylineType =
+  | 'dark_horse'
+  | 'giant_crisis'
+  | 'promoted_survival'
+  | 'unbeaten_run'
+  | 'cup_giant_killer';
 export type StorylinePhase = '出现' | '发展' | '高潮' | '落幕';
 export type StorylineOutcome = 'success' | 'failure';
 
@@ -20,6 +28,8 @@ export interface Storyline {
   endedWindow?: number;
   outcome?: StorylineOutcome;
   conclusion?: string;
+  /** Locks a cup story to one canonical competition without copying its results. */
+  competitionName?: string;
 }
 
 export interface StorylineCooldown {
@@ -36,6 +46,7 @@ export interface StorylineSignal {
   evidence: string[];
   nextWatch: string;
   priority: number;
+  competitionName?: string;
 }
 
 export const MAX_ACTIVE_STORYLINES = 8;
@@ -44,6 +55,15 @@ export const MAX_STORYLINE_COOLDOWNS = 64;
 export const MAX_STORYLINES_PER_SEASON = 8;
 export const STORYLINE_QUIET_WINDOWS = 2;
 export const STORYLINE_COOLDOWN_WINDOWS = 6;
+export const UNBEATEN_RUN_TRIGGER_LONG = 7;
+export const UNBEATEN_RUN_TRIGGER_SHORT = 6;
+export const STORYLINES_PER_TYPE_PER_SEASON: Record<StorylineType, number> = {
+  dark_horse: 2,
+  giant_crisis: 2,
+  promoted_survival: 1,
+  unbeaten_run: 2,
+  cup_giant_killer: 1,
+};
 
 const PHASE_PRIORITY: Record<StorylinePhase, number> = {
   '出现': 0,
@@ -56,6 +76,8 @@ const TYPE_LABEL: Record<StorylineType, string> = {
   dark_horse: '黑马崛起',
   giant_crisis: '豪门危机',
   promoted_survival: '升班马求生',
+  unbeaten_run: '联赛不败征程',
+  cup_giant_killer: '杯赛巨人杀手',
 };
 
 function standingsFor(world: GameWorld, level: 1 | 2 | 3): StandingEntry[] {
@@ -89,6 +111,17 @@ function signalKey(teamId: string, type: StorylineType): string {
   return `${teamId}:${type}`;
 }
 
+export function getStorylineArcKey(
+  teamId: string,
+  type: StorylineType,
+  competitionName?: string,
+): string {
+  const competitionScope = type === 'cup_giant_killer' && competitionName
+    ? `:${encodeURIComponent(competitionName)}`
+    : '';
+  return `team:${teamId}:story:${type}${competitionScope}`;
+}
+
 function getTeamSituation(world: GameWorld, teamId: string) {
   const team = world.teamBases[teamId];
   const state = world.teamStates[teamId];
@@ -107,6 +140,260 @@ function getTeamSituation(world: GameWorld, teamId: string) {
     ? row.points - (standings[relegationLine]?.points ?? row.points)
     : (standings[Math.max(0, relegationLine - 1)]?.points ?? row.points) - row.points;
   return { team, state, standings, row, rank, expected, relegationLine, safetyGap };
+}
+
+type TeamSituation = NonNullable<ReturnType<typeof getTeamSituation>>;
+
+type TeamMatchOutcome = 'win' | 'draw' | 'loss';
+
+interface CompletedTeamMatch {
+  windowIndex: number;
+  result: MatchResult;
+  outcome: TeamMatchOutcome;
+}
+
+interface LeagueRunSummary {
+  length: number;
+  wins: number;
+  draws: number;
+}
+
+interface CupCampaignSummary {
+  competitionName: string;
+  upsetWins: CompletedTeamMatch[];
+  deepestStage: number;
+  deepestRoundLabel: string;
+  champion: boolean;
+  eliminated: boolean;
+}
+
+function outcomeForTeam(result: MatchResult, teamId: string): TeamMatchOutcome {
+  const outcome = resolveMatchOutcome(result);
+  if (outcome === 'draw') return 'draw';
+  const won = (outcome === 'home' && result.homeTeamId === teamId)
+    || (outcome === 'away' && result.awayTeamId === teamId);
+  return won ? 'win' : 'loss';
+}
+
+function completedTeamMatches(world: GameWorld, teamId: string): CompletedTeamMatch[] {
+  return world.seasonState.calendar.flatMap((window, windowIndex) => {
+    if (!window.completed) return [];
+    return (window.results ?? [])
+      .filter(result => result.homeTeamId === teamId || result.awayTeamId === teamId)
+      .map(result => ({
+        windowIndex,
+        result,
+        outcome: outcomeForTeam(result, teamId),
+      }));
+  }).sort((left, right) => left.windowIndex - right.windowIndex
+    || left.result.fixtureId.localeCompare(right.result.fixtureId));
+}
+
+function summarizeLeagueRun(matches: CompletedTeamMatch[]): LeagueRunSummary {
+  const run: CompletedTeamMatch[] = [];
+  for (let index = matches.length - 1; index >= 0; index--) {
+    const match = matches[index];
+    if (match.result.competitionType !== 'league') continue;
+    if (match.outcome === 'loss') break;
+    run.unshift(match);
+  }
+  return {
+    length: run.length,
+    wins: run.filter(match => match.outcome === 'win').length,
+    draws: run.filter(match => match.outcome === 'draw').length,
+  };
+}
+
+function longestLeagueRun(matches: CompletedTeamMatch[]): LeagueRunSummary {
+  let current: CompletedTeamMatch[] = [];
+  let longest: CompletedTeamMatch[] = [];
+  for (const match of matches) {
+    if (match.result.competitionType !== 'league') continue;
+    if (match.outcome === 'loss') current = [];
+    else current = [...current, match];
+    if (current.length > longest.length) longest = current;
+  }
+  return {
+    length: longest.length,
+    wins: longest.filter(match => match.outcome === 'win').length,
+    draws: longest.filter(match => match.outcome === 'draw').length,
+  };
+}
+
+function unbeatenThresholds(totalLeagueGames: number): {
+  trigger: number;
+  development: number;
+  climax: number;
+} {
+  return totalLeagueGames <= 16
+    ? { trigger: UNBEATEN_RUN_TRIGGER_SHORT, development: 9, climax: 12 }
+    : { trigger: UNBEATEN_RUN_TRIGGER_LONG, development: 10, climax: 14 };
+}
+
+function detectUnbeatenRunSignal(
+  world: GameWorld,
+  teamId: string,
+  knownSituation?: TeamSituation,
+  knownMatches?: CompletedTeamMatch[],
+): StorylineSignal | null {
+  const situation = knownSituation ?? getTeamSituation(world, teamId);
+  if (!situation) return null;
+  const totalLeagueGames = Math.max(1, (situation.standings.length - 1) * 2);
+  const thresholds = unbeatenThresholds(totalLeagueGames);
+  const run = summarizeLeagueRun(knownMatches ?? completedTeamMatches(world, teamId));
+  if (run.length < thresholds.trigger) return null;
+  const phase = run.length >= thresholds.climax
+    ? '高潮'
+    : run.length >= thresholds.development
+      ? '发展'
+      : '出现';
+  const nextThreshold = phase === '出现' ? thresholds.development : thresholds.climax;
+  return {
+    teamId,
+    type: 'unbeaten_run',
+    phase,
+    title: `${situation.team.name}延续联赛不败`,
+    body: `已经连续${run.length}场联赛未尝败绩，其中${run.wins}胜${run.draws}平。`,
+    evidence: [
+      `联赛连续${run.length}场不败`,
+      `${run.wins}胜${run.draws}平`,
+      `当前联赛第${situation.rank}`,
+    ],
+    nextWatch: phase === '高潮'
+      ? '这段不败能把赛季带向哪里'
+      : `再延续${Math.max(1, nextThreshold - run.length)}场将进入下一阶段`,
+    priority: 32 + Math.min(18, run.length) * 2 + run.wins + PHASE_PRIORITY[phase] * 4,
+  };
+}
+
+function isCupKnockoutResult(result: MatchResult): boolean {
+  return result.competitionType === 'league_cup'
+    || result.competitionType === 'super_cup'
+    || result.competitionType === 'continental_cup';
+}
+
+function cupCampaigns(
+  world: GameWorld,
+  teamId: string,
+  knownMatches?: CompletedTeamMatch[],
+): CupCampaignSummary[] {
+  const grouped = new Map<string, CompletedTeamMatch[]>();
+  for (const match of knownMatches ?? completedTeamMatches(world, teamId)) {
+    if (!isCupKnockoutResult(match.result)) continue;
+    const matches = grouped.get(match.result.competitionName) ?? [];
+    matches.push(match);
+    grouped.set(match.result.competitionName, matches);
+  }
+
+  return [...grouped.entries()].map(([competitionName, matches]) => {
+    const upsetWins = matches.filter(match => (
+      match.outcome === 'win' && analyzeDestinyDeviation(match.result).isUpset
+    ));
+    const deepest = [...matches].sort((left, right) => (
+      getKnockoutRoundRank(right.result.roundLabel) - getKnockoutRoundRank(left.result.roundLabel)
+      || right.windowIndex - left.windowIndex
+      || left.result.fixtureId.localeCompare(right.result.fixtureId)
+    ))[0];
+    const latest = matches.at(-1);
+    const hasFutureFixture = world.seasonState.calendar
+      .slice(world.seasonState.currentWindowIndex)
+      .some(window => window.fixtures.some(fixture => (
+        fixture.competitionName === competitionName
+        && (fixture.homeTeamId === teamId || fixture.awayTeamId === teamId)
+      )));
+    const deepestStage = deepest ? getKnockoutRoundRank(deepest.result.roundLabel) : 0;
+    const champion = Boolean(
+      latest
+      && latest.outcome === 'win'
+      && getKnockoutRoundRank(latest.result.roundLabel) === 4,
+    );
+    return {
+      competitionName,
+      upsetWins,
+      deepestStage,
+      deepestRoundLabel: deepest?.result.roundLabel ?? '淘汰赛',
+      champion,
+      eliminated: Boolean(latest && latest.outcome === 'loss' && !hasFutureFixture),
+    };
+  });
+}
+
+function cupCampaignScore(campaign: CupCampaignSummary): number {
+  const bestProbability = Math.min(
+    100,
+    ...campaign.upsetWins.map(match => analyzeDestinyDeviation(match.result).actualProbability),
+  );
+  return campaign.upsetWins.length * 20
+    + campaign.deepestStage * 12
+    + Number(campaign.champion) * 30
+    + Math.max(0, 30 - bestProbability);
+}
+
+function probabilityLabel(probability: number): string {
+  return probability <= 0 ? '低于1%' : `约${probability}%`;
+}
+
+function detectCupGiantKillerSignal(
+  world: GameWorld,
+  teamId: string,
+  competitionName?: string,
+  knownSituation?: TeamSituation,
+  knownMatches?: CompletedTeamMatch[],
+): StorylineSignal | null {
+  const situation = knownSituation ?? getTeamSituation(world, teamId);
+  if (!situation) return null;
+  const campaign = cupCampaigns(world, teamId, knownMatches)
+    .filter(item => competitionName === undefined || item.competitionName === competitionName)
+    .filter(item => {
+      const hasHighStageUpset = item.upsetWins.some(match => (
+        getKnockoutRoundRank(match.result.roundLabel) >= 3
+      ));
+      return !item.eliminated && (item.upsetWins.length >= 2 || hasHighStageUpset);
+    })
+    .sort((left, right) => cupCampaignScore(right) - cupCampaignScore(left)
+      || left.competitionName.localeCompare(right.competitionName))[0];
+  if (!campaign) return null;
+
+  const bestUpset = [...campaign.upsetWins].sort((left, right) => (
+    analyzeDestinyDeviation(left.result).actualProbability
+      - analyzeDestinyDeviation(right.result).actualProbability
+    || left.windowIndex - right.windowIndex
+    || left.result.fixtureId.localeCompare(right.result.fixtureId)
+  ))[0];
+  const phase = campaign.champion
+    ? '高潮'
+    : campaign.deepestStage >= 3 || campaign.upsetWins.length >= 3
+      ? '发展'
+      : '出现';
+  const nextFixture = world.seasonState.calendar
+    .slice(world.seasonState.currentWindowIndex)
+    .flatMap(window => window.fixtures)
+    .find(fixture => fixture.competitionName === campaign.competitionName
+      && (fixture.homeTeamId === teamId || fixture.awayTeamId === teamId));
+  return {
+    teamId,
+    type: 'cup_giant_killer',
+    phase,
+    title: `${situation.team.name}成为杯赛巨人杀手`,
+    body: `在${campaign.competitionName}已经赢下${campaign.upsetWins.length}场明确冷门，最深推进至${campaign.deepestRoundLabel}。`,
+    evidence: [
+      `${campaign.competitionName} · ${campaign.upsetWins.length}场冷门胜利`,
+      `最深阶段 ${campaign.deepestRoundLabel}`,
+      bestUpset
+        ? `最意外一战赛前胜出概率${probabilityLabel(
+          analyzeDestinyDeviation(bestUpset.result).actualProbability,
+        )}`
+        : null,
+    ].filter((item): item is string => Boolean(item)),
+    nextWatch: campaign.champion
+      ? '这段巨人杀手征程已经捧杯，等待写入赛季档案'
+      : nextFixture
+        ? `下一站：${nextFixture.roundLabel}`
+        : '这段杯赛征程还能走多远',
+    priority: 38 + campaign.upsetWins.length * 8 + campaign.deepestStage * 6
+      + Number(campaign.champion) * 12,
+    competitionName: campaign.competitionName,
+  };
 }
 
 export function detectTeamStorylineSignals(world: GameWorld, teamId: string): StorylineSignal[] {
@@ -180,6 +467,13 @@ export function detectTeamStorylineSignals(world: GameWorld, teamId: string): St
     });
   }
 
+  const matches = completedTeamMatches(world, teamId);
+  const unbeatenRun = detectUnbeatenRunSignal(world, teamId, situation, matches);
+  if (unbeatenRun) signals.push(unbeatenRun);
+
+  const cupGiantKiller = detectCupGiantKillerSignal(world, teamId, undefined, situation, matches);
+  if (cupGiantKiller) signals.push(cupGiantKiller);
+
   return signals;
 }
 
@@ -192,23 +486,41 @@ export function detectStorylineSignals(world: GameWorld): StorylineSignal[] {
 }
 
 export function describeStoryline(world: GameWorld, storyline: Storyline): StorylineSignal | null {
-  const detected = detectTeamStorylineSignals(world, storyline.teamId)
-    .find(signal => signal.type === storyline.type);
+  const detected = storyline.type === 'cup_giant_killer'
+    ? detectCupGiantKillerSignal(world, storyline.teamId, storyline.competitionName)
+    : detectTeamStorylineSignals(world, storyline.teamId)
+      .find(signal => signal.type === storyline.type);
   if (detected) return { ...detected, phase: storyline.phase === '落幕' ? '高潮' : storyline.phase };
 
   const situation = getTeamSituation(world, storyline.teamId);
   if (!situation) return null;
   const { team, state, standings, row, rank, expected, relegationLine, safetyGap } = situation;
-  const title = storyline.type === 'dark_horse'
-    ? `${team.name}的黑马征程`
-    : storyline.type === 'giant_crisis'
-      ? `${team.name}的赛季危机`
-      : `${team.name}的升级首季`;
-  const body = storyline.type === 'dark_horse'
-    ? `目前排名第${rank}，故事进入观察期；赛前位置预期约为第${expected}。`
-    : storyline.type === 'giant_crisis'
-      ? `目前排名第${rank}，赛前位置预期约为第${expected}，危机是否解除仍需继续观察。`
-      : `目前排名第${rank}，${rank <= relegationLine ? '仍在降级区之外' : '仍处于降级区'}。`;
+  let title: string;
+  let body: string;
+  let nextWatch: string;
+  if (storyline.type === 'dark_horse') {
+    title = `${team.name}的黑马征程`;
+    body = `目前排名第${rank}，故事进入观察期；赛前位置预期约为第${expected}。`;
+    nextWatch = '能否重新扩大预期优势';
+  } else if (storyline.type === 'giant_crisis') {
+    title = `${team.name}的赛季危机`;
+    body = `目前排名第${rank}，赛前位置预期约为第${expected}，危机是否解除仍需继续观察。`;
+    nextWatch = '能否连续两个窗口回到正常区间';
+  } else if (storyline.type === 'promoted_survival') {
+    title = `${team.name}的升级首季`;
+    body = `目前排名第${rank}，${rank <= relegationLine ? '仍在降级区之外' : '仍处于降级区'}。`;
+    nextWatch = rank <= relegationLine
+      ? `领先降级线${Math.max(0, safetyGap)}分`
+      : `距离安全区${Math.max(0, safetyGap)}分`;
+  } else if (storyline.type === 'unbeaten_run') {
+    title = `${team.name}的不败征程`;
+    body = '最近一场联赛已经改变了这段走势，故事正在等待正式收束。';
+    nextWatch = '这段不败最终会定格在多少场';
+  } else {
+    title = `${team.name}的杯赛巨人杀手征程`;
+    body = `${storyline.competitionName ?? '杯赛'}征程已经来到转折点，故事正在等待正式收束。`;
+    nextWatch = '这段杯赛征程最终会停在哪里';
+  }
   return {
     teamId: storyline.teamId,
     type: storyline.type,
@@ -220,14 +532,9 @@ export function describeStoryline(world: GameWorld, storyline: Storyline): Story
       `${row.played}轮 ${row.points}分`,
       storyline.type === 'giant_crisis' ? `教练压力 ${state.coachPressure}` : storyline.evidence[0],
     ].filter((item): item is string => Boolean(item)).slice(0, 3),
-    nextWatch: storyline.type === 'dark_horse'
-      ? '能否重新扩大预期优势'
-      : storyline.type === 'giant_crisis'
-        ? '能否连续两个窗口回到正常区间'
-        : rank <= relegationLine
-          ? `领先降级线${Math.max(0, safetyGap)}分`
-          : `距离安全区${Math.max(0, safetyGap)}分`,
+    nextWatch,
     priority: 20 + PHASE_PRIORITY[storyline.phase] * 5,
+    competitionName: storyline.competitionName,
   };
 }
 
@@ -256,7 +563,27 @@ function concludeStoryline(
   let outcome: StorylineOutcome;
   let conclusion: string;
 
-  if (storyline.type === 'dark_horse') {
+  if (storyline.type === 'unbeaten_run') {
+    const longest = longestLeagueRun(completedTeamMatches(world, storyline.teamId));
+    const thresholds = unbeatenThresholds(Math.max(1, (standings.length - 1) * 2));
+    outcome = longest.length >= thresholds.development ? 'success' : 'failure';
+    conclusion = longest.length > 0
+      ? `${finalSeason ? '本赛季' : '这段'}联赛不败最终定格在${longest.length}场（${longest.wins}胜${longest.draws}平）${outcome === 'success' ? '，成为赛季的重要走势。' : '。'}`
+      : '当前赛程中已无法重建这段不败走势，故事停止追踪。';
+  } else if (storyline.type === 'cup_giant_killer') {
+    const campaign = cupCampaigns(world, storyline.teamId)
+      .find(item => item.competitionName === storyline.competitionName)
+      ?? cupCampaigns(world, storyline.teamId)
+        .sort((left, right) => cupCampaignScore(right) - cupCampaignScore(left))[0];
+    outcome = campaign && (
+      campaign.champion || campaign.upsetWins.length >= 3 || campaign.deepestStage >= 3
+    ) ? 'success' : 'failure';
+    conclusion = campaign
+      ? campaign.champion
+        ? `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门并最终夺冠，巨人杀手征程得到兑现。`
+        : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${campaign.deepestRoundLabel}${campaign.eliminated ? '后止步。' : '并在赛季末写入档案。'}`
+      : `${storyline.competitionName ?? '杯赛'}的巨人杀手征程已结束，详细赛果无法继续重建。`;
+  } else if (storyline.type === 'dark_horse') {
     outcome = finalSeason
       && rank <= Math.max(4, Math.ceil(standings.length / 4))
       && expected - rank >= 2
@@ -284,7 +611,9 @@ function concludeStoryline(
   return {
     ...storyline,
     phase: '落幕',
-    evidence: describeStoryline(world, storyline)?.evidence ?? storyline.evidence,
+    evidence: storyline.type === 'unbeaten_run' || storyline.type === 'cup_giant_killer'
+      ? storyline.evidence
+      : describeStoryline(world, storyline)?.evidence ?? storyline.evidence,
     lastUpdatedWindow: world.seasonState.currentWindowIndex,
     lastUpdatedElapsedWindow: world.totalElapsedWindows ?? 0,
     endedWindow: world.seasonState.currentWindowIndex,
@@ -308,7 +637,11 @@ function storylineNews(
     type: 'storyline',
     importance: phase === '高潮' || phase === '落幕' ? 'major' : 'normal',
     subject: {
-      arcKey: `team:${storyline.teamId}:story:${storyline.type}`,
+      arcKey: getStorylineArcKey(
+        storyline.teamId,
+        storyline.type,
+        storyline.competitionName,
+      ),
       eventKey: `${storyline.id}:${phase}:${storyline.lastUpdatedElapsedWindow}`,
       teamIds: [storyline.teamId],
       visualKind: storyline.type === 'giant_crisis' ? 'fall' : 'rise',
@@ -322,6 +655,21 @@ function storylineNews(
       ? storyline.conclusion ?? storyline.evidence.join(' · ')
       : storyline.evidence.join(' · '),
   };
+}
+
+function isStorylineInterrupted(world: GameWorld, storyline: Storyline): boolean {
+  if (storyline.type === 'unbeaten_run') {
+    const latestLeagueMatch = completedTeamMatches(world, storyline.teamId)
+      .filter(match => match.result.competitionType === 'league')
+      .at(-1);
+    return latestLeagueMatch?.outcome === 'loss';
+  }
+  if (storyline.type === 'cup_giant_killer') {
+    const campaign = cupCampaigns(world, storyline.teamId)
+      .find(item => item.competitionName === storyline.competitionName);
+    return campaign?.eliminated ?? false;
+  }
+  return false;
 }
 
 export function advanceStorylines(
@@ -356,8 +704,14 @@ export function advanceStorylines(
       continue;
     }
     const key = signalKey(storyline.teamId, storyline.type);
-    const signal = signalMap.get(key);
+    const signal = storyline.type === 'cup_giant_killer'
+      ? detectCupGiantKillerSignal(world, storyline.teamId, storyline.competitionName)
+      : signalMap.get(key);
     if (!signal) {
+      if (isStorylineInterrupted(world, storyline)) {
+        finish(storyline);
+        continue;
+      }
       const quietWindows = storyline.quietWindows + 1;
       if (quietWindows >= STORYLINE_QUIET_WINDOWS) finish({ ...storyline, quietWindows });
       else active.push({ ...storyline, quietWindows });
@@ -373,6 +727,7 @@ export function advanceStorylines(
       lastUpdatedWindow: windowIndex,
       lastUpdatedElapsedWindow: elapsedWindow,
       quietWindows: 0,
+      competitionName: storyline.competitionName ?? signal.competitionName,
     };
     active.push(updated);
     if (phase !== storyline.phase) news.push(storylineNews(world, updated, 'phase'));
@@ -384,12 +739,21 @@ export function advanceStorylines(
       .filter(storyline => storyline.seasonNumber === seasonNumber)
       .map(storyline => signalKey(storyline.teamId, storyline.type)));
     const coolingKeys = new Set(cooldowns.map(cooldown => cooldown.key));
+    const storylinesThisSeason = [
+      ...active.filter(storyline => storyline.seasonNumber === seasonNumber),
+      ...history.filter(storyline => storyline.seasonNumber === seasonNumber),
+    ];
+    const typeCounts = new Map<StorylineType, number>();
+    for (const storyline of storylinesThisSeason) {
+      typeCounts.set(storyline.type, (typeCounts.get(storyline.type) ?? 0) + 1);
+    }
     let seasonStoryCount = active.filter(storyline => storyline.seasonNumber === seasonNumber).length
       + history.filter(storyline => storyline.seasonNumber === seasonNumber).length;
     for (const signal of signals) {
       if (active.length >= MAX_ACTIVE_STORYLINES || seasonStoryCount >= MAX_STORYLINES_PER_SEASON) break;
       const key = signalKey(signal.teamId, signal.type);
       if (activeKeys.has(key) || usedThisSeason.has(key) || coolingKeys.has(key)) continue;
+      if ((typeCounts.get(signal.type) ?? 0) >= STORYLINES_PER_TYPE_PER_SEASON[signal.type]) continue;
       const storyline: Storyline = {
         id: `S${seasonNumber}-${signal.type}-${signal.teamId}-${elapsedWindow}`,
         type: signal.type,
@@ -402,10 +766,12 @@ export function advanceStorylines(
         lastUpdatedWindow: windowIndex,
         lastUpdatedElapsedWindow: elapsedWindow,
         quietWindows: 0,
+        competitionName: signal.competitionName,
       };
       active.push(storyline);
       activeKeys.add(key);
       seasonStoryCount++;
+      typeCounts.set(signal.type, (typeCounts.get(signal.type) ?? 0) + 1);
       news.push(storylineNews(world, storyline, 'start'));
     }
   }
@@ -432,5 +798,7 @@ export function getFixtureStorylineLabel(
   const teamName = world.teamBases[storyline.teamId]?.shortName ?? '';
   if (storyline.type === 'dark_horse') return `${teamName}黑马试金石`;
   if (storyline.type === 'giant_crisis') return `${teamName}危机转折战`;
-  return `${teamName}保级关键战`;
+  if (storyline.type === 'promoted_survival') return `${teamName}保级关键战`;
+  if (storyline.type === 'unbeaten_run') return `${teamName}不败延续战`;
+  return `${teamName}巨人杀手征程`;
 }

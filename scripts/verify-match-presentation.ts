@@ -83,7 +83,16 @@ async function verifyViewport(
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
     const canvas = dialog.getByTestId('pitch-canvas');
     await canvas.waitFor({ state: 'visible' });
-    await page.waitForTimeout(300);
+    const opener = dialog.getByTestId('key-match-opener');
+    if (await opener.isVisible()) {
+      await opener.getByRole('button', { name: '跳过转播开场' }).click();
+      await opener.waitFor({ state: 'hidden' });
+    }
+    await dialog.getByTestId('live-controls').waitFor({ state: 'visible' });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    });
 
     const defaultMode = await dialog.getByRole('button', { name: '直播', exact: true }).getAttribute('aria-pressed');
     if (defaultMode !== 'true') throw new Error(`${name}: live is not the default playback mode`);
@@ -143,10 +152,6 @@ async function verifyViewport(
       element.scrollWidth - element.clientWidth
     );
     const screenshot = `/tmp/football-match-live-${name}.png`;
-    await page.evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    });
     await page.screenshot({ path: screenshot, fullPage: false, animations: 'disabled' });
 
     if (metrics.opaqueSamples < 20) throw new Error(`${name}: pitch canvas is blank`);

@@ -74,7 +74,9 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: recommended primary focus mismatch`);
       }
       await page.getByText('主要观察', { exact: true }).first().waitFor();
-      await page.getByText('主要观察球队出战', { exact: true }).first().waitFor();
+      const focusMatches = page.getByTestId('focus-matches');
+      await focusMatches.waitFor();
+      await focusMatches.getByTestId('focus-watch-toggle').first().waitFor();
 
       await page.evaluate(() => {
         const store = (window as AuditWindow).__gameStore;

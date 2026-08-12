@@ -37,12 +37,23 @@ const STORYLINE_META: Record<StorylineType, { label: string; icon: IconName; col
   dark_horse: { label: '黑马崛起', icon: 'trend-up', color: 'text-emerald-300' },
   giant_crisis: { label: '豪门危机', icon: 'warning', color: 'text-red-300' },
   promoted_survival: { label: '升班马求生', icon: 'shield', color: 'text-amber-300' },
+  unbeaten_run: { label: '联赛不败征程', icon: 'fire', color: 'text-sky-300' },
+  cup_giant_killer: { label: '杯赛巨人杀手', icon: 'trophy', color: 'text-amber-300' },
 };
 
 function storylineOutcomeLabel(type: StorylineType, succeeded: boolean): string {
   if (type === 'dark_horse') return succeeded ? '兑现' : '回落';
   if (type === 'giant_crisis') return succeeded ? '化解' : '延续';
-  return succeeded ? '保级' : '降级';
+  if (type === 'promoted_survival') return succeeded ? '保级' : '降级';
+  if (type === 'unbeaten_run') return succeeded ? '成章' : '定格';
+  return succeeded ? '成章' : '止步';
+}
+
+function storylineOutcomeClass(type: StorylineType, succeeded: boolean): string {
+  if (succeeded) return 'bg-emerald-950/70 text-emerald-300';
+  if (type === 'unbeaten_run') return 'bg-sky-950/60 text-sky-300';
+  if (type === 'cup_giant_killer') return 'bg-amber-950/60 text-amber-300';
+  return 'bg-red-950/60 text-red-300';
 }
 
 export default function SeasonReview({ world, seasonNumber }: Props) {
@@ -236,11 +247,10 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                           {getTeamName(storyline.teamId, tb)}
                         </Link>
                         <span className={`shrink-0 text-[11px] ${meta.color}`}>{meta.label}</span>
-                        <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
-                          storyline.outcome === 'success'
-                            ? 'bg-emerald-950/70 text-emerald-300'
-                            : 'bg-red-950/60 text-red-300'
-                        }`}>
+                        <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${storylineOutcomeClass(
+                          storyline.type,
+                          storyline.outcome === 'success',
+                        )}`}>
                           {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
                         </span>
                       </div>

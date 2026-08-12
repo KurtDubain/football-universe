@@ -373,6 +373,24 @@ export function cloneSquadsForMutation(
 }
 
 /**
+ * Create a writable boundary for teams involved in one match window.
+ * Injury and suspension history helpers replace arrays instead of mutating
+ * them, so untouched teams and existing history arrays can be shared safely.
+ */
+export function cloneSquadsForTeamMutation(
+  squads: Record<string, Player[]>,
+  teamIds: Iterable<string>,
+): Record<string, Player[]> {
+  const writable = { ...squads };
+  for (const teamId of new Set(teamIds)) {
+    const players = squads[teamId];
+    if (!players) continue;
+    writable[teamId] = players.map(player => ({ ...player }));
+  }
+  return writable;
+}
+
+/**
  * Off-season cleanup. Called from `initializeNewSeason` AFTER the new
  * window counter is established (this helper doesn't move it).
  *

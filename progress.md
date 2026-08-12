@@ -4,7 +4,7 @@ Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题�
 
 - The next major experience project is recorded in `docs/narrative-director-checklist.md`. It targets a complete v4.54.0 Narrative Director release while keeping the observer role, authoritative simulation, determinism, existing visual assets, and storage/performance budgets frozen.
 - The plan is divided into seven cohesive work packages: contracts/director, Matchday World Pulse, result causality, persistent story expansion, derived person/competition signals, detail/history continuity, and integrated release validation. Each package defines its dependency, completion gate, validation scope, and recommended commit boundary so future sessions can work efficiently without re-auditing the whole project.
-- ND-0 through ND-2 were completed in the first efficient implementation batch; ND-3 through ND-6 remain open. The durable checklist contains the exact implementation and verification record.
+- ND-0 through ND-3 are complete; ND-4 through ND-6 remain open. The durable checklist contains the exact implementation and verification record.
 
 ## 2026-08-12 Narrative Director Batch A (ND-0 to ND-2)
 
@@ -16,6 +16,14 @@ Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题�
 - Compatibility includes optional validated `narrativeMemory` defaults, persistence/export/import, all advance modes, and no parallel result or history store. A full regression caught and corrected the backup test's pre-normalization expectation.
 - Verification passed 126 test files / 910 tests, full ESLint, strict TypeScript, ordinary and audit PWA builds, bundle and portable-script gates, six responsive observation viewports, World Pulse and observation-route audits, single/batch/season-boundary response audits, Dashboard, visual fallback, floating Advance, and the standard deterministic Canvas client. Initial production graph: 493,186 bytes / 162,900 gzip.
 - Next recommended work package: ND-3 Story Expansion (`unbeaten_run` and `cup_giant_killer`) as one engine/calibration batch. Do not start ND-4 source expansion until ND-3 arc identities and lifecycle thresholds are stable.
+
+## 2026-08-12 Narrative Director Story Expansion (ND-3)
+
+- Added two deliberately selective persistent team arcs. League unbeaten runs start only after six or seven chronological league matches depending on schedule length, then develop and climax at format-aware thresholds. Cup giant-killer stories require either two forecast-backed upset wins or one semifinal/final upset, retain their competition identity, and respect unfinished two-legged ties.
+- Both arcs are reconstructed from canonical completed calendar fixtures and frozen prediction data. They do not duplicate results, alter scores, consume RNG, or add an unbounded history store. Existing saves remain compatible through optional Storyline fields and stable structured arc keys.
+- Existing dark-horse, giant-crisis, and promoted-survival stories retain reserved per-type capacity inside the established eight-active/eight-per-season ceilings. The new stories use compact icon-only chapter marks, existing visual families, factual News, neutral failure states, and explicit Season Review and History labels without adding image weight.
+- Added a reusable Storyline frequency audit and lifecycle regression coverage. The 12-seed x 3-season audit produced all five story families with no cap or invariant violations; a separate 20-seed x 3-season run confirmed the same bounded distribution. Full verification passed 126 test files / 924 tests, ESLint, strict TypeScript, production/PWA builds, browser Storyline/Review/History/visual checks, and normal plus 4x CPU advance-performance budgets.
+- Next recommended work package: ND-4 derived Player, Coach, Transfer, Competition, and Record signals, implemented through one bounded world scan and shared source-adapter harness.
 
 ## 2026-08-12 v4.53.0 Coach Tactics And Star Presence
 
@@ -938,3 +946,12 @@ Original prompt: 可以，那你来优化一下动画模块吧
 - Added `docs/star-player-presence-plan.md` as the reviewable implementation baseline: sustainable rare star generation across all positions, one shared match-impact evaluator, position-neutral MOTM, corrected young-player semantics, restrained live focus players, world-star/youth/watchlist observation, and clearer leaderboard context.
 - Linked the plan to `docs/coach-tactics-formation-plan.md`. The two systems will share one ordered pipeline for coach tactics, formation-aware lineups, unit quality, named player marginal impact, frozen focus snapshots, authoritative events, match reports, and Canvas presentation.
 - No gameplay code has changed. Both plans remain pending final product approval, and checklist items must not be marked complete until implementation plus automated, long-run, browser, mobile, save-size, and performance validation succeeds.
+
+## 2026-08-13 Narrative Director Release Closure
+
+- ND-4 through ND-6 are complete. The bounded world scan now covers player, coach, transfer, competition, and canonical record signals; `Later`, Team/Player/Coach threads, the season-shape Overview, Season Review, and History all derive from existing simulation facts without a second outcome store.
+- The full browser audit exposed a timing race in the featured-match opener: the audit sampled underlying live controls while the opener transition was still active. The covered live surface is now removed from focus and the accessibility tree with `inert`/`aria-hidden`, while the verifier explicitly closes the opener and waits for a settled frame before measuring the real controls.
+- Narrative calibration passed 20 seeds x 30 seasons (30,380 windows) and 5 seeds x 100 seasons (25,355 windows), with every intended source family represented, no cap/destination/dedupe violations, and identical authoritative world digests against the pre-Narrative baseline. World-scan/digest P95 remained 5.79/6.8ms in the 30-season run and 6.69/8.5ms in the 100-season run.
+- The S150 audit completed 7,609 advances with zero errors or warnings. S1/S50/S100/S150 reload and next-advance digests matched; the compressed save was 2,109,420 bytes before cleanup and 1,668,106 bytes after cleanup, below the 4MiB storage gate.
+- Node 22.22.2 release verification passed 130 test files / 941 tests, ESLint, strict TypeScript, ordinary and audit PWA production builds, changelog, script portability, audio assets, zero-vulnerability production audit, and the complete browser suite. Mobile advance P95 was 30.2ms normally and 79.5ms at 4x CPU, with rapid clicks accepted exactly once and deterministic reload.
+- The ordinary entry is 241,915 bytes / 75,523 gzip and the initial graph is 493,846 bytes / 163,399 gzip. The production bundle contains no audit bridge markers. The mandatory standard web-game client completed three immersive animation iterations with changing Canvas/state snapshots and no console or page errors.

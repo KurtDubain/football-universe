@@ -20,8 +20,7 @@ import { generateAllSquads } from '../players/generator';
 import {
   createInitialPlayerStatSegments,
   createInitialPlayerStats,
-  updatePlayerStatSegmentsFromResults,
-  updatePlayerStatsFromResults,
+  updatePlayerStatsAndSegmentsFromResults,
 } from '../players/stats';
 import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
 import { getTeamIdsByLeague, getAllTeamIds, createNewsId } from './helpers';
@@ -41,6 +40,7 @@ import { enforceStorageLimits } from './storage-limits';
 import { buildTeamCoachMap } from '../coaches/coach-lookup';
 import {
   cloneSquadsForMutation,
+  cloneSquadsForTeamMutation,
   processInjuriesAndSuspensions,
   resetDisciplineForNewSeason,
 } from '../players/injuries';
@@ -1163,18 +1163,29 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
 
   // Update player stats — passes the post-bump global window so injured /
   // suspended players don't get credited an appearance.
-  const updatedPlayerStats = windowResult.results.length > 0
-    ? updatePlayerStatsFromResults(world.playerStats, windowResult.results, world.squads, totalElapsedWindowsAfter)
-    : world.playerStats;
-  const updatedPlayerStatSegments = windowResult.results.length > 0
-    ? updatePlayerStatSegmentsFromResults(world.playerStatSegments ?? {}, windowResult.results, world.squads, totalElapsedWindowsAfter)
-    : world.playerStatSegments;
+  const updatedPlayerStatViews = windowResult.results.length > 0
+    ? updatePlayerStatsAndSegmentsFromResults(
+        world.playerStats,
+        world.playerStatSegments ?? {},
+        windowResult.results,
+        world.squads,
+        totalElapsedWindowsAfter,
+      )
+    : {
+        playerStats: world.playerStats,
+        playerStatSegments: world.playerStatSegments,
+      };
+  const updatedPlayerStats = updatedPlayerStatViews.playerStats;
+  const updatedPlayerStatSegments = updatedPlayerStatViews.playerStatSegments;
 
   // Phase G mutates player fields while folding injuries and suspensions.
   // Give it an isolated snapshot so executing a window never changes the
   // caller's world or any player objects retained by React selectors.
   const updatedSquads = windowResult.results.length > 0
-    ? cloneSquadsForMutation(world.squads)
+    ? cloneSquadsForTeamMutation(
+        world.squads,
+        windowResult.results.flatMap(result => [result.homeTeamId, result.awayTeamId]),
+      )
     : world.squads;
   const injuryResult = windowResult.results.length > 0
     ? processInjuriesAndSuspensions({

@@ -57,6 +57,7 @@ const FULL_CHECKS: AuditCheck[] = [
   { script: 'verify:observation-judgment' },
   { script: 'verify:storyline-signals' },
   { script: 'verify:world-response' },
+  { script: 'verify:narrative-director' },
   { script: 'verify:key-node' },
   { script: 'verify:observation-route' },
   { script: 'verify:observation-archive' },

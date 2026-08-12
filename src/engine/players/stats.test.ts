@@ -5,6 +5,7 @@ import {
   getTopScorerByTeamFromSegments,
   playerTeamStatKey,
   updatePlayerStatSegmentsFromResults,
+  updatePlayerStatsAndSegmentsFromResults,
   updatePlayerStatsFromResults,
 } from './stats';
 import type { MatchResult, MatchEvent } from '../../types/match';
@@ -69,6 +70,30 @@ function mkLeagueResult(
 }
 
 describe('updatePlayerStatsFromResults — shootout exclusion', () => {
+  it('updates totals and club segments from the same match deltas', () => {
+    const scorer = mkPlayer('scorer', 'A', 'FW');
+    const keeper = mkPlayer('keeper', 'B', 'GK');
+    const squads = { A: [scorer], B: [keeper] };
+    const result = mkLeagueResult('A', 'B', 1, 0, [
+      { minute: 28, type: 'goal', teamId: 'A', playerId: scorer.uuid, description: '进球' },
+      { minute: 63, type: 'save', teamId: 'B', playerId: keeper.uuid, description: '扑救' },
+    ]);
+    const initialStats = createInitialPlayerStats(squads);
+    const initialSegments = createInitialPlayerStatSegments(squads);
+    const expectedStats = updatePlayerStatsFromResults(initialStats, [result], squads);
+    const expectedSegments = updatePlayerStatSegmentsFromResults(initialSegments, [result], squads);
+
+    const combined = updatePlayerStatsAndSegmentsFromResults(
+      initialStats,
+      initialSegments,
+      [result],
+      squads,
+    );
+
+    expect(combined.playerStats).toEqual(expectedStats);
+    expect(combined.playerStatSegments).toEqual(expectedSegments);
+  });
+
   it('credits starts, actual substitutes, minutes, and clean sheets without touching unused bench players', () => {
     const starter = mkPlayer('starter-df', 'A', 'DF');
     const substitute = mkPlayer('sub-df', 'A', 'DF');
