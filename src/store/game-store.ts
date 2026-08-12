@@ -109,6 +109,7 @@ interface GameStore {
   advanceWindow: () => Promise<boolean>;
   batchAdvance: (count: number) => Promise<boolean>;
   advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
+  skipCurrentSeason: () => Promise<boolean>;
   advanceToNextKeyNode: () => Promise<boolean>;
   dismissAdvanceError: () => void;
   /** Sets the legacy primary favorite. */
@@ -206,6 +207,10 @@ function yieldForAdvanceFeedback(): Promise<void> {
       setTimeout(resolve, 0);
     }
   });
+}
+
+function yieldAdvanceChunk(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 function hashActionSeed(input: string): number {
@@ -471,6 +476,96 @@ export const useGameStore = create<GameStore>()(
           return true;
         } catch (e) {
           console.error('Error in advanceUntil:', e);
+          set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
+          return false;
+        }
+      },
+
+      skipCurrentSeason: async () => {
+        let { world } = get();
+        if (!world || get().isAdvancing) return false;
+        const previousWorld = world;
+        const startingSeason = world.seasonState.seasonNumber;
+        set({ isAdvancing: true, advanceError: null });
+        await yieldForAdvanceFeedback();
+        try {
+          const {
+            buildAdvanceCompletionState,
+            buildAdvanceWorldResponse,
+            enforceStorageLimits,
+            executeWindowWithObservationSettlement,
+          } = await loadAdvanceRuntime();
+          const favoriteTeamIds = get().favoriteTeamIds;
+          const observationThemePreference = get().observationThemePreference;
+          let allNews: NewsItem[] = [];
+          let lastResults: MatchResult[] = [];
+          let observationSettlements: ObservationSettlement[] = [];
+          const outcomes: AdvanceWindowOutcome[] = [];
+          const safetyLimit = Math.max(80, world.seasonState.calendar.length + 8);
+
+          while (
+            outcomes.length < safetyLimit
+            && world.seasonState.seasonNumber === startingSeason
+          ) {
+            const currentWindow = getCurrentWindow(world);
+            if (!currentWindow) break;
+            const result = executeWindowWithObservationSettlement(
+              world,
+              favoriteTeamIds,
+              observationThemePreference,
+            );
+            world = result.world;
+            if (result.results.length > 0) lastResults = result.results;
+            allNews = [...allNews, ...result.news];
+            observationSettlements = [
+              ...observationSettlements,
+              ...result.observationSettlements,
+            ];
+            outcomes.push(result.outcome);
+
+            // A full season can contain dozens of windows. Let mobile browsers
+            // paint their busy state and process input without exposing a
+            // partially committed world.
+            if (
+              outcomes.length % 8 === 0
+              && world.seasonState.seasonNumber === startingSeason
+            ) {
+              await yieldAdvanceChunk();
+            }
+          }
+
+          if (
+            outcomes.length === 0
+            || world.seasonState.seasonNumber === startingSeason
+          ) {
+            throw new Error('Season skip did not reach the next season boundary.');
+          }
+          if (allNews.length > 30) allNews = allNews.slice(-30);
+          const updatedWorld = boundWorldStorageMetadata(enforceStorageLimits(world));
+          const worldResponse = buildAdvanceWorldResponse(
+            'skip_season',
+            outcomes,
+            updatedWorld,
+            favoriteTeamIds,
+            get().favoriteTeamId,
+            {
+              previousWorld,
+              favoritePlayerIds: get().favoritePlayerIds,
+              narrativeMemory: get().narrativeMemory,
+            },
+          );
+          set(state => buildAdvanceCompletionState(state, {
+            previousWorld,
+            world: updatedWorld,
+            favoriteTeamIds,
+            lastResults,
+            lastNews: allNews,
+            lastObservationSettlements: observationSettlements,
+            lastWorldResponse: worldResponse,
+          }));
+          return true;
+        } catch (e) {
+          console.error('Error skipping current season:', e);
           set({ isAdvancing: false, advanceError: ADVANCE_ERROR_MESSAGE });
           return false;
         }

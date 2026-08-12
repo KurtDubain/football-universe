@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-13 Narrative Editorial And Time Control
+
+- Accepted the v4.55.0 refinement recorded in `docs/narrative-editorial-checklist.md`: editorial headline maturity, explicit visual levels, a six-item More budget, broader post-advance world changes, fairer player-story competition, progressive fixture disclosure, and player-controlled advancement navigation.
+- Added a save-independent “stay on current view” preference shared by header, floating, batch, and key-node advancement. Dashboard retains its active tab when enabled; an explicitly starred spoiler-free live match remains an intentional one-shot exception.
+- Added canonical full-season advancement. It executes every remaining window through the existing simulation, observation, storage, achievement, and Narrative pipelines, yields every eight windows, commits atomically only after the next season exists, and stops before its first fixture.
+- Browser review caught two release issues before completion: the broader world-change rows made the compact mobile response 842.5px tall, and just-finished S1 facts became stale immediately after the world rolled into S2. World changes now start as a one-line expandable summary (final height 666.5px), while season-boundary news and transfers retain their real absolute freshness and still compete for only one World Moment.
+- Final Node 22.22.2 validation passed 132 test files / 953 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, bundle/changelog/script/security gates, and a production scan with no audit bridge. The 8-seed x 8-season Narrative audit scanned 3,232 windows plus 506 baseline windows with no violation; the 10-season browser audit completed 500 advances with no data issue and a successful save round-trip.
+- Dedicated 390x844 and 1440x900 browser checks confirmed three fixture groups with only one initially mounted, route/tab preference persistence, a 47-window canonical season skip with honors and player history, latest-report restoration, key-node behavior, Dashboard hierarchy, and zero overflow/runtime errors. The standard web-game client screenshots were visually inspected and contained no error artifact. No implementation or validation item remains open in `docs/narrative-editorial-checklist.md`.
+
 ## 2026-08-12 Narrative Director Planning
 
 - The next major experience project is recorded in `docs/narrative-director-checklist.md`. It targets a complete v4.54.0 Narrative Director release while keeping the observer role, authoritative simulation, determinism, existing visual assets, and storage/performance budgets frozen.

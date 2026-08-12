@@ -5,7 +5,7 @@ import type { ObservationSettlement } from './judgment';
 import { buildResultNarrativeDigest } from './narrative-sources';
 import type { NarrativeDigest, NarrativeMemoryEntry } from './narrative-types';
 
-export type AdvanceMode = 'single' | 'batch' | 'cup' | 'season_end' | 'key_node';
+export type AdvanceMode = 'single' | 'batch' | 'cup' | 'season_end' | 'key_node' | 'skip_season';
 
 export interface AdvanceWindowOutcome {
   seasonNumber: number;
@@ -155,7 +155,7 @@ export function buildAdvanceWorldResponse(
   const hasMajorMoment = allSettlements.length > 0
     || storyUpdates.length > 0
     || keyNews.some(item => item.importance === 'major')
-    || Boolean(narrative.feature?.visualKind)
+    || Boolean(narrative.worldMoment)
     || featuredResults.some(item => (
       isDecisiveRound(item.result) || analyzeDestinyDeviation(item.result).isUpset
     ));
@@ -185,6 +185,7 @@ export function buildAdvanceWorldResponse(
 }
 
 export function advanceModeLabel(mode: AdvanceMode, advancedWindows: number): string {
+  if (mode === 'skip_season') return `完整跳过本赛季 · ${advancedWindows}轮`;
   if (mode === 'key_node') return `前往关键节点 · ${advancedWindows}轮`;
   if (mode === 'cup') return `前往杯赛 · ${advancedWindows}轮`;
   if (mode === 'season_end') return `前往赛季末 · ${advancedWindows}轮`;

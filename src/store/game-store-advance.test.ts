@@ -126,6 +126,35 @@ describe('game store advance scheduling', () => {
     expect(useGameStore.getState().newAchievements).toEqual([]);
   });
 
+  it('skips through the real season boundary and retains complete generated history', async () => {
+    const initialWorld = useGameStore.getState().world!;
+    const startingSeason = initialWorld.seasonState.seasonNumber;
+    const startingHistory = initialWorld.honorHistory.length;
+
+    const skipped = await completeAdvance(useGameStore.getState().skipCurrentSeason());
+    const state = useGameStore.getState();
+    const world = state.world!;
+
+    expect(skipped).toBe(true);
+    expect(world.seasonState.seasonNumber).toBe(startingSeason + 1);
+    expect(world.seasonState.currentWindowIndex).toBe(0);
+    expect(world.seasonState.calendar[0].completed).toBe(false);
+    expect(world.honorHistory.length).toBeGreaterThan(startingHistory);
+    expect(world.honorHistory.at(-1)?.seasonNumber).toBe(startingSeason);
+    expect(Object.values(world.playerStatsHistory).some(rows => (
+      rows.some(row => row.season === startingSeason && (row.minutesPlayed ?? 0) > 0)
+    ))).toBe(true);
+    expect(state.lastWorldResponse).toMatchObject({
+      mode: 'skip_season',
+      seasonChanged: true,
+      fromSeason: startingSeason,
+      nextSeason: startingSeason + 1,
+    });
+    expect(state.lastWorldResponse?.completedMatches).toBeGreaterThan(0);
+    expect(state.lastResults.length).toBeGreaterThan(0);
+    expect(state.advanceTick).toBe(1);
+  });
+
   it('clears transient universe state for a new game and a full reset', async () => {
     const achievement = {
       id: 'test-achievement',

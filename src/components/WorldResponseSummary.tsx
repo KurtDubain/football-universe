@@ -15,7 +15,6 @@ import { getTeamShortName } from '../utils/format';
 import { Icon } from './Icon';
 import ObservationSettlementSummary from './ObservationSettlementSummary';
 import { WorldMomentFeature } from './WorldMomentFeature';
-import { worldMomentKindForNews } from './world-moment';
 
 function scoreLabel(result: MatchResult): string {
   const home = result.homeGoals + (result.etHomeGoals ?? 0);
@@ -142,13 +141,13 @@ function ResultCausality({ item }: { item: NarrativeItem }) {
           index="01"
           label="赛前条件"
           facts={item.causes}
-          fallback="双方没有冻结到足够显著的单项条件。"
+          fallback="赛前没有出现足以单独强调的条件。"
         />
         <CausalityStep
           index="02"
           label="场上转折"
           facts={item.turningPoints}
-          fallback="没有可可靠提取的关键转折；比分与比赛数据仍然有效。"
+          fallback="比赛没有留下可单独标出的转折，比分与场面数据构成主要记录。"
         />
         <CausalityStep
           index="03"
@@ -206,7 +205,6 @@ export default function WorldResponseSummary({
   const changes = [...response.storyUpdates, ...response.keyNews]
     .filter((item, index, all) => all.findIndex(entry => entry.id === item.id) === index)
     .slice(0, 3);
-  const narrativeFeature = response.narrative?.feature;
   const primaryFixtureId = response.featuredResults[0]?.result.fixtureId;
   const narrativeItems = [
     response.narrative?.feature,
@@ -216,17 +214,17 @@ export default function WorldResponseSummary({
   const causalityItem = narrativeItems.find(item => (
     item.source === 'match_result' && item.fixtureIds?.includes(primaryFixtureId ?? '')
   )) ?? narrativeItems.find(item => item.source === 'match_result');
-  const structuredMoment = narrativeFeature?.visualKind ? narrativeFeature : undefined;
-  const worldMoment = structuredMoment
-    ? undefined
-    : changes.find(news => worldMomentKindForNews(news) !== null);
-  const secondaryChanges = changes.filter(news => news.id !== worldMoment?.id);
-  const narrativeChanges = [
-    ...(narrativeFeature && narrativeFeature.source !== 'match_result' && !structuredMoment
-      ? [narrativeFeature]
-      : []),
-    ...(response.narrative?.signals ?? []).filter(item => item.source !== 'match_result'),
-  ].slice(0, 3);
+  const structuredMoment = response.narrative?.worldMoment;
+  const narrativeChanges = narrativeItems
+    .filter(item => item.source !== 'match_result')
+    .filter(item => item.arcKey !== structuredMoment?.arcKey)
+    .filter(item => item.editorialState === 'new' || item.editorialState === 'changed')
+    .filter((item, index, all) => all.findIndex(entry => entry.arcKey === item.arcKey) === index)
+    .slice(0, 4);
+  const secondaryChanges = changes
+    .filter(news => !narrativeChanges.some(item => item.title === news.title))
+    .filter(news => news.title !== structuredMoment?.title)
+    .slice(0, Math.max(0, 4 - narrativeChanges.length));
   const hiddenMatches = Math.max(0, response.completedMatches - response.featuredResults.length);
   const hiddenNews = Math.max(0, response.totalNews - changes.length);
 
@@ -297,10 +295,6 @@ export default function WorldResponseSummary({
             seasonNumber={structuredMoment.seasonNumber}
           />
         </div>
-      ) : worldMoment ? (
-        <div className="mt-3">
-          <WorldMomentFeature news={worldMoment} />
-        </div>
       ) : null}
 
       {response.featuredResults.length > 0 && (
@@ -344,11 +338,21 @@ export default function WorldResponseSummary({
       </div>
 
       {(narrativeChanges.length > 0 || secondaryChanges.length > 0) && (
-        <div className="mt-2" data-testid="world-response-changes">
-          {narrativeChanges.length > 0
-            ? narrativeChanges.map(item => <NarrativeChangeRow key={item.id} item={item} />)
-            : secondaryChanges.map(news => <ChangeRow key={news.id} news={news} />)}
-        </div>
+        <details className="mt-2 border-t border-slate-700/45" data-testid="world-response-changes">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[11px] font-semibold text-slate-400">
+            <Icon name="burst" size={14} className="text-emerald-300" />
+            <span className="shrink-0">本轮之后，世界发生了什么</span>
+            <span className="min-w-0 flex-1 truncate text-right font-normal text-slate-500">
+              {narrativeChanges[0]?.title ?? secondaryChanges[0]?.title}
+            </span>
+            <span className="shrink-0 text-slate-600">{narrativeChanges.length + secondaryChanges.length}条</span>
+            <Icon name="arrow-down" size={13} className="details-chevron shrink-0" />
+          </summary>
+          <div className="border-t border-slate-700/35">
+            {narrativeChanges.map(item => <NarrativeChangeRow key={item.id} item={item} />)}
+            {secondaryChanges.map(news => <ChangeRow key={news.id} news={news} />)}
+          </div>
+        </details>
       )}
 
       {(hiddenMatches > 0 || hiddenNews > 0 || response.nextWindowLabel) && (

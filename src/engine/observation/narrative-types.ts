@@ -25,6 +25,8 @@ export type NarrativeSubjectType =
   | 'world';
 
 export type NarrativeVisualKind = 'stage' | 'rise' | 'fall' | 'legacy' | 'transfer';
+export type NarrativeVisualLevel = 'signal' | 'chapter' | 'world_moment';
+export type NarrativeEditorialState = 'new' | 'changed' | 'ongoing';
 
 export interface NarrativeFact {
   /** Stable within one candidate so merged sources can retain unique facts. */
@@ -75,6 +77,10 @@ export interface NarrativeCandidate {
   nextWatch?: string;
   destinations?: NarrativeDestination[];
   visualKind?: NarrativeVisualKind;
+  /** Image eligibility is independent from the artwork family. */
+  visualLevel?: NarrativeVisualLevel;
+  /** Runtime-only tie-breaker for the most mature presentation of one arc. */
+  presentationPriority?: number;
   fingerprint: string;
   changedAt: number;
   weights: NarrativeWeights;
@@ -85,11 +91,16 @@ export interface NarrativeCandidate {
 /** Presentation-safe shape: internal ranking weights are deliberately absent. */
 export type NarrativeItem = Omit<
   NarrativeCandidate,
-  'weights' | 'reservedForObservationTheme'
->;
+  'weights' | 'reservedForObservationTheme' | 'presentationPriority' | 'visualLevel'
+> & {
+  visualLevel: NarrativeVisualLevel;
+  editorialState: NarrativeEditorialState;
+};
 
 export interface NarrativeDigest {
   feature?: NarrativeItem;
+  /** At most one historically meaningful image candidate for post-advance UI. */
+  worldMoment?: NarrativeItem;
   signals: NarrativeItem[];
   more: NarrativeItem[];
   /** Fixtures merged into Slot A receive a relation badge instead of repeated copy. */

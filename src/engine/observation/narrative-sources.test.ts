@@ -183,4 +183,89 @@ describe('narrative source adapters', () => {
       memory: [],
     })).toEqual(digest);
   });
+
+  it('treats previous-season final-window news as fresh at the season boundary', () => {
+    const previousWorld = initializeGameWorld(20260818);
+    const endWorld = structuredClone(previousWorld);
+    endWorld.seasonState.seasonNumber = 2;
+    endWorld.seasonState.currentWindowIndex = 0;
+    endWorld.totalElapsedWindows = 48;
+    const news = {
+      id: 'season-one-champion',
+      seasonNumber: 1,
+      windowIndex: 47,
+      type: 'trophy' as const,
+      importance: 'major' as const,
+      title: '冠军诞生',
+      description: '决赛结束后，冠军正式诞生。',
+    };
+    endWorld.newsLog = [news];
+
+    const digest = buildResultNarrativeDigest({
+      outcomes: [{
+        seasonNumber: 1,
+        windowIndex: 47,
+        windowLabel: '赛季结算',
+        results: [],
+        news: [news],
+        observationSettlements: [],
+      }],
+      endWorld,
+      previousWorld,
+      favoriteTeamIds: [],
+      favoritePlayerIds: [],
+      primaryFavoriteTeamId: null,
+      memory: [],
+    });
+
+    expect(digest.worldMoment).toMatchObject({
+      id: 'news:season-one-champion',
+      changedAt: 48,
+      visualLevel: 'world_moment',
+    });
+    expect(digest.worldMoment?.evidence?.[0].label).toBe('足坛动态');
+  });
+
+  it('uses each result window for World Moment freshness during a multi-window advance', () => {
+    const previousWorld = initializeGameWorld(20260819);
+    const [homeTeamId, awayTeamId] = Object.keys(previousWorld.teamBases);
+    const oldFinal = { ...result(homeTeamId, awayTeamId), fixtureId: 'old-final' };
+    const recentFinal = { ...result(homeTeamId, awayTeamId), fixtureId: 'recent-final' };
+    const endWorld = structuredClone(previousWorld);
+    endWorld.seasonState.currentWindowIndex = 4;
+    endWorld.totalElapsedWindows = 4;
+
+    const digest = buildResultNarrativeDigest({
+      outcomes: [
+        {
+          seasonNumber: 1,
+          windowIndex: 0,
+          windowLabel: '早先决赛',
+          results: [oldFinal],
+          news: [],
+          observationSettlements: [],
+        },
+        {
+          seasonNumber: 1,
+          windowIndex: 3,
+          windowLabel: '最近决赛',
+          results: [recentFinal],
+          news: [],
+          observationSettlements: [],
+        },
+      ],
+      endWorld,
+      previousWorld,
+      favoriteTeamIds: [],
+      favoritePlayerIds: [],
+      primaryFavoriteTeamId: null,
+      memory: [],
+    });
+
+    expect(digest.worldMoment).toMatchObject({
+      id: 'result:1:recent-final',
+      changedAt: 3,
+    });
+    expect(digest.more.map(item => item.id)).not.toContain('result:1:recent-final');
+  });
 });

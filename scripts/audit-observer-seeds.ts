@@ -9,7 +9,10 @@ import {
   initializeGameWorld,
 } from '../src/engine/season/season-manager';
 import { isUpset } from '../src/engine/season/helpers';
-import { computeFixtureImportance } from '../src/engine/season/match-importance';
+import { computeFixtureImportance, pickFocusMatches } from '../src/engine/season/match-importance';
+import { buildObservationTheme } from '../src/engine/observation/observation-theme';
+import { buildMatchdayNarrativeDigest } from '../src/engine/observation/narrative-sources';
+import type { NarrativeSource } from '../src/engine/observation/narrative-types';
 import type { MatchResult } from '../src/types/match';
 
 interface FocusMatchAudit {
@@ -24,6 +27,8 @@ interface FocusMatchAudit {
   deniedGoals: number;
   upset: boolean;
   dramaScore: number;
+  importanceScore: number;
+  reasons: string[];
 }
 
 interface SeedAudit {
@@ -36,6 +41,12 @@ interface SeedAudit {
   averageGoals: number;
   universeScore: number;
   firstExperienceScore: number;
+  observerDepthScore: number;
+  meaningfulChoiceWindows: number;
+  observationThemeWindows: number;
+  narrativeSourceDiversity: number;
+  featureWindows: number;
+  worldMomentWindows: number;
   firstFocusMatches: FocusMatchAudit[];
 }
 
@@ -44,6 +55,8 @@ function auditFocusMatch(
   teamId: string,
   result: MatchResult,
   world: ReturnType<typeof initializeGameWorld>,
+  importanceScore: number,
+  reasons: string[],
 ): FocusMatchAudit {
   const goals = result.homeGoals + result.awayGoals
     + (result.etHomeGoals ?? 0) + (result.etAwayGoals ?? 0);
@@ -78,6 +91,8 @@ function auditFocusMatch(
     deniedGoals,
     upset,
     dramaScore,
+    importanceScore,
+    reasons,
   };
 }
 
@@ -89,6 +104,11 @@ function auditSeed(seed: number): SeedAudit {
   let totalGoals = 0;
   let matchCount = 0;
   let firstFocusMatches: FocusMatchAudit[] = [];
+  let meaningfulChoiceWindows = 0;
+  let observationThemeWindows = 0;
+  let featureWindows = 0;
+  let worldMomentWindows = 0;
+  const narrativeSources = new Set<NarrativeSource>();
 
   for (let index = 0; index < 6; index++) {
     const window = getCurrentWindow(world);
@@ -99,17 +119,54 @@ function auditSeed(seed: number): SeedAudit {
     );
     if (highestNaturalImportance >= 4) naturallyFocusedWindows++;
 
+    const lensWindows = getObserverLensOptions(Object.values(world.teamBases))
+      .filter((option): option is typeof option & { id: Exclude<ObserverLens, 'neutral'>; teamId: string } => (
+        option.id !== 'neutral' && option.teamId !== null
+      ))
+      .map(option => {
+        const focusMatches = pickFocusMatches(window.fixtures, world, [option.teamId], 2, option.teamId);
+        const observationTheme = buildObservationTheme(world, option.teamId, 'auto');
+        const digest = buildMatchdayNarrativeDigest({
+          world,
+          currentWindow: window,
+          observationTheme,
+          focusMatches,
+          playerHighlights: [],
+          favoriteTeamIds: [option.teamId],
+          favoritePlayerIds: [],
+          primaryFavoriteTeamId: option.teamId,
+          memory: [],
+        });
+        const primaryFocus = focusMatches[0];
+        const hasSpecificStakes = primaryFocus?.importance.reasons.some(
+          reason => !reason.includes('观察球队出战'),
+        ) ?? false;
+        if (hasSpecificStakes || Boolean(digest.feature) || digest.signals.length > 0) {
+          meaningfulChoiceWindows++;
+        }
+        if (observationTheme) observationThemeWindows++;
+        if (digest.feature) featureWindows++;
+        if (digest.worldMoment) worldMomentWindows++;
+        for (const item of [digest.feature, ...digest.signals, ...digest.more]) {
+          if (item) narrativeSources.add(item.source);
+        }
+        return { option, primaryFocus };
+      });
+
     const execution = executeCurrentWindow(world);
     if (index === 0) {
-      firstFocusMatches = getObserverLensOptions(Object.values(world.teamBases))
-        .filter((option): option is typeof option & { id: Exclude<ObserverLens, 'neutral'>; teamId: string } => (
-          option.id !== 'neutral' && option.teamId !== null
-        ))
-        .flatMap(option => {
+      firstFocusMatches = lensWindows.flatMap(({ option, primaryFocus }) => {
           const result = execution.results.find(entry => (
             entry.homeTeamId === option.teamId || entry.awayTeamId === option.teamId
           ));
-          return result ? [auditFocusMatch(option.id, option.teamId, result, world)] : [];
+          return result ? [auditFocusMatch(
+            option.id,
+            option.teamId,
+            result,
+            world,
+            primaryFocus?.importance.score ?? 0,
+            primaryFocus?.importance.reasons ?? [],
+          )] : [];
         });
     }
     for (const result of execution.results) {
@@ -127,19 +184,42 @@ function auditSeed(seed: number): SeedAudit {
     world = execution.world;
   }
 
-  const universeScore = upsetCount * 5 + closeMatchCount + naturallyFocusedWindows * 3;
+  const universeScore = upsetCount * 3 + closeMatchCount + naturallyFocusedWindows * 2;
   const challenger = firstFocusMatches.find(entry => entry.lens === 'challenger');
+  const narrativeSourceDiversity = narrativeSources.size;
+  const observerDepthScore = meaningfulChoiceWindows * 2
+    + observationThemeWindows
+    + featureWindows
+    + narrativeSourceDiversity * 5
+    - Math.max(0, worldMomentWindows - 3) * 2;
+  const closeFirstMatches = firstFocusMatches.filter(entry => entry.margin <= 1).length;
   const firstExperienceReady = firstFocusMatches.length === 3
-    && firstFocusMatches.every(entry => entry.goals >= 2)
-    && Boolean(challenger && challenger.lateGoals >= 1 && challenger.margin <= 1);
+    && firstFocusMatches.every(entry => entry.importanceScore >= 4)
+    && meaningfulChoiceWindows >= 12
+    && observationThemeWindows >= 15
+    && narrativeSourceDiversity >= 3
+    && closeFirstMatches === 3
+    && Boolean(challenger && challenger.goals > 0);
   const firstExperienceScore = firstFocusMatches.reduce(
-    (total, entry) => total + entry.dramaScore * (entry.lens === 'challenger' ? 3 : 1),
-    challenger && challenger.goals >= 2 ? 20 : challenger && challenger.goals > 0 ? 8 : 0,
+    (total, entry) => total
+      + (
+        entry.importanceScore * 1.5
+        + Math.min(3, entry.reasons.length) * 2
+        + Math.min(3, entry.goals) * 2
+        + (entry.margin <= 1 ? 12 : entry.margin === 2 ? 6 : 0)
+        + entry.lateGoals * 2
+        + entry.redCards * 2
+        + entry.deniedGoals
+        + Number(entry.upset) * 3
+        - Math.max(0, entry.margin - 1) * 5
+        - Math.max(0, entry.goals - 5) * 3
+      ) * (entry.lens === 'challenger' ? 1.5 : 1),
+    challenger && challenger.margin <= 1 ? 10 : 0,
   );
 
   return {
     seed,
-    score: universeScore + firstExperienceScore,
+    score: universeScore + firstExperienceScore + observerDepthScore,
     firstExperienceReady,
     upsetCount,
     closeMatchCount,
@@ -147,6 +227,12 @@ function auditSeed(seed: number): SeedAudit {
     averageGoals: Math.round(totalGoals / Math.max(1, matchCount) * 100) / 100,
     universeScore,
     firstExperienceScore,
+    observerDepthScore,
+    meaningfulChoiceWindows,
+    observationThemeWindows,
+    narrativeSourceDiversity,
+    featureWindows,
+    worldMomentWindows,
     firstFocusMatches,
   };
 }

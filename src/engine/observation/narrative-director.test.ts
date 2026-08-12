@@ -5,6 +5,7 @@ import {
   createNarrativeFingerprint,
   directNarrative,
   MAX_NARRATIVE_MEMORY,
+  MAX_MORE_NARRATIVES,
   mergeNarrativeCandidates,
 } from './narrative-director';
 
@@ -74,6 +75,26 @@ describe('narrative director', () => {
     expect(merged[0].sourceRefs).toHaveLength(2);
   });
 
+  it('uses editorial maturity to choose the latest same-source headline regardless of input order', () => {
+    const early = candidate('leader', {
+      arcKey: 'player:p1:season:1',
+      source: 'player_story',
+      seasonPhase: '第8轮',
+      title: '位置标杆 · 测试球员',
+      presentationPriority: 25,
+    });
+    const mature = candidate('breakout', {
+      arcKey: early.arcKey,
+      source: 'player_story',
+      seasonPhase: 'U23新星',
+      title: '新星抬头 · 测试球员',
+      presentationPriority: 60,
+    });
+
+    expect(mergeNarrativeCandidates([early, mature])[0].title).toBe(mature.title);
+    expect(mergeNarrativeCandidates([mature, early])[0].title).toBe(mature.title);
+  });
+
   it('reserves the observation arc, returns relation fixtures, and enforces 1+2 limits', () => {
     const theme = candidate('theme', {
       arcKey: 'team:t1:story:dark_horse',
@@ -112,6 +133,43 @@ describe('narrative director', () => {
     expect(digest.more.map(item => item.id)).toEqual(['quiet']);
   });
 
+  it('caps More, suppresses recently unchanged items, and separates image family from eligibility', () => {
+    const items = Array.from({ length: 12 }, (_, index) => candidate(`item-${index}`, {
+      visualKind: 'legacy',
+      visualLevel: 'signal',
+    }));
+    const digest = directNarrative(items, [], { elapsedWindow: 20 });
+
+    expect(digest.more.length).toBeLessThanOrEqual(MAX_MORE_NARRATIVES);
+    expect(digest.worldMoment).toBeUndefined();
+
+    const rare = candidate('rare', {
+      visualKind: 'stage',
+      visualLevel: 'world_moment',
+      changedAt: 20,
+    });
+    expect(directNarrative([rare], [], { elapsedWindow: 20 }).worldMoment?.id).toBe('rare');
+    expect(directNarrative([{ ...rare, changedAt: 17 }], [], { elapsedWindow: 20 }).worldMoment)
+      .toBeUndefined();
+    const visualOnly = directNarrative([{
+      ...rare,
+      weights: { importance: 10, relevance: 0, continuity: 0, historical: 0 },
+    }], [], { elapsedWindow: 20 });
+    expect(visualOnly.worldMoment?.id).toBe('rare');
+    expect(visualOnly.more).toEqual([]);
+
+    const quiet = candidate('quiet-repeat', {
+      weights: { importance: 10, relevance: 0, continuity: 0, historical: 0 },
+    });
+    const memory: NarrativeMemoryEntry[] = [{
+      arcKey: quiet.arcKey,
+      fingerprint: quiet.fingerprint,
+      lastChangedAt: 19,
+      lastSelectedAt: 19,
+    }];
+    expect(directNarrative([quiet], memory, { elapsedWindow: 20 }).more).toEqual([]);
+  });
+
   it('uses favorites, novelty, continuity, and historical weight without exposing scores', () => {
     const ordinary = candidate('ordinary', {
       subjectIds: ['team-a'],
@@ -144,7 +202,7 @@ describe('narrative director', () => {
     expect(directNarrative([historical], memory, context).feature?.id).toBe('historical');
   });
 
-  it('keeps presentation memory bounded and updates only selected arcs', () => {
+  it('keeps presentation memory bounded and remembers every displayed arc', () => {
     let memory: NarrativeMemoryEntry[] = Array.from({ length: MAX_NARRATIVE_MEMORY }, (_, index) => ({
       arcKey: `old:${index}`,
       fingerprint: `${index}`,

@@ -99,7 +99,7 @@ function result(teamId: string, opponentId: string, won: boolean, fixtureId: str
 }
 
 describe('world narrative scan', () => {
-  it('surfaces all four positions, applies watch relevance, stays bounded, and never mutates the world', () => {
+  it('lets at most two position leaders compete for space, applies watch relevance, and never mutates the world', () => {
     const world = initializeGameWorld(20260812);
     world.playerStatSegments = undefined;
     const players = (['GK', 'DF', 'MF', 'FW'] as PlayerPosition[]).map(position => playerAt(world, position));
@@ -110,9 +110,8 @@ describe('world narrative scan', () => {
     const candidates = scan(world, [], [watched.uuid]);
     const leaders = candidates.filter(candidate => candidate.id.startsWith('player-leader:'));
 
-    expect(leaders.map(candidate => candidate.title.split('标杆')[0])).toEqual(
-      expect.arrayContaining(['门将', '后卫', '中场', '前锋']),
-    );
+    expect(leaders.length).toBeLessThanOrEqual(2);
+    expect(leaders.map(candidate => candidate.subjectIds[0])).toContain(watched.uuid);
     expect(leaders.find(candidate => candidate.subjectIds.includes(watched.uuid))?.weights.relevance).toBe(72);
     expect(candidates.filter(candidate => candidate.source === 'player_story').length).toBeLessThanOrEqual(WORLD_NARRATIVE_CAPS.player);
     expect(candidates.length).toBeLessThanOrEqual(WORLD_NARRATIVE_CAPS.total);
@@ -170,8 +169,15 @@ describe('world narrative scan', () => {
 
     world.teamStates[teamId].coachPressure = 64;
     expect(scan(world).some(candidate => candidate.id.startsWith('coach-pressure:') && candidate.subjectIds.includes(teamId))).toBe(false);
-    world.teamStates[teamId].coachPressure = 65;
-    expect(scan(world).some(candidate => candidate.id.startsWith('coach-pressure:') && candidate.subjectIds.includes(teamId))).toBe(true);
+    world.teamStates[teamId].coachPressure = 72;
+    const pressure72 = scan(world).find(candidate => candidate.id.startsWith('coach-pressure:') && candidate.subjectIds.includes(teamId));
+    expect(pressure72).toBeDefined();
+    world.teamStates[teamId].coachPressure = 73;
+    const pressure73 = scan(world).find(candidate => candidate.id.startsWith('coach-pressure:') && candidate.subjectIds.includes(teamId));
+    expect(pressure73?.fingerprint).toBe(pressure72?.fingerprint);
+    world.teamStates[teamId].coachPressure = 76;
+    const pressure76 = scan(world).find(candidate => candidate.id.startsWith('coach-pressure:') && candidate.subjectIds.includes(teamId));
+    expect(pressure76?.fingerprint).not.toBe(pressure72?.fingerprint);
   });
 
   it('uses only the destination-club segment for post-transfer resurgence', () => {
@@ -238,6 +244,39 @@ describe('world narrative scan', () => {
       keyPasses: 8,
     };
     expect(scan(world).some(candidate => candidate.id.startsWith('transfer-resurgence:'))).toBe(true);
+  });
+
+  it('keeps a season-end transfer fresh after the world rolls into the next season', () => {
+    const world = initializeGameWorld(20260815);
+    const player = playerAt(world, 'FW');
+    const fromTeamId = Object.keys(world.teamBases).find(teamId => teamId !== player.teamId)!;
+    world.seasonState.seasonNumber = 2;
+    world.seasonState.currentWindowIndex = 1;
+    world.totalElapsedWindows = 49;
+    world.transferHistory = [{
+      season: 1,
+      windowIndex: 47,
+      playerId: player.uuid,
+      playerName: player.name,
+      playerNumber: player.number,
+      position: player.position,
+      fromTeamId,
+      fromTeamName: world.teamBases[fromTeamId].name,
+      toTeamId: player.teamId,
+      toTeamName: world.teamBases[player.teamId].name,
+      type: 'transfer',
+      fee: 62,
+      reason: '重磅加盟',
+    }];
+
+    const transfer = scan(world).find(candidate => candidate.id.startsWith('transfer-complete:'));
+
+    expect(transfer).toMatchObject({
+      visualLevel: 'world_moment',
+      changedAt: 48,
+    });
+    expect(transfer?.summary).toContain('新的生涯篇章');
+    expect(transfer?.evidence?.[0].detail).toContain('转会');
   });
 
   it('derives title, promotion, relegation, final, continental, and World Cup signals from structured state', () => {

@@ -156,7 +156,7 @@ export default function NarrativeDigest({
       <div className="flex min-h-11 items-center gap-2 px-3 py-2">
         <Icon name="burst" size={16} className="shrink-0 text-emerald-300" />
         <h3 className="text-xs font-semibold text-slate-100">世界脉搏</h3>
-        <span className="text-[11px] text-slate-600">精选，不改变模拟</span>
+        <span className="text-[11px] text-slate-600">此刻值得留意</span>
         <span className="ml-auto max-w-[42%] truncate text-right text-[11px] text-slate-500" title={windowLabel}>
           {windowLabel}
         </span>
@@ -221,7 +221,7 @@ export default function NarrativeDigest({
                     </summary>
                     <div className="space-y-2.5 pb-1">
                       <FactGroup label="赛前背景" facts={digest.feature.causes} />
-                      <FactGroup label="已有证据" facts={digest.feature.evidence} />
+                      <FactGroup label="故事依据" facts={digest.feature.evidence} />
                       <FactGroup label="关键转折" facts={digest.feature.turningPoints} />
                       <FactGroup label="随后发生" facts={digest.feature.consequences} />
                     </div>
@@ -245,8 +245,8 @@ export default function NarrativeDigest({
         <details data-testid="more-world-signals" className="border-t border-slate-700/45">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-xs font-semibold text-slate-400 hover:text-slate-200">
             <Icon name="news" size={15} />
-            <span>更多本轮线索</span>
-            <span className="text-[11px] font-normal text-slate-600">{digest.more.length}条，已去重</span>
+            <span>更多本轮动态</span>
+            <span className="text-[11px] font-normal text-slate-600">{digest.more.length}条</span>
             <Icon name="arrow-down" size={14} className="ml-auto details-chevron" />
           </summary>
           <div className="px-3 pb-1">

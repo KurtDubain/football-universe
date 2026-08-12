@@ -9,6 +9,7 @@ import {
 } from '../src/engine/observation/narrative-world-scan';
 import type {
   NarrativeDigest,
+  NarrativeEditorialState,
   NarrativeMemoryEntry,
   NarrativeSource,
 } from '../src/engine/observation/narrative-types';
@@ -36,6 +37,7 @@ type DerivedSource = typeof derivedSources[number];
 const candidateCounts = Object.fromEntries(derivedSources.map(source => [source, 0])) as Record<DerivedSource, number>;
 const selectedCounts = Object.fromEntries(derivedSources.map(source => [source, 0])) as Record<DerivedSource, number>;
 const selectedAllSources: Partial<Record<NarrativeSource, number>> = {};
+const worldMomentSources: Partial<Record<NarrativeSource, number>> = {};
 const buildDurations: number[] = [];
 const digestDurations: number[] = [];
 const violations: string[] = [];
@@ -43,6 +45,15 @@ let windowsScanned = 0;
 let maxCandidatePool = 0;
 let maxDigestPool = 0;
 let digestWithFeature = 0;
+let digestWithWorldMoment = 0;
+let maxMoreItems = 0;
+let emergentPlayerCandidates = 0;
+const editorialStateCounts: Record<NarrativeEditorialState, number> = {
+  new: 0,
+  changed: 0,
+  ongoing: 0,
+};
+const playerLeaderPositions = new Set<string>();
 let baselineWindows = 0;
 
 function digestWorld(world: GameWorld): string {
@@ -68,7 +79,7 @@ function checkDestinations(world: GameWorld, digest: NarrativeDigest, label: str
   ]);
   const currentFixtureIds = new Set(getCurrentWindow(world)?.fixtures.map(fixture => fixture.id) ?? []);
   const retainedFixtureIds = new Set((world.memorableMatches ?? []).map(match => match.result.fixtureId));
-  const items = [digest.feature, ...digest.signals, ...digest.more]
+  const items = [digest.worldMoment, digest.feature, ...digest.signals, ...digest.more]
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   for (const item of items) {
     for (const destination of item.destinations ?? []) {
@@ -105,11 +116,15 @@ function inspectDigest(world: GameWorld, digest: NarrativeDigest, label: string)
   const arcs = items.map(item => `${item.seasonNumber}:${item.arcKey}`);
   if (new Set(arcs).size !== arcs.length) violations.push(`${label}: duplicate semantic arc`);
   if (digest.signals.length > 2) violations.push(`${label}: ${digest.signals.length} signals`);
+  if (digest.more.length > 6) violations.push(`${label}: ${digest.more.length} More items`);
+  if (digest.worldMoment && digest.worldMoment.visualLevel !== 'world_moment') {
+    violations.push(`${label}: ineligible World Moment`);
+  }
   if (containsInvalidNumber(digest)) violations.push(`${label}: NaN or Infinity in digest`);
   if (JSON.stringify(digest).includes('peakRating') || JSON.stringify(digest).includes('潜力上限')) {
     violations.push(`${label}: hidden potential leaked`);
   }
-  if (digest.candidateCount > 64 || digest.more.length > 64) {
+  if (digest.candidateCount > 64) {
     violations.push(`${label}: unbounded digest pool ${digest.candidateCount}/${digest.more.length}`);
   }
   checkDestinations(world, digest, label);
@@ -172,6 +187,14 @@ for (let seedOffset = 1; seedOffset <= seedCount; seedOffset++) {
         violations.push(`${label}: ${source} adapter exceeded cap`);
       }
     }
+    const playerCandidates = candidates.filter(candidate => candidate.source === 'player_story');
+    const leaders = playerCandidates.filter(candidate => candidate.id.startsWith('player-leader:'));
+    if (leaders.length > 2) violations.push(`${label}: ${leaders.length} reserved player leaders`);
+    for (const leader of leaders) {
+      const position = leader.id.split(':')[2];
+      if (position) playerLeaderPositions.add(position);
+    }
+    emergentPlayerCandidates += playerCandidates.length - leaders.length;
     if (candidates.length > WORLD_NARRATIVE_CAPS.total) violations.push(`${label}: world pool exceeded total cap`);
     if (containsInvalidNumber(candidates)) violations.push(`${label}: invalid number in source candidates`);
 
@@ -182,6 +205,15 @@ for (let seedOffset = 1; seedOffset <= seedCount; seedOffset++) {
       maxDigestPool = Math.max(maxDigestPool, digest.candidateCount);
       inspectDigest(world, digest, label);
       if (digest.feature) digestWithFeature++;
+      if (digest.worldMoment) {
+        digestWithWorldMoment++;
+        worldMomentSources[digest.worldMoment.source] = (worldMomentSources[digest.worldMoment.source] ?? 0) + 1;
+      }
+      maxMoreItems = Math.max(maxMoreItems, digest.more.length);
+      for (const item of [digest.feature, ...digest.signals, ...digest.more]
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))) {
+        editorialStateCounts[item.editorialState]++;
+      }
       for (const item of [digest.feature, ...digest.signals]
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))) {
         selectedAllSources[item.source] = (selectedAllSources[item.source] ?? 0) + 1;
@@ -260,6 +292,14 @@ const report = {
   maxCandidatePool,
   maxDigestPool,
   digestWithFeature,
+  digestWithWorldMoment,
+  worldMomentSources,
+  maxMoreItems,
+  editorialStateCounts,
+  playerNarrative: {
+    leaderPositions: [...playerLeaderPositions].sort(),
+    emergentCandidates: emergentPlayerCandidates,
+  },
   performance: {
     worldBuildP50Ms: Math.round(percentile(buildDurations, 0.5) * 100) / 100,
     worldBuildP95Ms: Math.round(buildP95 * 100) / 100,

@@ -103,6 +103,32 @@ function fixtureDestination(fixtureId: string) {
   return { key: `fixture:${fixtureId}`, label: '查看比赛', fixtureId };
 }
 
+function seasonEventChangedAt(
+  world: GameWorld,
+  seasonNumber: number,
+  windowIndex: number,
+): number {
+  const currentSeason = world.seasonState.seasonNumber;
+  const elapsed = world.totalElapsedWindows ?? 0;
+  if (seasonNumber === currentSeason - 1) {
+    const lastTransferWindow = Math.max(
+      windowIndex,
+      ...(world.transferHistory ?? [])
+        .filter(record => record.season === seasonNumber)
+        .map(record => record.windowIndex),
+    );
+    return Math.max(
+      0,
+      elapsed - world.seasonState.currentWindowIndex - Math.max(0, lastTransferWindow - windowIndex),
+    );
+  }
+  if (seasonNumber !== currentSeason) return 0;
+  return Math.max(
+    0,
+    elapsed - Math.max(0, world.seasonState.currentWindowIndex - windowIndex),
+  );
+}
+
 function standingsForLevel(world: GameWorld, level: 1 | 2 | 3): StandingEntry[] {
   if (level === 1) return world.league1Standings;
   if (level === 2) return world.league2Standings;
@@ -237,6 +263,8 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       nextWatch: '观察这份效率能否在更多出场时间中延续',
       destinations: [playerDestination(player.uuid), teamDestination(player.teamId)],
       visualKind: 'legacy',
+      visualLevel: 'signal',
+      presentationPriority: 25,
       fingerprint: createNarrativeFingerprint([
         season,
         player.uuid,
@@ -270,7 +298,7 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       seasonNumber: season,
       seasonPhase: 'U23新星',
       title: `新星抬头 · ${player.name}`,
-      summary: `${player.age}岁的${player.name}已经用真实出场和表现进入本季新星视野。`,
+      summary: `${player.age}岁的${player.name}已经凭本季出场和表现进入新星视野。`,
       evidence: [fact(
         'player_story',
         `player:${player.uuid}:breakout`,
@@ -280,6 +308,8 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       nextWatch: '观察他能否保持出场份额并跨过低样本阶段',
       destinations: [playerDestination(player.uuid), teamDestination(player.teamId)],
       visualKind: 'rise',
+      visualLevel: 'chapter',
+      presentationPriority: 58,
       fingerprint: createNarrativeFingerprint([
         season,
         player.uuid,
@@ -320,6 +350,8 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       nextWatch: '观察这次回升能否持续到赛季收官',
       destinations: [playerDestination(veteran.player.uuid)],
       visualKind: 'rise',
+      visualLevel: 'chapter',
+      presentationPriority: 68,
       fingerprint: createNarrativeFingerprint([
         season,
         veteran.player.uuid,
@@ -375,11 +407,13 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       seasonNumber: season,
       seasonPhase: '连续贡献',
       title: `${player.name}连续${streak.length}场制造进球`,
-      summary: '连续场次均来自真实出场阵容与常规时间、加时赛的进球或助攻事件。',
+      summary: '这段连续表现由正式比赛中的进球与助攻一步步累积。',
       evidence: [fact('player_story', `player:${player.uuid}:streak:${streak.length}`, '连续贡献', `${streak.length}场连续进球或助攻`)],
       nextWatch: '下一次实际出场将决定这段连续表现能否延续',
       destinations: [playerDestination(player.uuid)],
       visualKind: 'rise',
+      visualLevel: streak.length >= 9 && player.rating >= 86 ? 'world_moment' : 'chapter',
+      presentationPriority: Math.min(92, 62 + streak.length * 4),
       fingerprint: createNarrativeFingerprint([season, player.uuid, streak.length]),
       changedAt: elapsed,
       weights: { importance: Math.min(90, 68 + streak.length * 4), relevance: followed.has(player.uuid) ? 86 : 20, continuity: 70, historical: 25 },
@@ -408,21 +442,34 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
       seasonNumber: season,
       seasonPhase: '伤停观察',
       title: `${player.name}遭遇${injury!.reason}`,
-      summary: `${POSITION_LABELS[player.position]}${player.name}预计缺席${injury!.durationMatches}个比赛窗口，球队阵容将真实反映这段不可用期。`,
+      summary: `${POSITION_LABELS[player.position]}${player.name}预计缺席${injury!.durationMatches}个比赛窗口，球队必须在这段时间寻找替代者。`,
       evidence: [fact('player_story', `player:${player.uuid}:injury`, '伤停档案', `${injury!.type} · ${injury!.reason} · ${injury!.durationMatches}个比赛窗口`)],
       nextWatch: `最早在全局窗口${player.injuredUntilWindow}恢复可选`,
       destinations: [playerDestination(player.uuid), teamDestination(player.teamId)],
       visualKind: 'fall',
+      visualLevel: injury!.durationMatches >= 10 && player.rating >= 82
+        ? 'world_moment'
+        : 'chapter',
+      presentationPriority: Math.min(95, 68 + injury!.durationMatches * 2),
       fingerprint: createNarrativeFingerprint([season, player.uuid, injury]),
       changedAt: Math.max(0, injury!.startWindow),
       weights: { importance: Math.min(92, 65 + injury!.durationMatches * 2), relevance: followed.has(player.uuid) ? 92 : 18, continuity: 72, historical: injury!.type === 'long_term' ? 65 : 25 },
     });
   }
 
-  const retained = candidates.slice(0, leaders.length);
-  for (const candidate of candidates) {
-    if (retained.includes(candidate)) continue;
+  const retained: NarrativeCandidate[] = [];
+  let retainedLeaders = 0;
+  const rankedCandidates = [...candidates].sort((left, right) => (
+    right.weights.importance - left.weights.importance
+    || right.weights.relevance - left.weights.relevance
+    || (right.presentationPriority ?? 0) - (left.presentationPriority ?? 0)
+    || left.id.localeCompare(right.id)
+  ));
+  for (const candidate of rankedCandidates) {
+    const isLeader = candidate.id.startsWith('player-leader:');
+    if (isLeader && retainedLeaders >= 2) continue;
     retained.push(candidate);
+    if (isLeader) retainedLeaders++;
     if (retained.length >= WORLD_NARRATIVE_CAPS.player) break;
   }
   return retained.slice(0, WORLD_NARRATIVE_CAPS.player);
@@ -494,6 +541,15 @@ function coachCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate
     const oldCoach = world.coachBases[change.oldCoachId];
     const newCoach = world.coachBases[change.newCoachId];
     if (!team || !newCoach) continue;
+    const changeNews = [...world.newsLog].reverse().find(news => (
+      news.seasonNumber === season
+      && news.type === 'coach_hired'
+      && news.subject?.teamIds?.includes(change.teamId)
+      && news.subject?.coachIds?.includes(change.newCoachId)
+    ));
+    const changeElapsedWindow = changeNews
+      ? seasonEventChangedAt(world, changeNews.seasonNumber, changeNews.windowIndex)
+      : 0;
     candidates.push({
       id: `coach-change:${season}:${change.teamId}:${change.newCoachId}`,
       arcKey: `team:${change.teamId}:coach-cycle`,
@@ -509,8 +565,10 @@ function coachCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate
       nextWatch: '新帅至少完成三场比赛后，才能判断是否形成可信转折',
       destinations: [coachDestination(change.newCoachId), teamDestination(change.teamId)],
       visualKind: 'rise',
+      visualLevel: 'chapter',
+      presentationPriority: 72,
       fingerprint: createNarrativeFingerprint([season, change]),
-      changedAt: elapsed,
+      changedAt: changeElapsedWindow,
       weights: { importance: 80, relevance: favoriteTeams.has(change.teamId) ? 72 : 22, continuity: 76, historical: 35 },
     });
 
@@ -526,13 +584,15 @@ function coachCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate
       seasonNumber: season,
       seasonPhase: '新帅反弹',
       title: `${newCoach.name}带来第一段回应`,
-      summary: `${team.name}换帅后前三场场均积分由${turnaround.beforePpg.toFixed(2)}升至${turnaround.afterPpg.toFixed(2)}，样本仍小但变化已经可核对。`,
+      summary: `${team.name}换帅后前三场场均积分由${turnaround.beforePpg.toFixed(2)}升至${turnaround.afterPpg.toFixed(2)}，反弹已经出现。`,
       evidence: [fact('coach_story', `coach:${change.newCoachId}:turnaround`, '前后三场', `${turnaround.beforePoints}分 → ${turnaround.afterPoints}分`)],
       nextWatch: '继续观察六场以上样本，确认反弹是否成为稳定趋势',
       destinations: [coachDestination(change.newCoachId), teamDestination(change.teamId)],
       visualKind: 'rise',
+      visualLevel: 'chapter',
+      presentationPriority: 82,
       fingerprint: createNarrativeFingerprint([season, change.teamId, change.newCoachId, turnaround]),
-      changedAt: elapsed,
+      changedAt: changeElapsedWindow,
       weights: { importance: 86, relevance: favoriteTeams.has(change.teamId) ? 80 : 26, continuity: 84, historical: 40 },
     });
   }
@@ -556,12 +616,19 @@ function coachCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate
       seasonNumber: season,
       seasonPhase: '帅位压力',
       title: `${coach.name}的帅位进入高压区`,
-      summary: `${team.name}当前教练压力${state.coachPressure}，这是一项真实状态值，不预言必然下课。`,
+      summary: `${team.name}当前教练压力${state.coachPressure}，帅位周围的空气已经明显收紧。`,
       evidence: [fact('coach_story', `coach:${coachId}:pressure`, '当前压力', `${state.coachPressure}/100 · 近况${state.recentForm.join('') || '暂无'}`)],
       nextWatch: '下一场结果和球队预期将共同改变压力',
       destinations: [coachDestination(coachId), teamDestination(state.id)],
       visualKind: 'fall',
-      fingerprint: createNarrativeFingerprint([season, state.id, coachId, state.coachPressure, state.recentForm]),
+      visualLevel: 'chapter',
+      presentationPriority: 60 + Math.floor((state.coachPressure - 65) / 3),
+      fingerprint: createNarrativeFingerprint([
+        season,
+        state.id,
+        coachId,
+        Math.floor(state.coachPressure / 5) * 5,
+      ]),
       changedAt: elapsed,
       weights: { importance: 70 + (state.coachPressure - 65) * 0.7, relevance: favoriteTeams.has(state.id) ? 80 : 18, continuity: 72, historical: 18 },
     });
@@ -598,13 +665,22 @@ function transferCandidates(options: WorldNarrativeScanOptions): NarrativeCandid
     seasonNumber: record.season,
     seasonPhase: '转会落定',
     title: `${record.playerName}加盟${record.toTeamName}`,
-    summary: `${record.fromTeamName} → ${record.toTeamName}${record.fee ? ` · €${record.fee}M` : ''}，这笔移动已写入正式转会档案。`,
-    evidence: [fact('transfer', `transfer:${record.playerId}:${record.toTeamId}`, record.reason, `${record.position} · ${record.type}${record.fee ? ` · €${record.fee}M` : ''}`)],
+    summary: `${record.fromTeamName} → ${record.toTeamName}${record.fee ? ` · €${record.fee}M` : ''}，新的生涯篇章由此开始。`,
+    evidence: [fact(
+      'transfer',
+      `transfer:${record.playerId}:${record.toTeamId}`,
+      record.reason,
+      `${POSITION_LABELS[record.position]} · ${record.type === 'loan' ? '租借' : record.type === 'transfer' ? '转会' : '自由加盟'}${record.fee ? ` · €${record.fee}M` : ''}`,
+    )],
     nextWatch: '观察球员在新球队的实际出场与赛季表现',
     destinations: [playerDestination(record.playerId), teamDestination(record.fromTeamId), teamDestination(record.toTeamId)],
     visualKind: 'transfer',
+    visualLevel: (record.fee ?? 0) >= 60 || (playerById.get(record.playerId)?.rating ?? 0) >= 88
+      ? 'world_moment'
+      : 'chapter',
+    presentationPriority: Math.min(92, 58 + Math.floor((record.fee ?? 0) / 2)),
     fingerprint: createNarrativeFingerprint([record]),
-    changedAt: elapsed,
+    changedAt: seasonEventChangedAt(world, record.season, record.windowIndex),
     weights: {
       importance: Math.min(92, 62 + (record.fee ?? 0) * 0.35 + Math.max(0, (playerById.get(record.playerId)?.rating ?? 75) - 75)),
       relevance: favoriteTeams.has(record.fromTeamId) || favoriteTeams.has(record.toTeamId) ? 74 : 18,
@@ -645,6 +721,8 @@ function transferCandidates(options: WorldNarrativeScanOptions): NarrativeCandid
       nextWatch: '观察回升能否在更大样本中保持',
       destinations: [playerDestination(player.uuid), teamDestination(record.toTeamId)],
       visualKind: 'rise',
+      visualLevel: 'chapter',
+      presentationPriority: 78,
       fingerprint: createNarrativeFingerprint([season, player.uuid, previous.seasonScore, current.seasonScore, current.metrics.minutes]),
       changedAt: elapsed,
       weights: { importance: 82, relevance: favoriteTeams.has(record.toTeamId) ? 82 : 22, continuity: 76, historical: 38 },
@@ -735,6 +813,8 @@ function competitionCandidates(options: WorldNarrativeScanOptions): NarrativeCan
     nextWatch: landscape.kind === 'title' ? '关注领跑集团的直接对话' : '关注分界线两侧球队的下一轮结果',
     destinations: landscape.teamIds.slice(0, 3).map(teamDestination),
     visualKind: landscape.progress >= 0.8 ? 'stage' : undefined,
+    visualLevel: 'chapter',
+    presentationPriority: 48 + Math.round(landscape.progress * 30),
     fingerprint: createNarrativeFingerprint([season, landscape.id, landscape.detail]),
     changedAt: elapsed,
     weights: {
@@ -770,6 +850,8 @@ function competitionCandidates(options: WorldNarrativeScanOptions): NarrativeCan
       nextWatch: isFinal ? '冠军将在这场比赛后产生' : '观察谁能继续留在洲际舞台',
       destinations: [fixtureDestination(fixture.id)],
       visualKind: 'stage',
+      visualLevel: isFinal ? 'world_moment' : 'chapter',
+      presentationPriority: isFinal ? 100 : 70,
       fingerprint: createNarrativeFingerprint([fixture.id, fixture.roundLabel, fixture.isNeutralVenue]),
       changedAt: elapsed,
       weights: {
@@ -814,10 +896,10 @@ function recordCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
     subjectIds: [player.uuid, player.teamId, record.playerId],
     seasonNumber: season,
     seasonPhase: '纪录追逐',
-    title: `${player.name}接近存档赛季进球纪录`,
-    summary: `${player.name}已有${challenger.goals}球，距离已保留档案纪录${record.row.goals}球还差${record.row.goals - challenger.goals}球。`,
-    evidence: [fact('record', `record:goals:${record.row.season}:${record.playerId}`, '可核对目标', `S${record.row.season} · ${holder} · ${record.row.goals}球`)],
-    nextWatch: '纪录只在真实进球写入球员统计后更新',
+    title: `${player.name}逼近单季进球纪录`,
+    summary: `${player.name}已有${challenger.goals}球，距离${holder}在S${record.row.season}留下的${record.row.goals}球纪录还差${record.row.goals - challenger.goals}球。`,
+    evidence: [fact('record', `record:goals:${record.row.season}:${record.playerId}`, '纪录坐标', `S${record.row.season} · ${holder} · ${record.row.goals}球`)],
+    nextWatch: '每一个正式比赛进球，都将继续缩短与纪录的距离',
     destinations: [
       playerDestination(player.uuid),
       ...(record.playerId !== player.uuid && hasPlayerDetail(world, record.playerId)
@@ -825,6 +907,8 @@ function recordCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
         : []),
     ],
     visualKind: 'legacy',
+    visualLevel: 'chapter',
+    presentationPriority: 72,
     fingerprint: createNarrativeFingerprint([season, player.uuid, challenger.goals, record.row.season, record.playerId, record.row.goals]),
     changedAt: world.totalElapsedWindows ?? 0,
     weights: { importance: 82, relevance: options.favoritePlayerIds.includes(player.uuid) ? 88 : 20, continuity: 76, historical: 68 },

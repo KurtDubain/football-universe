@@ -2,6 +2,7 @@ import type {
   NarrativeCandidate,
   NarrativeDestination,
   NarrativeDigest,
+  NarrativeEditorialState,
   NarrativeFact,
   NarrativeItem,
   NarrativeMemoryEntry,
@@ -12,6 +13,7 @@ import type {
 
 export const MAX_NARRATIVE_MEMORY = 32;
 export const MAX_NARRATIVE_SIGNALS = 2;
+export const MAX_MORE_NARRATIVES = 6;
 export const NARRATIVE_FEATURE_THRESHOLD = 58;
 export const NARRATIVE_SIGNAL_THRESHOLD = 34;
 
@@ -82,11 +84,38 @@ function sourceReferences(candidate: NarrativeCandidate): NarrativeSourceReferen
     : [{ source: candidate.source, eventKey: candidate.eventKey }];
 }
 
+function phasePriority(phase: string | undefined): number {
+  if (!phase) return 0;
+  if (phase.includes('落幕') || phase.includes('冠军')) return 100;
+  if (phase.includes('高潮') || phase.includes('决赛')) return 90;
+  if (
+    phase.includes('回应')
+    || phase.includes('反弹')
+    || phase.includes('连续')
+    || phase.includes('落定')
+  ) return 80;
+  if (phase.includes('发展') || phase.includes('追逐') || phase.includes('高压')) return 70;
+  if (phase.includes('新星') || phase.includes('回升') || phase.includes('更替')) return 60;
+  if (phase.includes('开端')) return 50;
+  return 20;
+}
+
+/** Positive means left is the stronger display representation of the same arc. */
+function comparePresentation(left: NarrativeCandidate, right: NarrativeCandidate): number {
+  return SOURCE_AUTHORITY[left.source] - SOURCE_AUTHORITY[right.source]
+    || (left.presentationPriority ?? 0) - (right.presentationPriority ?? 0)
+    || phasePriority(left.seasonPhase) - phasePriority(right.seasonPhase)
+    || left.changedAt - right.changedAt
+    || left.weights.importance - right.weights.importance
+    || left.weights.historical - right.weights.historical
+    || right.id.localeCompare(left.id);
+}
+
 function mergeCandidatePair(
   left: NarrativeCandidate,
   right: NarrativeCandidate,
 ): NarrativeCandidate {
-  const preferred = SOURCE_AUTHORITY[right.source] > SOURCE_AUTHORITY[left.source] ? right : left;
+  const preferred = comparePresentation(right, left) > 0 ? right : left;
   const secondary = preferred === left ? right : left;
   const sourceRefs = uniqueByKey(
     [...sourceReferences(preferred), ...sourceReferences(secondary)],
@@ -108,6 +137,8 @@ function mergeCandidatePair(
     destinations: mergeDestinations(preferred.destinations, secondary.destinations),
     nextWatch: preferred.nextWatch ?? secondary.nextWatch,
     visualKind: preferred.visualKind ?? secondary.visualKind,
+    visualLevel: preferred.visualLevel ?? 'signal',
+    presentationPriority: preferred.presentationPriority,
     storylineType: preferred.storylineType ?? secondary.storylineType,
     seasonPhase: preferred.seasonPhase ?? secondary.seasonPhase,
     fingerprint: createNarrativeFingerprint(componentFingerprints),
@@ -189,11 +220,47 @@ function candidateScore(
     + clampScore(candidate.weights.historical) * 0.10;
 }
 
-function toNarrativeItem(candidate: NarrativeCandidate): NarrativeItem {
-  const { weights: _weights, reservedForObservationTheme: _reserved, ...item } = candidate;
+function editorialState(
+  candidate: NarrativeCandidate,
+  memory: readonly NarrativeMemoryEntry[],
+): NarrativeEditorialState {
+  const prior = memory.find(entry => entry.arcKey === candidate.arcKey);
+  if (!prior) return 'new';
+  return prior.fingerprint === candidate.fingerprint ? 'ongoing' : 'changed';
+}
+
+function toNarrativeItem(
+  candidate: NarrativeCandidate,
+  memory: readonly NarrativeMemoryEntry[],
+): NarrativeItem {
+  const {
+    weights: _weights,
+    reservedForObservationTheme: _reserved,
+    presentationPriority: _presentationPriority,
+    visualLevel,
+    ...item
+  } = candidate;
   void _weights;
   void _reserved;
-  return item;
+  void _presentationPriority;
+  return {
+    ...item,
+    visualLevel: visualLevel ?? 'signal',
+    editorialState: editorialState(candidate, memory),
+  };
+}
+
+function isRecentlyUnchanged(
+  candidate: NarrativeCandidate,
+  memory: readonly NarrativeMemoryEntry[],
+  elapsedWindow: number,
+): boolean {
+  const prior = memory.find(entry => entry.arcKey === candidate.arcKey);
+  return Boolean(
+    prior
+    && prior.fingerprint === candidate.fingerprint
+    && elapsedWindow - prior.lastSelectedAt <= 3
+  );
 }
 
 export function directNarrative(
@@ -217,18 +284,41 @@ export function directNarrative(
   const signalEntries = ranked
     .filter(entry => entry !== featureEntry && entry.score >= NARRATIVE_SIGNAL_THRESHOLD)
     .slice(0, MAX_NARRATIVE_SIGNALS);
+  const worldMomentEntry = ranked.find(entry => (
+    entry.candidate.visualLevel === 'world_moment'
+    && Boolean(entry.candidate.visualKind)
+    && editorialState(entry.candidate, memory) !== 'ongoing'
+    && context.elapsedWindow - entry.candidate.changedAt >= 0
+    && context.elapsedWindow - entry.candidate.changedAt <= 1
+  ));
   const selectedIds = new Set([
+    worldMomentEntry?.candidate.id,
     featureEntry?.candidate.id,
     ...signalEntries.map(entry => entry.candidate.id),
   ].filter((id): id is string => Boolean(id)));
-  const more = ranked
+  const moreEntries = ranked
     .filter(entry => !selectedIds.has(entry.candidate.id))
-    .map(entry => toNarrativeItem(entry.candidate));
+    .filter(entry => !isRecentlyUnchanged(entry.candidate, memory, context.elapsedWindow))
+    .filter(entry => (
+      editorialState(entry.candidate, memory) !== 'ongoing'
+      || entry.score >= NARRATIVE_SIGNAL_THRESHOLD
+      || entry.candidate.weights.continuity >= 70
+    ))
+    .sort((left, right) => {
+      const leftState = editorialState(left.candidate, memory);
+      const rightState = editorialState(right.candidate, memory);
+      const stateRank = (state: NarrativeEditorialState) => state === 'changed' ? 2 : state === 'new' ? 1 : 0;
+      return stateRank(rightState) - stateRank(leftState)
+        || right.score - left.score
+        || left.candidate.id.localeCompare(right.candidate.id);
+    })
+    .slice(0, MAX_MORE_NARRATIVES);
 
   return {
-    ...(featureEntry ? { feature: toNarrativeItem(featureEntry.candidate) } : {}),
-    signals: signalEntries.map(entry => toNarrativeItem(entry.candidate)),
-    more,
+    ...(featureEntry ? { feature: toNarrativeItem(featureEntry.candidate, memory) } : {}),
+    ...(worldMomentEntry ? { worldMoment: toNarrativeItem(worldMomentEntry.candidate, memory) } : {}),
+    signals: signalEntries.map(entry => toNarrativeItem(entry.candidate, memory)),
+    more: moreEntries.map(entry => toNarrativeItem(entry.candidate, memory)),
     observationRelationFixtureIds: [...new Set(
       reserved.flatMap(candidate => candidate.fixtureIds ?? []),
     )].sort(),
@@ -242,7 +332,11 @@ export function advanceNarrativeMemory(
   elapsedWindow: number,
 ): NarrativeMemoryEntry[] {
   if (!digest) return memory.slice(-MAX_NARRATIVE_MEMORY).map(entry => ({ ...entry }));
-  const selected = [digest.feature, ...digest.signals]
+  const selected = uniqueByKey(
+    [digest.worldMoment, digest.feature, ...digest.signals, ...digest.more]
+      .filter((item): item is NarrativeItem => Boolean(item)),
+    item => item.arcKey,
+  )
     .filter((item): item is NarrativeItem => Boolean(item));
   const next = new Map(memory.map(entry => [entry.arcKey, { ...entry }]));
   for (const item of selected) {

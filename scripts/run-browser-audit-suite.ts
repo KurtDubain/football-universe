@@ -23,6 +23,7 @@ const fixtureUrl = process.env.AUDIT_FIXTURE_URL ?? 'http://127.0.0.1:4174';
 
 const SMOKE_CHECKS: AuditCheck[] = [
   { script: 'audit:current' },
+  { script: 'verify:time-controls' },
   { script: 'verify:pwa-update' },
   { script: 'audit:advance-performance' },
   { script: 'verify:route-recovery' },

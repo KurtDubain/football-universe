@@ -8,6 +8,10 @@ import TournamentMusicDirector from '../components/TournamentMusicDirector';
 import TournamentMusicNowPlaying from '../components/TournamentMusicNowPlaying';
 import AchievementToast from '../components/AchievementToast';
 import { APP_VERSION } from '../version';
+import {
+  setAdvancePreferences,
+  useAdvancePreferences,
+} from './advance-preferences';
 import { SAVE_STORAGE_KEY } from '../store/save-schema';
 import { conservativeUTF16Bytes, isSaveNearCapacity } from '../store/save-budget';
 import MobileDrawer from '../components/MobileDrawer';
@@ -95,6 +99,7 @@ export default function Layout({ children }: LayoutProps) {
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const batchAdvance = useGameStore((s) => s.batchAdvance);
   const advanceToNextKeyNode = useGameStore((s) => s.advanceToNextKeyNode);
+  const skipCurrentSeason = useGameStore((s) => s.skipCurrentSeason);
   const advanceError = useGameStore((s) => s.advanceError);
   const dismissAdvanceError = useGameStore((s) => s.dismissAdvanceError);
   const getCurrentWindow = useGameStore((s) => s.getCurrentWindow);
@@ -102,6 +107,7 @@ export default function Layout({ children }: LayoutProps) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const feedbackPreferences = useFeedbackPreferences();
+  const advancePreferences = useAdvancePreferences();
   const favoriteTeamNames = useMemo(
     () => favoriteTeamIds.flatMap(id => {
       const team = world?.teamBases[id];
@@ -118,6 +124,7 @@ export default function Layout({ children }: LayoutProps) {
   const mobileReturnTarget = getMobileReturnTarget(location.pathname);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
+  const [confirmSkipSeason, setConfirmSkipSeason] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saveNearCapacity, setSaveNearCapacity] = useState(() => {
     try {
@@ -148,6 +155,7 @@ export default function Layout({ children }: LayoutProps) {
     [favoriteTeamIds, starredFixtureIds, world],
   );
   const showLatestResponse = () => {
+    if (advancePreferences.stayOnCurrentView) return;
     if (location.pathname !== '/') {
       navigate('/', { state: { showLatestResults: true } });
     }
@@ -169,6 +177,14 @@ export default function Layout({ children }: LayoutProps) {
     setShowFastMenu(false);
     playUiFeedback('advance');
     const advanced = await advanceToNextKeyNode();
+    if (!advanced) playUiFeedback('reject');
+    if (advanced) showLatestResponse();
+  };
+  const handleSkipSeason = async () => {
+    setShowFastMenu(false);
+    setConfirmSkipSeason(false);
+    playUiFeedback('advance');
+    const advanced = await skipCurrentSeason();
     if (!advanced) playUiFeedback('reject');
     if (advanced) showLatestResponse();
   };
@@ -471,7 +487,10 @@ export default function Layout({ children }: LayoutProps) {
             )}
             {currentWindow && (
               <button
-                onClick={() => setShowFastMenu(!showFastMenu)}
+                onClick={() => {
+                  setShowFastMenu(value => !value);
+                  setConfirmSkipSeason(false);
+                }}
                 disabled={isAdvancing}
                 aria-expanded={showFastMenu}
                 aria-haspopup="menu"
@@ -490,7 +509,7 @@ export default function Layout({ children }: LayoutProps) {
               <div
                 data-testid="advance-menu"
                 role="menu"
-                className="advance-menu-sheet absolute right-0 top-full z-[60] mt-1 w-[min(19rem,calc(100vw-24px))] overflow-hidden border border-[var(--border-strong)] bg-[var(--surface-raised)] shadow-xl"
+                className="advance-menu-sheet absolute right-0 top-full z-[60] mt-1 max-h-[calc(100dvh-4rem)] w-[min(19rem,calc(100vw-24px))] overflow-y-auto border border-[var(--border-strong)] bg-[var(--surface-raised)] shadow-xl"
               >
                 <div className="border-b border-slate-700/70 p-2">
                   <button
@@ -541,6 +560,56 @@ export default function Layout({ children }: LayoutProps) {
                     ? '当前关键内容处理完成后，固定步数推进会重新开放。'
                     : '固定步数会连续结算，不会在中途关键节点前自动停下。'}
                 </p>
+                <div className="border-t border-slate-700/70 px-3 py-2.5">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-slate-200">推进后停留当前视图</span>
+                      <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">保留当前页面与标签，不自动返回战报。</span>
+                    </span>
+                    <input
+                      data-testid="stay-on-current-view-toggle"
+                      type="checkbox"
+                      checked={advancePreferences.stayOnCurrentView}
+                      onChange={event => setAdvancePreferences({ stayOnCurrentView: event.target.checked })}
+                      className="h-5 w-5 shrink-0 accent-emerald-500"
+                    />
+                  </label>
+                </div>
+                <div className="border-t border-slate-700/70 p-2">
+                  {!confirmSkipSeason ? (
+                    <button
+                      type="button"
+                      data-testid="skip-current-season"
+                      onClick={() => setConfirmSkipSeason(true)}
+                      disabled={isAdvancing}
+                      className="press-scale min-h-11 w-full rounded-md border border-amber-700/55 px-3 py-2 text-left text-xs font-semibold text-amber-200 hover:bg-amber-900/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      直接跳过当前赛季
+                    </button>
+                  ) : (
+                    <div data-testid="skip-season-confirmation" className="border border-amber-700/45 bg-amber-950/20 p-2.5">
+                      <p className="text-xs font-semibold text-amber-100">完整结算本赛季剩余内容？</p>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">比赛、转会、伤病、奖项与历史档案都会正常生成，并停在新赛季首个窗口。</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmSkipSeason(false)}
+                          className="min-h-11 rounded border border-slate-600 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="confirm-skip-current-season"
+                          onClick={() => void handleSkipSeason()}
+                          className="min-h-11 rounded bg-amber-700 text-xs font-semibold text-white hover:bg-amber-600"
+                        >
+                          确认结算
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

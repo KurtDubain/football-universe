@@ -157,6 +157,7 @@ describe('advance world response', () => {
     expect(buildAdvanceWorldResponse('single', [], world, [], null)).toBeNull();
     expect(advanceModeLabel('season_end', 12)).toBe('前往赛季末 · 12轮');
     expect(advanceModeLabel('key_node', 3)).toBe('前往关键节点 · 3轮');
+    expect(advanceModeLabel('skip_season', 38)).toBe('完整跳过本赛季 · 38轮');
     expect(readableAdvanceError()).toContain('本次操作未提交');
   });
 
@@ -166,6 +167,7 @@ describe('advance world response', () => {
     ['cup', '前往杯赛 · 1轮'],
     ['season_end', '前往赛季末 · 1轮'],
     ['key_node', '前往关键节点 · 1轮'],
+    ['skip_season', '完整跳过本赛季 · 1轮'],
   ] as const)('keeps the %s advance mode explicit', (mode, label) => {
     const world = initializeGameWorld(20260725);
     const [home, away] = Object.keys(world.teamBases);

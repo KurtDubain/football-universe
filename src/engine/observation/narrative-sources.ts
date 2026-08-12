@@ -14,7 +14,11 @@ import {
 import type { TransferRumor } from '../transfers/rumor-generator';
 import { analyzeDestinyDeviation, extractMatchTurningPoints, resolveMatchOutcome } from '../match/analysis';
 import { getTeamCoachId } from '../coaches/coach-lookup';
-import { createNarrativeFingerprint, directNarrative } from './narrative-director';
+import {
+  createNarrativeFingerprint,
+  directNarrative,
+  mergeNarrativeCandidates,
+} from './narrative-director';
 import { buildWorldNarrativeCandidates } from './narrative-world-scan';
 import type { ObservationTheme } from './observation-theme';
 import type { AdvanceWindowOutcome } from './world-response';
@@ -117,6 +121,8 @@ function observationThemeCandidate(
       theme.nextWatch,
     ]),
     changedAt: world.totalElapsedWindows ?? 0,
+    visualLevel: 'signal',
+    presentationPriority: 100,
     weights: { importance: 100, relevance: 100, continuity: 100, historical: 20 },
     reservedForObservationTheme: true,
   };
@@ -141,6 +147,8 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
     nextWatch: signal.nextWatch,
     destinations: [teamDestination(signal.teamId)],
     visualKind: storyVisual(signal.type),
+    visualLevel: 'chapter' as const,
+    presentationPriority: signal.phase === '高潮' ? 90 : signal.phase === '发展' ? 70 : 50,
     fingerprint: createNarrativeFingerprint([
       signal.teamId,
       signal.type,
@@ -200,6 +208,8 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
         : '这段故事已经结束，只有新的事实达到门槛才会重新开启',
       destinations: [teamDestination(story.teamId)],
       visualKind: storyVisual(story.type),
+      visualLevel: story.outcome === 'success' ? 'world_moment' as const : 'chapter' as const,
+      presentationPriority: story.outcome === 'success' ? 100 : 85,
       fingerprint: createNarrativeFingerprint([
         story.id,
         story.outcome,
@@ -268,6 +278,8 @@ function focusFixtureCandidates(options: MatchdayNarrativeOptions): NarrativeCan
       nextWatch: '可锁定本场，推进后直接进入无剧透观战',
       destinations: [fixtureDestination(fixture.id)],
       visualKind: reasons.some(reason => reason.includes('决赛')) ? 'stage' as const : undefined,
+      visualLevel: reasons.some(reason => reason.includes('决赛')) ? 'world_moment' as const : 'signal' as const,
+      presentationPriority: reasons.some(reason => reason.includes('决赛')) ? 90 : 35,
       fingerprint: createNarrativeFingerprint([fixture.id, reasons]),
       changedAt: world.totalElapsedWindows ?? 0,
       weights: {
@@ -425,6 +437,8 @@ function windowSignalCandidates(
       nextWatch: '观察赛果是否改变当前判断',
       destinations: [fixtureDestination(signal.fixture.id)],
       visualKind: signal.kind === 'coach_pressure' ? 'fall' as const : undefined,
+      visualLevel: signal.kind === 'coach_pressure' ? 'chapter' as const : 'signal' as const,
+      presentationPriority: signal.kind === 'coach_pressure' ? 55 : 30 + signal.priority,
       fingerprint: createNarrativeFingerprint([signal.fixture.id, signal.kind, signal.summary]),
       changedAt: options.world.totalElapsedWindows ?? 0,
       weights: {
@@ -458,6 +472,8 @@ function playerHighlightCandidates(options: MatchdayNarrativeOptions): Narrative
     )],
     destinations: [playerDestination(highlight.playerId), fixtureDestination(highlight.fixtureId)],
     visualKind: 'legacy' as const,
+    visualLevel: highlight.priority >= 10 ? 'world_moment' as const : 'signal' as const,
+    presentationPriority: Math.min(85, 45 + highlight.priority * 3),
     fingerprint: createNarrativeFingerprint([
       highlight.fixtureId,
       highlight.playerId,
@@ -511,6 +527,8 @@ function rumorCandidates(options: MatchdayNarrativeOptions): NarrativeCandidate[
         teamDestination(rumor.eliteTeamId),
       ],
       visualKind: 'transfer' as const,
+      visualLevel: rumor.intensity === 'high' ? 'chapter' as const : 'signal' as const,
+      presentationPriority: rumor.intensity === 'high' ? 58 : 35,
       fingerprint: createNarrativeFingerprint([rumor.id, rumor.intensity]),
       changedAt: options.world.totalElapsedWindows ?? 0,
       weights: {
@@ -534,6 +552,44 @@ function newsVisualKind(news: NewsItem): NarrativeVisualKind | undefined {
   if (news.type === 'retirement') return 'legacy';
   if (news.type === 'rumor') return 'transfer';
   return undefined;
+}
+
+function newsVisualLevel(news: NewsItem): 'signal' | 'chapter' | 'world_moment' {
+  if (
+    news.type === 'trophy'
+    || news.type === 'promotion'
+    || news.type === 'relegation'
+    || news.type === 'retirement'
+    || (news.type === 'coach_fired' && news.importance === 'major')
+  ) return 'world_moment';
+  if (
+    news.type === 'coach_hired'
+    || news.type === 'coach_fired'
+    || news.type === 'injury'
+    || news.type === 'rumor'
+  ) return 'chapter';
+  return 'signal';
+}
+
+function newsChangedAt(world: GameWorld, news: NewsItem): number {
+  const currentSeason = world.seasonState.seasonNumber;
+  const elapsed = world.totalElapsedWindows ?? 0;
+  if (news.seasonNumber === currentSeason) {
+    return Math.max(0, elapsed - Math.max(0, world.seasonState.currentWindowIndex - news.windowIndex));
+  }
+  if (news.seasonNumber === currentSeason - 1) {
+    const lastNewsWindow = Math.max(
+      news.windowIndex,
+      ...world.newsLog
+        .filter(item => item.seasonNumber === news.seasonNumber)
+        .map(item => item.windowIndex),
+    );
+    return Math.max(
+      0,
+      elapsed - world.seasonState.currentWindowIndex - Math.max(0, lastNewsWindow - news.windowIndex),
+    );
+  }
+  return 0;
 }
 
 function newsCandidates(
@@ -577,16 +633,16 @@ function newsCandidates(
         seasonPhase: `窗口 ${news.windowIndex + 1}`,
         title: news.title,
         summary: news.description,
-        evidence: [fact('news', news.id, '已记录动态', news.description)],
+        evidence: [fact('news', news.id, '足坛动态', news.description)],
         destinations: [
           ...destinations,
           ...(news.fixtureId ? [fixtureDestination(news.fixtureId)] : []),
         ],
         visualKind: newsVisualKind(news),
+        visualLevel: newsVisualLevel(news),
+        presentationPriority: news.importance === 'major' ? 75 : 40,
         fingerprint: createNarrativeFingerprint([news.id, news.type, news.description]),
-        changedAt: news.seasonNumber === world.seasonState.seasonNumber
-          ? Math.max(0, (world.totalElapsedWindows ?? 0) - Math.max(0, world.seasonState.currentWindowIndex - news.windowIndex))
-          : 0,
+        changedAt: newsChangedAt(world, news),
         weights: {
           importance: news.importance === 'major' ? 86 : 60,
           relevance: subjectIds.length > 0 ? 22 : 5,
@@ -707,7 +763,45 @@ function resultConsequences(
       `${endWorld.teamBases[winnerId]?.name ?? winnerId}赢得${result.competitionName}。`,
     ));
   }
-  return consequences.slice(0, 4);
+  return consequences
+    .sort((left, right) => {
+      const priority = (item: NarrativeFact) => item.label === '奖杯归属'
+        ? 3
+        : item.label === '后续记录'
+          ? 2
+          : 1;
+      return priority(right) - priority(left) || left.key.localeCompare(right.key);
+    })
+    .slice(0, 4);
+}
+
+function outcomeChangedAt(
+  options: ResultNarrativeOptions,
+  outcome: AdvanceWindowOutcome,
+): number {
+  const currentSeason = options.endWorld.seasonState.seasonNumber;
+  const elapsed = options.endWorld.totalElapsedWindows ?? 0;
+  if (outcome.seasonNumber === currentSeason) {
+    return Math.max(
+      0,
+      elapsed - Math.max(0, options.endWorld.seasonState.currentWindowIndex - outcome.windowIndex),
+    );
+  }
+  if (outcome.seasonNumber === currentSeason - 1) {
+    const lastOutcomeWindow = Math.max(
+      outcome.windowIndex,
+      ...options.outcomes
+        .filter(item => item.seasonNumber === outcome.seasonNumber)
+        .map(item => item.windowIndex),
+    );
+    return Math.max(
+      0,
+      elapsed
+        - options.endWorld.seasonState.currentWindowIndex
+        - Math.max(0, lastOutcomeWindow - outcome.windowIndex),
+    );
+  }
+  return 0;
 }
 
 function resultCandidate(
@@ -775,9 +869,20 @@ function resultCandidate(
       point.title,
       point.detail,
     )),
-    consequences: resultConsequences(result, previousWorld, endWorld, outcome),
+    consequences: resultConsequences(
+      result,
+      options.outcomes.length === 1 ? previousWorld : undefined,
+      endWorld,
+      outcome,
+    ),
     destinations: [fixtureDestination(result.fixtureId)],
     visualKind: final ? 'stage' : deviation.isUpset ? 'fall' : undefined,
+    visualLevel: final || deviation.tier === 'major_upset'
+      ? 'world_moment'
+      : deviation.isUpset
+        ? 'chapter'
+        : 'signal',
+    presentationPriority: final ? 100 : deviation.tier === 'major_upset' ? 92 : deviation.isUpset ? 72 : 45,
     fingerprint: createNarrativeFingerprint([
       result.fixtureId,
       scoreLabel(result),
@@ -785,7 +890,7 @@ function resultCandidate(
       factors.map(item => [item.source, item.evidenceValue]),
       turningPoints,
     ]),
-    changedAt: endWorld.totalElapsedWindows ?? 0,
+    changedAt: outcomeChangedAt(options, outcome),
     weights: {
       importance: Math.min(100, 48
         + (primaryInvolved ? 24 : favoriteInvolved ? 16 : 0)
@@ -824,15 +929,42 @@ export function buildResultNarrativeDigest(options: ResultNarrativeOptions): Nar
     .sort((left, right) => right.priority - left.priority || left.result.fixtureId.localeCompare(right.result.fixtureId))
     .slice(0, 24);
   const allNews = options.outcomes.flatMap(outcome => outcome.news);
+  const worldCandidates = (world: GameWorld): NarrativeCandidate[] => {
+    const currentWindow = world.seasonState.calendar[
+      world.seasonState.currentWindowIndex
+    ] ?? world.seasonState.calendar.at(-1);
+    return [
+      ...storylineCandidates(world),
+      ...(currentWindow ? buildWorldNarrativeCandidates({
+        world,
+        currentWindow,
+        favoriteTeamIds: options.favoriteTeamIds,
+        favoritePlayerIds: options.favoritePlayerIds,
+      }) : []),
+    ];
+  };
+  const endWorldCandidates = worldCandidates(options.endWorld);
+  const transitionMemory = new Map(options.memory.map(entry => [entry.arcKey, entry]));
+  if (options.previousWorld) {
+    for (const candidate of mergeNarrativeCandidates(worldCandidates(options.previousWorld))) {
+      transitionMemory.set(candidate.arcKey, {
+        arcKey: candidate.arcKey,
+        fingerprint: candidate.fingerprint,
+        lastChangedAt: candidate.changedAt,
+        lastSelectedAt: options.previousWorld.totalElapsedWindows ?? 0,
+      });
+    }
+  }
   const candidates = [
     ...rankedResults.map(entry => resultCandidate(entry.result, entry.outcome, options)),
+    ...endWorldCandidates,
     ...newsCandidates(
       options.endWorld,
       allNews,
       new Set(['match_result', 'upset', 'streak']),
     ),
   ];
-  return directNarrative(candidates, options.memory, {
+  return directNarrative(candidates, [...transitionMemory.values()], {
     elapsedWindow: options.endWorld.totalElapsedWindows ?? 0,
     favoriteTeamIds: options.favoriteTeamIds,
     favoritePlayerIds: options.favoritePlayerIds,

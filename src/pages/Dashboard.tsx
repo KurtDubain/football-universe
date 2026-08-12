@@ -40,6 +40,7 @@ import { buildObservationTheme } from '../engine/observation/observation-theme';
 import { buildMatchdayNarrativeDigest } from '../engine/observation/narrative-sources';
 import NarrativeDigest from '../components/NarrativeDigest';
 import SeasonNarrativeOverview from '../components/SeasonNarrativeOverview';
+import { useAdvancePreferences } from '../app/advance-preferences';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -74,6 +75,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const advanceTick = useGameStore((s) => s.advanceTick);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
+  const advancePreferences = useAdvancePreferences();
 
   const [activeTab, setActiveTab] = useState<TabKey>(() => (
     (location.state as { showLatestResults?: boolean } | null)?.showLatestResults ? 'results' : 'matchday'
@@ -119,15 +121,17 @@ function DashboardContent({ world }: { world: GameWorld }) {
       setPendingLiveCelebration(nextCelebration);
       // Clear starred (one-shot per advance)
       clearStarredFixtures();
-    } else if (finalResult) {
+    } else if (!advancePreferences.stayOnCurrentView && finalResult) {
       setLiveFeatured(true);
       setLiveResult(finalResult);
       setPendingLiveCelebration(nextCelebration);
-    } else {
+    } else if (!advancePreferences.stayOnCurrentView) {
       setTabDirection('forward');
       setActiveTab('results');
       setPendingLiveCelebration(null);
       if (nextCelebration) setCelebrationType(nextCelebration);
+    } else {
+      setPendingLiveCelebration(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTick]);
@@ -629,11 +633,11 @@ function MatchdayTab({
     isAdvancing,
   });
 
-  // Group fixtures by competition (excluding ones already shown in focus banner)
+  // Group every fixture so headers keep truthful counts. Focus fixtures are
+  // omitted only from the expanded card grid because they already appear above.
   const groupMap = new Map<string, MatchFixture[]>();
 
   for (const f of currentWindow.fixtures) {
-    if (focusFixtureIds.has(f.id)) continue; // already rendered in focus banner above
     const key = f.competitionName || f.competitionType;
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key)!.push(f);
@@ -646,12 +650,6 @@ function MatchdayTab({
     const ib = order.indexOf(b[0]);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
-
-  const groupColors: Record<string, string> = {
-    '顶级联赛': 'border-amber-500',
-    '甲级联赛': 'border-blue-500',
-    '乙级联赛': 'border-emerald-500',
-  };
 
   const primaryTeam = favoriteTeamId ? world.teamBases[favoriteTeamId] : null;
   const openNarrativeFixture = (fixtureId: string) => {
@@ -832,28 +830,123 @@ function MatchdayTab({
         onFixtureClick={openNarrativeFixture}
       />
 
-      {/* Grouped fixtures */}
-      {sorted.map(([groupName, fixtures]) => (
-        <div key={groupName}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`w-1 h-5 rounded-full ${groupColors[groupName] ? groupColors[groupName].replace('border-', 'bg-') : 'bg-purple-500'}`} />
-            <h3 className="text-sm font-semibold text-slate-200">{groupName}</h3>
-            <span className="text-[11px] text-slate-500">{fixtures.length}场</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1.5 stagger-children">
-            {fixtures.map((fixture) => (
-              <FixtureCard
-                key={fixture.id}
-                fixture={fixture}
-                world={world}
-                teamTopScorers={teamTopScorers}
-                onClick={() => onFixtureClick(fixture)}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+      <FixtureGroupList
+        key={`${world.seasonState.seasonNumber}:${world.seasonState.currentWindowIndex}`}
+        groups={sorted}
+        world={world}
+        primaryTeamId={favoriteTeamId}
+        focusFixtureIds={focusFixtureIds}
+        teamTopScorers={teamTopScorers}
+        onFixtureClick={onFixtureClick}
+      />
     </div>
+  );
+}
+
+const FIXTURE_GROUP_TONES: Record<string, string> = {
+  '顶级联赛': 'bg-amber-500',
+  '甲级联赛': 'bg-blue-500',
+  '乙级联赛': 'bg-emerald-500',
+};
+
+function initialFixtureGroup(
+  groups: Array<[string, MatchFixture[]]>,
+  primaryTeamId: string | null,
+): string | null {
+  if (primaryTeamId) {
+    const observed = groups.find(([, fixtures]) => fixtures.some(fixture => (
+      fixture.homeTeamId === primaryTeamId || fixture.awayTeamId === primaryTeamId
+    )));
+    if (observed) return observed[0];
+  }
+  return groups[0]?.[0] ?? null;
+}
+
+export function FixtureGroupList({
+  groups,
+  world,
+  primaryTeamId,
+  focusFixtureIds,
+  teamTopScorers,
+  onFixtureClick,
+}: {
+  groups: Array<[string, MatchFixture[]]>;
+  world: GameWorld;
+  primaryTeamId: string | null;
+  focusFixtureIds: ReadonlySet<string>;
+  teamTopScorers: Record<string, PlayerSeasonStats>;
+  onFixtureClick: (fixture: MatchFixture) => void;
+}) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const initial = initialFixtureGroup(groups, primaryTeamId);
+    return new Set(initial ? [initial] : []);
+  });
+  const totalFixtures = groups.reduce((sum, [, fixtures]) => sum + fixtures.length, 0);
+
+  if (groups.length === 0) return null;
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups(current => {
+      const next = new Set(current);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
+
+  return (
+    <section data-testid="fixture-groups" className="border-y border-slate-700/60 bg-slate-950/15">
+      <div className="flex min-h-11 items-center gap-2 px-3 py-2">
+        <Icon name="bracket" size={15} className="text-slate-400" />
+        <h3 className="text-xs font-semibold text-slate-200">本轮全部赛程</h3>
+        <span className="text-[11px] text-slate-500">{totalFixtures}场</span>
+        <span className="ml-auto text-[11px] text-slate-600">按赛事展开</span>
+      </div>
+      {groups.map(([groupName, fixtures]) => {
+        const expanded = expandedGroups.has(groupName);
+        const focusedCount = fixtures.filter(fixture => focusFixtureIds.has(fixture.id)).length;
+        const remainingFixtures = fixtures.filter(fixture => !focusFixtureIds.has(fixture.id));
+        return (
+          <div key={groupName} className="border-t border-slate-700/45">
+            <button
+              type="button"
+              data-testid="fixture-group-toggle"
+              data-group-name={groupName}
+              aria-expanded={expanded}
+              onClick={() => toggleGroup(groupName)}
+              className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-800/35"
+            >
+              <span className={`h-4 w-1 shrink-0 ${FIXTURE_GROUP_TONES[groupName] ?? 'bg-violet-500'}`} />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-200" title={groupName}>{groupName}</span>
+              {focusedCount > 0 && (
+                <span className="shrink-0 text-[11px] text-amber-300">焦点 {focusedCount}</span>
+              )}
+              <span className="shrink-0 text-[11px] text-slate-500">{fixtures.length}场</span>
+              <Icon name="arrow-down" size={14} className={`shrink-0 text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </button>
+            {expanded && (
+              <div data-testid="fixture-group-content" className="px-3 pb-3">
+                {remainingFixtures.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {remainingFixtures.map(fixture => (
+                      <FixtureCard
+                        key={fixture.id}
+                        fixture={fixture}
+                        world={world}
+                        teamTopScorers={teamTopScorers}
+                        onClick={() => onFixtureClick(fixture)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-2 text-[11px] text-slate-500">本组比赛均已列入上方焦点战。</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

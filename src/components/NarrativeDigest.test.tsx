@@ -29,6 +29,8 @@ function item(id: string, source: NarrativeItem['source'] = 'news'): NarrativeIt
     destinations: [{ key: `fixture:${id}`, label: '查看比赛', fixtureId: `fixture:${id}` }],
     fingerprint: id,
     changedAt: 1,
+    visualLevel: 'signal',
+    editorialState: 'new',
   };
 }
 
@@ -62,7 +64,7 @@ describe('NarrativeDigest', () => {
     expect(container.querySelectorAll('[data-testid="narrative-signals"] > div')).toHaveLength(2);
     const more = container.querySelector<HTMLDetailsElement>('[data-testid="more-world-signals"]');
     expect(more?.open).toBe(false);
-    expect(more?.textContent).toContain('2条，已去重');
+    expect(more?.textContent).toContain('2条');
     expect(more?.textContent).toContain('标题 more-a');
     expect(more?.textContent).toContain('标题 more-b');
   });
