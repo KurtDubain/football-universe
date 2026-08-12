@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useCallback, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useRef, useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MatchResult, MatchEvent } from '../types/match';
 import type { TeamBase } from '../types/team';
@@ -39,8 +39,7 @@ import {
   matchOpenerKindForCompetition,
   matchOpenerLabel,
 } from './match-live/match-opener-artwork';
-import { ambientMusicSceneForFinal } from '../feedback/ambient-music';
-import { holdTournamentMusic, overrideTournamentMusic } from '../feedback/tournament-music-session';
+import { holdTournamentMusic } from '../feedback/tournament-music-session';
 import {
   APPROACH_LABELS,
   TACTICS_REASON_LABELS,
@@ -362,7 +361,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const previousCommentaryCountRef = useRef<number | null>(null);
   const soundscapeRef = useRef<MatchSoundscape | null>(null);
   const previousPhaseRef = useRef<PlaybackPhase>(initialPlaybackState.phase);
-  const [ceremonyMusicOwner] = useState(() => `tournament-final-${result.fixtureId}`);
+  const [matchMusicHoldOwner] = useState(() => `match-live-${result.fixtureId}`);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -398,9 +397,6 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, [result.events, result.homeTeamId, timelineMax]);
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
   const finished = playback.phase === 'finished';
-  const finalMusicScene = openerFinal
-    ? ambientMusicSceneForFinal(result.competitionType, result.competitionName, finished)
-    : null;
   const paused = playback.phase === 'paused';
   const halftime = playback.phase === 'halftime';
   const extraTimeBreak = playback.phase === 'extra_time_break';
@@ -439,6 +435,11 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     return () => window.clearTimeout(timer);
   }, [reducedMotion, showOpener]);
 
+  useLayoutEffect(
+    () => holdTournamentMusic(matchMusicHoldOwner),
+    [matchMusicHoldOwner],
+  );
+
   useEffect(() => {
     const soundscape = createMatchSoundscape({
       result,
@@ -446,7 +447,6 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       muted: !feedbackPreferences.soundEnabled || locallyMuted,
       profile: feedbackPreferences.soundProfile,
       effectsVolume: feedbackPreferences.effectsVolume,
-      musicVolume: feedbackPreferences.musicVolume,
     });
     soundscapeRef.current = soundscape;
     if (feedbackPreferences.soundEnabled && !locallyMuted) soundscape.start();
@@ -468,22 +468,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, [feedbackPreferences.soundProfile]);
 
   useEffect(() => {
-    soundscapeRef.current?.setLevels(
-      feedbackPreferences.effectsVolume,
-      feedbackPreferences.musicVolume,
-    );
-  }, [feedbackPreferences.effectsVolume, feedbackPreferences.musicVolume]);
-
-  useEffect(() => {
-    if (locallyMuted || !pageVisible) return holdTournamentMusic(ceremonyMusicOwner);
-    if (finalMusicScene) return overrideTournamentMusic(ceremonyMusicOwner, finalMusicScene);
-    return holdTournamentMusic(ceremonyMusicOwner);
-  }, [
-    ceremonyMusicOwner,
-    finalMusicScene,
-    locallyMuted,
-    pageVisible,
-  ]);
+    soundscapeRef.current?.setLevels(feedbackPreferences.effectsVolume);
+  }, [feedbackPreferences.effectsVolume]);
 
   useEffect(() => {
     soundscapeRef.current?.update({

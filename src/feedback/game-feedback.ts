@@ -1,4 +1,5 @@
 import { getFeedbackPreferences } from './preferences';
+import { duckAmbientMusic } from './ambient-music';
 import {
   shouldVibrateForCue,
   type FeedbackCue,
@@ -107,6 +108,16 @@ function playAudioCue(cue: FeedbackCue): boolean {
   if (!unlockGameAudio() || !audioContext) return false;
   const context = audioContext;
   lastCueAt.set(cue, timestamp);
+  const isMusical = cue === 'start' || cue === 'season_end';
+  const isMajor = cue === 'goal' || cue === 'major_upset' || cue === 'story_upgrade';
+  const isRoutine = cue === 'selection' || cue === 'toggle_on' || cue === 'toggle_off';
+  duckAmbientMusic(isMajor
+    ? { factor: 0.5, holdMs: 700, releaseMs: 420 }
+    : isMusical
+      ? { factor: 0.58, holdMs: 900, releaseMs: 450 }
+      : isRoutine
+        ? { factor: 0.84, holdMs: 110, releaseMs: 160 }
+        : { factor: 0.7, holdMs: 220, releaseMs: 240 });
   void import('./feedback-sounds')
     .then(({ scheduleFeedbackCue }) => {
       if (!getFeedbackPreferences().soundEnabled || audioUnavailableEnvironment()

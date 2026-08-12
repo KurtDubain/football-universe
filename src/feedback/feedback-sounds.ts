@@ -10,10 +10,25 @@ interface Tone {
 }
 
 export const FEEDBACK_VOLUME_LIFT = {
-  musical: 2.1,
-  event: 1.55,
-  ui: 1.4,
+  musical: 5.6,
+  event: 5.2,
+  ui: 5.8,
 } as const;
+
+export const FEEDBACK_CUE_TRIM: Readonly<Record<FeedbackCue, number>> = {
+  start: 1,
+  goal: 1,
+  major_upset: 1,
+  story_upgrade: 1,
+  season_end: 1,
+  advance: 0.95,
+  selection: 1.5,
+  confirm: 1,
+  toggle_on: 1.15,
+  toggle_off: 1.15,
+  intervention: 0.9,
+  reject: 1.15,
+};
 
 const CUE_TONES: Record<FeedbackCue, Tone[]> = {
   start: [
@@ -72,11 +87,13 @@ const CUE_TONES: Record<FeedbackCue, Tone[]> = {
 };
 
 export function feedbackVolumeLiftForCue(cue: FeedbackCue): number {
-  if (cue === 'start' || cue === 'season_end') return FEEDBACK_VOLUME_LIFT.musical;
-  if (cue === 'advance' || cue === 'selection' || cue === 'confirm'
+  let busLift: number;
+  if (cue === 'start' || cue === 'season_end') busLift = FEEDBACK_VOLUME_LIFT.musical;
+  else if (cue === 'advance' || cue === 'selection' || cue === 'confirm'
     || cue === 'toggle_on' || cue === 'toggle_off' || cue === 'intervention'
-    || cue === 'reject') return FEEDBACK_VOLUME_LIFT.ui;
-  return FEEDBACK_VOLUME_LIFT.event;
+    || cue === 'reject') busLift = FEEDBACK_VOLUME_LIFT.ui;
+  else busLift = FEEDBACK_VOLUME_LIFT.event;
+  return busLift * FEEDBACK_CUE_TRIM[cue];
 }
 
 function scheduleTone(context: AudioContext, tone: Tone, volumeLift: number): void {

@@ -187,7 +187,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-61,581 production TypeScript lines · 224 production source files · 130 test files · 45 browser/simulation audit commands
+61,645 production TypeScript lines · 224 production source files · 130 test files · 45 browser/simulation audit commands
 
 生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 

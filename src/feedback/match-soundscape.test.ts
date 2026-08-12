@@ -50,12 +50,15 @@ describe('match soundscape semantics', () => {
     expect(MATCH_SOUND_PROFILE_MIX.quiet.crowd).toBeLessThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
     expect(MATCH_SOUND_PROFILE_MIX.stadium.crowd).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
     expect(MATCH_SOUND_PROFILE_MIX.quiet.action).toBeGreaterThanOrEqual(MATCH_SOUND_PROFILE_MIX.balanced.action);
-    expect(MATCH_SOUND_PROFILE_MIX.balanced.music).toBeGreaterThan(1);
+    expect(MATCH_SOUND_PROFILE_MIX.balanced.action).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.accent);
+    expect(MATCH_SOUND_PROFILE_MIX.balanced.reaction).toBeGreaterThan(MATCH_SOUND_PROFILE_MIX.balanced.crowd);
+    expect(MATCH_SOUND_PROFILE_MIX.balanced.accent).toBeLessThan(1);
+    expect('music' in MATCH_SOUND_PROFILE_MIX.balanced).toBe(false);
     expect(MATCH_SOUND_PROFILE_MIX.balanced.master).toBeGreaterThanOrEqual(1);
     expect(
       MATCH_SOUND_PROFILE_MIX.balanced.master * MATCH_SOUND_PROFILE_MIX.balanced.action,
-    ).toBeGreaterThan(1.25);
-    expect(MATCH_SOUND_PROFILE_MIX.stadium.master).toBeLessThanOrEqual(1.12);
+    ).toBeGreaterThan(1.5);
+    expect(MATCH_SOUND_PROFILE_MIX.stadium.master).toBeLessThanOrEqual(1.06);
   });
 
   it('raises tension late in a close match and for shootouts', () => {

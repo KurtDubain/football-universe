@@ -24,7 +24,12 @@ interface ActiveMusic {
   scene: AmbientMusicScene;
   audio: HTMLAudioElement;
   requested: boolean;
+  targetVolume: number;
+  duckFactor: number;
+  duckUntil: number;
+  duckReleaseMs: number;
   fadeTimer: ReturnType<typeof setInterval> | null;
+  duckTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export interface AmbientMusicLease {
@@ -37,15 +42,25 @@ export interface AmbientMusicStartOptions {
   transitionMs?: number;
 }
 
+export interface AmbientMusicDuckOptions {
+  factor?: number;
+  holdMs?: number;
+  attackMs?: number;
+  releaseMs?: number;
+}
+
+// Browser-decoded PCM is normalized to roughly -23.5 dBFS RMS per looping
+// track. The champion cue stays two decibels forward without returning to the
+// previous near-full-scale music mix.
 export const AMBIENT_MUSIC_TRACKS: Readonly<Record<AmbientMusicScene, { source: string; loop: boolean; gain: number }>> = {
-  league_cup: { source: leagueCupThemeUrl, loop: true, gain: 0.74 },
-  super_cup: { source: superCupThemeUrl, loop: true, gain: 0.74 },
-  mainland_cup: { source: mainlandCupThemeUrl, loop: true, gain: 0.76 },
-  southern_cup: { source: southernCupThemeUrl, loop: true, gain: 0.76 },
-  eastern_cup: { source: easternCupThemeUrl, loop: true, gain: 0.76 },
-  world_cup: { source: worldCupThemeUrl, loop: true, gain: 0.7 },
-  world_cup_final: { source: worldCupFinalUrl, loop: false, gain: 0.78 },
-  world_cup_champion: { source: worldCupChampionUrl, loop: false, gain: 0.86 },
+  league_cup: { source: leagueCupThemeUrl, loop: true, gain: 0.35 },
+  super_cup: { source: superCupThemeUrl, loop: true, gain: 0.3 },
+  mainland_cup: { source: mainlandCupThemeUrl, loop: true, gain: 0.33 },
+  southern_cup: { source: southernCupThemeUrl, loop: true, gain: 0.39 },
+  eastern_cup: { source: easternCupThemeUrl, loop: true, gain: 0.35 },
+  world_cup: { source: worldCupThemeUrl, loop: true, gain: 0.34 },
+  world_cup_final: { source: worldCupFinalUrl, loop: false, gain: 0.36 },
+  world_cup_champion: { source: worldCupChampionUrl, loop: false, gain: 0.41 },
 };
 
 export function ambientMusicSceneForFinal(
@@ -65,6 +80,10 @@ export function ambientMusicSceneForFinal(
 
 let activeMusic: ActiveMusic | null = null;
 
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function report(owner: string, scene: AmbientMusicScene, state: 'started' | 'blocked' | 'stopped' | 'ended'): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent('football-ambient-music', { detail: { owner, scene, state } }));
@@ -72,7 +91,11 @@ function report(owner: string, scene: AmbientMusicScene, state: 'started' | 'blo
 
 function releaseAudio(current: ActiveMusic, state: 'blocked' | 'stopped'): void {
   if (current.fadeTimer !== null) clearInterval(current.fadeTimer);
+  if (current.duckTimer !== null) clearTimeout(current.duckTimer);
   current.fadeTimer = null;
+  current.duckTimer = null;
+  current.duckUntil = 0;
+  current.duckReleaseMs = 0;
   current.audio.pause();
   current.audio.removeAttribute('src');
   current.audio.load();
@@ -104,6 +127,11 @@ function stopActive(owner?: string, fadeOutMs = 0): void {
   const current = activeMusic;
   activeMusic = null;
   current.requested = false;
+  if (current.duckTimer !== null) clearTimeout(current.duckTimer);
+  current.duckTimer = null;
+  current.duckFactor = 1;
+  current.duckUntil = 0;
+  current.duckReleaseMs = 0;
   if (fadeOutMs > 0 && !current.audio.paused) {
     fadeAudio(current, 0, fadeOutMs, () => releaseAudio(current, 'stopped'));
   } else {
@@ -131,16 +159,29 @@ export function startAmbientMusic(
   const audio = new Audio(track.source);
   audio.preload = 'auto';
   audio.loop = track.loop;
-  const targetVolume = Math.max(0, Math.min(1, track.gain * preferences.musicVolume));
+  const targetVolume = clamp(track.gain * preferences.musicVolume);
   audio.volume = options.fadeInMs ? 0 : targetVolume;
-  const current: ActiveMusic = { owner, scene, audio, requested: true, fadeTimer: null };
+  const current: ActiveMusic = {
+    owner,
+    scene,
+    audio,
+    requested: true,
+    targetVolume,
+    duckFactor: 1,
+    duckUntil: 0,
+    duckReleaseMs: 0,
+    fadeTimer: null,
+    duckTimer: null,
+  };
   activeMusic = current;
   audio.addEventListener('ended', () => {
     if (activeMusic !== current) return;
     activeMusic = null;
     current.requested = false;
     if (current.fadeTimer !== null) clearInterval(current.fadeTimer);
+    if (current.duckTimer !== null) clearTimeout(current.duckTimer);
     current.fadeTimer = null;
+    current.duckTimer = null;
     report(owner, scene, 'ended');
   }, { once: true });
   const started = audio.play()
@@ -163,6 +204,34 @@ export function stopAmbientMusic(owner?: string): void {
   stopActive(owner);
 }
 
+/** Briefly yields the music bed so UI and match-action cues remain audible. */
+export function duckAmbientMusic(options: AmbientMusicDuckOptions = {}): boolean {
+  const current = activeMusic;
+  if (!current || !current.requested || current.audio.paused) return false;
+  const factor = clamp(options.factor ?? 0.68, 0.25, 1);
+  const holdMs = Math.max(0, options.holdMs ?? 260);
+  const attackMs = Math.max(0, options.attackMs ?? 45);
+  const releaseMs = Math.max(0, options.releaseMs ?? 260);
+
+  if (current.duckTimer !== null) clearTimeout(current.duckTimer);
+  current.duckFactor = Math.min(current.duckFactor, factor);
+  const now = Date.now();
+  current.duckUntil = Math.max(current.duckUntil, now + holdMs);
+  current.duckReleaseMs = Math.max(current.duckReleaseMs, releaseMs);
+  fadeAudio(current, current.targetVolume * current.duckFactor, attackMs);
+  current.duckTimer = setTimeout(() => {
+    current.duckTimer = null;
+    current.duckFactor = 1;
+    current.duckUntil = 0;
+    const retainedReleaseMs = current.duckReleaseMs;
+    current.duckReleaseMs = 0;
+    if (activeMusic === current && current.requested) {
+      fadeAudio(current, current.targetVolume, retainedReleaseMs);
+    }
+  }, Math.max(0, current.duckUntil - now));
+  return true;
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     const current = activeMusic;
@@ -173,7 +242,8 @@ if (typeof document !== 'undefined') {
     }
     const preferences = getFeedbackPreferences();
     if (current.requested && preferences.soundEnabled && preferences.musicVolume > 0) {
-      current.audio.volume = Math.max(0, Math.min(1, AMBIENT_MUSIC_TRACKS[current.scene].gain * preferences.musicVolume));
+      current.targetVolume = clamp(AMBIENT_MUSIC_TRACKS[current.scene].gain * preferences.musicVolume);
+      current.audio.volume = current.targetVolume * current.duckFactor;
       void current.audio.play().catch(() => undefined);
     }
   });

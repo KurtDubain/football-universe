@@ -5,6 +5,7 @@ import { DEFAULT_FEEDBACK_PREFERENCES, setFeedbackPreferences } from './preferen
 import {
   AMBIENT_MUSIC_TRACKS,
   ambientMusicSceneForFinal,
+  duckAmbientMusic,
   startAmbientMusic,
   stopAmbientMusic,
 } from './ambient-music';
@@ -43,23 +44,24 @@ describe('ambient tournament music', () => {
     expect(await lease.started).toBe(true);
     expect(AudioMock.instances).toHaveLength(1);
     expect(AudioMock.instances[0].loop).toBe(true);
-    expect(AudioMock.instances[0].volume).toBeCloseTo(0.7);
+    expect(AudioMock.instances[0].volume).toBeCloseTo(0.34);
     lease.stop();
     expect(AudioMock.instances[0].pause).toHaveBeenCalledTimes(1);
   });
 
-  it('ships five distinct looping cup identities at an audible mastered level', async () => {
+  it('ships five distinct looping cup identities at normalized background levels', async () => {
     const scenes = ['league_cup', 'super_cup', 'mainland_cup', 'southern_cup', 'eastern_cup'] as const;
     expect(new Set(scenes.map(scene => AMBIENT_MUSIC_TRACKS[scene].source)).size).toBe(scenes.length);
     for (const scene of scenes) {
       expect(AMBIENT_MUSIC_TRACKS[scene].loop).toBe(true);
-      expect(AMBIENT_MUSIC_TRACKS[scene].gain).toBeGreaterThanOrEqual(0.74);
+      expect(AMBIENT_MUSIC_TRACKS[scene].gain).toBeGreaterThanOrEqual(0.3);
+      expect(AMBIENT_MUSIC_TRACKS[scene].gain).toBeLessThanOrEqual(0.39);
       expect(AMBIENT_MUSIC_TRACKS[scene].source).toContain(`${scene.replaceAll('_', '-')}-theme-v1`);
     }
 
     const lease = startAmbientMusic('southern_cup', 'regional-page');
     expect(await lease.started).toBe(true);
-    expect(AudioMock.instances[0].volume).toBeCloseTo(0.76);
+    expect(AudioMock.instances[0].volume).toBeCloseTo(0.39);
     lease.stop();
   });
 
@@ -81,7 +83,7 @@ describe('ambient tournament music', () => {
     const final = startAmbientMusic('world_cup_final', 'match-final');
     expect(await final.started).toBe(true);
     expect(AudioMock.instances[0].pause).toHaveBeenCalledTimes(1);
-    expect(AudioMock.instances[1].volume).toBeCloseTo(0.39);
+    expect(AudioMock.instances[1].volume).toBeCloseTo(0.18);
     page.stop();
     expect(AudioMock.instances[1].pause).not.toHaveBeenCalled();
     final.stop();
@@ -107,6 +109,45 @@ describe('ambient tournament music', () => {
       expect(AudioMock.instances[0].pause).toHaveBeenCalledTimes(1);
       expect(AudioMock.instances[1].volume).toBeCloseTo(AMBIENT_MUSIC_TRACKS.super_cup.gain);
       final.stop();
+    } finally {
+      vi.runAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it('briefly ducks and restores the music bed for foreground cues', async () => {
+    vi.useFakeTimers();
+    try {
+      const lease = startAmbientMusic('super_cup', 'director');
+      expect(await lease.started).toBe(true);
+      const audio = AudioMock.instances[0];
+
+      expect(duckAmbientMusic({ factor: 0.5, holdMs: 100, attackMs: 0, releaseMs: 100 })).toBe(true);
+      expect(audio.volume).toBeCloseTo(AMBIENT_MUSIC_TRACKS.super_cup.gain * 0.5);
+      vi.advanceTimersByTime(225);
+      expect(audio.volume).toBeCloseTo(AMBIENT_MUSIC_TRACKS.super_cup.gain);
+      lease.stop();
+    } finally {
+      vi.runAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let a later routine cue shorten a stronger ducking window', async () => {
+    vi.useFakeTimers();
+    try {
+      const lease = startAmbientMusic('super_cup', 'director');
+      expect(await lease.started).toBe(true);
+      const audio = AudioMock.instances[0];
+
+      duckAmbientMusic({ factor: 0.5, holdMs: 400, attackMs: 0, releaseMs: 100 });
+      vi.advanceTimersByTime(50);
+      duckAmbientMusic({ factor: 0.84, holdMs: 50, attackMs: 0, releaseMs: 50 });
+      vi.advanceTimersByTime(100);
+      expect(audio.volume).toBeCloseTo(AMBIENT_MUSIC_TRACKS.super_cup.gain * 0.5);
+      vi.advanceTimersByTime(375);
+      expect(audio.volume).toBeCloseTo(AMBIENT_MUSIC_TRACKS.super_cup.gain);
+      lease.stop();
     } finally {
       vi.runAllTimers();
       vi.useRealTimers();
