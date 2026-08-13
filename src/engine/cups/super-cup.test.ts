@@ -143,6 +143,13 @@ describe('completeSuperCupGroupStage', () => {
       result.penalties
       && result.penaltyHome !== result.penaltyAway,
     )).toBe(true);
+    expect(secondLegResults.every(result => {
+      const kicks = result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
+      return result.extraTime
+        && kicks.length > 0
+        && kicks.filter(event => event.type === 'penalty_goal' && event.teamId === result.homeTeamId).length === result.penaltyHome
+        && kicks.filter(event => event.type === 'penalty_goal' && event.teamId === result.awayTeamId).length === result.penaltyAway;
+    })).toBe(true);
     expect(advanced.knockoutRounds[2].roundName).toBe('SF-L1');
   });
 });

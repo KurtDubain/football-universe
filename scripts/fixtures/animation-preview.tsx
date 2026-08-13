@@ -207,6 +207,25 @@ const shootoutResult = {
   awayMatchday: snapshot('away', '5-4-1', undefined, 120),
 } satisfies MatchResult;
 
+const sameMinuteResult = {
+  ...regularResult,
+  fixtureId: 'animation-same-minute-preview',
+  homeGoals: 2,
+  events: [
+    ...events.slice(0, 6),
+    {
+      minute: 40,
+      type: 'goal' as const,
+      teamId: 'home',
+      playerId: 'home-11',
+      playerNumber: 11,
+      playerName: 'HOME 11',
+      description: '连续进攻中补射破门',
+    },
+    ...events.slice(6),
+  ],
+} satisfies MatchResult;
+
 const params = new URLSearchParams(window.location.search);
 const competition = params.get('competition');
 const competitionResult = competition === 'world'
@@ -216,7 +235,11 @@ const competitionResult = competition === 'world'
     : competition === 'domestic'
       ? { ...regularResult, competitionType: 'league_cup' as const, competitionName: '联赛杯', roundLabel: '1/4 决赛', isNeutralVenue: true }
       : regularResult;
-const selectedResult = params.has('shootout') ? shootoutResult : competitionResult;
+const selectedResult = params.has('shootout')
+  ? shootoutResult
+  : params.has('sameMinute')
+    ? sameMinuteResult
+    : competitionResult;
 const result = params.get('shape') === 'alternate'
   ? {
       ...selectedResult,

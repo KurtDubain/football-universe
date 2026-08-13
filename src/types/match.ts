@@ -50,7 +50,10 @@ export interface MatchFixture {
   competitionName: string;
   roundLabel: string;
   leg?: 1 | 2; // for two-legged ties
-  firstLegResult?: { home: number; away: number }; // for second legs
+  /** Aggregate context for a second leg. The first-leg home side is this fixture's away side. */
+  firstLegResult?: { home: number; away: number };
+  /** Whether away goals resolve an aggregate tie before extra time or penalties. */
+  awayGoalsRule?: boolean;
   /**
    * Set true for matches played at a neutral venue.
    * When true: no home advantage is applied in the simulator, UI hides

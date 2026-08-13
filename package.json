@@ -35,6 +35,7 @@
     "audit:player-performance": "tsx scripts/audit-player-performance.ts",
     "audit:coach-stars": "tsx scripts/audit-coach-stars.ts",
     "verify:match": "tsx scripts/verify-match-presentation.ts",
+    "verify:match-playback": "tsx scripts/verify-match-playback-sync.ts",
     "verify:match-shootout": "tsx scripts/verify-match-shootout.ts",
     "verify:match-set-pieces": "tsx scripts/verify-match-set-pieces.ts",
     "verify:match-tactics": "tsx scripts/verify-match-tactics.ts",

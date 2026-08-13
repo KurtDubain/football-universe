@@ -2,6 +2,8 @@ import { SuperCupState, SuperCupGroup, CupRound, CupFixture } from '../../types/
 import { StandingEntry } from '../../types/league';
 import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
+import { simulatePenaltyShootout } from '../match/penalty-shootout';
+import { generateMatchEvents } from '../match/events';
 import { drawGroups } from './draw';
 
 // ---------------------------------------------------------------------------
@@ -147,24 +149,45 @@ function determineWinnerTwoLegged(
       : team1;
   }
 
-  // A tie can be level on aggregate even when the second-leg score itself is
-  // not level, so the match simulator cannot always know to create a shootout.
-  // Resolve that cup-level edge here with the same seeded RNG and persist it
-  // on both representations of the second leg.
-  const nominalHomeWins = rng.next() < 0.5;
-  const losingScore = rng.nextInt(3, 5);
-  const penaltyHome = nominalHomeWins ? losingScore + 1 : losingScore;
-  const penaltyAway = nominalHomeWins ? losingScore : losingScore + 1;
+  // Defensive compatibility path for externally supplied or legacy results.
+  // Normal second legs now carry aggregate context into the simulator, which
+  // creates extra time and a complete authoritative kick sequence itself.
+  const shootout = simulatePenaltyShootout(rng.fork());
+  const shootoutEvents = generateMatchEvents(
+    0,
+    0,
+    secondLegResult.homeTeamId,
+    secondLegResult.awayTeamId,
+    'super_cup',
+    rng.fork(),
+    true,
+    shootout.kicks,
+    undefined,
+    undefined,
+    0,
+    0,
+    false,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    'shootout',
+  );
   secondLegResult.penalties = true;
-  secondLegResult.penaltyHome = penaltyHome;
-  secondLegResult.penaltyAway = penaltyAway;
+  secondLegResult.extraTime = true;
+  secondLegResult.etHomeGoals ??= 0;
+  secondLegResult.etAwayGoals ??= 0;
+  secondLegResult.penaltyHome = shootout.homeScore;
+  secondLegResult.penaltyAway = shootout.awayScore;
+  secondLegResult.events.push(...shootoutEvents);
   secondLegFixture.result = {
     ...secondLegFixture.result!,
+    extraTime: true,
     penalties: true,
-    penHome: penaltyHome,
-    penAway: penaltyAway,
+    penHome: shootout.homeScore,
+    penAway: shootout.awayScore,
   };
-  return nominalHomeWins ? team2 : team1;
+  return shootout.homeScore > shootout.awayScore ? team2 : team1;
 }
 
 /**
@@ -405,7 +428,6 @@ export function advanceSuperCupKnockout(
   results: MatchResult[],
   rng: SeededRNG,
 ): SuperCupState {
-  void rng; // Pairings are deterministic; keep the seeded API stable.
   const resultMap = new Map(results.map((r) => [r.fixtureId, r]));
 
   // Find the first incomplete knockout round

@@ -38,6 +38,7 @@ const FULL_CHECKS: AuditCheck[] = [
   ...SMOKE_CHECKS,
   { script: 'audit:animation-performance' },
   { script: 'verify:match' },
+  { script: 'verify:match-playback', server: 'fixture' },
   { script: 'verify:match-shootout', server: 'fixture' },
   { script: 'verify:match-set-pieces', server: 'fixture' },
   { script: 'verify:match-openers', server: 'fixture' },

@@ -63,6 +63,7 @@ interface Props {
   homeApproach?: MatchApproach;
   awayApproach?: MatchApproach;
   onPlaybackHoldChange?: (holding: boolean) => void;
+  onPlaybackAvailabilityChange?: (available: boolean) => void;
   onPresentationCue?: (cue: MatchPresentationCue) => void;
   onPresentationAtmosphereChange?: (snapshot: MatchPresentationAtmosphere) => void;
 }
@@ -197,7 +198,7 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
     possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
-    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   } = props;
 
   const homeFormation: CoachFormation = homeMatchday?.formation ?? '4-3-3';
@@ -308,10 +309,14 @@ function PitchCanvas(props: Props) {
     },
   });
 
-  const eventScene = useMemo(
-    () => findEventScene(allEvents, minute, homeTeamId, flashEvent),
-    [allEvents, minute, homeTeamId, flashEvent],
-  );
+  const eventScene = useMemo(() => {
+    // Shootout kicks start after minute 120. Do not preload one while extra
+    // time is still being rendered with the full outfield shape.
+    const stageEvents = shootout
+      ? allEvents
+      : allEvents.filter(event => event.minute <= maxMinute);
+    return findEventScene(stageEvents, minute, homeTeamId, flashEvent);
+  }, [allEvents, flashEvent, homeTeamId, maxMinute, minute, shootout]);
   const homeRoster = useMemo(() => buildPitchRoster(homeMatchday), [homeMatchday]);
   const awayRoster = useMemo(() => buildPitchRoster(awayMatchday), [awayMatchday]);
 
@@ -328,21 +333,21 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   });
   useEffect(() => {
     liveRef.current = {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
       homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-      onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
+      onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
   }, [
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-    onPlaybackHoldChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   ]);
 
   useEffect(() => () => {
@@ -1533,8 +1538,10 @@ function PitchCanvas(props: Props) {
         if (raf !== 0) cancelAnimationFrame(raf);
         raf = 0;
         updateRenderingDebug(false, 'hidden');
+        liveRef.current.onPlaybackAvailabilityChange?.(false);
         return;
       }
+      liveRef.current.onPlaybackAvailabilityChange?.(intersectionVisible);
       wakeRenderLoop();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -1547,8 +1554,10 @@ function PitchCanvas(props: Props) {
           if (raf !== 0) cancelAnimationFrame(raf);
           raf = 0;
           updateRenderingDebug(false, 'covered');
+          liveRef.current.onPlaybackAvailabilityChange?.(false);
           return;
         }
+        liveRef.current.onPlaybackAvailabilityChange?.(pageVisible);
         wakeRenderLoop();
       }, { threshold: 0.05 });
     intersectionObserver?.observe(canvas);

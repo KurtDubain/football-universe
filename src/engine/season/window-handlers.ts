@@ -264,16 +264,25 @@ export function handleSuperCup(
   const currentKORound = superCup.knockoutRounds[currentKOIdx];
 
   const isFinal = currentKORound.roundName === 'Final';
-  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf) => applyVenuePolicy({
+  const isSecondLeg = currentKORound.roundName === 'QF-L2' || currentKORound.roundName === 'SF-L2';
+  const firstLegRound = isSecondLeg ? superCup.knockoutRounds[currentKOIdx - 1] : undefined;
+  const matchFixtures: MatchFixture[] = currentKORound.fixtures.map((cf, index) => applyVenuePolicy({
     id: cf.id,
     homeTeamId: cf.homeTeamId,
     awayTeamId: cf.awayTeamId,
     competitionType: 'super_cup' as const,
     competitionName: '超级杯',
     roundLabel: cf.roundName,
+    ...(firstLegRound?.fixtures[index]?.result ? {
+      firstLegResult: {
+        home: firstLegRound.fixtures[index].result!.home,
+        away: firstLegRound.fixtures[index].result!.away,
+      },
+      awayGoalsRule: superCup.awayGoalRule,
+    } : {}),
   }));
 
-  const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isFinal);
+  const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isFinal || isSecondLeg);
 
   // Advance the knockout
   const updatedSuperCup = advanceSuperCupKnockout(superCup, sim.results, rng);

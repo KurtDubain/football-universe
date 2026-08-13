@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from 'react';
+import { act, useEffect, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatchEvent, MatchResult } from '../types/match';
@@ -11,11 +11,53 @@ import ResultAnimation from './ResultAnimation';
 import NewsTicker from './NewsTicker';
 import { setFeedbackPreferences } from '../feedback/preferences';
 
-vi.mock('./PitchCanvas', () => ({
-  default: ({ featuredPlayerIds = [] }: { featuredPlayerIds?: readonly string[] }) => (
-    <div data-testid="pitch" data-featured-player-ids={featuredPlayerIds.join(',')} />
-  ),
-}));
+vi.mock('./PitchCanvas', () => {
+  function MockPitchCanvas({
+    featuredPlayerIds = [],
+    flashEvent,
+    homeTeamId,
+    onPlaybackAvailabilityChange,
+    onPresentationCue,
+  }: {
+    featuredPlayerIds?: readonly string[];
+    flashEvent?: MatchEvent | null;
+    homeTeamId: string;
+    onPlaybackAvailabilityChange?: (available: boolean) => void;
+    onPresentationCue?: (cue: {
+      id: string;
+      moment: 'outcome';
+      event: MatchEvent;
+      attackingHome: boolean;
+      outcome: 'goal' | 'save' | 'block' | 'miss' | 'delivery';
+    }) => void;
+  }) {
+    useEffect(() => {
+      onPlaybackAvailabilityChange?.(true);
+    }, [onPlaybackAvailabilityChange]);
+    useEffect(() => {
+      if (!flashEvent) return;
+      const outcome = flashEvent.type === 'goal' || flashEvent.type === 'own_goal' || flashEvent.type === 'penalty_goal'
+        ? 'goal'
+        : flashEvent.type === 'df_block'
+          ? 'block'
+          : flashEvent.type === 'corner' || flashEvent.type === 'free_kick'
+            ? 'delivery'
+            : flashEvent.type === 'save' || flashEvent.type === 'gk_save'
+              || (flashEvent.type === 'penalty_miss' && flashEvent.shootout?.outcome === 'saved')
+              ? 'save'
+              : 'miss';
+      onPresentationCue?.({
+        id: `${flashEvent.minute}:${flashEvent.type}:${flashEvent.teamId}:outcome`,
+        moment: 'outcome',
+        event: flashEvent,
+        attackingHome: flashEvent.teamId === homeTeamId,
+        outcome,
+      });
+    }, [flashEvent, homeTeamId, onPresentationCue]);
+    return <div data-testid="pitch" data-featured-player-ids={featuredPlayerIds.join(',')} />;
+  }
+  return { default: MockPitchCanvas };
+});
 
 vi.mock('./CanvasEffects', () => ({
   EnergyWave: () => null,
@@ -330,6 +372,7 @@ describe('MatchLive playback state machine', () => {
     advance(480);
     advance(1200);
     advance(480);
+    advance(1200);
 
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');

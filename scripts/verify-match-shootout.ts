@@ -15,7 +15,34 @@ async function verifyViewport(name: string, width: number, height: number) {
     const dialog = page.getByRole('dialog', { name: '比赛直播回放' });
     await dialog.getByRole('button', { name: '精华', exact: true }).click();
     const tracker = dialog.getByTestId('shootout-tracker');
-    await tracker.waitFor({ state: 'visible', timeout: 20_000 });
+    await tracker.waitFor({ state: 'visible', timeout: 45_000 });
+    const preImpactHandle = await page.waitForFunction(() => {
+      const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
+      if (!render) return false;
+      const state = JSON.parse(render()) as {
+        phase: string;
+        event: { type: string; attackerId?: string } | null;
+        action: { kind: string; progress: number } | null;
+      };
+      if (
+        state.phase !== 'shooting'
+        || state.event?.type !== 'penalty_goal'
+        || state.event.attackerId !== 'home-10'
+        || state.action?.kind !== 'shot'
+        || state.action.progress >= 0.72
+      ) {
+        return false;
+      }
+      return {
+        home: document.querySelector('[data-testid="shootout-home-score"]')?.textContent,
+        away: document.querySelector('[data-testid="shootout-away-score"]')?.textContent,
+      };
+    }, undefined, { timeout: 20_000 });
+    const preImpactScore = await preImpactHandle.jsonValue() as { home?: string; away?: string };
+    if (preImpactScore.home !== '0' || preImpactScore.away !== '0') {
+      throw new Error(`${name}: first shootout score committed before contact (${preImpactScore.home}:${preImpactScore.away})`);
+    }
+    await dialog.getByTestId('shootout-home-score').getByText('1', { exact: true }).waitFor({ timeout: 8_000 });
     await page.waitForFunction(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
       if (!render) return false;
@@ -84,6 +111,7 @@ async function verifyViewport(name: string, width: number, height: number) {
     return {
       viewport: `${width}x${height}`,
       minuteLabel,
+      preImpactScore,
       visiblePlayers: state.homeOnField.length + state.awayOnField.length,
       shotOutcome: state.event.outcome,
       taker: state.event.attackerId,

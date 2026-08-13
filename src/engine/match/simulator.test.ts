@@ -277,6 +277,33 @@ describe('simulateMatch', () => {
       }
     });
 
+    it('uses aggregate score to trigger extra time in a non-drawn second leg', () => {
+      const seed = Array.from({ length: 100 }, (_, index) => index + 1).find(candidate => {
+        const result = simulateMatch(buildContext(candidate, true), makeFixture()).matchResult;
+        return result.homeGoals !== result.awayGoals;
+      });
+      expect(seed).toBeDefined();
+      const baseline = simulateMatch(buildContext(seed!, true), makeFixture()).matchResult;
+      const secondLeg: MatchFixture = {
+        ...makeFixture(),
+        competitionType: 'super_cup',
+        firstLegResult: { home: baseline.homeGoals, away: baseline.awayGoals },
+        awayGoalsRule: false,
+      };
+      const result = simulateMatch(buildContext(seed!, true), secondLeg).matchResult;
+
+      expect(result.homeGoals).toBe(baseline.homeGoals);
+      expect(result.awayGoals).toBe(baseline.awayGoals);
+      expect(result.homeGoals).not.toBe(result.awayGoals);
+      expect(result.extraTime).toBe(true);
+      if (result.penalties) {
+        const kicks = result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
+        expect(kicks).not.toHaveLength(0);
+        expect(kicks.filter(event => event.type === 'penalty_goal' && event.teamId === 'home')).toHaveLength(result.penaltyHome ?? 0);
+        expect(kicks.filter(event => event.type === 'penalty_goal' && event.teamId === 'away')).toHaveLength(result.penaltyAway ?? 0);
+      }
+    });
+
     it('keeps shootout events, scores, order, and first-five takers consistent', () => {
       let shootoutCount = 0;
       for (let seed = 1; seed <= 400 && shootoutCount < 20; seed++) {

@@ -6,12 +6,15 @@ import PitchCanvas from './PitchCanvas';
 import { Icon, IconName } from './Icon';
 import {
   isHighlightEvent,
-  nextPlaybackStep,
   playbackBreakDelay,
   playbackTickDelay,
   PLAYBACK_MODE_OPTIONS,
-  type PlaybackMode,
 } from './match-live/playback-mode';
+import {
+  initialPlaybackState,
+  playbackReducer,
+  type PlaybackPhase,
+} from './match-live/playback-state';
 import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
 import {
   createMatchSoundscape,
@@ -76,55 +79,8 @@ const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
   free_kick:    { name: 'whistle', accent: '#7dd3fc' },
 };
 
-type PlaybackPhase = 'playing' | 'paused' | 'halftime' | 'extra_time_break' | 'shootout_break' | 'finished';
-
-interface PlaybackState {
-  minute: number;
-  mode: PlaybackMode;
-  phase: PlaybackPhase;
-  consumedEventCount: number;
-  homeScore: number;
-  awayScore: number;
-  penaltyHomeScore: number;
-  penaltyAwayScore: number;
-  flashEvent: MatchEvent | null;
-  goalFlash: 'home' | 'away' | null;
-  flashVersion: number;
-  goalFlashVersion: number;
-  hasHadHalftime: boolean;
-  hasHadExtraTimeBreak: boolean;
-  hasHadShootoutBreak: boolean;
-}
-
-type PlaybackAction =
-  | { type: 'tick'; events: MatchEvent[]; maxMinute: number; homeTeamId: string }
-  | { type: 'skip'; events: MatchEvent[]; maxMinute: number; homeTeamId: string }
-  | { type: 'setMode'; mode: PlaybackMode }
-  | { type: 'togglePause' }
-  | { type: 'resumeBreak' }
-  | { type: 'clearEventFlash'; version: number }
-  | { type: 'clearGoalFlash'; version: number };
-
-const initialPlaybackState: PlaybackState = {
-  minute: 0,
-  mode: 'live',
-  phase: 'playing',
-  consumedEventCount: 0,
-  homeScore: 0,
-  awayScore: 0,
-  penaltyHomeScore: 0,
-  penaltyAwayScore: 0,
-  flashEvent: null,
-  goalFlash: null,
-  flashVersion: 0,
-  goalFlashVersion: 0,
-  hasHadHalftime: false,
-  hasHadExtraTimeBreak: false,
-  hasHadShootoutBreak: false,
-};
-
 function getPlaybackStageLabel(
-  state: Pick<PlaybackState, 'minute' | 'phase'>,
+  state: { minute: number; phase: PlaybackPhase },
   hasPenalties: boolean,
 ): string {
   if (state.phase === 'finished') return '全场';
@@ -135,109 +91,6 @@ function getPlaybackStageLabel(
   if (state.minute > 90) return '加时赛';
   if (state.minute > 45) return '下半场';
   return '上半场';
-}
-
-function isScoreEvent(event: MatchEvent): boolean {
-  return event.type === 'goal' || event.type === 'own_goal';
-}
-
-function revealThroughMinute(
-  state: PlaybackState,
-  targetMinute: number,
-  events: MatchEvent[],
-  homeTeamId: string,
-): PlaybackState {
-  let nextEventCount = state.consumedEventCount;
-  let homeScore = state.homeScore;
-  let awayScore = state.awayScore;
-  let penaltyHomeScore = state.penaltyHomeScore;
-  let penaltyAwayScore = state.penaltyAwayScore;
-  let latestEvent: MatchEvent | null = null;
-  let latestGoal: MatchEvent | null = null;
-
-  while (nextEventCount < events.length && events[nextEventCount].minute <= targetMinute) {
-    const event = events[nextEventCount];
-    latestEvent = event;
-    if (isScoreEvent(event)) {
-      latestGoal = event;
-      if (event.teamId === homeTeamId) homeScore++;
-      else awayScore++;
-    } else if (event.type === 'penalty_goal') {
-      latestGoal = event;
-      if (event.teamId === homeTeamId) penaltyHomeScore++;
-      else penaltyAwayScore++;
-    }
-    nextEventCount++;
-  }
-
-  if (!latestEvent) return { ...state, minute: targetMinute };
-  return {
-    ...state,
-    minute: targetMinute,
-    consumedEventCount: nextEventCount,
-    homeScore,
-    awayScore,
-    penaltyHomeScore,
-    penaltyAwayScore,
-    flashEvent: latestGoal ?? latestEvent,
-    goalFlash: latestGoal ? (latestGoal.teamId === homeTeamId ? 'home' : 'away') : state.goalFlash,
-    flashVersion: state.flashVersion + 1,
-    goalFlashVersion: latestGoal ? state.goalFlashVersion + 1 : state.goalFlashVersion,
-  };
-}
-
-function playbackReducer(state: PlaybackState, action: PlaybackAction): PlaybackState {
-  switch (action.type) {
-    case 'tick': {
-      if (state.phase !== 'playing') return state;
-      const requestedMinute = Math.min(
-        action.maxMinute,
-        state.minute + nextPlaybackStep(state.minute, action.maxMinute, action.events, state.mode),
-      );
-      let nextMinute = requestedMinute;
-      if (state.minute < 45 && requestedMinute >= 45 && !state.hasHadHalftime) nextMinute = 45;
-      else if (state.minute < 90 && requestedMinute >= 90 && action.maxMinute > 90 && !state.hasHadExtraTimeBreak) nextMinute = 90;
-      else if (state.minute < 120 && requestedMinute >= 120 && action.maxMinute > 120 && !state.hasHadShootoutBreak) nextMinute = 120;
-      const next = revealThroughMinute(state, nextMinute, action.events, action.homeTeamId);
-      if (nextMinute === 45 && !state.hasHadHalftime) {
-        return { ...next, phase: 'halftime', hasHadHalftime: true };
-      }
-      if (nextMinute === 90 && action.maxMinute > 90 && !state.hasHadExtraTimeBreak) {
-        return { ...next, phase: 'extra_time_break', hasHadExtraTimeBreak: true };
-      }
-      if (nextMinute === 120 && action.maxMinute > 120 && !state.hasHadShootoutBreak) {
-        return { ...next, phase: 'shootout_break', hasHadShootoutBreak: true };
-      }
-      if (nextMinute >= action.maxMinute) return { ...next, phase: 'finished' };
-      return next;
-    }
-    case 'skip': {
-      const completed = revealThroughMinute(state, action.maxMinute, action.events, action.homeTeamId);
-      return {
-        ...completed,
-        phase: 'finished',
-        hasHadHalftime: true,
-        hasHadExtraTimeBreak: action.maxMinute > 90,
-        hasHadShootoutBreak: action.maxMinute > 120,
-        flashEvent: null,
-        goalFlash: null,
-      };
-    }
-    case 'setMode':
-      return { ...state, mode: action.mode };
-    case 'togglePause':
-      if (state.phase === 'playing') return { ...state, phase: 'paused' };
-      if (state.phase === 'paused') return { ...state, phase: 'playing' };
-      return state;
-    case 'resumeBreak':
-      return state.phase === 'halftime' || state.phase === 'extra_time_break' || state.phase === 'shootout_break'
-        ? { ...state, phase: 'playing' }
-        : state;
-    case 'clearEventFlash':
-      return action.version === state.flashVersion ? { ...state, flashEvent: null } : state;
-    case 'clearGoalFlash':
-      return action.version === state.goalFlashVersion ? { ...state, goalFlash: null } : state;
-  }
 }
 
 function playbackKey(result: MatchResult): string {
@@ -294,7 +147,7 @@ function ShootoutTracker({
           ? `${nextTeamName}命中即可结束`
           : `${nextTeamName}即将主罚`;
 
-  const row = (name: string, color: string, kicks: MatchEvent[], score: number) => (
+  const row = (side: 'home' | 'away', name: string, color: string, kicks: MatchEvent[], score: number) => (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
       <div className="flex min-w-0 items-center gap-2">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
@@ -319,7 +172,10 @@ function ShootoutTracker({
           );
         })}
       </div>
-      <span className="w-5 text-right text-sm font-black tabular-nums text-amber-300">{score}</span>
+      <span
+        data-testid={`shootout-${side}-score`}
+        className="w-5 text-right text-sm font-black tabular-nums text-amber-300"
+      >{score}</span>
     </div>
   );
 
@@ -330,8 +186,8 @@ function ShootoutTracker({
         <span className="text-[10px] text-slate-500">{pressure} · <span className="tabular-nums">{homeScore} - {awayScore}</span></span>
       </div>
       <div className="space-y-1.5">
-        {row(homeName, homeColor, homeKicks, homeScore)}
-        {row(awayName, awayColor, awayKicks, awayScore)}
+        {row('home', homeName, homeColor, homeKicks, homeScore)}
+        {row('away', awayName, awayColor, awayKicks, awayScore)}
       </div>
     </div>
   );
@@ -352,6 +208,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
   const [unseenEventCount, setUnseenEventCount] = useState(0);
   const [presentationHolding, setPresentationHolding] = useState(false);
+  const [pitchAvailable, setPitchAvailable] = useState(true);
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerKind = matchOpenerKindForCompetition(result.competitionType);
@@ -396,6 +253,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       .map(({ event }) => event);
   }, [result.events, result.homeTeamId, timelineMax]);
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
+  const pendingPresentationEvent = playback.pendingEventIndex === null
+    ? null
+    : allEvents[playback.pendingEventIndex] ?? null;
   const finished = playback.phase === 'finished';
   const paused = playback.phase === 'paused';
   const halftime = playback.phase === 'halftime';
@@ -491,10 +351,28 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   ]);
 
   const handlePresentationCue = useCallback((cue: MatchPresentationCue) => {
+    if (cue.moment === 'outcome') {
+      const eventIndex = allEvents.indexOf(cue.event);
+      if (eventIndex >= 0) {
+        dispatch({
+          type: 'commitPresentation',
+          events: allEvents,
+          eventIndex,
+          homeTeamId: result.homeTeamId,
+        });
+      }
+    }
     if (!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible || showOpener) return;
     const soundscape = soundscapeRef.current;
     soundscape?.playPresentation(cue);
-  }, [feedbackPreferences.soundEnabled, locallyMuted, pageVisible, showOpener]);
+  }, [
+    allEvents,
+    feedbackPreferences.soundEnabled,
+    locallyMuted,
+    pageVisible,
+    result.homeTeamId,
+    showOpener,
+  ]);
 
   const handlePresentationAtmosphere = useCallback((snapshot: MatchPresentationAtmosphere) => {
     soundscapeRef.current?.updatePresentation(snapshot);
@@ -528,7 +406,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   }, []);
 
   useEffect(() => {
-    if (playback.phase !== 'playing' || !pageVisible || showOpener || presentationHolding) return;
+    if (
+      playback.phase !== 'playing'
+      || playback.pendingEventIndex !== null
+      || !pageVisible
+      || !pitchAvailable
+      || showOpener
+      || presentationHolding
+    ) return;
     const nextHighlight = allEvents.find(event =>
       event.minute > playback.minute && isHighlightEvent(event)
     );
@@ -549,7 +434,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     playback.flashEvent,
     playback.minute,
     playback.mode,
+    playback.pendingEventIndex,
     playback.phase,
+    pitchAvailable,
     presentationHolding,
     reducedMotion,
     result.homeTeamId,
@@ -920,12 +807,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
             <div className="px-3 py-2 lg:px-4 lg:py-3">
               <PitchCanvas
-                minute={Math.min(playback.minute, maxMin)}
+                minute={playback.minute}
                 maxMinute={maxMin}
                 homeColor={ht?.color ?? '#ef4444'}
                 awayColor={at?.color ?? '#3b82f6'}
                 homeTeamId={result.homeTeamId}
-                flashEvent={playback.flashEvent}
+                flashEvent={pendingPresentationEvent}
                 allEvents={allEvents}
                 homeMatchday={result.homeMatchday}
                 awayMatchday={result.awayMatchday}
@@ -944,6 +831,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 homeApproach={result.homeTactics?.approach}
                 awayApproach={result.awayTactics?.approach}
                 onPlaybackHoldChange={setPresentationHolding}
+                onPlaybackAvailabilityChange={setPitchAvailable}
                 onPresentationCue={handlePresentationCue}
                 onPresentationAtmosphereChange={handlePresentationAtmosphere}
               />

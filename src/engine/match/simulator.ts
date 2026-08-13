@@ -65,6 +65,23 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function knockoutTieNeedsResolution(
+  fixture: MatchFixture,
+  homeGoals: number,
+  awayGoals: number,
+): boolean {
+  if (!fixture.firstLegResult) return homeGoals === awayGoals;
+
+  const aggregateHome = fixture.firstLegResult.away + homeGoals;
+  const aggregateAway = fixture.firstLegResult.home + awayGoals;
+  if (aggregateHome !== aggregateAway) return false;
+  if (!fixture.awayGoalsRule) return true;
+
+  const homeAwayGoals = fixture.firstLegResult.away;
+  const awayAwayGoals = awayGoals;
+  return homeAwayGoals === awayAwayGoals;
+}
+
 function stableStringHash(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index++) {
@@ -469,7 +486,7 @@ export function simulateMatch(
   let penaltyAway: number | undefined;
   let penaltyShootout: PenaltyShootoutResult | undefined;
 
-  if (ctx.isKnockout && regHomeGoals === regAwayGoals) {
+  if (ctx.isKnockout && knockoutTieNeedsResolution(fixture, regHomeGoals, regAwayGoals)) {
     extraTime = true;
     homeParticipation = extendMatchParticipation(homeParticipation, 120);
     awayParticipation = extendMatchParticipation(awayParticipation, 120);
@@ -515,7 +532,11 @@ export function simulateMatch(
     etHomeGoals = reconciledExtraTimeEvents.filter(isHomeGoal).length;
     etAwayGoals = reconciledExtraTimeEvents.filter(isAwayGoal).length;
 
-    if (regHomeGoals + etHomeGoals === regAwayGoals + etAwayGoals) {
+    if (knockoutTieNeedsResolution(
+      fixture,
+      regHomeGoals + etHomeGoals,
+      regAwayGoals + etAwayGoals,
+    )) {
       penalties = true;
       penaltyShootout = simulatePenaltyShootout(rng);
       penaltyHome = penaltyShootout.homeScore;

@@ -1,5 +1,15 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-13 Live Score Synchronization And Shootout Integrity
+
+- Current request: fix intermittent live-animation stalls followed by an immediate final-score jump, and audit penalty-shootout logic rather than treating it as only a visual defect.
+- Extracted the Match Live reducer into a pure playback state machine. Shot and set-piece events now enter a pending presentation state; score, shootout tally, commentary, and goal feedback commit only when PitchCanvas emits the authoritative outcome frame. Same-minute goals remain separate ordered presentations instead of collapsing into one score jump.
+- PitchCanvas now reports whether it is actually visible. A covered/offscreen pitch pauses the parent match clock as well as rAF, preventing mobile scrolling or viewport shifts from advancing an unseen broadcast.
+- Separated extra time from shootout staging. Events after minute 120 are no longer preloaded into the full-team extra-time scene, and PitchCanvas receives the actual shootout event minute so first kicks cannot stall behind the 120-minute cap.
+- Super Cup second legs now carry first-leg aggregate context and the away-goals policy into the simulator. Aggregate ties can correctly trigger extra time and a normal authoritative shootout even when the second-leg score itself is not level. The legacy/external-result fallback now creates a legal kick sequence and events instead of assigning a bare random final tally.
+- Focused verification passed 46 reducer/simulator/cup tests and strict TypeScript. Browser checks proved score order `0 -> 1 -> 2` for two goals in the same minute, first-shootout pre-impact score `0:0` at 1440/320/390 widths, two visible shootout actors, and no runtime or overflow errors. The animation audit now requires the match clock to pause while Canvas is covered and evaluates long tasks only during active playback; 1x/4x profiles passed with 0/58ms playback long tasks.
+- Final verification passed 133 test files / 959 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, dedicated same-minute score synchronization, shootouts at 1440/320/390, the standard deterministic Canvas client with inspected screenshots, and normal/4x CPU animation audits. No implementation item remains open in this pass.
+
 ## 2026-08-13 Narrative Editorial And Time Control
 
 - Accepted the v4.55.0 refinement recorded in `docs/narrative-editorial-checklist.md`: editorial headline maturity, explicit visual levels, a six-item More budget, broader post-advance world changes, fairer player-story competition, progressive fixture disclosure, and player-controlled advancement navigation.

@@ -24,6 +24,7 @@ interface ProfileResult {
   hiddenPaused: boolean;
   hiddenClockPaused: boolean;
   coveredPaused: boolean;
+  coveredClockPaused: boolean;
   unrelatedUpdatePreservedPlayback: boolean;
   finalScoreMatches: boolean;
   closedUnmountedCanvas: boolean;
@@ -124,6 +125,7 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     await dialog.getByRole('button', { name: '精华' }).click();
     await page.waitForTimeout(1800);
     const rendering = await readRendering(page);
+    const animationLongTasks = await page.evaluate(() => (window as AuditWindow).__animationLongTasks ?? []);
 
     const beforeUnrelated = await page.locator('[data-testid="live-minute"]').textContent();
     const framesBeforeUnrelated = rendering.renderedFrames;
@@ -159,10 +161,13 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     await canvas.evaluate(element => { (element as HTMLElement).style.display = 'none'; });
     await page.waitForTimeout(150);
     const coveredStart = await readRendering(page);
+    const coveredStartMinute = await page.locator('[data-testid="live-minute"]').textContent();
     await page.waitForTimeout(200);
     const coveredEnd = await readRendering(page);
+    const coveredEndMinute = await page.locator('[data-testid="live-minute"]').textContent();
     const coveredPaused = coveredStart.pauseReason === 'covered'
       && coveredEnd.renderedFrames === coveredStart.renderedFrames;
+    const coveredClockPaused = coveredEndMinute === coveredStartMinute;
     await canvas.evaluate(element => { (element as HTMLElement).style.display = ''; });
     await page.waitForTimeout(150);
 
@@ -210,7 +215,7 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     const nextBatchReset = await dialog.getAttribute('data-fixture-id') === nextFixtureId
       && await page.locator('[data-testid="live-minute"]').textContent() === "0'";
 
-    const longTasks = await page.evaluate(() => (window as AuditWindow).__animationLongTasks ?? []);
+    const longTaskBudget = cpuRate === 1 ? 120 : 250;
     const passed = rendering.averageRenderMs < 20
       && rendering.averageFrameIntervalMs <= 33
       && rendering.maxConsecutiveSlowFrames <= 4
@@ -218,6 +223,8 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
       && hiddenPaused
       && hiddenClockPaused
       && coveredPaused
+      && coveredClockPaused
+      && Math.max(0, ...animationLongTasks) <= longTaskBudget
       && unrelatedUpdatePreservedPlayback
       && finalScoreMatches
       && closedUnmountedCanvas
@@ -228,10 +235,11 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
       cpuRate,
       fixtureId: expected.fixtureId,
       rendering,
-      longTasks,
+      longTasks: animationLongTasks,
       hiddenPaused,
       hiddenClockPaused,
       coveredPaused,
+      coveredClockPaused,
       unrelatedUpdatePreservedPlayback,
       finalScoreMatches,
       closedUnmountedCanvas,
