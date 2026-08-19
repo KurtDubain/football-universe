@@ -1,5 +1,12 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-19 v4.55.3 Slower Live Broadcast Cadence
+
+- Current request: slow the live match animation because the match clock and on-pitch actions still feel too fast to read as believable football.
+- Kept Highlights as the concise route, slowed the default Live timeline from 380 ms to 540 ms per quiet minute, and slowed Immersive from 620 ms to 820 ms. Approaching chances, event aftermath, and interval holds now receive proportionally longer pauses.
+- Added a presentation-only Canvas motion rate: Live action advances at 0.72 simulation frames per rendered frame and Immersive at 0.58, while Highlights remains 1.0. This stretches passing, carrying, set-piece preparation, defensive recovery, and shots without changing event order, scores, simulation data, save data, or 60 fps rendering smoothness.
+- Final Node 22.22.2 validation passed 135 test files / 965 tests, strict TypeScript, ESLint, ordinary and audit PWA builds, same-minute score ordering, shootouts at 1440/320/390, and normal/4x CPU animation audits. Same-minute goals still committed `0 -> 1 -> 2` at impact, shootout scoring stayed `0:0` before the first kick, controls had zero overflow, and Canvas recorded no long task with roughly 0.30/1.18 ms average render cost. The standard deterministic game client completed two 120-frame Live bursts with coherent state, no console errors, and visually inspected nonblank pitch screenshots.
+
 ## 2026-08-19 v4.55.2 Release Hygiene, Documentation Source Of Truth, And Live Runtime Architecture
 
 - Closed the release-integrity gap in the previous live synchronization work with v4.55.1, then released this maintainability pass as v4.55.2. Package metadata, runtime version, in-game changelog, README, and CI changelog checks now move together.

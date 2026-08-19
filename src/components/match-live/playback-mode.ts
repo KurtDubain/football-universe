@@ -82,16 +82,16 @@ export function playbackTickDelay(
     && isShotHighlight(nextHighlight)
     && nextHighlight!.minute - minute <= 5;
   if (mode === 'live') {
-    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 350 : 1200;
-    if (eventJustRevealed) return reducedMotion ? 250 : 700;
-    if (approachingShot) return reducedMotion ? 200 : 480;
-    return reducedMotion ? 180 : 380;
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1650;
+    if (eventJustRevealed) return reducedMotion ? 320 : 900;
+    if (approachingShot) return reducedMotion ? 280 : 720;
+    return reducedMotion ? 240 : 540;
   }
   if (mode === 'immersive') {
-    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1800;
-    if (eventJustRevealed) return reducedMotion ? 300 : 1050;
-    if (approachingShot) return reducedMotion ? 260 : 680;
-    return reducedMotion ? 240 : 620;
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 550 : 2300;
+    if (eventJustRevealed) return reducedMotion ? 380 : 1300;
+    if (approachingShot) return reducedMotion ? 340 : 980;
+    return reducedMotion ? 300 : 820;
   }
 
   if (!flashEvent
@@ -108,12 +108,23 @@ export function playbackTickDelay(
   return reducedMotion ? 90 : 120;
 }
 
+/**
+ * Canvas simulation frames advanced per rendered frame. Highlights retain the
+ * concise cut while live modes give passes, carries and defensive recovery
+ * enough screen time to read as one football action rather than a fast replay.
+ */
+export function playbackMotionRate(mode: PlaybackMode): number {
+  if (mode === 'immersive') return 0.58;
+  if (mode === 'live') return 0.72;
+  return 1;
+}
+
 export function playbackBreakDelay(
   mode: PlaybackMode,
   reducedMotion: boolean,
 ): number {
   if (reducedMotion) return 250;
-  if (mode === 'live') return 1800;
-  if (mode === 'immersive') return 2800;
+  if (mode === 'live') return 2400;
+  if (mode === 'immersive') return 3600;
   return 650;
 }

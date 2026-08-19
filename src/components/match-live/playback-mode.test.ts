@@ -3,6 +3,7 @@ import type { MatchEvent } from '../../types/match';
 import {
   nextPlaybackStep,
   playbackBreakDelay,
+  playbackMotionRate,
   playbackTickDelay,
 } from './playback-mode';
 
@@ -33,10 +34,10 @@ describe('match live playback modes', () => {
     expect(playbackTickDelay('highlights', 20, events[2], true)).toBe(300);
     expect(playbackTickDelay('highlights', 20, events[0], false)).toBe(120);
     expect(playbackTickDelay('highlights', 16, events[1], false)).toBe(1800);
-    expect(playbackTickDelay('live', 20, events[2], false)).toBe(1200);
-    expect(playbackTickDelay('live', 21, events[2], false)).toBe(380);
-    expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(1800);
-    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(620);
+    expect(playbackTickDelay('live', 20, events[2], false)).toBe(1650);
+    expect(playbackTickDelay('live', 21, events[2], false)).toBe(540);
+    expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(2300);
+    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(820);
   });
 
   it('slows the highlights timeline while a set piece is being prepared', () => {
@@ -48,13 +49,19 @@ describe('match live playback modes', () => {
   it('reserves enough real time for an open-play chance to reach its shot', () => {
     expect(playbackTickDelay('highlights', 15, null, false, events[2])).toBe(520);
     expect(playbackTickDelay('highlights', 17, null, false, events[2])).toBe(520);
-    expect(playbackTickDelay('live', 18, null, false, events[2])).toBe(480);
-    expect(playbackTickDelay('immersive', 19, null, false, events[2])).toBe(680);
+    expect(playbackTickDelay('live', 18, null, false, events[2])).toBe(720);
+    expect(playbackTickDelay('immersive', 19, null, false, events[2])).toBe(980);
+  });
+
+  it('slows physical action without slowing the concise highlights cut', () => {
+    expect(playbackMotionRate('highlights')).toBe(1);
+    expect(playbackMotionRate('live')).toBe(0.72);
+    expect(playbackMotionRate('immersive')).toBe(0.58);
   });
 
   it('uses mode-aware breaks and the shortest reduced-motion break', () => {
-    expect(playbackBreakDelay('live', false)).toBe(1800);
-    expect(playbackBreakDelay('immersive', false)).toBe(2800);
+    expect(playbackBreakDelay('live', false)).toBe(2400);
+    expect(playbackBreakDelay('immersive', false)).toBe(3600);
     expect(playbackBreakDelay('highlights', false)).toBe(650);
     expect(playbackBreakDelay('live', true)).toBe(250);
   });

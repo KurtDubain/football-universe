@@ -41,7 +41,7 @@ import {
   type RenderBudget,
 } from './pitch-canvas/render-budget';
 import { mountPitchRuntime } from './pitch-canvas/runtime';
-import type { PlaybackMode } from './match-live/playback-mode';
+import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
 
 interface Props {
   minute: number;
@@ -891,7 +891,7 @@ function PitchCanvas(props: Props) {
         loadSequence(gen.phases, sequenceSeedRef.current);
         sequenceSceneRef.current = null;
       } else if (phase) {
-        phaseFrameRef.current++;
+        phaseFrameRef.current += playbackMotionRate(livePlaybackMode);
         if (phaseStateRef.current !== 'holding') {
           // Check for interception mid-pass
           let turnoverLoaded = false;
