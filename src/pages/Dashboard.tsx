@@ -11,6 +11,7 @@ import type { PlayerSeasonStats } from '../types/player';
 import MatchDetailModal from '../components/MatchDetailModal';
 import SeasonReview from '../components/SeasonReview';
 import Celebration from '../components/Celebration';
+import { celebrationDuration, type CelebrationType } from '../components/celebration-types';
 import { getMatchTags, shouldCelebrate } from '../components/celebration-logic';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
@@ -88,8 +89,8 @@ function DashboardContent({ world }: { world: GameWorld }) {
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
-  const [celebrationType, setCelebrationType] = useState<'trophy' | 'confetti' | null>(null);
-  const [pendingLiveCelebration, setPendingLiveCelebration] = useState<'trophy' | 'confetti' | null>(null);
+  const [celebrationType, setCelebrationType] = useState<CelebrationType | null>(null);
+  const [pendingLiveCelebration, setPendingLiveCelebration] = useState<CelebrationType | null>(null);
   const [liveResult, setLiveResult] = useState<MatchResult | null>(null);
   const [liveFeatured, setLiveFeatured] = useState(false);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
@@ -101,7 +102,19 @@ function DashboardContent({ world }: { world: GameWorld }) {
   useEffect(() => {
     if (advanceTick === prevAdvanceTick.current) return;
     prevAdvanceTick.current = advanceTick;
-    if (lastResults.length === 0) return;
+
+    const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
+    if (!prevWindow && !lastWorldResponse) return;
+    const completedWindowType = lastWorldResponse?.seasonChanged
+      ? 'season_end'
+      : prevWindow?.type ?? lastResults[0]?.competitionType ?? 'league';
+    const completedWindowLabel = lastWorldResponse?.toLabel ?? prevWindow?.label ?? '';
+    const nextCelebration = shouldCelebrate(completedWindowType, completedWindowLabel, lastResults);
+    if (lastResults.length === 0) {
+      setPendingLiveCelebration(null);
+      setCelebrationType(nextCelebration);
+      return;
+    }
 
     // Priority 1: starred fixture in this batch → auto-live the first one
     const starredHit = starredFixtureIds.length > 0
@@ -111,10 +124,6 @@ function DashboardContent({ world }: { world: GameWorld }) {
     const finalResult = lastResults.find(r =>
       r.roundLabel === 'Final' || r.roundLabel === '决赛'
     );
-    const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
-    const nextCelebration = prevWindow
-      ? shouldCelebrate(prevWindow.type, prevWindow.label, lastResults)
-      : null;
     if (starredHit) {
       setLiveFeatured(true);
       setLiveResult(starredHit);
@@ -132,6 +141,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
       if (nextCelebration) setCelebrationType(nextCelebration);
     } else {
       setPendingLiveCelebration(null);
+      setCelebrationType(nextCelebration);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTick]);
@@ -432,7 +442,8 @@ function DashboardContent({ world }: { world: GameWorld }) {
           key={`${advanceTick}-${celebrationType}`}
           active
           type={celebrationType}
-          duration={celebrationType === 'trophy' ? 5000 : 3500}
+          duration={celebrationDuration(celebrationType)}
+          seed={advanceTick}
         />
       )}
 

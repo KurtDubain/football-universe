@@ -1,5 +1,13 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-20 v4.55.4 Layered World-Transition Celebrations
+
+- Current request: make world and competition transitions feel less monotonous by adding tasteful fireworks, ribbons, and related motion instead of showing only a trophy.
+- Rebuilt the bounded celebration layer around five semantic levels: ordinary advances use an eight-streamer edge sweep and restrained pitch/brass wash; knockout progression uses a fuller streamer launch; relegation playoffs use seeded confetti; season rollover uses three real radial firework bursts plus confetti; completed finals retain the trophy and now layer fireworks and seeded confetti behind it.
+- Celebration selection is deterministic from the completed window and result, never from hidden outcomes. Seeded layouts vary by advance without consuming simulation RNG. Every overlay remains pointer-transparent, bounded to 54 confetti pieces / 18 streamers / 36 firework rays, and `prefers-reduced-motion` hides moving layers while retaining the static trophy for an actual title.
+- Fixed a pre-existing season-boundary presentation gap: after the world rolls into the next season, Dashboard now uses the frozen `lastWorldResponse` season/label context instead of trying to find the completed window in the new calendar.
+- Final Node 22.22.2 validation passed 137 test files / 971 tests, strict TypeScript, ESLint, ordinary and audit PWA builds, bundle budgets, and the full mobile/desktop focused-broadcast workflow. Dedicated browser checks proved 8 bounded transition streamers, 3 firework bursts / 36 rays, zero overflow/runtime errors at 390 and 1440 widths, reliable season-boundary triggering, and `display: none` for motion layers under reduced motion. Ordinary and season-rollover screenshots plus the standard deterministic Canvas client were visually inspected; the latter completed two 90-frame bursts with coherent state and no console errors. Main JS remains 244,107 bytes / 76,097 gzip and no media asset was added.
+
 ## 2026-08-19 v4.55.3 Slower Live Broadcast Cadence
 
 - Current request: slow the live match animation because the match clock and on-pitch actions still feel too fast to read as believable football.

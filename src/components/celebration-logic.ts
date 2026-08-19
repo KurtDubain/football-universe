@@ -1,5 +1,6 @@
 import { isDerby, getDerbyName } from '../config/derbies';
 import type { TeamBase } from '../types/team';
+import type { CelebrationType } from './celebration-types';
 
 export type MatchTag = {
   label: string;
@@ -58,10 +59,20 @@ export function getMatchTags(
 
 export function shouldCelebrate(
   windowType: string,
-  _roundLabel: string,
+  roundLabel: string,
   results: { competitionType: string; roundLabel: string }[],
-): 'trophy' | 'confetti' | null {
+): CelebrationType {
   if (results.some(result => result.roundLabel === 'Final' || result.roundLabel === '决赛')) return 'trophy';
-  if (windowType === 'season_end' || windowType === 'relegation_playoff') return 'confetti';
-  return null;
+  if (windowType === 'season_end') return 'fireworks';
+  if (windowType === 'relegation_playoff') return 'confetti';
+
+  const stage = roundLabel.toLowerCase();
+  const isKnockoutStage = /(^|\s)(r16|qf|sf)(\s|$)|16强|八强|四强|半决赛|淘汰赛/.test(stage);
+  const isCupWindow = windowType === 'league_cup'
+    || windowType === 'super_cup'
+    || windowType === 'continental_cup'
+    || windowType === 'world_cup';
+  if (isCupWindow && isKnockoutStage) return 'streamers';
+
+  return 'transition';
 }

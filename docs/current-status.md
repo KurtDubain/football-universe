@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
 Last reviewed: 2026-08-19
-Current release: v4.55.3
+Current release: v4.55.4
 Status: release-ready core; active work is limited to human experience validation.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -16,8 +16,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 964 unit and component tests across 135 test files.
-- Approximately 62k production TypeScript lines across 230 source files.
+- 971 unit and component tests across 137 test files.
+- Approximately 63k production TypeScript lines across 230 source files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - The live broadcast uses one tested playback controller and one tested Canvas runtime. The browser matrix verifies ordered same-minute goals, score-on-impact semantics, mobile shootouts, covered-canvas pause, close/reopen behavior, and final-score integrity.
 - Node 22.22.2 and pnpm 10.34.5 are the release toolchain.
