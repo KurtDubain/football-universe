@@ -43,6 +43,9 @@ jobs:
           CHANGELOG_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
         run: pnpm changelog:check
 
+      - name: Current documentation
+        run: pnpm docs:check
+
       - name: Tournament music assets
         run: pnpm audio:check
 

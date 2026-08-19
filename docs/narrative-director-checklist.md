@@ -1,9 +1,12 @@
 # Narrative Director Implementation Checklist
 
-Status: complete; ND-0 through ND-6 complete
-Target release: v4.54.0  
+Status: historical implementation ledger; ND-0 through ND-6 complete
+
+Current roadmap: [`current-status.md`](current-status.md)
+
+Target release: v4.54.0
 Last updated: 2026-08-13
-Source of truth: this checklist supersedes conversational planning when a future session resumes the work.
+The original checklist below preserves the accepted scope and release evidence. It is no longer an active task source.
 
 ## 0. Product Goal And Frozen Rules
 

@@ -2,7 +2,7 @@
 
 Created: 2026-07-17
 
-> Document status (reviewed 2026-08-09): archived UI implementation ledger. The Progress Log records the evidence available when each phase shipped; the current UI contract lives in shared components, browser verification scripts, and the latest release notes. Unchecked design experiments are not an active commitment unless promoted into a newer roadmap. The Definition of Done remains a reusable gate, so its boxes intentionally stay open.
+> Document status (reviewed 2026-08-19): archived UI implementation ledger. The Progress Log records the evidence available when each phase shipped; the current roadmap lives in [`current-status.md`](current-status.md), while the UI contract lives in shared components, browser verification scripts, and the latest release notes. Unchecked design experiments are not an active commitment unless promoted into the current roadmap. The Definition of Done remains a reusable gate, so its boxes intentionally stay open.
 
 This document tracks the UI and experience work found during the July 2026 multi-agent review and production audit. The target direction is a **night football broadcast desk**: clear operational data, recognizable club and competition identity, and restrained illustrated match/story assets.
 

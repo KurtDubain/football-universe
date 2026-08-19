@@ -1,6 +1,9 @@
 # Narrative Editorial And Time Control Checklist
 
-Status: complete and release validated
+Status: historical implementation ledger; complete and release validated
+
+Current roadmap: [`current-status.md`](current-status.md)
+
 Target release: v4.55.0
 Last updated: 2026-08-13
 

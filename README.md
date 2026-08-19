@@ -187,13 +187,17 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-61,645 production TypeScript lines · 224 production source files · 130 test files · 45 browser/simulation audit commands
+Current release: **v4.55.1**
+
+62k+ production TypeScript lines · 220+ production source files · 130+ test files · 45+ browser/simulation audit commands
+
+当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 
 生产依赖审计结论与运行边界记录在 [`docs/security-audit.md`](docs/security-audit.md)。
 
 现行“东亚足球年鉴 × 现场转播台”美术语法与图片使用边界记录在 [`docs/art-direction.md`](docs/art-direction.md)。
 
-参赛打磨的历史实施台账、仍需人工完成的投稿材料与最终发布门禁记录在 [`docs/contest-final-polish-checklist.md`](docs/contest-final-polish-checklist.md)。
+参赛打磨的历史实施台账与人工走查模板保留在 [`docs/contest-final-polish-checklist.md`](docs/contest-final-polish-checklist.md)。
 
 <details>
 <summary>📁 Project Structure</summary>
