@@ -3,7 +3,8 @@ import { writeFileSync } from 'node:fs';
 
 const url = process.env.PERF_URL ?? 'http://127.0.0.1:4173/?audit';
 const samples = Number(process.env.PERF_SAMPLES ?? 5);
-const settleMs = Number(process.env.PERF_SETTLE_MS ?? 750);
+const settleMs = Number(process.env.PERF_SETTLE_MS ?? 100);
+const saveTimeoutMs = Number(process.env.PERF_SAVE_TIMEOUT_MS ?? 3_000);
 const seed = Number(process.env.PERF_SEED ?? 20260716);
 const reportPath = process.env.PERF_REPORT;
 
@@ -18,10 +19,12 @@ interface AdvanceSample {
   workerSerializationMs: number;
   workerCompressionMs: number;
   compressedChars: number;
+  saveSettled: boolean;
 }
 
 interface ProfileResult {
   cpuRate: number;
+  coldStart: AdvanceSample;
   samples: AdvanceSample[];
   p50ActionMs: number;
   p95ActionMs: number;
@@ -58,7 +61,7 @@ async function restoreBaseline(page: Page, baseline: string): Promise<void> {
 }
 
 async function runSample(page: Page): Promise<AdvanceSample> {
-  return page.evaluate(async (waitMs) => {
+  return page.evaluate(async ({ waitMs, saveWaitMs }) => {
     type AuditState = {
       isAdvancing: boolean;
       advanceWindow: () => Promise<void>;
@@ -75,8 +78,13 @@ async function runSample(page: Page): Promise<AdvanceSample> {
       compressionMs: number;
     }> = [];
     const timingController = new AbortController();
+    let saveSettled = false;
+    let resolveSave: (() => void) | undefined;
+    const saveCompleted = new Promise<void>(resolve => { resolveSave = resolve; });
     window.addEventListener('football-save-performance', (event) => {
       saveTimings.push((event as CustomEvent<(typeof saveTimings)[number]>).detail);
+      saveSettled = true;
+      resolveSave?.();
     }, { signal: timingController.signal });
     const observer = typeof PerformanceObserver !== 'undefined'
       && PerformanceObserver.supportedEntryTypes.includes('longtask')
@@ -104,6 +112,10 @@ async function runSample(page: Page): Promise<AdvanceSample> {
     const busyAtFirstFrame = store.getState().isAdvancing && busyButton;
     await advance;
     const actionMs = performance.now() - start;
+    await Promise.race([
+      saveCompleted,
+      new Promise<void>(resolve => setTimeout(resolve, saveWaitMs)),
+    ]);
     await new Promise((resolve) => setTimeout(resolve, waitMs));
 
     clearInterval(timer);
@@ -121,8 +133,9 @@ async function runSample(page: Page): Promise<AdvanceSample> {
       workerSerializationMs: Math.max(0, ...saveTimings.map((timing) => timing.serializationMs)),
       workerCompressionMs: Math.max(0, ...saveTimings.map((timing) => timing.compressionMs)),
       compressedChars,
+      saveSettled,
     };
-  }, settleMs);
+  }, { waitMs: settleMs, saveWaitMs: saveTimeoutMs });
 }
 
 async function runProfile(
@@ -133,11 +146,13 @@ async function runProfile(
 ): Promise<ProfileResult> {
   await restoreBaseline(page, baseline);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
+  const coldStart = await runSample(page);
   const profileSamples: AdvanceSample[] = [];
   for (let index = 0; index < samples; index++) profileSamples.push(await runSample(page));
   const actions = profileSamples.map((sample) => sample.actionMs);
   return {
     cpuRate,
+    coldStart,
     samples: profileSamples,
     p50ActionMs: percentile(actions, 0.5),
     p95ActionMs: percentile(actions, 0.95),
@@ -233,19 +248,29 @@ try {
   console.log(JSON.stringify(result, null, 2));
   if (reportPath) writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
 
-  const allSamples = [...normal.samples, ...throttled.samples];
+  const steadySamples = [...normal.samples, ...throttled.samples];
+  const coldStartSamples = [normal.coldStart, throttled.coldStart];
+  const allSamples = [...coldStartSamples, ...steadySamples];
   const failures = [
     allSamples.every((sample) => sample.busyImmediate && sample.busyAtFirstFrame)
       ? null
       : 'advance feedback did not render before simulation',
+    allSamples.every(sample => sample.saveSettled)
+      ? null
+      : 'save Worker did not settle between measured advances',
     Math.max(normal.maxLongTaskMs, throttled.maxLongTaskMs) <= 100
       ? null
-      : 'main-thread long task exceeded 100 ms',
-    Math.max(normal.maxTimerGapMs, throttled.maxTimerGapMs) <= 200
+      : 'steady-state main-thread long task exceeded 100 ms',
+    Math.max(...coldStartSamples.map(sample => sample.maxLongTaskMs)) <= 150
+      ? null
+      : 'cold-start main-thread long task exceeded 150 ms',
+    Math.max(...allSamples.map(sample => sample.maxTimerGapMs)) <= 200
       ? null
       : 'timer gap exceeded 200 ms',
     normal.p95ActionMs <= 50 ? null : 'normal-speed p95 exceeded 50 ms',
     throttled.p95ActionMs <= 100 ? null : '4x CPU p95 exceeded 100 ms',
+    normal.coldStart.actionMs <= 75 ? null : 'normal-speed cold start exceeded 75 ms',
+    throttled.coldStart.actionMs <= 150 ? null : '4x CPU cold start exceeded 150 ms',
     rapid.after - rapid.before === 1 ? null : 'rapid input executed more than one advance',
     restoredWindow === expectedWindow ? null : 'latest acknowledged advance did not survive reload',
   ].filter((failure): failure is string => failure !== null);

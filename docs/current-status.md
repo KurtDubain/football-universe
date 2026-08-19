@@ -1,8 +1,8 @@
 # Football Universe Current Status
 
-Last reviewed: 2026-08-19  
-Current release: v4.55.1  
-Status: release-ready core; active work is limited to live-broadcast maintainability and human experience validation.
+Last reviewed: 2026-08-19
+Current release: v4.55.2
+Status: release-ready core; active work is limited to human experience validation.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
 
@@ -16,17 +16,17 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 959 unit and component tests across 133 test files.
-- Approximately 62k production TypeScript lines across 226 source files.
+- 964 unit and component tests across 135 test files.
+- Approximately 62k production TypeScript lines across 230 source files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
-- The latest playback audit verifies ordered same-minute goals, score-on-impact semantics, mobile shootouts, covered-canvas pause, and two-leg aggregate shootout integrity.
+- The live broadcast uses one tested playback controller and one tested Canvas runtime. The browser matrix verifies ordered same-minute goals, score-on-impact semantics, mobile shootouts, covered-canvas pause, close/reopen behavior, and final-score integrity.
 - Node 22.22.2 and pnpm 10.34.5 are the release toolchain.
 
 ## Active Work
 
-1. Restructure `MatchLive` and `PitchCanvas` around one typed playback contract without changing simulation output, timing semantics, visuals, audio balance, or save data.
-2. Re-run the complete live-match browser matrix and performance budgets after that refactor.
-3. Conduct three unassisted first-five-minute playtests and one complete fifteen-minute observer-route walkthrough on real devices.
+1. Conduct three unassisted first-five-minute playtests and record repeated points of confusion rather than individual visual preferences.
+2. Complete one fifteen-minute observer-route walkthrough on an iPhone Safari and one mid-range Android Chrome device.
+3. Promote only repeated human-test findings into this roadmap; do not reopen archived feature lists by default.
 
 ## Candidate Follow-Ups
 

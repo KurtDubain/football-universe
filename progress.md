@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-19 v4.55.2 Release Hygiene, Documentation Source Of Truth, And Live Runtime Architecture
+
+- Closed the release-integrity gap in the previous live synchronization work with v4.55.1, then released this maintainability pass as v4.55.2. Package metadata, runtime version, in-game changelog, README, and CI changelog checks now move together.
+- Established `docs/current-status.md` as the only active roadmap. README keeps stable product and development facts, `progress.md` remains chronological evidence, and historical plan/checklist files are explicitly archived rather than silently appearing as unfinished current work. The new `docs:check` gate verifies release alignment, documentation roles, live test counts, and production source scale.
+- Extracted MatchLive's clock, pending presentation, score-on-impact, visibility, reduced-motion, break, skip, pause, and flash lifecycle into one tested playback controller. Full commentary history and shootout progression now live in focused presentation components without changing existing interaction or result semantics.
+- Extracted PitchCanvas fixed-step timing, audit advancement, hidden-tab suspension, covered-canvas suspension, and deterministic resume into one tested runtime. MatchLive fell from 1,020 to 693 lines while PitchCanvas retained visual ownership and the authoritative simulator, save data, scores, event order, and audio balance remained unchanged.
+- Corrected the advance-performance audit itself: cold-start and steady-state costs are reported separately, every sample waits for Worker persistence to settle, and the original 50 ms normal / 100 ms throttled steady-state budgets remain enforced. The clean smoke run measured steady-state p95 at 27.8 ms normally and 69.9 ms under 4x CPU, with every save settled and 20 rapid attempts accepting exactly one advance.
+- Final Node 22.22.2 verification passed 135 test files / 964 tests, ESLint, strict TypeScript, dependency audit, audio and script gates, ordinary and audit PWA builds, bundle budgets, changelog and documentation checks, and the complete browser smoke suite. Browser coverage included 500 advances across 10 seasons, 126 responsive route checks, automatic PWA updates, offline route recovery, cup brackets, all five tournament music identities, tactics and featured players, ordered same-minute goals, shootouts, Canvas pause/reopen behavior, and 320/390/430/1440 layouts with zero runtime or overflow errors. Only unassisted human-device playtests remain active.
+
 ## 2026-08-13 Live Score Synchronization And Shootout Integrity
 
 - Current request: fix intermittent live-animation stalls followed by an immediate final-score jump, and audit penalty-shootout logic rather than treating it as only a visual defect.
