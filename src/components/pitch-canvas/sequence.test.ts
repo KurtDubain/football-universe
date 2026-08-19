@@ -175,4 +175,68 @@ describe('pitch possession sequences', () => {
       slot.x >= 0.05 && slot.x <= 0.62 && slot.y >= 0.07 && slot.y <= 0.93
     )).toBe(true);
   });
+
+  it('uses the coach approach to weight possession routes without losing deterministic playback', () => {
+    const counterPatterns: string[] = [];
+    const controlPatterns: string[] = [];
+    for (let seed = 1; seed <= 120; seed++) {
+      const counter = generateSequence(seed, {
+        attackingHome: true,
+        homeFormation: '4-4-2',
+        homeApproach: 'counter',
+      });
+      const control = generateSequence(seed, {
+        attackingHome: true,
+        homeFormation: '4-4-2',
+        homeApproach: 'control',
+      });
+      counterPatterns.push(counter.phases[0]?.pattern ?? '');
+      controlPatterns.push(control.phases[0]?.pattern ?? '');
+      expect(generateSequence(seed, {
+        attackingHome: true,
+        homeFormation: '4-4-2',
+        homeApproach: 'counter',
+      })).toEqual(counter);
+    }
+
+    expect(counterPatterns.filter(pattern => pattern === 'counter').length).toBeGreaterThan(45);
+    expect(controlPatterns.filter(pattern => pattern === 'counter')).toHaveLength(0);
+    expect(controlPatterns.filter(pattern => (
+      pattern === 'build_up' || pattern === 'central_combination' || pattern === 'switch_play'
+    )).length).toBeGreaterThan(70);
+  });
+
+  it('gives each formation several valid route variants and a distinct positional identity', () => {
+    const formations = ['4-3-3', '4-2-3-1', '4-4-2', '5-4-1'] as const;
+    const representativeRoutes = new Set<string>();
+
+    for (const formation of formations) {
+      const routes = new Set<string>();
+      for (let seed = 1; seed <= 90; seed++) {
+        const sequence = generateSequence(seed, {
+          attackingHome: true,
+          homeFormation: formation,
+          homeApproach: 'balanced',
+        });
+        routes.add(sequence.phases.map(phase => `${phase.passerIdx}>${phase.receiverIdx}`).join('|'));
+        expect(sequence.phases.every(phase => (
+          phase.passerIdx >= 0 && phase.passerIdx < 11
+          && phase.receiverIdx >= 0 && phase.receiverIdx < 11
+          && phase.targetOverride !== undefined
+          && phase.targetOverride.x >= 0.03 && phase.targetOverride.x <= 0.97
+          && phase.targetOverride.y >= 0.05 && phase.targetOverride.y <= 0.95
+        ))).toBe(true);
+      }
+      expect(routes.size).toBeGreaterThan(20);
+
+      const representative = generateSequence(1, {
+        attackingHome: true,
+        homeFormation: formation,
+        homeApproach: 'balanced',
+      });
+      representativeRoutes.add(representative.phases.map(phase => `${phase.passerIdx}>${phase.receiverIdx}`).join('|'));
+    }
+
+    expect(representativeRoutes.size).toBe(formations.length);
+  });
 });

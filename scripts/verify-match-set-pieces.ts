@@ -82,7 +82,10 @@ async function verifyViewport(name: string, width: number, height: number) {
     const sourceX = freeKick.action?.sourceOverride?.x ?? 0;
     const wall = freeKick.awayOnField.filter(player => player.slot >= 1 && player.slot <= 4);
     if (wall.length < 3 || wall.some(player => player.x <= sourceX)) {
-      throw new Error(`${name}: direct free-kick wall is not goal-side of the ball`);
+      throw new Error(
+        `${name}: direct free-kick wall is not goal-side of the ball `
+        + `(source=${sourceX.toFixed(3)}, wall=${wall.map(player => `${player.slot}:${player.x.toFixed(3)}`).join(',')})`,
+      );
     }
     const wallSpread = Math.max(...wall.map(player => player.y)) - Math.min(...wall.map(player => player.y));
     if (wallSpread < 0.07) throw new Error(`${name}: direct free-kick wall is not visibly formed`);

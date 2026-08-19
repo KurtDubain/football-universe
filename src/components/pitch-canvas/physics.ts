@@ -28,6 +28,12 @@ function formationForTeam(isHomeTeam: boolean, formations: PitchFormationLayouts
   return isHomeTeam ? formations.home : formations.away;
 }
 
+function forwardLaneForSlot(formIdx: number, formation: FormationSlot[]): number {
+  const slot = formation[formIdx] ?? BASE_FORMATION[formIdx];
+  const forwardCount = formation.filter(entry => entry.role === 'FW').length;
+  return forwardCount <= 1 ? 0.5 : 0.5 + (slot.y - 0.5) * 0.72;
+}
+
 /**
  * Where a player should be standing in their formation slot, given the
  * tactical shift (positive = home team pushed up, away pulled back).
@@ -367,7 +373,10 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
   const formation = input.formation ?? BASE_FORMATION;
   const slot = getBaseSlot(formIdx, isHomeTeam, shift, formation);
   const attackDirection = isHomeTeam ? 1 : -1;
-  const ahead = (x: number, amount: number) => x + attackDirection * amount;
+  // Off-ball runs stop short of the goal line. The authoritative shooter can
+  // still enter the event's exact release point, while supporting runners do
+  // not drag an entire marking block into the six-yard line.
+  const ahead = (x: number, amount: number) => clamp(x + attackDirection * amount, 0.075, 0.925);
   const behind = (x: number, amount: number) => x - attackDirection * amount;
   const upperSide = ballNY < 0.5;
   const slotUpper = slot.y < 0.5;
@@ -379,6 +388,16 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
   const isWinger = slot.role === 'FW' && Math.abs(slot.y - 0.5) >= 0.2;
   const isCentralMidfielder = slot.role === 'MF' && Math.abs(slot.y - 0.5) < 0.14;
   const isCentralForward = slot.role === 'FW' && Math.abs(slot.y - 0.5) < 0.18;
+  const midfieldSlots = formation.filter(entry => entry.role === 'MF');
+  const midfieldDepthRange = midfieldSlots.length > 0
+    ? Math.max(...midfieldSlots.map(entry => entry.x)) - Math.min(...midfieldSlots.map(entry => entry.x))
+    : 0;
+  const isHoldingMidfielder = slot.role === 'MF'
+    && slot.x <= Math.min(...midfieldSlots.map(entry => entry.x)) + 0.025;
+  const isAdvancedMidfielder = slot.role === 'MF'
+    && midfieldDepthRange >= 0.055
+    && slot.x >= Math.max(...midfieldSlots.map(entry => entry.x)) - 0.025;
+  const forwardLaneY = forwardLaneForSlot(formIdx, formation);
   let x = slot.x;
   let y = slot.y;
   let sprint = 0;
@@ -397,11 +416,13 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         x = ahead(slot.x, isFullback ? 0.035 : 0.008);
         y = isFullback ? (slotUpper ? 0.11 : 0.89) : lerp(slot.y, 0.5, 0.08);
       } else if (slot.role === 'MF') {
-        x = isCentralMidfielder ? behind(ballNX, 0.11) : behind(ballNX, 0.04);
-        y = isCentralMidfielder ? 0.5 : lerp(slot.y, ballNY, 0.22);
+        x = isAdvancedMidfielder
+          ? behind(ballNX, 0.025)
+          : isHoldingMidfielder ? behind(ballNX, 0.12) : behind(ballNX, 0.055);
+        y = isCentralMidfielder ? lerp(0.5, ballNY, 0.12) : lerp(slot.y, ballNY, 0.22);
       } else {
         x = ahead(ballNX, isCentralForward ? 0.16 : 0.11);
-        y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
+        y = isWinger ? (slotUpper ? 0.12 : 0.88) : forwardLaneY;
       }
       break;
 
@@ -411,7 +432,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         y = wideY;
         sprint = 0.78;
       } else if (isWideMidfielder && sameFlank) {
-        x = behind(ballNX, 0.075);
+        x = isAdvancedMidfielder ? ahead(ballNX, 0.025) : behind(ballNX, 0.075);
         y = lerp(wideY, 0.5, 0.34);
       } else if (isWinger && sameFlank) {
         x = ahead(ballNX, 0.11);
@@ -419,7 +440,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         sprint = 0.68;
       } else if (isCentralForward) {
         x = ahead(ballNX, 0.13);
-        y = 0.5;
+        y = forwardLaneY;
         sprint = stage === 'create' ? 0.72 : 0.35;
       } else if (isWinger) {
         x = ahead(ballNX, 0.1);
@@ -436,11 +457,13 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         y = slotUpper ? 0.1 : 0.9;
       } else if (slot.role === 'MF') {
         const side = slot.y < 0.43 ? -1 : slot.y > 0.57 ? 1 : 0;
-        x = isCentralMidfielder ? behind(ballNX, 0.11) : behind(ballNX, 0.035);
-        y = 0.5 + side * 0.13;
+        x = isAdvancedMidfielder
+          ? ahead(ballNX, 0.035)
+          : isHoldingMidfielder ? behind(ballNX, 0.12) : behind(ballNX, 0.045);
+        y = isCentralMidfielder ? lerp(0.5, ballNY, 0.2) : 0.5 + side * 0.13;
       } else if (isCentralForward) {
         x = ahead(ballNX, 0.12);
-        y = 0.5;
+        y = forwardLaneY;
         sprint = stage === 'create' ? 0.72 : 0.38;
       } else if (isWinger) {
         x = ahead(ballNX, 0.07);
@@ -469,7 +492,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
     case 'counter':
       if (slot.role === 'FW') {
         x = ahead(ballNX, isCentralForward ? 0.16 : 0.13);
-        y = isCentralForward ? lerp(0.5, ballNY, 0.22) : lerp(slot.y, ballNY, 0.18);
+        y = isCentralForward ? lerp(forwardLaneY, ballNY, 0.18) : lerp(slot.y, ballNY, 0.18);
         sprint = 1;
       } else if (slot.role === 'MF' && (isCentralMidfielder || sameFlank)) {
         x = behind(ballNX, isCentralMidfielder ? 0.12 : 0.045);
@@ -490,7 +513,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
         y = isCentralMidfielder ? 0.5 : lerp(slot.y, farWideY, 0.2);
       } else {
         x = ahead(ballNX, isCentralForward ? 0.12 : 0.08);
-        y = isWinger ? (slotUpper ? 0.12 : 0.88) : 0.5;
+        y = isWinger ? (slotUpper ? 0.12 : 0.88) : forwardLaneY;
       }
       break;
   }
@@ -693,8 +716,10 @@ export function updatePlayerPositions(
     if (overrideTarget && teamHasBall && slot.role === 'FW' && !isHolder) {
       const laneSeed = (i + 1) * 97 + Math.round(overrideTarget.x * 1000) + Math.round(overrideTarget.y * 1000);
       const supportDepth = 0.08 + seededRand(laneSeed) * 0.07;
+      const supportLaneY = forwardLaneForSlot(formIdx, formation);
       targetX_n = overrideTarget.x + (isHomeTeam ? -supportDepth : supportDepth);
-      targetY_n = overrideTarget.y + (seededRand(laneSeed + 1) - 0.5) * 0.18;
+      const laneVariation = (seededRand(laneSeed + 1) - 0.5) * 0.045;
+      targetY_n = lerp(supportLaneY, overrideTarget.y, 0.34) + laneVariation;
     }
 
     if (defensiveAction?.playerIndex === i) {
@@ -726,7 +751,7 @@ export function updatePlayerPositions(
       }
     }
 
-    if (!teamHasBall && defensiveAction?.playerIndex !== i) {
+    if (!teamHasBall && defensiveAction?.playerIndex !== i && !setPieceTarget) {
       const primaryDefender = i === defensiveRoles.presserIndex || i === defensiveRoles.coverIndex;
       const recoveringReleasedShot = currentPhase.kind === 'shot'
         && phaseState !== 'holding'

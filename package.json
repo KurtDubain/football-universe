@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.55.4",
+  "version": "4.55.5",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {

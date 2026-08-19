@@ -42,6 +42,7 @@ import {
 } from './pitch-canvas/render-budget';
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
+import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
 
 interface Props {
   minute: number;
@@ -544,21 +545,37 @@ function PitchCanvas(props: Props) {
       const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh, layout);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
-      if ((firstPhase.setPiece || firstPhase.restart) && firstPhase.sourceOverride) {
+      if (firstPhase.setPiece) {
+        // A dead-ball scene starts after the referee has allowed both teams
+        // to take their positions. Stage that omitted setup immediately so a
+        // wall or penalty shape is formed before the visible run-up begins.
+        for (let playerIndex = 0; playerIndex < 22; playerIndex++) {
+          const isHomeTeam = playerIndex < 11;
+          const playerFormation = isHomeTeam
+            ? liveRef.current.formationLayouts.home
+            : liveRef.current.formationLayouts.away;
+          const formIdx = playerIndex % 11;
+          const target = setPiecePlayerTarget(
+            playerIndex,
+            isHomeTeam,
+            playerFormation[formIdx].role,
+            firstPhase,
+            playerFormation,
+          );
+          if (!target) continue;
+          const player = playerPosRef.current[playerIndex];
+          player.x = target.x;
+          player.y = target.y;
+          player.vx = 0;
+          player.vy = 0;
+        }
+      } else if (firstPhase.restart && firstPhase.sourceOverride) {
         const takerOffset = firstPhase.attackingHome ? 0 : 11;
         const taker = playerPosRef.current[takerOffset + firstPhase.passerIdx];
         taker.x = firstPhase.sourceOverride.x;
         taker.y = firstPhase.sourceOverride.y;
         taker.vx = 0;
         taker.vy = 0;
-      }
-      if (firstPhase.setPiece === 'penalty') {
-        const defendingHome = !firstPhase.attackingHome;
-        const goalkeeper = playerPosRef.current[defendingHome ? 0 : 11];
-        goalkeeper.x = defendingHome ? 0.03 : 0.97;
-        goalkeeper.y = 0.5;
-        goalkeeper.vx = 0;
-        goalkeeper.vy = 0;
       }
     }
 
@@ -1178,7 +1195,7 @@ function PitchCanvas(props: Props) {
         lastAtmosphereRef.current = { ...atmosphere, frame: f };
         live.onPresentationAtmosphereChange?.(atmosphere);
       }
-      const assignmentKey = `${sequenceSeedRef.current}:${tacticalMoment}:${isAttHome ? 'H' : 'A'}:${activeHome.length}:${activeAway.length}`;
+      const assignmentKey = `${sequenceSeedRef.current}:${phaseIdxRef.current}:${tacticalMoment}:${isAttHome ? 'H' : 'A'}:${activeHome.length}:${activeAway.length}`;
       if (tacticalAssignmentKeyRef.current !== assignmentKey) {
         tacticalAssignmentKeyRef.current = assignmentKey;
         tacticalAssignmentsRef.current = buildTacticalAssignments(

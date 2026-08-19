@@ -201,6 +201,115 @@ describe('pitch player movement', () => {
     expect(winger.sprint).toBe(1);
   });
 
+  it('keeps a two-forward shape in staggered finishing lanes', () => {
+    const formation = getFormationSlots('4-4-2');
+    const firstForward = computeAttackingShapeTarget({
+      formIdx: 9,
+      isHomeTeam: true,
+      shift: 0,
+      ballNX: 0.66,
+      ballNY: 0.46,
+      pattern: 'central_combination',
+      stage: 'create',
+      formation,
+    });
+    const secondForward = computeAttackingShapeTarget({
+      formIdx: 10,
+      isHomeTeam: true,
+      shift: 0,
+      ballNX: 0.66,
+      ballNY: 0.46,
+      pattern: 'central_combination',
+      stage: 'create',
+      formation,
+    });
+
+    expect(firstForward.x).toBeCloseTo(secondForward.x);
+    expect(secondForward.y - firstForward.y).toBeGreaterThan(0.14);
+  });
+
+  it('keeps supporting counter runners outside the goal-line buffer', () => {
+    const formation = getFormationSlots('4-4-2');
+    const awayForward = computeAttackingShapeTarget({
+      formIdx: 9,
+      isHomeTeam: false,
+      shift: 0,
+      ballNX: 0.11,
+      ballNY: 0.46,
+      pattern: 'counter',
+      stage: 'create',
+      formation,
+    });
+
+    expect(awayForward.x).toBeGreaterThanOrEqual(0.075);
+    expect(awayForward.x).toBeLessThan(0.11);
+  });
+
+  it('lets a free-kick wall form during the setup instead of reacting after contact', () => {
+    const players = initialPlayers();
+    const phase: PassPhase = {
+      passerIdx: 7,
+      receiverIdx: 7,
+      attackingHome: true,
+      kind: 'shot',
+      duration: 112,
+      releaseDelayFrames: 84,
+      hold: 20,
+      arc: 0.2,
+      intercepted: false,
+      setPiece: 'direct_free_kick',
+      sourceOverride: { x: 0.8, y: 0.5 },
+    };
+
+    for (let frame = 0; frame < 84; frame++) {
+      updatePlayerPositions(
+        players,
+        0.8,
+        0.5,
+        'home',
+        7,
+        phase,
+        'shooting',
+        { x: 0.985, y: 0.5 },
+        0,
+        undefined,
+        undefined,
+        0,
+      );
+    }
+
+    expect(players.slice(12, 16).every(player => player.x > 0.8)).toBe(true);
+    expect(Math.max(...players.slice(12, 16).map(player => player.y))
+      - Math.min(...players.slice(12, 16).map(player => player.y))).toBeGreaterThan(0.07);
+  });
+
+  it('shows the number ten ahead of the double pivot in a 4-2-3-1 combination', () => {
+    const formation = getFormationSlots('4-2-3-1');
+    const pivot = computeAttackingShapeTarget({
+      formIdx: 5,
+      isHomeTeam: true,
+      shift: 0,
+      ballNX: 0.62,
+      ballNY: 0.5,
+      pattern: 'central_combination',
+      stage: 'progress',
+      formation,
+    });
+    const numberTen = computeAttackingShapeTarget({
+      formIdx: 8,
+      isHomeTeam: true,
+      shift: 0,
+      ballNX: 0.62,
+      ballNY: 0.5,
+      pattern: 'central_combination',
+      stage: 'progress',
+      formation,
+    });
+
+    expect(numberTen.x - pivot.x).toBeGreaterThan(0.12);
+    expect(numberTen.y).toBeCloseTo(0.5);
+  });
+
   it('keeps the shooter near the release point and supporting forwards in separate lanes', () => {
     const players = initialPlayers();
     const shot: PassPhase = {

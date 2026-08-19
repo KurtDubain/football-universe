@@ -64,15 +64,46 @@ function selectPattern(
   startingPlayerIdx: number | undefined,
   transition: boolean,
   formation: FormationSlot[],
+  approach: MatchApproach,
 ): PresentationPlayPattern {
   if (transition) return 'counter';
   const startingRole = startingPlayerIdx === undefined ? undefined : formation[startingPlayerIdx]?.role;
-  if (startingRole === 'FW') return 'recycle';
-  if (playStyle < 0.2) return 'build_up';
-  if (playStyle < 0.42) return 'wing_overload';
-  if (playStyle < 0.62) return 'central_combination';
-  if (playStyle < 0.84) return 'switch_play';
-  return 'recycle';
+  const weights: Record<MatchApproach, Array<[PresentationPlayPattern, number]>> = {
+    balanced: [
+      ['build_up', 0.2], ['wing_overload', 0.22], ['central_combination', 0.2],
+      ['switch_play', 0.22], ['recycle', 0.16],
+    ],
+    pressing: [
+      ['build_up', 0.12], ['wing_overload', 0.24], ['central_combination', 0.2],
+      ['switch_play', 0.14], ['recycle', 0.1], ['counter', 0.2],
+    ],
+    control: [
+      ['build_up', 0.25], ['wing_overload', 0.13], ['central_combination', 0.23],
+      ['switch_play', 0.23], ['recycle', 0.16],
+    ],
+    counter: [
+      ['build_up', 0.07], ['wing_overload', 0.18], ['central_combination', 0.08],
+      ['switch_play', 0.12], ['recycle', 0.11], ['counter', 0.44],
+    ],
+    low_block: [
+      ['build_up', 0.08], ['wing_overload', 0.16], ['central_combination', 0.1],
+      ['switch_play', 0.18], ['recycle', 0.2], ['counter', 0.28],
+    ],
+  };
+  let cursor = playStyle;
+  let selected: PresentationPlayPattern = 'recycle';
+  for (const [pattern, weight] of weights[approach]) {
+    cursor -= weight;
+    if (cursor <= 0) {
+      selected = pattern;
+      break;
+    }
+  }
+  // A forward receiving the final pass of a prior episode should not always
+  // trigger the same four-player reset. They can set a runner, switch the
+  // point of attack, or protect possession according to the coach's intent.
+  if (startingRole === 'FW' && selected === 'build_up') return 'recycle';
+  return selected;
 }
 
 function nearestSlot(
@@ -94,11 +125,30 @@ function roleIndices(formation: FormationSlot[], role: FormationSlot['role']): n
   return formation.flatMap((slot, index) => slot.role === role ? [index] : []);
 }
 
+function depthSlot(
+  formation: FormationSlot[],
+  role: FormationSlot['role'],
+  mode: 'deep' | 'advanced',
+  targetY = 0.5,
+  excluded: number[] = [],
+): number {
+  return formation
+    .map((slot, index) => ({ slot, index }))
+    .filter(entry => entry.slot.role === role && !excluded.includes(entry.index))
+    .sort((left, right) => (
+      (mode === 'advanced' ? right.slot.x - left.slot.x : left.slot.x - right.slot.x)
+      || Math.abs(left.slot.y - targetY) - Math.abs(right.slot.y - targetY)
+      || left.index - right.index
+    ))[0]?.index ?? nearestSlot(formation, [role], targetY, excluded);
+}
+
 function routeForPattern(
   pattern: PresentationPlayPattern,
   startingPlayerIdx: number | undefined,
   upperFlank: boolean,
   formation: FormationSlot[],
+  formationName: CoachFormation,
+  variant: number,
 ): number[] {
   const flankY = upperFlank ? 0.12 : 0.88;
   const oppositeY = 1 - flankY;
@@ -112,30 +162,78 @@ function routeForPattern(
   const wideRoles: FormationSlot['role'][] = forwards.length >= 3 ? ['FW'] : ['MF'];
   const winger = nearestSlot(formation, wideRoles, flankY);
   const oppositeWinger = nearestSlot(formation, wideRoles, oppositeY, [winger]);
+  const oppositeFullback = nearestSlot(formation, ['DF'], oppositeY, [fullback]);
+  const holdingMidfielder = depthSlot(formation, 'MF', 'deep', 0.5);
+  const attackingMidfielder = depthSlot(formation, 'MF', 'advanced', 0.5, [holdingMidfielder]);
+  const wideMidfielder = nearestSlot(formation, ['MF'], flankY);
+  const oppositeWideMidfielder = nearestSlot(formation, ['MF'], oppositeY, [wideMidfielder]);
+  const secondForward = forwards.length >= 2
+    ? nearestSlot(formation, ['FW'], oppositeY, [striker])
+    : oppositeWinger;
+  const isTwoForwardShape = formationName === '4-4-2';
 
   if (startingPlayerIdx !== undefined) {
     const role = formation[startingPlayerIdx]?.role;
     if (pattern === 'counter') {
       return compactRoute(role === 'FW'
-        ? [startingPlayerIdx, startingPlayerIdx === striker ? winger : striker]
-        : [startingPlayerIdx, winger, striker]);
+        ? [startingPlayerIdx, startingPlayerIdx === striker ? secondForward : striker]
+        : [startingPlayerIdx, variant === 0 ? winger : attackingMidfielder, isTwoForwardShape ? secondForward : striker]);
     }
-    if (role === 'FW') return compactRoute([startingPlayerIdx, midfielder, centralMidfielder, oppositeWinger]);
+    if (role === 'FW') {
+      if (pattern === 'wing_overload') return compactRoute([startingPlayerIdx, wideMidfielder, fullback, oppositeWinger]);
+      if (pattern === 'central_combination') return compactRoute([startingPlayerIdx, attackingMidfielder, isTwoForwardShape ? secondForward : oppositeWinger]);
+      if (pattern === 'switch_play') return compactRoute([startingPlayerIdx, midfielder, oppositeWideMidfielder, oppositeWinger]);
+      return compactRoute([startingPlayerIdx, holdingMidfielder, centerBack, otherMidfielder, oppositeWinger]);
+    }
     if (role === 'MF') {
-      return compactRoute(pattern === 'switch_play'
-        ? [startingPlayerIdx, otherMidfielder, oppositeWinger]
-        : [startingPlayerIdx, winger, striker]);
+      if (pattern === 'switch_play') return compactRoute([startingPlayerIdx, centerBack, oppositeFullback, oppositeWinger]);
+      if (pattern === 'recycle') return compactRoute([startingPlayerIdx, centerBack, oppositeFullback, oppositeWideMidfielder]);
+      if (pattern === 'central_combination') return compactRoute([startingPlayerIdx, attackingMidfielder, striker, secondForward]);
+      return compactRoute([startingPlayerIdx, variant === 0 ? winger : fullback, striker]);
     }
-    return compactRoute([startingPlayerIdx, centralMidfielder, midfielder, winger]);
+    if (role === 'GK') return compactRoute([startingPlayerIdx, centerBack, holdingMidfielder, variant === 0 ? winger : wideMidfielder]);
+    if (pattern === 'switch_play') return compactRoute([startingPlayerIdx, holdingMidfielder, oppositeFullback, oppositeWinger]);
+    if (pattern === 'wing_overload') return compactRoute([startingPlayerIdx, wideMidfielder, fullback, winger]);
+    return compactRoute([startingPlayerIdx, holdingMidfielder, attackingMidfielder, striker]);
   }
 
   switch (pattern) {
-    case 'build_up': return compactRoute([centerBack, centralMidfielder, midfielder, winger]);
-    case 'wing_overload': return compactRoute([centerBack, midfielder, fullback, winger]);
-    case 'central_combination': return compactRoute([centerBack, centralMidfielder, midfielder, striker]);
-    case 'switch_play': return compactRoute([fullback, centerBack, centralMidfielder, otherMidfielder, oppositeWinger]);
-    case 'counter': return compactRoute([centralMidfielder, winger, striker]);
-    case 'recycle': return compactRoute([winger, midfielder, centerBack, nearestSlot(formation, ['DF'], 0.5), fullback]);
+    case 'build_up':
+      return compactRoute(variant === 0
+        ? [centerBack, holdingMidfielder, midfielder, winger]
+        : variant === 1
+          ? [centerBack, nearestSlot(formation, ['DF'], oppositeY, [centerBack]), fullback, wideMidfielder]
+          : [centerBack, otherMidfielder, attackingMidfielder, striker]);
+    case 'wing_overload':
+      return compactRoute(variant === 0
+        ? [centerBack, midfielder, fullback, winger]
+        : variant === 1
+          ? [holdingMidfielder, winger, fullback, striker]
+          : [fullback, wideMidfielder, attackingMidfielder, isTwoForwardShape ? secondForward : striker]);
+    case 'central_combination':
+      return compactRoute(variant === 0
+        ? [centerBack, holdingMidfielder, attackingMidfielder, striker]
+        : variant === 1
+          ? [otherMidfielder, attackingMidfielder, striker, secondForward]
+          : [holdingMidfielder, midfielder, winger, striker]);
+    case 'switch_play':
+      return compactRoute(variant === 0
+        ? [fullback, centerBack, holdingMidfielder, oppositeWideMidfielder, oppositeWinger]
+        : variant === 1
+          ? [midfielder, centerBack, oppositeFullback, oppositeWinger]
+          : [winger, midfielder, centralMidfielder, oppositeWideMidfielder]);
+    case 'counter':
+      return compactRoute(variant === 0
+        ? [centralMidfielder, winger, striker]
+        : variant === 1
+          ? [centerBack, wideMidfielder, striker]
+          : [midfielder, striker, secondForward]);
+    case 'recycle':
+      return compactRoute(variant === 0
+        ? [winger, midfielder, centerBack, oppositeFullback]
+        : variant === 1
+          ? [wideMidfielder, holdingMidfielder, centerBack, fullback, winger]
+          : [striker, attackingMidfielder, otherMidfielder, oppositeWinger]);
   }
 }
 
@@ -149,6 +247,7 @@ function targetForPattern(
   upperFlank: boolean,
   seedValue: number,
   formation: FormationSlot[],
+  variant: number,
 ): { x: number; y: number } {
   const t = (step + 1) / Math.max(1, stepCount);
   const sourceProgress = attackingHome ? source.x : 1 - source.x;
@@ -161,25 +260,31 @@ function targetForPattern(
   switch (pattern) {
     case 'build_up': {
       const start = Math.max(0.24, Math.min(sourceProgress + 0.04, 0.42));
-      progress = start + (0.68 - start) * t;
-      y = receiverY * 0.72 + flankY * 0.28;
+      progress = variant === 1 && step === 0
+        ? Math.max(0.18, sourceProgress - 0.035)
+        : start + ((variant === 2 ? 0.72 : 0.68) - start) * t;
+      y = receiverY * 0.76 + flankY * 0.24;
       break;
     }
     case 'wing_overload': {
       const start = Math.max(0.32, Math.min(sourceProgress, 0.5));
-      progress = start + (0.78 - start) * t;
-      y = flankY * 0.72 + receiverY * 0.28;
+      const overlapBoost = variant === 1 && step >= stepCount - 2 ? 0.05 : 0;
+      progress = start + (0.78 - start) * t + overlapBoost;
+      y = flankY * (variant === 2 ? 0.58 : 0.72) + receiverY * (variant === 2 ? 0.42 : 0.28);
       break;
     }
     case 'central_combination': {
       const start = Math.max(0.34, Math.min(sourceProgress, 0.5));
       progress = start + (0.79 - start) * t;
-      y = 0.5 * 0.72 + receiverY * 0.28;
+      const halfSpace = upperFlank ? 0.42 : 0.58;
+      y = (variant === 0 ? 0.5 : halfSpace) * 0.66 + receiverY * 0.34;
       break;
     }
     case 'switch_play': {
       const start = Math.max(0.28, Math.min(sourceProgress - 0.03, 0.48));
-      progress = start + (0.7 - start) * t;
+      progress = step === 0
+        ? Math.max(0.2, sourceProgress - (variant === 1 ? 0.075 : 0.04))
+        : start + ((variant === 2 ? 0.74 : 0.7) - start) * t;
       y = source.y + (oppositeY - source.y) * t;
       break;
     }
@@ -229,10 +334,13 @@ function buildOpenPlayPlan(
   sourceOverride: { x: number; y: number } | undefined,
   transition: boolean,
   formation: FormationSlot[],
+  formationName: CoachFormation,
+  approach: MatchApproach,
 ): OpenPlayPlan {
   const upperFlank = seededRand(seed * 13 + 19) < 0.5;
-  const pattern = selectPattern(playStyle, startingPlayerIdx, transition, formation);
-  const route = routeForPattern(pattern, startingPlayerIdx, upperFlank, formation);
+  const variant = Math.floor(seededRand(seed * 29 + 37) * 3);
+  const pattern = selectPattern(playStyle, startingPlayerIdx, transition, formation, approach);
+  const route = routeForPattern(pattern, startingPlayerIdx, upperFlank, formation, formationName, variant);
   const source = sourceOverride ?? (() => {
     const slot = formation[route[0]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
     return { x: attackingHome ? slot.x : 1 - slot.x, y: slot.y };
@@ -247,6 +355,7 @@ function buildOpenPlayPlan(
     upperFlank,
     seededRand(seed * 17 + step + 71),
     formation,
+    variant,
   ));
   return { pattern, route, targets };
 }
@@ -278,9 +387,11 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   const r = (n: number) => seededRand(seed * 7 + n);
   const homePossessionShare = Math.min(0.75, Math.max(0.25, options.homePossessionShare ?? 0.5));
   const isHome = options.attackingHome ?? r(0) < homePossessionShare;
+  const formationName = (isHome ? options.homeFormation : options.awayFormation) ?? '4-3-3';
+  const approach = (isHome ? options.homeApproach : options.awayApproach) ?? 'balanced';
   const formation = getTacticalFormationSlots(
-    isHome ? options.homeFormation : options.awayFormation,
-    isHome ? options.homeApproach : options.awayApproach,
+    formationName,
+    approach,
   );
   const playStyle = r(1);
   // A shot on the canvas must have an authoritative event behind it. Ordinary
@@ -385,6 +496,8 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       options.sourceOverride,
       options.transition ?? false,
       formation,
+      formationName,
+      approach,
     );
     route = plan.route;
     pattern = plan.pattern;

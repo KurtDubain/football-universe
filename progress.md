@@ -1,5 +1,15 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-20 v4.55.5 Live Tactical Route Variety
+
+- Current request: reduce the live Canvas's scripted feel while keeping abstract top-down players, making ball routes and formations read more like football without changing authoritative match results.
+- The audit found that frozen tactics changed the base formation but did not weight open-play route selection, each play pattern mostly reused one passer chain, a forward continuation always recycled through the same path, and central forwards in a 4-4-2 collapsed toward one lane.
+- Open play now selects deterministic pattern weights from the frozen approach and chooses one of three route variants built from the actual formation roles. Control favors buildup/combinations/switches, counter and low-block shapes break vertically more often, and each of the four formations exposes distinct receiving chains without consuming simulation RNG.
+- Off-ball movement now distinguishes holding and advanced midfield lines in a 4-2-3-1, preserves paired striker lanes in a 4-4-2, and reuses those lanes for shot support. Defensive assignments remain stable within a pass but refresh at the next phase instead of following a complete episode unchanged.
+- Focused sequence, physics, set-piece, and event-scene tests cover route determinism, 20+ route variants per formation, bounded coordinates, approach weighting, double-pivot/number-ten depth, two-forward spacing, goal-line buffers, and pre-contact wall setup. The first browser pass exposed that richer prior routes could leave a free-kick wall too far away to form before contact; dead-ball scenes now stage their omitted setup before the visible run-up, and the desktop/mobile gate passes again.
+- Final Node 22.22.2 validation passed 137 test files / 977 tests, ESLint, strict TypeScript, ordinary and audit PWA builds, changelog/docs/script gates, and bundle budgets. The main entry remains 244,107 bytes / 76,096 gzip, and the ordinary build continues to omit the audit store bridge.
+- Browser validation passed 4-3-3 vs 5-4-1 and 4-2-3-1 vs 4-4-2 at 1440/320/390 widths, same-minute score-on-impact ordering, corners, direct free kicks, penalties, and shootouts. Canvas retained exact final scores, hidden/covered pause behavior, and zero runtime errors; average draw cost was 0.29ms normally and 1.13ms under 4x CPU with no long tasks. The standard deterministic game client completed three 180-frame episodes, and route/formation/free-kick screenshots were visually inspected.
+
 ## 2026-08-20 v4.55.4 Layered World-Transition Celebrations
 
 - Current request: make world and competition transitions feel less monotonous by adding tasteful fireworks, ribbons, and related motion instead of showing only a trophy.
