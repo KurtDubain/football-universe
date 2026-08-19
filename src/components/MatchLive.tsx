@@ -1,20 +1,10 @@
-import { useEffect, useLayoutEffect, useReducer, useRef, useCallback, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { MatchResult, MatchEvent } from '../types/match';
+import type { MatchResult } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
-import { Icon, IconName } from './Icon';
-import {
-  isHighlightEvent,
-  playbackBreakDelay,
-  playbackTickDelay,
-  PLAYBACK_MODE_OPTIONS,
-} from './match-live/playback-mode';
-import {
-  initialPlaybackState,
-  playbackReducer,
-  type PlaybackPhase,
-} from './match-live/playback-state';
+import { Icon } from './Icon';
+import { PLAYBACK_MODE_OPTIONS } from './match-live/playback-mode';
 import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
 import {
   createMatchSoundscape,
@@ -37,6 +27,9 @@ import {
   buildLiveCommentaryHistory,
   shootoutEventLabel,
 } from './match-live/live-commentary';
+import LiveCommentaryFeed from './match-live/LiveCommentaryFeed';
+import ShootoutTracker from './match-live/ShootoutTracker';
+import { useMatchPlaybackController } from './match-live/use-match-playback-controller';
 import {
   matchOpenerArtworkForCompetition,
   matchOpenerKindForCompetition,
@@ -62,37 +55,6 @@ interface Props {
   featured?: boolean;
 }
 
-const EVENT_ICONS: Record<string, { name: IconName; accent?: string }> = {
-  goal:         { name: 'ball' },
-  penalty_goal: { name: 'ball', accent: '#fbbf24' },
-  own_goal:     { name: 'ball', accent: '#ef4444' },
-  yellow_card:  { name: 'warning', accent: '#facc15' },
-  red_card:     { name: 'warning', accent: '#ef4444' },
-  save:         { name: 'gloves' },
-  miss:         { name: 'x' },
-  penalty_miss: { name: 'x', accent: '#fbbf24' },
-  gk_save:      { name: 'gloves', accent: '#3b82f6' },
-  df_block:     { name: 'shield', accent: '#3b82f6' },
-  assist:       { name: 'sparkle', accent: '#a78bfa' },
-  substitution: { name: 'refresh', accent: '#38bdf8' },
-  corner:       { name: 'flag', accent: '#fbbf24' },
-  free_kick:    { name: 'whistle', accent: '#7dd3fc' },
-};
-
-function getPlaybackStageLabel(
-  state: { minute: number; phase: PlaybackPhase },
-  hasPenalties: boolean,
-): string {
-  if (state.phase === 'finished') return '全场';
-  if (state.phase === 'halftime') return '中场';
-  if (state.phase === 'extra_time_break') return '加时前';
-  if (state.phase === 'shootout_break') return '点球前';
-  if (hasPenalties && state.minute > 120) return '点球大战';
-  if (state.minute > 90) return '加时赛';
-  if (state.minute > 45) return '下半场';
-  return '上半场';
-}
-
 function playbackKey(result: MatchResult): string {
   const eventKey = result.events.map((event, index) =>
     `${index}:${event.minute}:${event.type}:${event.teamId}:${event.playerId ?? ''}`,
@@ -100,171 +62,49 @@ function playbackKey(result: MatchResult): string {
   return `${result.fixtureId}:${result.homeGoals}:${result.awayGoals}:${result.etHomeGoals ?? 0}:${result.etAwayGoals ?? 0}:${eventKey}`;
 }
 
-function ShootoutTracker({
-  events,
-  homeTeamId,
-  homeName,
-  awayName,
-  homeColor,
-  awayColor,
-  homeScore,
-  awayScore,
-  nextEvent,
-}: {
-  events: MatchEvent[];
-  homeTeamId: string;
-  homeName: string;
-  awayName: string;
-  homeColor: string;
-  awayColor: string;
-  homeScore: number;
-  awayScore: number;
-  nextEvent?: MatchEvent;
-}) {
-  const homeKicks = events.filter(event => event.teamId === homeTeamId);
-  const awayKicks = events.filter(event => event.teamId !== homeTeamId);
-  const slotCount = Math.max(5, homeKicks.length, awayKicks.length);
-  const latest = events.at(-1);
-  const stage = latest?.shootout?.suddenDeath
-    ? `突然死亡 · 第${latest.shootout.round - 5}轮`
-    : `点球大战 · 第${latest?.shootout?.round ?? 1}轮`;
-  const nextTeamName = nextEvent?.teamId === homeTeamId ? homeName : awayName;
-  const nextTeamScore = nextEvent?.teamId === homeTeamId ? homeScore : awayScore;
-  const opponentScore = nextEvent?.teamId === homeTeamId ? awayScore : homeScore;
-  const nextTeamTaken = Math.max(0, (nextEvent?.shootout?.teamKickNumber ?? 1) - 1);
-  const opponentTaken = events.filter(event => event.teamId !== nextEvent?.teamId).length;
-  const nextKickWins = Boolean(nextEvent && !nextEvent.shootout?.suddenDeath
-    && nextTeamScore + 1 > opponentScore + Math.max(0, 5 - opponentTaken));
-  const mustScore = Boolean(nextEvent && !nextEvent.shootout?.suddenDeath
-    && nextTeamScore + Math.max(0, 5 - nextTeamTaken) <= opponentScore);
-  const pressure = !nextEvent
-    ? '逐罚结束'
-    : nextEvent.shootout?.suddenDeath
-      ? `${nextTeamName}进入突然死亡主罚`
-      : mustScore
-        ? `${nextTeamName}必须罚进`
-        : nextKickWins
-          ? `${nextTeamName}命中即可结束`
-          : `${nextTeamName}即将主罚`;
-
-  const row = (side: 'home' | 'away', name: string, color: string, kicks: MatchEvent[], score: number) => (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-        <span className="truncate text-[11px] font-semibold text-slate-300" title={name}>{name}</span>
-      </div>
-      <div className="flex flex-wrap justify-end gap-1" aria-label={`${name}点球记录`}>
-        {Array.from({ length: slotCount }, (_, index) => {
-          const kick = kicks[index];
-          const scored = kick?.type === 'penalty_goal';
-          return (
-            <span
-              key={index}
-              title={kick?.description ?? '尚未主罚'}
-              className={`h-3 w-3 rounded-full border ${
-                !kick
-                  ? 'border-slate-600 bg-transparent'
-                  : scored
-                    ? 'border-emerald-300 bg-emerald-400'
-                    : 'border-rose-300 bg-rose-500'
-              }`}
-            />
-          );
-        })}
-      </div>
-      <span
-        data-testid={`shootout-${side}-score`}
-        className="w-5 text-right text-sm font-black tabular-nums text-amber-300"
-      >{score}</span>
-    </div>
-  );
-
-  return (
-    <div data-testid="shootout-tracker" className="border-y border-amber-400/15 bg-amber-400/[0.04] px-4 py-2.5">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[10px] font-semibold text-amber-300">{stage}</span>
-        <span className="text-[10px] text-slate-500">{pressure} · <span className="tabular-nums">{homeScore} - {awayScore}</span></span>
-      </div>
-      <div className="space-y-1.5">
-        {row('home', homeName, homeColor, homeKicks, homeScore)}
-        {row('away', awayName, awayColor, awayKicks, awayScore)}
-      </div>
-    </div>
-  );
-}
-
 export default function MatchLive(props: Props) {
   return <MatchLiveSession key={`${playbackKey(props.result)}:${props.featured ? 'featured' : 'standard'}`} {...props} />;
 }
 
 function MatchLiveSession({ result, teamBases, onClose, featured = false }: Props) {
-  const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
   const [locallyMuted, setLocallyMuted] = useState(false);
   const feedbackPreferences = useFeedbackPreferences();
-  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
-  const [reducedMotion, setReducedMotion] = useState(() =>
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-  );
-  const [followingLiveFeed, setFollowingLiveFeed] = useState(true);
-  const [unseenEventCount, setUnseenEventCount] = useState(0);
-  const [presentationHolding, setPresentationHolding] = useState(false);
-  const [pitchAvailable, setPitchAvailable] = useState(true);
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerKind = matchOpenerKindForCompetition(result.competitionType);
   const openerArtwork = matchOpenerArtworkForCompetition(result.competitionType);
   const [showOpener, setShowOpener] = useState(prestigeOpener);
-  const logRef = useRef<HTMLDivElement>(null);
-  const previousCommentaryCountRef = useRef<number | null>(null);
+  const {
+    playback,
+    allEvents,
+    shownEvents,
+    pendingPresentationEvent,
+    maxMinute: maxMin,
+    timelineMax,
+    pageVisible,
+    reducedMotion,
+    finished,
+    paused,
+    halftime,
+    extraTimeBreak,
+    shootoutBreak,
+    isBreak,
+    inShootout,
+    stageLabel,
+    setPresentationHolding,
+    setPitchAvailable,
+    commitPresentationCue,
+    setMode,
+    togglePause,
+    skip,
+  } = useMatchPlaybackController({ result, openerVisible: showOpener });
   const soundscapeRef = useRef<MatchSoundscape | null>(null);
-  const previousPhaseRef = useRef<PlaybackPhase>(initialPlaybackState.phase);
+  const previousPhaseRef = useRef(playback.phase);
   const [matchMusicHoldOwner] = useState(() => `match-live-${result.fixtureId}`);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
-  const maxMin = result.extraTime ? 120 : 90;
-  const timelineMax = result.penalties
-    ? Math.max(121, ...result.events.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss').map(event => event.minute))
-    : maxMin;
-
-  const allEvents = useMemo(() => {
-    let homeKickCount = 0;
-    let awayKickCount = 0;
-    return result.events.map((sourceEvent, order) => {
-      let event = sourceEvent;
-      if ((event.type === 'penalty_goal' || event.type === 'penalty_miss') && !event.shootout) {
-        const isHome = event.teamId === result.homeTeamId;
-        const teamKickNumber = isHome ? ++homeKickCount : ++awayKickCount;
-        event = {
-          ...event,
-          shootout: {
-            kickNumber: homeKickCount + awayKickCount,
-            round: teamKickNumber,
-            teamKickNumber,
-            suddenDeath: teamKickNumber > 5,
-            outcome: event.type === 'penalty_goal' ? 'scored' : 'off_target',
-          },
-        };
-      }
-      return { event, order };
-    })
-      .filter(({ event }) => event.minute <= timelineMax)
-      .sort((a, b) => a.event.minute - b.event.minute || a.order - b.order)
-      .map(({ event }) => event);
-  }, [result.events, result.homeTeamId, timelineMax]);
-  const shownEvents = allEvents.slice(0, playback.consumedEventCount);
-  const pendingPresentationEvent = playback.pendingEventIndex === null
-    ? null
-    : allEvents[playback.pendingEventIndex] ?? null;
-  const finished = playback.phase === 'finished';
-  const paused = playback.phase === 'paused';
-  const halftime = playback.phase === 'halftime';
-  const extraTimeBreak = playback.phase === 'extra_time_break';
-  const shootoutBreak = playback.phase === 'shootout_break';
-  const isBreak = halftime || extraTimeBreak || shootoutBreak;
-  const stageLabel = getPlaybackStageLabel(playback, Boolean(result.penalties));
   const shootoutEvents = shownEvents.filter(event => event.type === 'penalty_goal' || event.type === 'penalty_miss');
-  const inShootout = Boolean(result.penalties && playback.minute > 120);
   const featuredPlayers = useMemo(() => result.featuredPlayers ?? [], [result.featuredPlayers]);
   const featuredPlayerIds = useMemo(
     () => featuredPlayers.map(player => player.playerId),
@@ -351,26 +191,15 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   ]);
 
   const handlePresentationCue = useCallback((cue: MatchPresentationCue) => {
-    if (cue.moment === 'outcome') {
-      const eventIndex = allEvents.indexOf(cue.event);
-      if (eventIndex >= 0) {
-        dispatch({
-          type: 'commitPresentation',
-          events: allEvents,
-          eventIndex,
-          homeTeamId: result.homeTeamId,
-        });
-      }
-    }
+    commitPresentationCue(cue);
     if (!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible || showOpener) return;
     const soundscape = soundscapeRef.current;
     soundscape?.playPresentation(cue);
   }, [
-    allEvents,
+    commitPresentationCue,
     feedbackPreferences.soundEnabled,
     locallyMuted,
     pageVisible,
-    result.homeTeamId,
     showOpener,
   ]);
 
@@ -390,68 +219,6 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => setPageVisible(document.visibilityState !== 'hidden');
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  useEffect(() => {
-    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!query) return;
-    const handleChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
-    query.addEventListener?.('change', handleChange);
-    return () => query.removeEventListener?.('change', handleChange);
-  }, []);
-
-  useEffect(() => {
-    if (
-      playback.phase !== 'playing'
-      || playback.pendingEventIndex !== null
-      || !pageVisible
-      || !pitchAvailable
-      || showOpener
-      || presentationHolding
-    ) return;
-    const nextHighlight = allEvents.find(event =>
-      event.minute > playback.minute && isHighlightEvent(event)
-    );
-    const delay = playbackTickDelay(
-      playback.mode,
-      playback.minute,
-      playback.flashEvent,
-      reducedMotion,
-      nextHighlight,
-    );
-    const timer = window.setTimeout(() => {
-      dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [
-    allEvents,
-    pageVisible,
-    playback.flashEvent,
-    playback.minute,
-    playback.mode,
-    playback.pendingEventIndex,
-    playback.phase,
-    pitchAvailable,
-    presentationHolding,
-    reducedMotion,
-    result.homeTeamId,
-    showOpener,
-    timelineMax,
-  ]);
-
-  useEffect(() => {
-    if (!isBreak || !pageVisible) return;
-    const timer = window.setTimeout(
-      () => dispatch({ type: 'resumeBreak' }),
-      playbackBreakDelay(playback.mode, reducedMotion),
-    );
-    return () => clearTimeout(timer);
-  }, [isBreak, pageVisible, playback.mode, reducedMotion]);
 
   useEffect(() => {
     if (!feedbackPreferences.soundEnabled || locallyMuted || !playback.flashEvent) return;
@@ -481,26 +248,6 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     else if (playback.phase === 'finished') soundscapeRef.current?.playStage('fulltime');
   }, [feedbackPreferences.soundEnabled, locallyMuted, playback.phase]);
 
-  useEffect(() => {
-    if (!playback.flashEvent) return;
-    const version = playback.flashVersion;
-    const timer = window.setTimeout(
-      () => dispatch({ type: 'clearEventFlash', version }),
-      reducedMotion ? 400 : 3000,
-    );
-    return () => clearTimeout(timer);
-  }, [playback.flashEvent, playback.flashVersion, reducedMotion]);
-
-  useEffect(() => {
-    if (!playback.goalFlash) return;
-    const version = playback.goalFlashVersion;
-    const timer = window.setTimeout(
-      () => dispatch({ type: 'clearGoalFlash', version }),
-      reducedMotion ? 350 : 2500,
-    );
-    return () => clearTimeout(timer);
-  }, [playback.goalFlash, playback.goalFlashVersion, reducedMotion]);
-
   const commentaryEntries = useMemo(() => buildLiveCommentaryHistory({
     events: shownEvents,
     currentMinute: playback.minute,
@@ -508,29 +255,6 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     homeTeamName: ht?.name ?? '主队',
     awayTeamName: at?.name ?? '客队',
   }), [at?.name, ht?.name, playback.minute, result.homeTeamId, shownEvents]);
-
-  useEffect(() => {
-    const previousCount = previousCommentaryCountRef.current;
-    previousCommentaryCountRef.current = commentaryEntries.length;
-    if (previousCount === null) return;
-    const added = Math.max(0, commentaryEntries.length - previousCount);
-    if (added === 0) return;
-    if (!followingLiveFeed) {
-      setUnseenEventCount(count => count + added);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      logRef.current?.scrollTo?.({
-        top: 0,
-        behavior: 'auto',
-      });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [commentaryEntries.length, followingLiveFeed, reducedMotion]);
-
-  const skip = useCallback(() => {
-    dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
-  }, [allEvents, timelineMax, result.homeTeamId]);
 
   // Commentary text for current state
   const commentary = useMemo(() => {
@@ -857,64 +581,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             )}
           </div>
 
-          <aside className="broadcast-commentary min-w-0 border-t border-slate-800/70 lg:border-l lg:border-t-0">
-            <div className="min-h-16 border-b border-slate-800/70 px-4 py-3">
-              <div className="mb-1 text-[9px] font-semibold text-slate-500">当前播报</div>
-              <p className="text-[12px] leading-5 text-emerald-300/90 animate-slide-up" key={commentary}>{commentary}</p>
-            </div>
-
-            <div className="relative">
-              <div className="flex h-8 items-center justify-between border-b border-slate-800/50 px-4 text-[9px] font-semibold text-slate-500">
-                <span>本场完整播报</span>
-                <span className="tabular-nums">{commentaryEntries.length} 条</span>
-              </div>
-              {unseenEventCount > 0 && (
-                <button
-                  type="button"
-                  data-testid="new-live-events"
-                  onClick={() => {
-                    setFollowingLiveFeed(true);
-                    setUnseenEventCount(0);
-                    logRef.current?.scrollTo?.({ top: 0, behavior: 'auto' });
-                  }}
-                  className="absolute right-3 top-2 z-10 min-h-9 rounded-md border border-emerald-500/30 bg-emerald-950 px-2 text-[10px] text-emerald-300 shadow-lg"
-                >{unseenEventCount} 条新战况</button>
-              )}
-              <div
-                ref={logRef}
-                data-testid="live-event-log"
-                onPointerDown={() => setFollowingLiveFeed(false)}
-                onTouchStart={() => setFollowingLiveFeed(false)}
-                onWheel={() => setFollowingLiveFeed(false)}
-                onScroll={event => {
-                  const atTop = event.currentTarget.scrollTop <= 8;
-                  setFollowingLiveFeed(atTop);
-                  if (atTop) setUnseenEventCount(0);
-                }}
-                aria-label="本场完整播报"
-                className="h-36 touch-pan-y overflow-y-auto overscroll-y-contain px-4 py-2 lg:h-[348px]"
-              >
-                {commentaryEntries.map((entry, index) => (
-                  <div
-                    key={entry.id}
-                    data-testid="live-commentary-entry"
-                    className={`flex min-h-8 items-start gap-2 border-b border-slate-800/30 py-1.5 text-[11px] last:border-b-0 ${index === 0 ? 'text-slate-200' : 'text-slate-500'}`}
-                  >
-                    <span className="w-7 shrink-0 pt-0.5 text-right font-mono text-[10px]">{entry.label}</span>
-                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sm">
-                      {entry.event && EVENT_ICONS[entry.event.type]
-                        ? <Icon name={EVENT_ICONS[entry.event.type].name} size={14} accent={EVENT_ICONS[entry.event.type].accent} />
-                        : <span className="text-emerald-500/60">•</span>}
-                    </span>
-                    {entry.event
-                      ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry.event.teamId === result.homeTeamId ? ht?.color : at?.color }} />
-                      : <span className="w-2 shrink-0" />}
-                    <span className="min-w-0 leading-4">{entry.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
+          <LiveCommentaryFeed
+            currentCommentary={commentary}
+            entries={commentaryEntries}
+            homeTeamId={result.homeTeamId}
+            homeColor={ht?.color}
+            awayColor={at?.color}
+          />
         </div>
 
         {/* Final results */}
@@ -964,7 +637,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   type="button"
                   aria-pressed={playback.mode === option.value}
                   data-testid={`playback-mode-${option.value}`}
-                  onClick={() => dispatch({ type: 'setMode', mode: option.value })}
+                  onClick={() => setMode(option.value)}
                   className={`min-h-11 min-w-11 cursor-pointer px-2.5 py-1 text-[10px] transition-colors sm:min-h-9 ${
                     playback.mode === option.value
                       ? 'bg-emerald-600 text-white'
@@ -975,7 +648,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 </button>
               ))}
             </div>
-            <button onClick={() => dispatch({ type: 'togglePause' })} disabled={isBreak}
+            <button onClick={togglePause} disabled={isBreak}
               className="min-h-11 min-w-11 rounded-md bg-slate-800 px-2.5 py-1 text-[10px] text-slate-400 hover:bg-slate-700 cursor-pointer disabled:cursor-default disabled:opacity-60 sm:min-h-9"
             >{isBreak ? '休息' : paused ? '继续' : '暂停'}</button>
             <button

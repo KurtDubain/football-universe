@@ -40,6 +40,7 @@ import {
   shouldDegradeRenderBudget,
   type RenderBudget,
 } from './pitch-canvas/render-budget';
+import { mountPitchRuntime } from './pitch-canvas/runtime';
 import type { PlaybackMode } from './match-live/playback-mode';
 
 interface Props {
@@ -1472,102 +1473,29 @@ function PitchCanvas(props: Props) {
 
     }
 
+    const runtime = mountPitchRuntime({
+      canvas,
+      getFrameStepMs: () => renderBudget.frameStepMs,
+      getPlaybackPauseReason: () => {
+        if (liveRef.current.finished) return 'completed';
+        if (liveRef.current.halftime) return 'break';
+        if (!liveRef.current.active) return 'paused';
+        return 'none';
+      },
+      renderFrame,
+      recordFrameInterval,
+      onPaused: reason => updateRenderingDebug(false, reason),
+      onAvailabilityChange: available => {
+        liveRef.current.onPlaybackAvailabilityChange?.(available);
+      },
+    });
     const debugWindow = window as PitchDebugWindow;
-    const advanceTime = (milliseconds: number) => {
-      const steps = Math.max(1, Math.round(milliseconds / FIXED_FRAME_MS));
-      for (let step = 0; step < steps; step++) renderFrame();
-    };
+    const advanceTime = (milliseconds: number) => runtime.advanceTime(milliseconds, FIXED_FRAME_MS);
     debugWindow.advanceTime = advanceTime;
-
-    let pageVisible = document.visibilityState !== 'hidden';
-    let intersectionVisible = true;
-    let lastTimestamp = performance.now();
-    let accumulator = renderBudget.frameStepMs;
-    let raf = 0;
-    let lastPauseReason: PitchDebugState['rendering']['pauseReason'] = 'none';
-
-    function getPauseReason(): PitchDebugState['rendering']['pauseReason'] {
-      if (!pageVisible) return 'hidden';
-      if (!intersectionVisible) return 'covered';
-      if (liveRef.current.finished) return 'completed';
-      if (liveRef.current.halftime) return 'break';
-      if (!liveRef.current.active) return 'paused';
-      return 'none';
-    }
-
-    function scheduleFrame(): void {
-      if (raf === 0) raf = requestAnimationFrame(animate);
-    }
-
-    function wakeRenderLoop(): void {
-      lastTimestamp = performance.now();
-      accumulator = renderBudget.frameStepMs;
-      scheduleFrame();
-    }
-
-    function animate(timestamp: number): void {
-      raf = 0;
-      const pauseReason = getPauseReason();
-      if (pauseReason !== 'none') {
-        if (
-          pauseReason !== lastPauseReason
-          && pauseReason !== 'hidden'
-          && pauseReason !== 'covered'
-        ) renderFrame();
-        lastPauseReason = pauseReason;
-        updateRenderingDebug(false, pauseReason);
-        return;
-      }
-      lastPauseReason = 'none';
-      const elapsed = Math.min(100, Math.max(0, timestamp - lastTimestamp));
-      lastTimestamp = timestamp;
-      accumulator += elapsed;
-      recordFrameInterval(elapsed);
-      let steps = 0;
-      while (accumulator >= renderBudget.frameStepMs && steps < 6) {
-        renderFrame();
-        accumulator -= renderBudget.frameStepMs;
-        steps++;
-      }
-      scheduleFrame();
-    }
-
-    const handleVisibilityChange = () => {
-      pageVisible = document.visibilityState !== 'hidden';
-      if (!pageVisible) {
-        if (raf !== 0) cancelAnimationFrame(raf);
-        raf = 0;
-        updateRenderingDebug(false, 'hidden');
-        liveRef.current.onPlaybackAvailabilityChange?.(false);
-        return;
-      }
-      liveRef.current.onPlaybackAvailabilityChange?.(intersectionVisible);
-      wakeRenderLoop();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    const intersectionObserver = typeof IntersectionObserver === 'undefined'
-      ? null
-      : new IntersectionObserver((entries) => {
-        intersectionVisible = entries[0]?.isIntersecting ?? true;
-        if (!intersectionVisible) {
-          if (raf !== 0) cancelAnimationFrame(raf);
-          raf = 0;
-          updateRenderingDebug(false, 'covered');
-          liveRef.current.onPlaybackAvailabilityChange?.(false);
-          return;
-        }
-        liveRef.current.onPlaybackAvailabilityChange?.(pageVisible);
-        wakeRenderLoop();
-      }, { threshold: 0.05 });
-    intersectionObserver?.observe(canvas);
-    wakeRenderLoopRef.current = wakeRenderLoop;
-    wakeRenderLoop();
+    wakeRenderLoopRef.current = runtime.wake;
     return () => {
-      if (raf !== 0) cancelAnimationFrame(raf);
+      runtime.dispose();
       resizeObserver.disconnect();
-      intersectionObserver?.disconnect();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       wakeRenderLoopRef.current = () => undefined;
       if (debugWindow.advanceTime === advanceTime) delete debugWindow.advanceTime;
     };
