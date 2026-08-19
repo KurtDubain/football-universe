@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-20 v4.55.6 Manual Vercel Update Check
+
+- Current request: keep automatic PWA updates but add a reliable, user-visible manual check for the latest Vercel deployment because repeated refreshes could still feel inconsistent.
+- The existing deployment contract was retained: `version.json` carries the semantic version plus Vercel commit SHA, both it and `sw.js` bypass CDN caching, and activated workers reload only after advances, route loading, and blocking dialogs are clear.
+- Added one shared application update state and a public manual check without exposing a production `window` bridge. Settings now reports checking, current, available, ready, offline, error, and unsupported states; the button revalidates both `version.json` and `sw.js`, so a same-version deployment with a new commit remains detectable.
+- Added a `pageshow` foreground check for restored mobile/PWA sessions. A prepared worker still uses the existing safe coordinator, preserves the save, and waits for the current critical operation before its single refresh.
+- Updated the PWA browser audit to exercise the real 390px Settings control twice: first against the current build and then against a mocked same-version/new-build deployment. It completed one update request, had zero horizontal overflow/runtime errors, and the resulting screenshot was visually inspected.
+- Final Node 22.22.2 validation passed 137 test files / 977 tests, strict TypeScript, ESLint, changelog/docs/script gates, ordinary and audit PWA builds, and the old-to-new deployment transition. The transition held through a blocking dialog, reloaded exactly once, retained the save, loaded only the new entry, and reopened History offline. The ordinary build contains no audit bridge; its 244,046-byte / 76,101-byte gzip entry and 164,544-byte gzip initial graph remain within budget. The standard deterministic game client also completed two passes with a visually inspected, nonblank Dashboard and no reported errors.
+
 ## 2026-08-20 v4.55.5 Live Tactical Route Variety
 
 - Current request: reduce the live Canvas's scripted feel while keeping abstract top-down players, making ball routes and formations read more like football without changing authoritative match results.

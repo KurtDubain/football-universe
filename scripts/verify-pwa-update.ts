@@ -58,12 +58,19 @@ async function main(): Promise<void> {
       }).__appUpdateAudit?.getState().lastRemoteBuildId === expectedBuildId
     ), deployedVersion.buildId);
 
-    remoteBuildId = auditBuildId;
-    await page.evaluate(async () => {
-      await (window as typeof window & {
-        __appUpdateAudit?: { checkNow: () => Promise<boolean> };
-      }).__appUpdateAudit?.checkNow();
+    await page.getByRole('button', { name: '开始观察' }).click();
+    await page.getByTestId('observation-runway').waitFor({ timeout: 15_000 });
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/settings?audit=1');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     });
+    await page.getByRole('heading', { name: '设置' }).waitFor();
+    await page.getByTestId('check-app-update').click();
+    await page.getByTestId('app-update-status').filter({ hasText: '已是最新版' }).waitFor();
+
+    remoteBuildId = auditBuildId;
+    await page.getByTestId('check-app-update').click();
+    await page.getByTestId('app-update-status').filter({ hasText: `发现 v${packageVersion}` }).waitFor();
     await page.waitForFunction(expectedBuildId => {
       const monitor = (window as typeof window & {
         __appUpdateAudit?: {

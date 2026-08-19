@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo } from 'react';
+import { lazy, Suspense, useState, useMemo, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/game-store';
 import { exportCurrentSave, importCurrentSave } from '../store/save-backup';
@@ -21,10 +21,43 @@ import {
   suspendGameAudio,
   unlockGameAudio,
 } from '../feedback/game-feedback';
+import { Icon } from '../components/Icon';
+import {
+  checkForAppUpdate,
+  getAppUpdateState,
+  subscribeAppUpdate,
+  type AppUpdateState,
+} from '../pwa/app-update';
 
 const DevDataHealthPanel = import.meta.env.DEV
   ? lazy(() => import('../components/DataHealthPanel'))
   : null;
+
+function shortBuildId(buildId: string | null): string | null {
+  if (!buildId) return null;
+  return buildId.length > 12 ? buildId.slice(0, 7) : buildId;
+}
+
+function updateStatusCopy(state: AppUpdateState): string {
+  const remoteVersion = state.remoteVersion ? `v${state.remoteVersion}` : '新版本';
+  switch (state.phase) {
+    case 'checking': return '正在向 Vercel 检查最新部署...';
+    case 'current': return `已是最新版 · 构建 ${shortBuildId(state.remoteBuildId) ?? shortBuildId(state.localBuildId)}`;
+    case 'available': return `发现 ${remoteVersion}，正在准备更新...`;
+    case 'ready': return '新版本已就绪，将在当前操作结束后安全刷新';
+    case 'offline': return '当前处于离线状态，联网后可重新检查';
+    case 'error': return '暂时无法检查，请稍后重试';
+    case 'unsupported': return '当前浏览器不支持应用内更新';
+    default: return `当前构建 ${shortBuildId(state.localBuildId)}`;
+  }
+}
+
+function updateStatusClass(state: AppUpdateState): string {
+  if (state.phase === 'current' || state.phase === 'ready') return 'text-emerald-400';
+  if (state.phase === 'available' || state.phase === 'offline') return 'text-amber-300';
+  if (state.phase === 'error' || state.phase === 'unsupported') return 'text-red-300';
+  return 'text-slate-500';
+}
 
 export default function Settings() {
   const world = useGameStore((s) => s.world);
@@ -45,6 +78,11 @@ function SettingsContent({ world }: { world: GameWorld }) {
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const feedbackPreferences = useFeedbackPreferences();
+  const appUpdate = useSyncExternalStore(
+    subscribeAppUpdate,
+    getAppUpdateState,
+    getAppUpdateState,
+  );
 
   const saveKey = SAVE_STORAGE_KEY;
   let saveSize = '未知';
@@ -355,8 +393,43 @@ function SettingsContent({ world }: { world: GameWorld }) {
           <span className="text-slate-200">{Object.values(world.squads).reduce((s, sq) => s + sq.length, 0)} 名</span>
           <span className="text-slate-500">存档大小</span>
           <span className={isSaveNearCapacity(saveBytes) ? 'text-amber-300' : 'text-slate-200'}>{saveSize}</span>
-          <span className="text-slate-500">版本</span>
-          <span className="text-slate-200">v{APP_VERSION}</span>
+          <span className="pt-1.5 text-slate-500">版本</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-slate-200">v{APP_VERSION}</span>
+              <button
+                type="button"
+                data-testid="check-app-update"
+                disabled={appUpdate.phase === 'checking' || appUpdate.phase === 'ready'}
+                onClick={() => {
+                  playUiFeedback('selection');
+                  void checkForAppUpdate();
+                }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-slate-600 bg-slate-900/60 px-2.5 text-xs font-medium text-slate-300 transition-colors hover:border-emerald-600 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
+              >
+                <Icon
+                  name={appUpdate.phase === 'ready' ? 'check' : 'refresh'}
+                  size={14}
+                  className={appUpdate.phase === 'checking' ? 'animate-spin motion-reduce:animate-none' : undefined}
+                />
+                {appUpdate.phase === 'checking'
+                  ? '检查中'
+                  : appUpdate.phase === 'ready'
+                    ? '更新就绪'
+                    : appUpdate.phase === 'available'
+                      ? '再次检查'
+                      : '检查更新'}
+              </button>
+            </div>
+            <p
+              role="status"
+              aria-live="polite"
+              data-testid="app-update-status"
+              className={`mt-1.5 text-[10px] leading-4 ${updateStatusClass(appUpdate)}`}
+            >
+              {updateStatusCopy(appUpdate)}
+            </p>
+          </div>
         </div>
       </div>
 

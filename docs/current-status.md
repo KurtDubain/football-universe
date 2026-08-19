@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
 Last reviewed: 2026-08-20
-Current release: v4.55.5
+Current release: v4.55.6
 Status: release-ready core; active work is limited to human experience validation.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.

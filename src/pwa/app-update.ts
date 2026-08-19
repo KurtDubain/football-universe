@@ -10,6 +10,65 @@ import { ROUTE_RESOURCE_ERROR_EVENT, ROUTE_RESOURCE_SETTLED_EVENT } from './even
 const VERSION_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const VERSION_ENDPOINT = '/version.json';
 
+export type AppUpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'current'
+  | 'available'
+  | 'ready'
+  | 'offline'
+  | 'error'
+  | 'unsupported';
+
+export interface AppUpdateState {
+  phase: AppUpdatePhase;
+  localVersion: string;
+  localBuildId: string;
+  remoteVersion: string | null;
+  remoteBuildId: string | null;
+  checkedAt: number | null;
+  pendingReload: boolean;
+}
+
+const initialUpdateState: AppUpdateState = {
+  phase: 'idle',
+  localVersion: APP_VERSION,
+  localBuildId: __APP_BUILD_ID__,
+  remoteVersion: null,
+  remoteBuildId: null,
+  checkedAt: null,
+  pendingReload: false,
+};
+
+let updateState = initialUpdateState;
+let manualCheckHandler: (() => Promise<boolean>) | null = null;
+const updateListeners = new Set<() => void>();
+
+function publishUpdateState(patch: Partial<AppUpdateState>): void {
+  updateState = { ...updateState, ...patch };
+  updateListeners.forEach(listener => listener());
+}
+
+export function getAppUpdateState(): AppUpdateState {
+  return updateState;
+}
+
+export function subscribeAppUpdate(listener: () => void): () => void {
+  updateListeners.add(listener);
+  return () => updateListeners.delete(listener);
+}
+
+export function checkForAppUpdate(): Promise<boolean> {
+  if (manualCheckHandler) return manualCheckHandler();
+
+  const unsupported = !('serviceWorker' in navigator);
+  publishUpdateState({
+    phase: unsupported ? 'unsupported' : navigator.onLine ? 'error' : 'offline',
+    checkedAt: Date.now(),
+  });
+  return Promise.resolve(false);
+}
+
 interface AppUpdateAuditState {
   localVersion: string;
   localBuildId: string;
@@ -41,7 +100,10 @@ function isSafeToReload(): boolean {
 }
 
 export function startAppUpdateMonitor(): () => void {
-  if (!('serviceWorker' in navigator)) return () => undefined;
+  if (!('serviceWorker' in navigator)) {
+    publishUpdateState({ phase: 'unsupported' });
+    return () => undefined;
+  }
 
   let registration: ServiceWorkerRegistration | undefined;
   let checkPromise: Promise<boolean> | null = null;
@@ -58,9 +120,20 @@ export function startAppUpdateMonitor(): () => void {
     reload: () => window.location.reload(),
   });
 
-  const checkNow = (): Promise<boolean> => {
-    if (!registration || !navigator.onLine) return Promise.resolve(false);
-    if (checkPromise) return checkPromise;
+  const checkNow = (manual = false): Promise<boolean> => {
+    if (!navigator.onLine) {
+      if (manual) publishUpdateState({ phase: 'offline', checkedAt: Date.now() });
+      return Promise.resolve(false);
+    }
+    if (!registration) {
+      if (manual) publishUpdateState({ phase: 'error', checkedAt: Date.now() });
+      return Promise.resolve(false);
+    }
+    if (checkPromise) {
+      return manual ? checkPromise.then(() => checkNow(true)) : checkPromise;
+    }
+
+    if (manual) publishUpdateState({ phase: 'checking', pendingReload: false });
 
     checkPromise = (async () => {
       checkCount += 1;
@@ -69,22 +142,53 @@ export function startAppUpdateMonitor(): () => void {
           cache: 'no-store',
           headers: { Accept: 'application/json' },
         });
-        if (!response.ok) return false;
+        if (!response.ok) {
+          if (manual) publishUpdateState({ phase: 'error', checkedAt: Date.now() });
+          return false;
+        }
 
         const remote = parseRemoteAppVersion(await response.json());
-        if (!remote) return false;
+        if (!remote) {
+          if (manual) publishUpdateState({ phase: 'error', checkedAt: Date.now() });
+          return false;
+        }
         lastRemoteVersion = remote.version;
         lastRemoteBuildId = remote.buildId;
         const sameDeployment = remote.buildId
           ? remote.buildId === __APP_BUILD_ID__
           : remote.version === APP_VERSION;
-        if (sameDeployment) return false;
+        if (sameDeployment) {
+          if (manual) {
+            // Also ask the browser to revalidate sw.js. This catches the narrow
+            // window where version.json and the worker reach an edge at different times.
+            await registration?.update();
+            if (!expectingControllerChange && !registration?.installing && !registration?.waiting) {
+              publishUpdateState({
+                phase: 'current',
+                remoteVersion: remote.version,
+                remoteBuildId: remote.buildId,
+                checkedAt: Date.now(),
+                pendingReload: false,
+              });
+            }
+          }
+          return false;
+        }
+
+        publishUpdateState({
+          phase: 'available',
+          remoteVersion: remote.version,
+          remoteBuildId: remote.buildId,
+          checkedAt: Date.now(),
+          pendingReload: false,
+        });
 
         updateRequests += 1;
         await registration?.update();
         completedUpdateRequests += 1;
         return true;
       } catch {
+        if (manual) publishUpdateState({ phase: 'error', checkedAt: Date.now() });
         return false;
       } finally {
         checkPromise = null;
@@ -102,7 +206,10 @@ export function startAppUpdateMonitor(): () => void {
     const handleStateChange = () => {
       if (worker.state === 'activated') {
         worker.removeEventListener('statechange', handleStateChange);
-        if (isUpdate) coordinator.requestReload();
+        if (isUpdate) {
+          publishUpdateState({ phase: 'ready', pendingReload: true });
+          coordinator.requestReload();
+        }
       } else if (worker.state === 'redundant') {
         worker.removeEventListener('statechange', handleStateChange);
       }
@@ -112,17 +219,23 @@ export function startAppUpdateMonitor(): () => void {
   };
 
   const handleControllerChange = () => {
-    if (expectingControllerChange) coordinator.requestReload();
+    if (expectingControllerChange) {
+      publishUpdateState({ phase: 'ready', pendingReload: true });
+      coordinator.requestReload();
+    }
   };
   navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
 
-  void navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(activeRegistration => {
+  const registrationReady = navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(activeRegistration => {
     registration = activeRegistration;
     const handleUpdateFound = () => {
       const worker = activeRegistration.installing;
       if (!worker) return;
       const isUpdate = Boolean(navigator.serviceWorker.controller);
-      if (isUpdate) expectingControllerChange = true;
+      if (isUpdate) {
+        expectingControllerChange = true;
+        publishUpdateState({ phase: 'available' });
+      }
       watchInstallingWorker(worker, isUpdate);
     };
     activeRegistration.addEventListener('updatefound', handleUpdateFound);
@@ -133,12 +246,23 @@ export function startAppUpdateMonitor(): () => void {
     if (activeRegistration.installing) handleUpdateFound();
     if (activeRegistration.waiting && navigator.serviceWorker.controller) {
       expectingControllerChange = true;
+      publishUpdateState({ phase: 'ready', pendingReload: true });
       coordinator.requestReload();
     }
     void checkNow();
   }).catch(error => {
+    publishUpdateState({ phase: 'error', checkedAt: Date.now() });
     console.warn('[app-update] Service Worker registration failed.', error);
   });
+
+  const requestManualCheck = async () => {
+    if (!registration && navigator.onLine) {
+      publishUpdateState({ phase: 'checking', pendingReload: false });
+      await registrationReady;
+    }
+    return checkNow(true);
+  };
+  manualCheckHandler = requestManualCheck;
 
   const handleForeground = () => {
     if (document.visibilityState !== 'visible') return;
@@ -146,6 +270,10 @@ export function startAppUpdateMonitor(): () => void {
     void checkNow();
   };
   const handleFocus = () => {
+    coordinator.notifySafetyChanged();
+    void checkNow();
+  };
+  const handlePageShow = () => {
     coordinator.notifySafetyChanged();
     void checkNow();
   };
@@ -161,6 +289,7 @@ export function startAppUpdateMonitor(): () => void {
 
   document.addEventListener('visibilitychange', handleForeground);
   window.addEventListener('focus', handleFocus);
+  window.addEventListener('pageshow', handlePageShow);
   window.addEventListener('online', handleOnline);
   window.addEventListener(ROUTE_RESOURCE_ERROR_EVENT, handleRouteResourceError);
   window.addEventListener(ROUTE_RESOURCE_SETTLED_EVENT, handleRouteResourceSettled);
@@ -197,10 +326,12 @@ export function startAppUpdateMonitor(): () => void {
     window.clearInterval(interval);
     document.removeEventListener('visibilitychange', handleForeground);
     window.removeEventListener('focus', handleFocus);
+    window.removeEventListener('pageshow', handlePageShow);
     window.removeEventListener('online', handleOnline);
     window.removeEventListener(ROUTE_RESOURCE_ERROR_EVENT, handleRouteResourceError);
     window.removeEventListener(ROUTE_RESOURCE_SETTLED_EVENT, handleRouteResourceSettled);
     navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+    if (manualCheckHandler === requestManualCheck) manualCheckHandler = null;
     if (exposeAudit) delete window.__appUpdateAudit;
   };
 }
