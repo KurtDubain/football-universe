@@ -1,5 +1,12 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-20 v4.56.1 Entry Budget And Settings Icon Polish
+
+- The initialized application shell, global layout, navigation, advance controls, and route declarations now load through one recoverable `GameShell` boundary. Welcome and pre-game Team Editor remain directly available, while an existing save still receives the same retry, offline explanation, and safe recovery behavior.
+- Audit-build entry size fell from 249,005 to 195,700 bytes and from 77,628 to 62,094 bytes gzip. The initial static graph fell from 504,266 to 457,366 bytes and from 166,246 to 153,230 bytes gzip; the deferred game shell is 42,200 bytes / 13,110 bytes gzip.
+- Settings game-guide Emoji and character arrows were replaced by the shared SVG icon language. Every row now has a stable 48px touch target, accessible expanded state and controls relationship, a reduced-motion-aware disclosure arrow, and a pure-data configuration covered by a focused test.
+- Node 22.22.2 verification passed 139 test files / 979 tests, strict TypeScript, ESLint, the audit PWA build, bundle/changelog/docs gates, and zero-vulnerability production audit. The browser smoke passed 10 seasons / 500 advances, 126 route checks across seven viewports, route recovery, offline revisit, PWA update, advance performance, cup, music, tactics, and player/team workflows with no runtime errors.
+
 ## 2026-08-20 v4.56.0 Perceived-Quality P0/P1 Polish
 
 - Current request: improve the highest-value player-experience details without adding more gameplay systems, covering page continuity, routine feedback, early empty states, legacy visual consistency, and live-dialog closure.
