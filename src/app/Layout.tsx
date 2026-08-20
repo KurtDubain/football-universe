@@ -37,10 +37,21 @@ interface LayoutProps {
 const routeScrollPositions = new Map<string, number>();
 const ROUTE_SCROLL_STORAGE_PREFIX = 'football-route-scroll:';
 const HISTORY_SCROLL_STATE_KEY = 'footballRouteScroll';
+const MAX_ROUTE_SCROLL_MEMORY_ENTRIES = 160;
+
+function setRouteScrollMemory(key: string, scrollTop: number): void {
+  routeScrollPositions.delete(key);
+  routeScrollPositions.set(key, scrollTop);
+  while (routeScrollPositions.size > MAX_ROUTE_SCROLL_MEMORY_ENTRIES) {
+    const oldestKey = routeScrollPositions.keys().next().value;
+    if (oldestKey === undefined) break;
+    routeScrollPositions.delete(oldestKey);
+  }
+}
 
 function rememberRouteScroll(key: string, pathname: string, scrollTop: number): void {
-  routeScrollPositions.set(`key:${key}`, scrollTop);
-  routeScrollPositions.set(`path:${pathname}`, scrollTop);
+  setRouteScrollMemory(`key:${key}`, scrollTop);
+  setRouteScrollMemory(`path:${pathname}`, scrollTop);
   try {
     sessionStorage.setItem(`${ROUTE_SCROLL_STORAGE_PREFIX}${pathname}`, String(scrollTop));
   } catch {
@@ -198,7 +209,9 @@ export default function Layout({ children }: LayoutProps) {
     const preloadFromEvent = (event: Event) => {
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
       if (!target || target.origin !== window.location.origin || target.target === '_blank') return;
-      if (mainRef.current) rememberRouteScroll(location.key, location.pathname, mainRef.current.scrollTop);
+      if (event.type !== 'pointerover' && mainRef.current) {
+        rememberRouteScroll(location.key, location.pathname, mainRef.current.scrollTop);
+      }
       const pending = preloadRouteForPath(target.pathname);
       if (pending) void pending.catch(() => undefined);
     };
@@ -211,6 +224,10 @@ export default function Layout({ children }: LayoutProps) {
       document.removeEventListener('focusin', preloadFromEvent, { capture: true });
     };
   }, [location.key, location.pathname]);
+
+  useEffect(() => () => {
+    if (routeScrollSaveTimerRef.current !== null) window.clearTimeout(routeScrollSaveTimerRef.current);
+  }, []);
 
   useLayoutEffect(() => {
     const element = mainRef.current;
