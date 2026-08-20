@@ -76,6 +76,7 @@ export default function NewsTicker({
       {/* Main ticker bar */}
       <button
         type="button"
+        data-ui-feedback="selection"
         data-fixture-id={item.fixtureId}
         aria-expanded={expanded}
         aria-controls="global-news-list"
@@ -102,6 +103,7 @@ export default function NewsTicker({
           {sorted.map((n, i) => (
             <button
               type="button"
+              data-ui-feedback="selection"
               key={n.id}
               data-fixture-id={n.fixtureId}
               className={`w-full text-left flex items-start gap-2 px-4 py-2 border-l-2 hover:bg-slate-700/30 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${typeBg[n.type] ?? 'border-l-slate-600'} ${i === index ? 'bg-slate-700/20' : ''}`}

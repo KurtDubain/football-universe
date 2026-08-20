@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import type { TransferRecord } from '../types/transfer';
-import { EmptyState, PageHeader, PageShell, Panel, SectionHeader, SegmentedControl, StatusBadge } from '../components/ui';
+import { PageHeader, PageShell, Panel, SectionHeader, SegmentedControl, StatusBadge } from '../components/ui';
 import TransferTeamLink from '../components/TransferTeamLink';
+import { useUiSessionState } from '../app/ui-session-state';
+import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
 const posColor: Record<string, string> = {
@@ -47,7 +49,7 @@ function detectSwapIndices(all: TransferRecord[]): Set<number> {
 
 export default function Transfers() {
   const world = useGameStore((s) => s.world);
-  const [filter, setFilter] = useState<'all' | 'major'>('all');
+  const [filter, setFilter] = useUiSessionState<'all' | 'major'>('ui.transfers.filter', 'all');
 
   const transferData = useMemo(() => {
     if (!world) return { bySeasons: [] as { season: number; records: TransferRecord[]; swapIndices: Set<number> }[], total: 0 };
@@ -103,9 +105,12 @@ export default function Transfers() {
       />
 
       {transferData.bySeasons.length === 0 ? (
-        <EmptyState
+        <WorldProgressEmptyState
+          world={world}
           title="尚无转会记录"
-          description="完成一个完整赛季后将自动生成转会窗口"
+          description="首个完整赛季结束后，转会窗口会自动归档每笔流动。"
+          actionLabel="查看当前赛季"
+          actionTo="/"
         />
       ) : (
         <div className="space-y-4">

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
@@ -7,6 +7,8 @@ import { computePlayerCareerTotals } from '../engine/players/career-totals';
 import TrophyBreakdown from '../components/TrophyBreakdown';
 import type { PlayerPosition, PlayerRetirement } from '../types/player';
 import type { CoachCandidate, CoachRetirement } from '../types/coach';
+import { useUiSessionState } from '../app/ui-session-state';
+import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 
 type EraFilter = 'all' | 'recent' | 'classic';
 type SortKey = 'recent' | 'peak' | 'goals';
@@ -32,10 +34,10 @@ const STYLE_CHIP: Record<string, string> = {
 
 export default function Legends() {
   const world = useGameStore((s) => s.world);
-  const [era, setEra] = useState<EraFilter>('all');
-  const [sortBy, setSortBy] = useState<SortKey>('recent');
-  const [tab, setTab] = useState<LegendTab>('players');
-  const [coachSortBy, setCoachSortBy] = useState<CoachSortKey>('recent');
+  const [era, setEra] = useUiSessionState<EraFilter>('ui.legends.era', 'all');
+  const [sortBy, setSortBy] = useUiSessionState<SortKey>('ui.legends.sort', 'recent');
+  const [tab, setTab] = useUiSessionState<LegendTab>('ui.legends.tab', 'players');
+  const [coachSortBy, setCoachSortBy] = useUiSessionState<CoachSortKey>('ui.legends.coach-sort', 'recent');
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
@@ -48,7 +50,7 @@ export default function Legends() {
   // think their filter wiped out the data. Only kicks in when every section
   // is empty (else the user can still see the candidate pool / coaches tab).
   if (retirements.length === 0 && candidatePool.length === 0 && coachRetirements.length === 0) {
-    return <FullEmptyState />;
+    return <FullEmptyState world={world} />;
   }
 
   // ── Section B (players): filter + sort retirees ──
@@ -109,7 +111,7 @@ export default function Legends() {
             key={key}
             onClick={() => setTab(key)}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
-              tab === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              tab === key ? 'bg-[var(--action)] text-white' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             {label}
@@ -134,7 +136,7 @@ export default function Legends() {
                     key={key}
                     onClick={() => setEra(key)}
                     className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                      era === key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      era === key ? 'bg-[var(--action)] text-white' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     {label}
@@ -154,7 +156,7 @@ export default function Legends() {
           </div>
 
           {sorted.length === 0 ? (
-            <div className="bg-slate-800/60 rounded-xl border border-slate-700/60 p-6 text-center text-sm text-slate-500">
+            <div className="bg-slate-800/60 rounded-lg border border-slate-700/60 p-6 text-center text-sm text-slate-500">
               当前筛选下没有退役球员。
             </div>
           ) : (
@@ -257,7 +259,7 @@ function RetireeCard({
   );
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
       {/* Header row: position + name */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -359,7 +361,7 @@ function CandidateCard({
   const styleChip = STYLE_CHIP[candidate.style] ?? 'text-slate-300 bg-slate-700/50 border-slate-600/30';
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h4 className="text-sm font-semibold text-slate-100 truncate" title={candidate.name}>
@@ -511,7 +513,7 @@ function CareerArcChart({
 
 function CoachPoolEmptyState() {
   return (
-    <div className="bg-slate-800/60 rounded-xl border border-dashed border-slate-700/60 p-5 text-center">
+    <div className="bg-slate-800/60 rounded-lg border border-dashed border-slate-700/60 p-5 text-center">
       <div className="text-2xl mb-1" aria-hidden>🎓</div>
       <p className="text-sm text-slate-300 font-medium">暂无候选名帅</p>
       <p className="text-xs text-slate-500 mt-1">
@@ -541,7 +543,7 @@ function CoachRetireeCard({
     : null;
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4 hover:border-slate-600 transition-colors">
       {/* Header row: name + style chip + fromPlayer badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -608,7 +610,7 @@ function CoachRetireeCard({
 
 function CoachRetireeEmptyState() {
   return (
-    <div className="bg-slate-800/60 rounded-xl border border-dashed border-slate-700/60 p-5 text-center">
+    <div className="bg-slate-800/60 rounded-lg border border-dashed border-slate-700/60 p-5 text-center">
       <div className="text-2xl mb-1" aria-hidden>🎩</div>
       <p className="text-sm text-slate-300 font-medium">暂无退役教练</p>
       <p className="text-xs text-slate-500 mt-1">
@@ -618,24 +620,22 @@ function CoachRetireeEmptyState() {
   );
 }
 
-function FullEmptyState() {
+function FullEmptyState({ world }: { world: NonNullable<ReturnType<typeof useGameStore.getState>['world']> }) {
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl">
       <header className="mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2">
           <span aria-hidden>🏛️</span>
           传奇名人堂
         </h2>
       </header>
-      <div className="bg-slate-800/60 rounded-xl border border-slate-700/60 p-8 text-center">
-        <div className="text-5xl mb-3" aria-hidden>🏟️</div>
-        <p className="text-base text-slate-200 font-semibold">尚无退役球员</p>
-        <p className="text-xs text-slate-500 mt-2 max-w-sm mx-auto leading-relaxed">
-          进入下一赛季后，33 岁以上的球员将开始按概率退役。
-          <br />
-          巅峰能力 ≥ 85 且 35 岁以后退役的球员还有机会进入未来名帅候选池。
-        </p>
-      </div>
+      <WorldProgressEmptyState
+        world={world}
+        title="第一代传奇仍在赛场"
+        description="进入后续赛季后，退役球员、名帅候选与生涯荣誉会自然沉淀到这里。"
+        actionLabel="关注当代球星"
+        actionTo="/players"
+      />
     </div>
   );
 }

@@ -90,6 +90,7 @@ interface FloatingAdvanceButtonProps {
   stageLabel?: string;
   accentClass?: string;
   isAdvancing: boolean;
+  busyLabel?: string;
   disabled: boolean;
   onAdvance: () => void;
 }
@@ -98,6 +99,7 @@ export default function FloatingAdvanceButton({
   stageLabel,
   accentClass = 'bg-[var(--text-muted)]',
   isAdvancing,
+  busyLabel,
   disabled,
   onAdvance,
 }: FloatingAdvanceButtonProps) {
@@ -265,9 +267,11 @@ export default function FloatingAdvanceButton({
       onPointerCancel={finishDrag}
       onKeyDown={handleMoveKey}
     >
-      <Icon name="play" size={18} />
+      <span className={isAdvancing ? 'animate-spin motion-reduce:animate-none' : ''}>
+        <Icon name={isAdvancing ? 'refresh' : 'play'} size={18} />
+      </span>
       <span className="sr-only sm:not-sr-only sm:text-sm sm:font-semibold">
-        {isAdvancing ? '推进中' : '推进'}
+        {isAdvancing ? (busyLabel ?? '结算中') : '推进'}
       </span>
       <span className={`absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-[var(--action)] sm:static sm:h-1.5 sm:w-1.5 sm:ring-0 ${accentClass}`} aria-hidden="true" />
     </button>

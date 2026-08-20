@@ -57,9 +57,9 @@ export default function CoachDetail() {
   return (
     <div className="max-w-3xl space-y-5">
       {/* Header card */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-5">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-5">
         <div className="flex items-start gap-4">
-          <div className={`w-16 h-16 bg-gradient-to-br ${ratingTier} rounded-xl flex items-center justify-center shrink-0`}>
+          <div className={`w-16 h-16 bg-gradient-to-br ${ratingTier} rounded-lg flex items-center justify-center shrink-0`}>
             <span className="text-white font-black text-2xl">{base.rating}</span>
           </div>
           <div className="flex-1 min-w-0">
@@ -157,7 +157,7 @@ export default function CoachDetail() {
         const championships = allRecords.filter(r => r.leaguePosition === 1).length;
 
         return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">执教数据</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="text-center">
@@ -189,7 +189,7 @@ export default function CoachDetail() {
       {/* Buff grid + meta */}
       <div className="grid grid-cols-2 gap-4">
         {/* Buffs */}
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">教练加成</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             {buffs.map((b) => (
@@ -204,7 +204,7 @@ export default function CoachDetail() {
         </div>
 
         {/* Special traits */}
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">特质</h3>
           <div className="space-y-2.5">
             <TraitBar label="抗压能力" value={base.pressureResistance} max={100} />
@@ -216,7 +216,7 @@ export default function CoachDetail() {
 
       {/* Trophies */}
       {trophies.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
             奖杯柜 ({trophies.length})
           </h3>
@@ -266,7 +266,7 @@ export default function CoachDetail() {
         }).filter(Boolean) as { teamName: string; delta: number }[];
 
         return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">执教分析</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
               <div className="text-center">
@@ -309,7 +309,7 @@ export default function CoachDetail() {
       {(() => {
         const rivalries = computeCoachRivalries(world, id, 5);
         return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700/60 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 宿敌录
@@ -369,7 +369,7 @@ export default function CoachDetail() {
 
       {/* Career history */}
       {career.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-700/60">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               执教履历 ({career.length} 段)

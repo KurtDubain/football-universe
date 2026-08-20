@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useUiSessionState } from '../app/ui-session-state';
+import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName } from '../utils/format';
@@ -28,8 +30,8 @@ export default function History() {
 function HistoryContent({ world }: { world: GameWorld }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
   const [detailedSeason, setDetailedSeason] = useState<number | null>(null);
-  const [seasonRange, setSeasonRange] = useState<'recent10' | 'recent40' | 'all'>('recent10');
-  const [tab, setTab] = useState<'seasons' | 'coefficient' | 'records' | 'coaches' | 'hall'>('seasons');
+  const [seasonRange, setSeasonRange] = useUiSessionState<'recent10' | 'recent40' | 'all'>('ui.history.range', 'recent10');
+  const [tab, setTab] = useUiSessionState<'seasons' | 'coefficient' | 'records' | 'coaches' | 'hall'>('ui.history.tab', 'seasons');
 
   const honors = world.honorHistory;
 
@@ -177,7 +179,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
 
       {/* Trophy leaderboard */}
       {tab === 'hall' && trophyCounts.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">历史奖杯榜</h3>
           <div className="space-y-1.5">
             {trophyCounts.slice(0, 10).map((t, i) => (
@@ -195,7 +197,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
 
       {/* Current cash belongs to the statistics view. */}
       {tab === 'records' && wealthRanking.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">财富榜</h3>
             <span className="text-[10px] text-slate-600">当前现金 · Phase H</span>
@@ -267,7 +269,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           )}
 
           {(world.achievements ?? []).length > 0 && (
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">成就殿堂</h3>
               <div className="flex flex-wrap gap-2">
                 {(world.achievements ?? []).map((a: Achievement) => (
@@ -282,7 +284,13 @@ function HistoryContent({ world }: { world: GameWorld }) {
           )}
 
           {honors.length === 0 ? (
-            <p className="text-sm text-slate-500">暂无历史记录，完成至少一个赛季后显示</p>
+            <WorldProgressEmptyState
+              world={world}
+              title="首卷历史正在书写"
+              description="完成首个赛季后，冠军、赛季故事与观察判断会在这里形成正式档案。"
+              actionLabel="返回本季总览"
+              actionTo="/"
+            />
           ) : (
             <>
               {honors.length > 10 && (
@@ -478,7 +486,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
 
           {/* Special records */}
           {funRecords.maxConsec >= 2 && (
-            <div className="bg-amber-900/15 rounded-xl border border-amber-700/30 p-4">
+            <div className="bg-amber-900/15 rounded-lg border border-amber-700/30 p-4">
               <div className="flex items-center gap-2">
                 <span className="text-lg">👑</span>
                 <div>
@@ -492,7 +500,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           )}
 
           {funRecords.mostChanges.coachChanges.length >= 3 && (
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
               <div className="text-xs text-slate-400">
                 最动荡赛季: 第{funRecords.mostChanges.seasonNumber}赛季 — {funRecords.mostChanges.coachChanges.length}次换帅
               </div>
@@ -508,7 +516,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
       {tab === 'hall' && honors.length > 0 && (
         <div className="space-y-5">
           {/* Competition Kings */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">赛事之王</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(() => {
@@ -553,7 +561,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           </div>
 
           {/* Record Wall */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">纪录墙</h3>
             <div className="space-y-2">
               {(() => {
@@ -607,7 +615,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           </div>
 
           {/* Coach Records */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">教练纪录</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(() => {
@@ -662,7 +670,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
           </div>
 
           {/* Continental Power Rankings */}
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">大洲对抗</h3>
             {(() => {
               const continents: Record<string, { teams: string[]; trophies: number; avgOvr: number; l1Count: number; wins: number; losses: number }> = {};
@@ -721,7 +729,13 @@ function HistoryContent({ world }: { world: GameWorld }) {
         </div>
       )}
       {tab === 'hall' && honors.length === 0 && (
-        <p className="text-sm text-slate-500">完成至少一个赛季后显示荣誉殿堂</p>
+        <WorldProgressEmptyState
+          world={world}
+          title="荣誉殿堂等待首位冠军"
+          description="首个赛季归档后，冠军履历与跨赛季荣誉会从这里开始累积。"
+          actionLabel="查看本季赛程"
+          actionTo="/calendar"
+        />
       )}
 
       {/* ═══ Tab: 名帅殿堂 ═══ */}
@@ -730,9 +744,9 @@ function HistoryContent({ world }: { world: GameWorld }) {
           {coachStats.filter(cs => cs && (cs.trophies > 0 || cs.totalSeasons > 1)).map((cs) => {
             const c = cs!;
             return (
-              <Link key={c.coachId} to={`/coach/${c.coachId}`} className="block bg-slate-800 rounded-xl border border-slate-700 p-3 hover:border-slate-600 transition-colors hover-lift">
+              <Link key={c.coachId} to={`/coach/${c.coachId}`} className="block bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 hover:border-slate-600 transition-colors hover-lift">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${c.rating >= 85 ? 'bg-amber-500' : c.rating >= 70 ? 'bg-blue-500' : 'bg-slate-600'}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${c.rating >= 85 ? 'bg-amber-500' : c.rating >= 70 ? 'bg-blue-500' : 'bg-slate-600'}`}>
                     <span className="text-white font-bold text-xs">{c.rating}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -752,7 +766,13 @@ function HistoryContent({ world }: { world: GameWorld }) {
             );
           })}
           {coachStats.every(cs => !cs || (cs.trophies === 0 && cs.totalSeasons <= 1)) && (
-            <p className="py-8 text-center text-sm text-slate-500">完成更多赛季后，具有代表性履历的教练会进入名帅殿堂。</p>
+            <WorldProgressEmptyState
+              world={world}
+              title="名帅履历仍在形成"
+              description="完成更多赛季后，冠军、长期执教与逆袭经历会筛选出具有代表性的教练。"
+              actionLabel="观察现役教练"
+              actionTo="/coaches"
+            />
           )}
         </div>
       )}
@@ -867,7 +887,7 @@ function formatDelta(value: number): string {
 
 function RecordCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 text-center">
       <div className="text-xl font-bold text-slate-100">{value}</div>
       <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
     </div>
@@ -876,7 +896,7 @@ function RecordCard({ label, value }: { label: string; value: string }) {
 
 function RecordDetail({ emoji, title, team, detail, teamId, color }: { emoji: string; title: string; team: string; detail: string; teamId: string; color?: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 flex items-center gap-3">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 flex items-center gap-3">
       <span className="text-xl shrink-0">{emoji}</span>
       <div className="flex-1 min-w-0">
         <div className="text-[10px] text-slate-500">{title}</div>

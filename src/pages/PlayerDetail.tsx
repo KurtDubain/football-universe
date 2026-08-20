@@ -227,9 +227,9 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
   return (
     <div className="max-w-2xl space-y-5">
       {/* Header */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-5">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-5">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-black text-white shrink-0" style={{ backgroundColor: team.color }}>
+          <div className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl font-black text-white shrink-0" style={{ backgroundColor: team.color }}>
             {player.number}
           </div>
           <div className="min-w-0 flex-1">
@@ -277,6 +277,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
           </div>
           <button
             type="button"
+            data-ui-feedback={isFollowed ? 'toggle_off' : 'toggle_on'}
             onClick={() => toggleFavoritePlayer(uuid)}
             disabled={followLimitReached}
             aria-label={isFollowed ? `取消关注 ${player.name}` : `关注 ${player.name}`}
@@ -350,7 +351,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
 
       {/* Key Match Metrics */}
       {(keyMetrics.finalGoals > 0 || keyMetrics.lateGoals > 0 || keyMetrics.hatTricks > 0) && (
-        <div className="bg-gradient-to-r from-amber-900/15 to-slate-800 rounded-xl border border-amber-700/30 p-3">
+        <div className="bg-gradient-to-r from-amber-900/15 to-slate-800 rounded-lg border border-amber-700/30 p-3">
           <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">关键先生</h3>
           <div className="grid grid-cols-3 gap-2">
             <div className="text-center">
@@ -373,7 +374,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
       )}
 
       {/* Attributes */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">球员属性</h3>
         <div className="space-y-2">
           <AttrBar label="综合能力" value={player.rating} max={99} />
@@ -382,7 +383,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
       </div>
 
       {starContext.recentForm && starContext.recentForm.summaries.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">近期比赛影响</h3>
             <span className="text-[11px] text-slate-500">最近 {starContext.recentForm.appearances} 场</span>
@@ -400,7 +401,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
 
       {/* Red cards */}
       {(stats?.redCards ?? 0) > 0 && (
-        <div className="bg-red-900/15 rounded-xl border border-red-800/30 p-3 text-center">
+        <div className="bg-red-900/15 rounded-lg border border-red-800/30 p-3 text-center">
           <span className="text-sm text-red-400 font-semibold">红牌: {stats!.redCards}</span>
         </div>
       )}
@@ -425,7 +426,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
 
 function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="chart" size={13} /> 本赛季球队拆分
@@ -494,7 +495,7 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   // Newest first
   const sorted = [...awards].sort((a, b) => b.season - a.season);
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
         <Icon name="medal" size={14} accent="#fbbf24" /> 个人荣誉 ({awards.length})
       </h3>
@@ -552,7 +553,7 @@ function PositionPerformanceCard({
     : result.score >= 30 ? 'text-orange-300'
     : 'text-red-300';
   return (
-    <div className="bg-gradient-to-br from-slate-800 to-slate-800/70 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-gradient-to-br from-slate-800 to-slate-800/70 rounded-lg border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="chart" size={13} /> 赛季综合评分
@@ -600,7 +601,7 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
       ) / scoredMinutes
     : null;
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
@@ -665,7 +666,7 @@ function RivalsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
   const rivals = computePlayerRivals(world, playerUuid, 3);
   if (rivals.length === 0) return null;
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="target" size={13} /> 位置之争
@@ -707,7 +708,7 @@ function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeo
   // Oldest first (career progression)
   const sorted = [...transfers].sort((a, b) => a.season - b.season || a.windowIndex - b.windowIndex);
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
         <Icon name="refresh" size={13} /> 转会履历 ({transfers.length})
       </h3>
@@ -779,7 +780,7 @@ function InjurySection({
   if (history.length === 0 && !isInjured && !isSuspended) return null;
   const sorted = [...history].sort((a, b) => b.startWindow - a.startWindow);
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1"><Icon name="bandage" size={13} accent="#fca5a5" /> 伤病记录</h3>
         <div className="flex gap-1.5">
@@ -817,7 +818,7 @@ function InjurySection({
 
 function StatBox({ label, value, color, tooltip }: { label: string; value: number; color?: string; tooltip?: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3 text-center" title={tooltip}>
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-3 text-center" title={tooltip}>
       <div className={`text-2xl font-bold ${color ?? 'text-slate-100'}`}>{value}</div>
       <div className="text-[10px] text-slate-500 mt-0.5">{label}</div>
     </div>
@@ -869,7 +870,7 @@ function RetiredPlayerView({
   const narrativeThread = world ? buildPlayerNarrativeThread(world, retired.uuid) : null;
   return (
     <div className="max-w-2xl space-y-5">
-      <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-xl border border-slate-700/60 p-5">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-800/60 rounded-lg border border-slate-700/60 p-5">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/40 font-medium inline-flex items-center gap-1">
             <Icon name="building" size={11} /> 已退役
@@ -886,6 +887,7 @@ function RetiredPlayerView({
             </Link>
             <button
               type="button"
+              data-ui-feedback={isFollowed ? 'toggle_off' : 'toggle_on'}
               onClick={() => toggleFavoritePlayer(retired.uuid)}
               disabled={followLimitReached}
               aria-label={isFollowed ? `取消关注 ${retired.name}` : `关注 ${retired.name}`}

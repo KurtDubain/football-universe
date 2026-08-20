@@ -1220,6 +1220,7 @@ body {
 .animate-slide-up { animation: slide-up 0.35s ease-out both; }
 .animate-slide-down { animation: slide-down 0.3s ease-out both; }
 .animate-fade-in { animation: fade-in 0.4s ease-out both; }
+.route-enter { animation: route-enter 0.17s ease-out both; }
 .animate-scale-in { animation: scale-in 0.3s ease-out both; }
 .animate-slide-in-right { animation: slide-in-right 0.35s ease-out both; }
 
@@ -1255,6 +1256,56 @@ body {
 }
 .press-scale:active {
   transform: scale(0.97);
+}
+
+@keyframes route-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.advance-activity-track {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--action) 18%, transparent);
+}
+
+.advance-activity-track::after {
+  content: '';
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: var(--competition-gold);
+  animation: advance-activity 1.05s ease-in-out infinite;
+}
+
+.match-live-overlay[data-closing='true'] {
+  animation: match-live-overlay-out 0.15s ease-in both;
+}
+
+.match-live-shell-closing {
+  animation: match-live-shell-out 0.15s ease-in both !important;
+}
+
+@keyframes match-live-overlay-out {
+  to { opacity: 0; }
+}
+
+@keyframes match-live-shell-out {
+  to { opacity: 0; transform: scale(0.985) translateY(3px); }
+}
+
+@keyframes advance-activity {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(365%); }
+}
+
+@media (hover: none) {
+  .app-route-content :where(a, button):not(:disabled):active {
+    filter: brightness(1.13);
+  }
 }
 
 @keyframes action-feedback-scan {

@@ -5,7 +5,7 @@ import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
 import { Icon } from './Icon';
 import { PLAYBACK_MODE_OPTIONS } from './match-live/playback-mode';
-import { playGameFeedback, unlockGameAudio } from '../feedback/game-feedback';
+import { playGameFeedback, playUiFeedback, unlockGameAudio } from '../feedback/game-feedback';
 import {
   createMatchSoundscape,
   isPresentationSequencedSoundEvent,
@@ -68,6 +68,7 @@ export default function MatchLive(props: Props) {
 
 function MatchLiveSession({ result, teamBases, onClose, featured = false }: Props) {
   const [locallyMuted, setLocallyMuted] = useState(false);
+  const [closing, setClosing] = useState(false);
   const feedbackPreferences = useFeedbackPreferences();
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
@@ -101,6 +102,20 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const soundscapeRef = useRef<MatchSoundscape | null>(null);
   const previousPhaseRef = useRef(playback.phase);
   const [matchMusicHoldOwner] = useState(() => `match-live-${result.fixtureId}`);
+  const closeTimerRef = useRef<number | null>(null);
+  const closingRef = useRef(false);
+
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    playUiFeedback('selection');
+    if (reducedMotion) {
+      onClose();
+      return;
+    }
+    setClosing(true);
+    closeTimerRef.current = window.setTimeout(onClose, 150);
+  }, [onClose, reducedMotion]);
 
   const ht = teamBases[result.homeTeamId];
   const at = teamBases[result.awayTeamId];
@@ -211,14 +226,18 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') requestClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose]);
+  }, [requestClose]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!feedbackPreferences.soundEnabled || locallyMuted || !playback.flashEvent) return;
@@ -296,9 +315,10 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
       aria-modal="true"
       aria-label="比赛直播回放"
       data-fixture-id={result.fixtureId}
-      className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
+      data-closing={closing || undefined}
+      className="match-live-overlay fixed inset-0 bg-black/85 backdrop-blur-sm z-[500] flex items-center justify-center p-3"
     >
-      <div className={`match-live-shell relative flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${
+      <div className={`match-live-shell relative flex max-h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden bg-slate-900 shadow-2xl animate-scale-in motion-reduce:animate-none border ${closing ? 'match-live-shell-closing' : ''} ${
         playback.goalFlash ? 'border-green-500/50' : 'border-slate-800'
       } transition-colors duration-500`}>
 
@@ -319,6 +339,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.1),rgba(2,6,23,0.42)_50%,rgba(2,6,23,0.96))]" aria-hidden="true" />
             <button
               type="button"
+              data-ui-feedback="selection"
               onClick={() => setShowOpener(false)}
               aria-label="跳过转播开场"
               title="跳过转播开场"
@@ -593,6 +614,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {/* Final results */}
         {finished && (
           <div className="space-y-2 px-4 pb-3 text-center animate-slide-up">
+            <div data-testid="live-final-reveal" className="ui-eyebrow text-[9px] text-[var(--competition-gold)]">
+              终场哨 · 比赛归档完成
+            </div>
             {result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
             {result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
             {featuredPlayers.length > 0 && (
@@ -637,7 +661,11 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   type="button"
                   aria-pressed={playback.mode === option.value}
                   data-testid={`playback-mode-${option.value}`}
-                  onClick={() => setMode(option.value)}
+                  onClick={() => {
+                    if (playback.mode === option.value) return;
+                    playUiFeedback('selection');
+                    setMode(option.value);
+                  }}
                   className={`min-h-11 min-w-11 cursor-pointer px-2.5 py-1 text-[10px] transition-colors sm:min-h-9 ${
                     playback.mode === option.value
                       ? 'bg-emerald-600 text-white'
@@ -680,7 +708,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           </div>
           <div className="flex justify-end gap-2">
             {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
-            <button onClick={onClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
+            <button onClick={requestClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
               {finished ? '关闭' : '退出'}
             </button>
           </div>

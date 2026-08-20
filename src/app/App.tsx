@@ -3,29 +3,7 @@ import { useGameStore } from '../store/game-store';
 import Layout from './Layout';
 import Welcome from '../pages/Welcome';
 import { RecoverableRoute } from './route-resource';
-
-const routeImporters = {
-  dashboard: () => import('../pages/Dashboard'),
-  calendar: () => import('../pages/Calendar'),
-  league: () => import('../pages/League'),
-  cup: () => import('../pages/Cup'),
-  coaches: () => import('../pages/Coaches'),
-  teamDetail: () => import('../pages/TeamDetail'),
-  coachDetail: () => import('../pages/CoachDetail'),
-  history: () => import('../pages/History'),
-  compare: () => import('../pages/Compare'),
-  chronicle: () => import('../pages/Chronicle'),
-  legends: () => import('../pages/Legends'),
-  teams: () => import('../pages/Teams'),
-  players: () => import('../pages/Players'),
-  playerDetail: () => import('../pages/PlayerDetail'),
-  settings: () => import('../pages/Settings'),
-  teamEditor: () => import('../pages/TeamEditor'),
-  transfers: () => import('../pages/Transfers'),
-  market: () => import('../pages/Market'),
-  memorable: () => import('../pages/MemorableMatches'),
-  search: () => import('../pages/AdvancedSearch'),
-};
+import { routeImporters } from './route-modules';
 
 export { RouteLoading } from './route-resource';
 

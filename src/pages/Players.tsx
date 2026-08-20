@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
+import { useUiSessionState } from '../app/ui-session-state';
 import {
   getCareerTopAssistRows,
   getCareerTopScorerRows,
@@ -56,9 +57,9 @@ export default function Players() {
   const favoritePlayerIds = useGameStore((s) => s.favoritePlayerIds);
   const toggleFavoritePlayer = useGameStore((s) => s.toggleFavoritePlayer);
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('overall');
-  const [rankingGroup, setRankingGroup] = useState<RankingGroup>('season');
-  const [starView, setStarView] = useState<StarView>('world');
+  const [tab, setTab] = useUiSessionState<Tab>('ui.players.tab', 'overall');
+  const [rankingGroup, setRankingGroup] = useUiSessionState<RankingGroup>('ui.players.ranking-group', 'season');
+  const [starView, setStarView] = useUiSessionState<StarView>('ui.players.star-view', 'world');
   const [showAllFocus, setShowAllFocus] = useState(false);
 
   const topOverall = useMemo(
@@ -205,6 +206,7 @@ export default function Players() {
         </div>
         <button
           type="button"
+          data-ui-feedback={followed ? 'toggle_off' : 'toggle_on'}
           onClick={() => toggleFavoritePlayer(player.uuid)}
           disabled={followLimitReached}
           aria-label={followed ? `取消关注 ${player.name}` : `关注 ${player.name}`}
@@ -493,7 +495,7 @@ export default function Players() {
                     <span className="block truncate text-sm font-semibold text-slate-300">{player.name}</span>
                     <span className="text-xs text-slate-500">已退役 · S{player.seasonRetired} · 巅峰 {player.peakRating}</span>
                   </Link>
-                  <button type="button" onClick={() => toggleFavoritePlayer(player.uuid)} aria-label={`取消关注 ${player.name}`} className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-amber-500/50 bg-amber-500/12 text-amber-300">
+                  <button type="button" data-ui-feedback="toggle_off" onClick={() => toggleFavoritePlayer(player.uuid)} aria-label={`取消关注 ${player.name}`} className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-amber-500/50 bg-amber-500/12 text-amber-300">
                     <Icon name="star" size={17} />
                   </button>
                 </div>

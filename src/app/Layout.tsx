@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useEffect, useMemo } from 'react';
+import { type ReactNode, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
@@ -28,9 +28,54 @@ import {
   suspendGameAudio,
   unlockGameAudio,
 } from '../feedback/game-feedback';
+import { preloadRouteForPath } from './route-modules';
 
 interface LayoutProps {
   children: ReactNode;
+}
+
+const routeScrollPositions = new Map<string, number>();
+const ROUTE_SCROLL_STORAGE_PREFIX = 'football-route-scroll:';
+const HISTORY_SCROLL_STATE_KEY = 'footballRouteScroll';
+
+function rememberRouteScroll(key: string, pathname: string, scrollTop: number): void {
+  routeScrollPositions.set(`key:${key}`, scrollTop);
+  routeScrollPositions.set(`path:${pathname}`, scrollTop);
+  try {
+    sessionStorage.setItem(`${ROUTE_SCROLL_STORAGE_PREFIX}${pathname}`, String(scrollTop));
+  } catch {
+    // In-memory restoration remains available when session storage is blocked.
+  }
+  try {
+    if (window.location.pathname === pathname) {
+      window.history.replaceState({
+        ...window.history.state,
+        [HISTORY_SCROLL_STATE_KEY]: { pathname, scrollTop },
+      }, '');
+    }
+  } catch {
+    // Router navigation remains functional if history state cannot be updated.
+  }
+}
+
+function readRouteScroll(key: string, pathname: string): number {
+  const historyScroll = window.history.state?.[HISTORY_SCROLL_STATE_KEY] as {
+    pathname?: string;
+    scrollTop?: number;
+  } | undefined;
+  if (historyScroll?.pathname === pathname && Number.isFinite(historyScroll.scrollTop)) {
+    return Number(historyScroll.scrollTop);
+  }
+  try {
+    const raw = sessionStorage.getItem(`${ROUTE_SCROLL_STORAGE_PREFIX}${pathname}`);
+    if (raw !== null) {
+      const stored = Number(raw);
+      if (Number.isFinite(stored)) return stored;
+    }
+  } catch {
+    // Fall through to in-memory history when session storage is blocked.
+  }
+  return routeScrollPositions.get(`key:${key}`) ?? routeScrollPositions.get(`path:${pathname}`) ?? 0;
 }
 
 const navSections: Array<{
@@ -125,7 +170,16 @@ export default function Layout({ children }: LayoutProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
   const [confirmSkipSeason, setConfirmSkipSeason] = useState(false);
+  const [advanceLabel, setAdvanceLabel] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const routeScrollSaveTimerRef = useRef<number | null>(null);
+  const routeRestoreRef = useRef({ identity: '', target: 0, active: false });
+  const routeIdentity = `${location.key}:${location.pathname}`;
+  if (routeRestoreRef.current.identity !== routeIdentity) {
+    const target = readRouteScroll(location.key, location.pathname);
+    routeRestoreRef.current = { identity: routeIdentity, target, active: target > 0 };
+  }
   const [saveNearCapacity, setSaveNearCapacity] = useState(() => {
     try {
       return isSaveNearCapacity(conservativeUTF16Bytes(localStorage.getItem(SAVE_STORAGE_KEY)));
@@ -139,6 +193,56 @@ export default function Layout({ children }: LayoutProps) {
     window.addEventListener('football-save-error', handleSaveError);
     return () => window.removeEventListener('football-save-error', handleSaveError);
   }, []);
+
+  useEffect(() => {
+    const preloadFromEvent = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
+      if (!target || target.origin !== window.location.origin || target.target === '_blank') return;
+      if (mainRef.current) rememberRouteScroll(location.key, location.pathname, mainRef.current.scrollTop);
+      const pending = preloadRouteForPath(target.pathname);
+      if (pending) void pending.catch(() => undefined);
+    };
+    document.addEventListener('pointerover', preloadFromEvent, { capture: true, passive: true });
+    document.addEventListener('pointerdown', preloadFromEvent, { capture: true, passive: true });
+    document.addEventListener('focusin', preloadFromEvent, { capture: true });
+    return () => {
+      document.removeEventListener('pointerover', preloadFromEvent, { capture: true });
+      document.removeEventListener('pointerdown', preloadFromEvent, { capture: true });
+      document.removeEventListener('focusin', preloadFromEvent, { capture: true });
+    };
+  }, [location.key, location.pathname]);
+
+  useLayoutEffect(() => {
+    const element = mainRef.current;
+    if (!element) return;
+    const targetScroll = routeRestoreRef.current.target;
+    let observer: ResizeObserver | null = null;
+    let restoreTimeout = 0;
+    let restoreRetry = 0;
+    const applyRestore = () => {
+      element.scrollTop = targetScroll;
+      if (targetScroll === 0 || Math.abs(element.scrollTop - targetScroll) <= 2) {
+        routeRestoreRef.current.active = false;
+        observer?.disconnect();
+        if (restoreTimeout) window.clearTimeout(restoreTimeout);
+        if (restoreRetry) window.clearTimeout(restoreRetry);
+      }
+    };
+    applyRestore();
+    if (targetScroll > 0 && Math.abs(element.scrollTop - targetScroll) > 2) {
+      observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(applyRestore);
+      observer?.observe(element);
+      restoreTimeout = window.setTimeout(() => observer?.disconnect(), 600);
+      restoreRetry = window.setTimeout(applyRestore, 80);
+      window.requestAnimationFrame(applyRestore);
+    }
+    return () => {
+      observer?.disconnect();
+      if (restoreTimeout) window.clearTimeout(restoreTimeout);
+      if (restoreRetry) window.clearTimeout(restoreRetry);
+      rememberRouteScroll(location.key, location.pathname, element.scrollTop);
+    };
+  }, [location.key, location.pathname]);
 
   useEffect(() => {
     const handleSaveSize = (event: Event) => {
@@ -161,32 +265,52 @@ export default function Layout({ children }: LayoutProps) {
     }
   };
   const handleWindowAdvance = async () => {
+    setAdvanceLabel('结算本轮');
     playUiFeedback('advance');
-    const advanced = await advanceWindow();
-    if (!advanced) playUiFeedback('reject');
-    if (advanced) showLatestResponse();
+    try {
+      const advanced = await advanceWindow();
+      if (!advanced) playUiFeedback('reject');
+      if (advanced) showLatestResponse();
+    } finally {
+      setAdvanceLabel(null);
+    }
   };
   const handleBatchAdvance = async (count: number) => {
     setShowFastMenu(false);
+    setAdvanceLabel(`结算 ${count} 轮`);
     playUiFeedback('advance');
-    const advanced = await batchAdvance(count);
-    if (!advanced) playUiFeedback('reject');
-    if (advanced) showLatestResponse();
+    try {
+      const advanced = await batchAdvance(count);
+      if (!advanced) playUiFeedback('reject');
+      if (advanced) showLatestResponse();
+    } finally {
+      setAdvanceLabel(null);
+    }
   };
   const handleKeyNodeAdvance = async () => {
     setShowFastMenu(false);
+    setAdvanceLabel('前往关键节点');
     playUiFeedback('advance');
-    const advanced = await advanceToNextKeyNode();
-    if (!advanced) playUiFeedback('reject');
-    if (advanced) showLatestResponse();
+    try {
+      const advanced = await advanceToNextKeyNode();
+      if (!advanced) playUiFeedback('reject');
+      if (advanced) showLatestResponse();
+    } finally {
+      setAdvanceLabel(null);
+    }
   };
   const handleSkipSeason = async () => {
     setShowFastMenu(false);
     setConfirmSkipSeason(false);
+    setAdvanceLabel('结算本赛季');
     playUiFeedback('advance');
-    const advanced = await skipCurrentSeason();
-    if (!advanced) playUiFeedback('reject');
-    if (advanced) showLatestResponse();
+    try {
+      const advanced = await skipCurrentSeason();
+      if (!advanced) playUiFeedback('reject');
+      if (advanced) showLatestResponse();
+    } finally {
+      setAdvanceLabel(null);
+    }
   };
   const handleFloatingAdvance = handleWindowAdvance;
   const toggleGlobalSound = () => {
@@ -436,9 +560,13 @@ export default function Layout({ children }: LayoutProps) {
               <button
                 type="button"
                 data-testid="mobile-route-back"
-                onClick={() => navigate(mobileReturnTarget.to)}
-                aria-label={`返回${mobileReturnTarget.label}`}
-                title={`返回${mobileReturnTarget.label}`}
+                onClick={() => {
+                  const canGoBack = Number(window.history.state?.idx ?? 0) > 0;
+                  if (canGoBack) navigate(-1);
+                  else navigate(mobileReturnTarget.to);
+                }}
+                aria-label="返回上一页"
+                title={`返回上一页（直接访问时返回${mobileReturnTarget.label}）`}
                 className="md:hidden flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
               >
                 <span aria-hidden="true">←</span>
@@ -482,7 +610,7 @@ export default function Layout({ children }: LayoutProps) {
                 disabled={isAdvancing || !currentWindow}
                 className="ui-action-feedback h-[44px] min-w-[44px] rounded-l-md bg-[var(--action)] px-3 text-sm font-medium text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-auto sm:px-4 sm:py-1.5"
               >
-                {isAdvancing ? '...' : currentWindow ? '推进' : '完成'}
+                {isAdvancing ? (advanceLabel ?? '结算中') : currentWindow ? '推进' : '完成'}
               </button>
             )}
             {currentWindow && (
@@ -613,6 +741,11 @@ export default function Layout({ children }: LayoutProps) {
               </div>
             )}
           </div>
+          {isAdvancing && (
+            <div className="advance-activity-track" role="status" aria-live="polite">
+              <span className="sr-only">{advanceLabel ?? '正在结算比赛与更新数据'}</span>
+            </div>
+          )}
         </header>
 
         {/* News ticker at top */}
@@ -632,7 +765,30 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Content */}
-        <main className="app-route-content app-workspace tabular-nums flex-1 overflow-auto p-3 sm:p-5 animate-fade-in" key={location.pathname}>
+        <main
+          ref={mainRef}
+          onScroll={(event) => {
+            const restoration = routeRestoreRef.current;
+            if (restoration.active && Math.abs(event.currentTarget.scrollTop - restoration.target) > 2) return;
+            restoration.active = false;
+            if (routeScrollSaveTimerRef.current !== null) window.clearTimeout(routeScrollSaveTimerRef.current);
+            const scrollTop = event.currentTarget.scrollTop;
+            const routeKey = location.key;
+            const pathname = location.pathname;
+            routeScrollSaveTimerRef.current = window.setTimeout(
+              () => rememberRouteScroll(routeKey, pathname, scrollTop),
+              120,
+            );
+          }}
+          onClickCapture={(event) => {
+            if (event.target instanceof Element && event.target.closest('a[href]')) {
+              if (routeScrollSaveTimerRef.current !== null) window.clearTimeout(routeScrollSaveTimerRef.current);
+              rememberRouteScroll(location.key, location.pathname, event.currentTarget.scrollTop);
+            }
+          }}
+          className="app-route-content app-workspace tabular-nums flex-1 overflow-auto p-3 sm:p-5 route-enter"
+          key={location.key}
+        >
           {children}
         </main>
       </div>
@@ -642,6 +798,7 @@ export default function Layout({ children }: LayoutProps) {
         stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
         accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
         isAdvancing={isAdvancing}
+        busyLabel={advanceLabel ?? undefined}
         disabled={isAdvancing || !currentWindow}
         onAdvance={handleFloatingAdvance}
       />

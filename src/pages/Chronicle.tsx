@@ -104,19 +104,19 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
 
       {/* All-time stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 text-center">
           <div className="text-2xl font-black text-slate-100">{totalSeasons}</div>
           <div className="text-[10px] text-slate-500">总赛季</div>
         </div>
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 text-center">
           <div className="text-2xl font-black text-amber-400">{uniqueChampions}</div>
           <div className="text-[10px] text-slate-500">不同冠军</div>
         </div>
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 text-center">
           <div className="text-2xl font-black text-slate-100">{totalCoachChanges}</div>
           <div className="text-[10px] text-slate-500">总换帅</div>
         </div>
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 text-center">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 text-center">
           <div className="text-2xl font-black text-emerald-400">{totalPromotions}</div>
           <div className="text-[10px] text-slate-500">总升级次数</div>
         </div>
@@ -124,7 +124,7 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
 
       {/* Dynasties */}
       {dynasties.length > 0 && (
-        <div className="bg-amber-900/15 rounded-xl border border-amber-700/30 p-4">
+        <div className="bg-amber-900/15 rounded-lg border border-amber-700/30 p-4">
           <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">王朝</h3>
           <div className="space-y-1.5">
             {dynasties.map((d, i) => (
@@ -140,7 +140,7 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
       )}
 
       {/* Champion Timeline */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700/60">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">冠军更迭</h3>
         </div>
@@ -161,7 +161,7 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
 
       {/* OVR Evolution */}
       {topTeams.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">豪门OVR变迁</h3>
           <div className="space-y-2">
             {topTeams.map(tid => {
@@ -360,7 +360,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
       <button onClick={onBack} className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer">← 返回编年史</button>
 
       {/* Header with rich narrative */}
-      <div className="py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30 px-4 sm:px-6">
+      <div className="py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-lg border border-amber-700/30 px-4 sm:px-6">
         <h2 className="text-2xl font-black text-slate-100 text-center">第{seasonNumber}赛季</h2>
         <div className="flex justify-center gap-4 mt-1 text-[10px] text-slate-500">
           <span>{seasonMatches.length}场比赛</span>
@@ -404,7 +404,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
 
       {/* Memorable Matches */}
       {(blowouts.length > 0 || highScoring.length > 0) && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">难忘比赛</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {blowouts[0] && blowouts[0].diff >= 4 && (
@@ -425,7 +425,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
 
       {/* Continental Performance */}
       {Object.keys(contStats).length > 1 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">大洲对抗</h3>
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(contStats).map(([cont, data]) => {
@@ -491,7 +491,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
 
       {/* Season Buffs Recap */}
       {buffs.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
           <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季剧情</h3>
           <div className="space-y-1.5">
             {buffs.map(b => {
@@ -511,7 +511,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
 
       {/* Coach Changes */}
       {honor.coachChanges.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
           <h3 className="text-xs font-semibold text-slate-400 mb-2">教练变动 ({honor.coachChanges.length})</h3>
           <div className="space-y-1">
             {honor.coachChanges.map((c, i) => (
@@ -607,12 +607,12 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
 
   return (
     <div className="max-w-4xl space-y-4">
-      <div className="py-4 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-xl border border-amber-700/30 px-4 text-center">
+      <div className="py-4 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-lg border border-amber-700/30 px-4 text-center">
         <h2 className="text-xl font-black text-slate-100">编年史 · 全部赛季</h2>
         <p className="text-xs text-slate-500 mt-1">从开局到现在，{episodes.length}个赛季的兴衰起伏</p>
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
         <div className="relative">
           <div className="absolute left-8 top-0 bottom-0 w-px bg-slate-700" />
           {episodes.map((ep) => (
@@ -639,7 +639,7 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
 
 function StandingsTable({ title, records, tb }: { title: string; records: SeasonRow[]; tb: Record<string, TeamBase> }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
       <div className="px-3 py-2 border-b border-slate-700/60">
         <h3 className="text-xs font-semibold text-slate-400">{title}</h3>
       </div>
@@ -679,7 +679,7 @@ function MemMatch({ m, tb }: { m: MatchHistoryEntry; tb: Record<string, TeamBase
 
 function AwardBox({ emoji, label, team, detail, color }: { emoji: string; label: string; team: string; detail: string; color?: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
       <div className="flex items-center gap-2">
         <span className="text-lg shrink-0">{emoji}</span>
         <div className="flex-1 min-w-0">

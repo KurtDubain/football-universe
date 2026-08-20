@@ -121,19 +121,19 @@ export default function TeamEditor() {
             <button onClick={resetToDefault} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">重置默认</button>
             <button onClick={importJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导入</button>
             <button onClick={exportJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导出</button>
-            <button onClick={saveTemplate} className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg cursor-pointer">保存模板</button>
+            <button onClick={saveTemplate} data-ui-feedback="confirm" className="px-3 py-1.5 text-xs bg-[var(--action)] hover:bg-[var(--action-hover)] text-white rounded-md cursor-pointer">保存模板</button>
           </div>
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="搜索球队..."
-            className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+            className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm focus:outline-none focus:border-[var(--focus-ring)]" />
           <span className="text-xs text-slate-500">{teams.length}/32 支球队</span>
         </div>
 
         {/* Teams list */}
-        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+        <div className="bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
           <div className="hidden sm:grid grid-cols-12 gap-2 px-3 py-2 border-b border-slate-700/60 text-[10px] text-slate-500 font-semibold uppercase">
             <div className="col-span-3">名称 / 简称</div>
             <div className="col-span-2">联赛 / 档次</div>
@@ -201,12 +201,12 @@ export default function TeamEditor() {
         {/* Action buttons */}
         <div className="flex gap-3 flex-wrap pt-2">
           <button onClick={startVanilla} disabled={starting}
-            className="flex-1 px-5 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium rounded-xl cursor-pointer transition-colors">
+            className="flex-1 px-5 py-3 bg-[var(--surface-raised)] hover:bg-slate-700 border border-[var(--border-strong)] text-slate-300 font-medium rounded-lg cursor-pointer transition-colors">
             {starting ? '正在创建宇宙…' : '← 返回欢迎页（默认开局）'}
           </button>
-          <button onClick={startGameWithCustom} disabled={starting}
-            className="flex-1 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl cursor-pointer shadow-lg shadow-blue-900/40">
-            {starting ? '正在创建宇宙…' : '🚀 用自定义球队开局'}
+          <button onClick={startGameWithCustom} disabled={starting} data-ui-feedback="confirm"
+            className="flex-1 px-5 py-3 bg-[var(--action)] hover:bg-[var(--action-hover)] text-white font-bold rounded-lg cursor-pointer shadow-lg shadow-black/25">
+            {starting ? '正在创建宇宙…' : '用自定义球队开局'}
           </button>
         </div>
       </div>
@@ -219,7 +219,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
     <div>
       <label className="block text-[10px] text-slate-500 mb-0.5">{label}</label>
       <input type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-blue-500" />
+        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-[var(--focus-ring)]" />
     </div>
   );
 }
@@ -229,7 +229,7 @@ function NumField({ label, value, onChange, max }: { label: string; value: numbe
     <div>
       <label className="block text-[10px] text-slate-500 mb-0.5">{label}</label>
       <input type="number" value={value} min={1} max={max} onChange={e => onChange(parseInt(e.target.value) || 0)}
-        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-blue-500" />
+        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-[var(--focus-ring)]" />
     </div>
   );
 }

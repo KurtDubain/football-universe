@@ -22,6 +22,7 @@ import {
   unlockGameAudio,
 } from '../feedback/game-feedback';
 import { Icon } from '../components/Icon';
+import { PageHeader, PageShell } from '../components/ui';
 import {
   checkForAppUpdate,
   getAppUpdateState,
@@ -158,20 +159,22 @@ function SettingsContent({ world }: { world: GameWorld }) {
   ];
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <h2 className="text-xl font-bold text-slate-100">设置</h2>
+    <PageShell width="narrow">
+      <PageHeader title="设置" description="管理声音、存档、界面与宇宙规则说明" />
 
       {/* Language switcher */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">语言 / Language</h3>
         <div className="flex gap-2">
           <button onClick={() => setLanguage('zh')}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors ${i18n.language === 'zh' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'}`}>
-            🇨🇳 中文
+            data-ui-feedback="selection"
+            className={`flex-1 px-4 py-2 rounded-md text-sm cursor-pointer transition-colors ${i18n.language === 'zh' ? 'bg-[var(--action)] text-white' : 'bg-[var(--surface-raised)] text-slate-400 hover:text-slate-200'}`}>
+            中文
           </button>
           <button onClick={() => setLanguage('en')}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors ${i18n.language === 'en' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'}`}>
-            🇺🇸 English
+            data-ui-feedback="selection"
+            className={`flex-1 px-4 py-2 rounded-md text-sm cursor-pointer transition-colors ${i18n.language === 'en' ? 'bg-[var(--action)] text-white' : 'bg-[var(--surface-raised)] text-slate-400 hover:text-slate-200'}`}>
+            English
           </button>
         </div>
         <p className="text-[10px] text-slate-500 mt-2">部分内容（球队名称、新闻文案）暂时仅支持中文</p>
@@ -291,7 +294,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       </section>
 
       {/* Favorite teams (up to 3) */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">关注球队</h3>
           <span className="text-[10px] text-slate-500">已选 {favoriteTeamIds.length}/3</span>
@@ -376,7 +379,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       </div>
 
       {/* Game info */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">游戏信息</h3>
         <div className="grid grid-cols-2 gap-y-2 text-sm">
           <span className="text-slate-500">当前赛季</span>
@@ -457,7 +460,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
 
       {/* Runtime stats */}
       {world.honorHistory.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">历史统计</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <StatCard label="总进球" value={`${stats.totalGoals}`} />
@@ -477,7 +480,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       )}
 
       {/* Game Guide */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700/60">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">游戏指南</h3>
         </div>
@@ -505,7 +508,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       </div>
 
       {/* Save management */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">存档管理</h3>
         <div className="space-y-2">
           <button
@@ -576,7 +579,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       </div>
 
       {/* Danger zone */}
-      <div className="bg-slate-800 rounded-xl border border-red-900/30 p-4">
+      <div className="bg-[var(--surface-panel)] rounded-lg border border-red-900/30 p-4">
         <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">危险操作</h3>
         {!showConfirm ? (
           <button
@@ -612,7 +615,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
         <p>足球联赛宇宙 · 电子斗蛐蛐模拟器</p>
         <p className="mt-1">v{APP_VERSION} · by KurtDubain</p>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

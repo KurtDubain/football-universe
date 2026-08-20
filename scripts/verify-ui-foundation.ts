@@ -140,6 +140,55 @@ async function main(): Promise<void> {
     });
     await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
 
+    await page.goto(`${baseUrl}/players?audit=1`, { waitUntil: 'networkidle' });
+    const positionGroup = page.locator('[aria-label="榜单分组"] [role="tab"]', { hasText: '位置' });
+    await positionGroup.click();
+    await page.getByRole('button', { name: '打开导航菜单' }).click();
+    await page.getByRole('dialog').locator('a[href="/teams"]').click();
+    await page.waitForURL(/\/teams/);
+    await page.getByRole('button', { name: '打开导航菜单' }).click();
+    await page.getByRole('dialog').locator('a[href="/players"]').click();
+    await page.waitForURL(/\/players/);
+    const playerFilterRestored = await positionGroup.getAttribute('aria-selected') === 'true';
+    if (!playerFilterRestored) throw new Error('Players ranking group did not survive route navigation');
+
+    await page.goto(`${baseUrl}/teams?audit=1`, { waitUntil: 'networkidle' });
+    const routeContent = page.locator('.app-route-content');
+    const detailLink = page.locator('main a[href^="/team/"]').last();
+    await detailLink.scrollIntoViewIfNeeded();
+    const scrollBeforeDetail = await routeContent.evaluate(element => element.scrollTop);
+    await detailLink.click();
+    const storedBeforeReturn = await page.evaluate(() => sessionStorage.getItem('football-route-scroll:/teams'));
+    await page.waitForURL(/\/team\//);
+    await page.getByTestId('mobile-route-back').click();
+    await page.waitForURL(/\/teams/);
+    try {
+      await page.waitForFunction(
+        expected => Math.abs((document.querySelector<HTMLElement>('.app-route-content')?.scrollTop ?? 0) - expected) <= 4,
+        scrollBeforeDetail,
+      );
+    } catch (error) {
+      const diagnostic = await page.evaluate(() => {
+        const content = document.querySelector<HTMLElement>('.app-route-content');
+        return {
+          top: content?.scrollTop,
+          stored: sessionStorage.getItem('football-route-scroll:/teams'),
+          height: content?.scrollHeight,
+        };
+      });
+      throw new Error(`Route scroll wait failed: ${JSON.stringify(diagnostic)}; ${String(error)}`);
+    }
+    const scrollAfterReturn = await routeContent.evaluate(element => element.scrollTop);
+    const routeScrollRestored = Math.abs(scrollAfterReturn - scrollBeforeDetail) <= 4;
+    if (!routeScrollRestored) {
+      const diagnostic = await page.evaluate(() => ({
+        url: location.href,
+        stored: sessionStorage.getItem('football-route-scroll:/teams'),
+        height: document.querySelector<HTMLElement>('.app-route-content')?.scrollHeight,
+      }));
+      throw new Error(`Route scroll was not restored: ${scrollBeforeDetail} -> ${scrollAfterReturn}; stored before return ${storedBeforeReturn}; ${JSON.stringify(diagnostic)}`);
+    }
+
     const rootTokens = await page.evaluate(() => {
       const style = getComputedStyle(document.documentElement);
       return ['--surface-page', '--surface-panel', '--surface-floating', '--action', '--competition-gold']
@@ -148,7 +197,12 @@ async function main(): Promise<void> {
     if (rootTokens.some(([, value]) => !value)) throw new Error('One or more semantic tokens are missing');
     if (errors.length > 0) throw new Error(`Runtime errors: ${errors.join(' | ')}`);
 
-    console.log(JSON.stringify({ results, largeTextMetrics, rootTokens, screenshots: [
+    console.log(JSON.stringify({ results, largeTextMetrics, continuity: {
+      playerFilterRestored,
+      routeScrollRestored,
+      scrollBeforeDetail,
+      scrollAfterReturn,
+    }, rootTokens, screenshots: [
       '/tmp/football-ui-mobile-compact-history.png',
       '/tmp/football-ui-mobile-teams.png',
       '/tmp/football-ui-mobile-players.png',

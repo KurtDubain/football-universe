@@ -18,12 +18,14 @@ import { leagueConfigs } from '../config/competitions';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 import TeamBadge from '../components/TeamBadge';
 import { CompetitionMark } from '../components/FootballIdentity';
+import { useUiSessionState } from '../app/ui-session-state';
+import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 
 export default function League() {
   const { level } = useParams<{ level: string }>();
   const world = useGameStore((s) => s.world);
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
-  const [tab, setTab] = useState<'standings' | 'schedule' | 'trend'>('standings');
+  const [tab, setTab] = useUiSessionState<'standings' | 'schedule' | 'trend'>('ui.league.tab', 'standings');
 
   // Modal state
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
@@ -732,7 +734,15 @@ function TrendChart({ rounds, standings, world }: {
   // Build cumulative points per team per round
   const completedRounds = rounds.filter(r => r.completed && r.results.length > 0);
   if (completedRounds.length === 0) {
-    return <p className="text-sm text-slate-500 text-center py-8">暂无数据，至少完成一轮联赛后显示走势图</p>;
+    return (
+      <WorldProgressEmptyState
+        world={world}
+        title="联赛走势等待首轮落点"
+        description="完成一轮联赛后，积分轨迹会在这里逐轮延伸。"
+        actionLabel="查看本轮赛程"
+        actionTo="/calendar"
+      />
+    );
   }
 
   const teamIds = standings.map(s => s.teamId);

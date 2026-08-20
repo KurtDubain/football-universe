@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-20 v4.56.0 Perceived-Quality P0/P1 Polish
+
+- Current request: improve the highest-value player-experience details without adding more gameplay systems, covering page continuity, routine feedback, early empty states, legacy visual consistency, and live-dialog closure.
+- Route chunks now preload from deliberate hover, focus, or touch intent while respecting Save-Data and 2G connections. Browser-history return restores the actual previous page and its scroll position; high-use player, league, history, legend, and transfer tabs and filters persist for the current session.
+- Advance controls report the operation being settled and expose a slim activity track; the floating control uses a busy glyph and matching label. Explicitly annotated follow, save, news, empty-state, and language controls receive restrained existing UI cues without making every navigation click noisy.
+- First-season transfer, history, hall, legend, and trend views now show compact season progress, the next calendar node, and one useful route action. Settings, Team Editor, player/coach detail, Legends, Chronicle, and Season Review use the shared annual panel radius and surface language instead of legacy blue-purple dashboard styling.
+- Match Live now provides feedback when changing playback mode, a clear full-time archive reveal, and a reduced-motion-aware 150ms close transition guarded against repeated close requests. Authoritative events, playback order, match results, saves, and simulation RNG are unchanged.
+- The maintained UI browser gate now verifies both session filter continuity and nested-scroll restoration. It caught an actual lazy-route race during this release; scroll ownership now follows the browser history entry with memory and session fallbacks, and the final mobile return check restores the Teams route from 1650px to exactly 1650px.
+
 ## 2026-08-20 v4.55.6 Manual Vercel Update Check
 
 - Current request: keep automatic PWA updates but add a reliable, user-visible manual check for the latest Vercel deployment because repeated refreshes could still feel inconsistent.

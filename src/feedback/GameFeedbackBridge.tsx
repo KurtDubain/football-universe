@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../store/game-store';
-import { selectWorldFeedbackCue } from './feedback-policy';
-import { playGameFeedback, suspendGameAudio, unlockGameAudio } from './game-feedback';
+import { selectWorldFeedbackCue, type UiFeedbackCue } from './feedback-policy';
+import { playGameFeedback, playUiFeedback, suspendGameAudio, unlockGameAudio } from './game-feedback';
 import { getFeedbackPreferences } from './preferences';
 
 export default function GameFeedbackBridge() {
@@ -24,6 +24,19 @@ export default function GameFeedbackBridge() {
       document.removeEventListener('keydown', unlockFromGesture, { capture: true });
       document.removeEventListener('visibilitychange', handleVisibility);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleAnnotatedFeedback = (event: MouseEvent) => {
+      const control = event.target instanceof Element
+        ? event.target.closest<HTMLElement>('[data-ui-feedback]')
+        : null;
+      if (!control || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
+      const cue = control.dataset.uiFeedback as UiFeedbackCue | undefined;
+      if (cue) playUiFeedback(cue);
+    };
+    document.addEventListener('click', handleAnnotatedFeedback, { capture: true });
+    return () => document.removeEventListener('click', handleAnnotatedFeedback, { capture: true });
   }, []);
 
   useEffect(() => {

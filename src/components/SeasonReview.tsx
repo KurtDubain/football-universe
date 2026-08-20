@@ -154,7 +154,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   })();
 
   return (
-    <div className="space-y-4">
+    <div className="season-review-annual space-y-4">
       {/* Narrative Header */}
       <div data-testid="season-champion-hero" className="relative min-h-[220px] overflow-hidden rounded-lg border border-amber-700/30 bg-slate-900">
         <DecorativeImage
@@ -208,7 +208,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* Prediction result */}
       {prediction && (
-        <div className={`rounded-xl border p-3 ${prediction.correctCount && prediction.correctCount > 0 ? 'bg-emerald-900/15 border-emerald-700/30' : 'bg-slate-800 border-slate-700'}`}>
+        <div className={`rounded-lg border p-3 ${prediction.correctCount && prediction.correctCount > 0 ? 'bg-emerald-900/15 border-emerald-700/30' : 'bg-slate-800 border-slate-700'}`}>
           <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季观察预测</h3>
           <div className="flex flex-wrap gap-4 text-xs">
             <div>
@@ -269,7 +269,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* L1 final standings */}
       {l1Records.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
           <div className="px-3 py-2 border-b border-slate-700/60">
             <h3 className="text-xs font-semibold text-slate-400">顶级联赛最终积分榜</h3>
           </div>
@@ -311,7 +311,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* Player awards (颁奖典礼) */}
       {overallPlayers.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-4">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
           <h3 className="text-sm font-bold text-slate-200 mb-3 flex items-center gap-1.5">
             <Icon name="chart" size={15} /> 赛季综合表现
           </h3>
@@ -342,7 +342,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         const awards = (world.playerAwardsHistory ?? []).filter(a => a.season === seasonNumber);
         if (awards.length === 0) return null;
         return (
-          <div className="bg-gradient-to-br from-amber-900/15 via-slate-800 to-slate-800 rounded-xl border border-amber-800/30 p-4">
+          <div className="bg-gradient-to-br from-amber-900/15 via-slate-800 to-slate-800 rounded-lg border border-amber-800/30 p-4">
             <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-1.5">
               <span>🏆</span><span>颁奖典礼</span>
             </h3>
@@ -377,7 +377,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           const kingNum = king.identity.playerNumber ?? '';
           const kingName = king.identity.playerName;
           return (
-            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-amber-900/20 to-slate-800 border-b border-slate-700/50">
                 <div className="flex items-center gap-3">
                   <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: king.identity.teamColor ?? '#f59e0b' }}>
@@ -414,7 +414,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           const kingNum = king.identity.playerNumber ?? '';
           const kingName = king.identity.playerName;
           return (
-            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
               <div className="p-3 bg-gradient-to-r from-emerald-900/20 to-slate-800 border-b border-slate-700/50">
                 <div className="flex items-center gap-3">
                   <Link to={`/player/${king.playerId}`} className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-black text-white shrink-0 hover:opacity-80" style={{ backgroundColor: king.identity.teamColor ?? '#10b981' }}>
@@ -448,9 +448,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       </div>
 
       {/* Derived team/coach observations; official player awards are above. */}
-      <div className="bg-gradient-to-r from-purple-900/15 via-slate-800 to-purple-900/15 rounded-xl border border-purple-700/30 overflow-hidden">
-        <div className="px-4 py-3 border-b border-purple-700/20">
-          <h3 className="text-sm font-bold text-purple-300">球队与教练观察</h3>
+      <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]">
+        <div className="border-b border-[var(--border-subtle)] px-4 py-3">
+          <h3 className="text-sm font-bold text-[var(--competition-gold)]">球队与教练观察</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-700/30">
           {/* Best Coach — team with highest position vs expectation */}
@@ -496,7 +496,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* World Cup */}
       {honor.worldCupWinner && (
-        <div className="bg-sky-900/15 rounded-xl border border-sky-800/30 p-3">
+        <div className="bg-sky-900/15 rounded-lg border border-sky-800/30 p-3">
           <h3 className="text-xs font-semibold text-sky-400 mb-2">环球冠军杯</h3>
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <span className="text-amber-400 font-semibold">冠军:</span>
@@ -508,7 +508,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
       {/* Season buffs recap */}
       {buffs.length > 0 && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
           <h3 className="text-xs font-semibold text-slate-400 mb-2">赛季剧情回顾</h3>
           <div className="space-y-1.5">
             {buffs.map(buff => {
@@ -532,7 +532,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       {(honor.promoted.length > 0 || honor.relegated.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {honor.promoted.length > 0 && (
-            <div className="bg-green-900/15 rounded-xl border border-green-800/30 p-3">
+            <div className="bg-green-900/15 rounded-lg border border-green-800/30 p-3">
               <h3 className="text-xs font-semibold text-green-400 mb-2">升级球队</h3>
               {honor.promoted.map(p => (
                 <div key={p.teamId} className="text-xs text-slate-300 flex items-center gap-1.5 py-0.5">
@@ -544,7 +544,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             </div>
           )}
           {honor.relegated.length > 0 && (
-            <div className="bg-red-900/15 rounded-xl border border-red-800/30 p-3">
+            <div className="bg-red-900/15 rounded-lg border border-red-800/30 p-3">
               <h3 className="text-xs font-semibold text-red-400 mb-2">降级球队</h3>
               {honor.relegated.map(r => (
                 <div key={r.teamId} className="text-xs text-slate-300 flex items-center gap-1.5 py-0.5">
@@ -568,7 +568,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         ).slice(0, 12);
         if (highlights.length === 0) return null;
         return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-700/60">
               <h3 className="text-xs font-semibold text-slate-400">赛季大事记</h3>
             </div>
@@ -621,7 +621,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         const dominant = entries.sort((a, b) => b[1].wins - a[1].wins)[0];
 
         return (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+          <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
             <h3 className="text-xs font-semibold text-slate-400 mb-2">大洲赛季对抗</h3>
             <div className="grid grid-cols-3 gap-2">
               {entries.map(([name, data]) => {
@@ -662,7 +662,7 @@ function ChampionCard({ title, teamId, runnerUp, tb, accent }: { title: string; 
   };
 
   return (
-    <div className={`rounded-xl border p-3 ${colors[accent] ?? colors.amber}`}>
+    <div className={`rounded-lg border p-3 ${colors[accent] ?? colors.amber}`}>
       <div className="text-[10px] text-slate-500 mb-1">{title}</div>
       <div className="flex items-center gap-2">
         <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: team.color }}>
@@ -952,7 +952,7 @@ function PrimaryTeamTrajectory({
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3">
       <div className="text-[10px] text-slate-500">{label}</div>
       <div className="text-sm font-semibold text-slate-200 mt-0.5 truncate" title={value}>{value}</div>
       <div className="text-[10px] text-slate-500 truncate" title={sub}>{sub}</div>
