@@ -429,8 +429,12 @@ function DashboardContent({ world }: { world: GameWorld }) {
 
         {activeTab === 'review' && lastCompletedSeason && (
           <>
-            <TransferWindowEntry world={world} />
             <SeasonReview world={world} seasonNumber={lastCompletedSeason} />
+            <SeasonArchiveHandoff
+              world={world}
+              archivedSeason={lastCompletedSeason}
+              onObserveNext={() => selectTab('matchday')}
+            />
           </>
         )}
       </div>
@@ -1735,52 +1739,83 @@ function GodHandPanel({ teamBases }: { teamBases: Record<string, TeamBase> }) {
   );
 }
 
-/**
- * v23 — Non-blocking transfer window entry. Shows ONLY in the season
- * review tab when there's an unhandled favorite-team transfer window.
- * "处理" navigates to /market for manual review; "全自动" closes with
- * auto-resolve. If user just clicks "推进" without ever opening this,
- * the safety net in season-manager.ts auto-resolves on the next window
- * advance (one news item is emitted to make that visible).
- */
-function TransferWindowEntry({ world }: { world: GameWorld }) {
-  const navigate = useNavigate();
+function SeasonArchiveHandoff({
+  world,
+  archivedSeason,
+  onObserveNext,
+}: {
+  world: GameWorld;
+  archivedSeason: number;
+  onObserveNext: () => void;
+}) {
   const closeTransferWindow = useGameStore(s => s.closeTransferWindow);
-  if (!world.transferWindow || world.transferWindow.status !== 'open') return null;
-  const tw = world.transferWindow;
-  const pendingOffers = tw.incomingOffers.filter(o => o.resolution === 'pending').length;
-  const pendingTargets = tw.outgoingTargets.filter(t => t.resolution === 'pending').length;
+  const transferWindow = world.transferWindow?.status === 'open' ? world.transferWindow : null;
+  const pendingOffers = transferWindow?.incomingOffers.filter(o => o.resolution === 'pending').length ?? 0;
+  const pendingTargets = transferWindow?.outgoingTargets.filter(t => t.resolution === 'pending').length ?? 0;
   const totalPending = pendingOffers + pendingTargets;
+  const currentWindow = world.seasonState.calendar[world.seasonState.currentWindowIndex];
+
   return (
-    <div className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl border border-amber-700/50 p-4 mb-4">
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="text-2xl shrink-0 text-amber-400"><Icon name="stadium" size={28} /></div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-amber-300">第{tw.season}赛季转会窗口</div>
-          <div className="text-xs text-slate-400 mt-1">
-            {totalPending > 0
-              ? <>共 <span className="text-amber-300 font-bold">{totalPending}</span> 项待处理:
-                  <span className="text-slate-300 ml-1">{pendingOffers} 项报价</span>、
-                  <span className="text-slate-300">{pendingTargets} 项目标</span></>
-              : '所有决策已完成,点击「完成」收尾'}
+    <section data-testid="season-archive-handoff" className="border-y border-emerald-800/45 bg-emerald-950/10 px-3 py-4 sm:px-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <Icon name="clipboard" size={19} className="mt-0.5 shrink-0 text-emerald-300" />
+          <div className="min-w-0">
+            <div className="ui-eyebrow text-[10px] text-emerald-400">ARCHIVE HANDOFF</div>
+            <h3 className="mt-0.5 text-sm font-bold text-slate-100">S{archivedSeason} 已封存，S{world.seasonState.seasonNumber} 等待开篇</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              冠军、观察判断与赛季故事已经写入历史；{currentWindow?.label ?? '下一赛季'}尚未结算。
+            </p>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">不处理也没关系，下次推进时会按默认策略自动结算。</div>
         </div>
-        <div className="flex gap-2 ml-auto shrink-0">
-          <button
-            onClick={() => navigate('/market')}
-            className="px-3 py-2 min-h-[36px] bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded cursor-pointer inline-flex items-center gap-1"
-          >
-            <Icon name="cart" size={14} /> 处理
-          </button>
-          <button
-            onClick={() => closeTransferWindow(true)}
-            className="px-3 py-2 min-h-[36px] bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded cursor-pointer inline-flex items-center gap-1"
-          >
-            <Icon name="bolt" size={14} /> 全自动
-          </button>
-        </div>
+        <button
+          type="button"
+          data-testid="observe-next-season"
+          onClick={onObserveNext}
+          className="press-scale inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded bg-[var(--action)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--action-hover)]"
+        >
+          <Icon name="eye" size={15} />
+          观察 S{world.seasonState.seasonNumber}
+        </button>
       </div>
-    </div>
+
+      <nav className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-700/50 pt-3 sm:grid-cols-3" aria-label="赛季归档去向">
+        <Link to="/history" className="flex min-h-11 items-center gap-2 rounded border border-slate-700/70 px-3 text-xs font-semibold text-slate-300 hover:border-amber-700/60 hover:text-amber-200">
+          <Icon name="trophy" size={15} />
+          历史荣誉
+        </Link>
+        <Link to="/chronicle" className="flex min-h-11 items-center gap-2 rounded border border-slate-700/70 px-3 text-xs font-semibold text-slate-300 hover:border-emerald-700/60 hover:text-emerald-200">
+          <Icon name="building" size={15} />
+          编年史
+        </Link>
+        {transferWindow && (
+          <Link
+            to="/market"
+            data-testid="season-handoff-transfer"
+            className="col-span-2 flex min-h-11 items-center gap-2 rounded border border-amber-700/55 px-3 text-xs font-semibold text-amber-200 hover:bg-amber-950/35 sm:col-span-1"
+          >
+            <Icon name="handshake" size={15} />
+            S{transferWindow.season} 转会窗口
+            {totalPending > 0 && <span className="ml-auto text-[11px] text-amber-400">{totalPending}项</span>}
+          </Link>
+        )}
+      </nav>
+
+      {transferWindow && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-amber-800/35 pt-3 text-[11px] text-slate-500">
+          <span className="min-w-0 flex-1">
+            新赛季转会事务可单独查看；略过时会在下次推进前按球队策略结算。
+          </span>
+          <button
+            type="button"
+            data-testid="auto-resolve-season-transfer"
+            onClick={() => closeTransferWindow(true)}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:border-slate-600 hover:text-white"
+          >
+            <Icon name="bolt" size={14} /> 交由球队处理
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

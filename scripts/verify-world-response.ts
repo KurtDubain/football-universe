@@ -284,12 +284,46 @@ async function main(): Promise<void> {
       const seasonBoundaryScreenshot = `/tmp/football-world-response-${viewport.name}-season-boundary.png`;
       await page.screenshot({ path: seasonBoundaryScreenshot, animations: 'disabled', fullPage: false });
       await page.getByTestId('open-season-review').click();
-      await page.getByTestId('season-champion-hero').waitFor();
+      const championHero = page.getByTestId('season-champion-hero');
+      const archiveHandoff = page.getByTestId('season-archive-handoff');
+      await championHero.waitFor();
+      await archiveHandoff.waitFor();
+      const reviewOrderIsCorrect = await page.evaluate(() => {
+        const hero = document.querySelector('[data-testid="season-champion-hero"]');
+        const handoff = document.querySelector('[data-testid="season-archive-handoff"]');
+        return Boolean(hero && handoff && (hero.compareDocumentPosition(handoff) & Node.DOCUMENT_POSITION_FOLLOWING));
+      });
+      if (!reviewOrderIsCorrect) {
+        throw new Error(`${viewport.name}: next-season handoff appeared before the completed-season archive`);
+      }
+      await archiveHandoff.scrollIntoViewIfNeeded();
+      const handoffScreenshot = `/tmp/football-world-response-${viewport.name}-season-handoff.png`;
+      await page.screenshot({ path: handoffScreenshot, animations: 'disabled', fullPage: false });
+      const beforeObserveNext = await page.evaluate(() => {
+        const world = (window as AuditWindow).__gameStore!.getState().world;
+        const index = world.seasonState.currentWindowIndex;
+        return { index, completed: world.seasonState.calendar[index].completed };
+      });
+      await page.getByTestId('observe-next-season').click();
+      await page.getByRole('tab', { name: '比赛日', exact: true }).waitFor();
+      const afterObserveNext = await page.evaluate(() => {
+        const world = (window as AuditWindow).__gameStore!.getState().world;
+        const index = world.seasonState.currentWindowIndex;
+        return { index, completed: world.seasonState.calendar[index].completed };
+      });
+      if (
+        afterObserveNext.index !== beforeObserveNext.index
+        || afterObserveNext.completed !== beforeObserveNext.completed
+      ) {
+        throw new Error(`${viewport.name}: opening the next-season observation unexpectedly advanced the world`);
+      }
+      await page.getByRole('tab', { name: /S\d+档案/ }).click();
+      await archiveHandoff.waitFor();
       const transferWindowOpen = await page.evaluate(() => (
         window as AuditWindow
       ).__gameStore!.getState().world.transferWindow?.status === 'open');
       if (transferWindowOpen) {
-        await page.getByText(/第\d+赛季转会窗口/).waitFor();
+        await page.getByTestId('season-handoff-transfer').waitFor();
         await page.evaluate(() => (
           window as AuditWindow
         ).__gameStore!.getState().closeTransferWindow(false));
@@ -343,6 +377,7 @@ async function main(): Promise<void> {
         featuredMatches: await page.getByTestId('world-response-match').count(),
         runtimeErrors: errors.length,
         seasonBoundaryScreenshot,
+        handoffScreenshot,
         transferScreenshot,
       });
       await context.close();

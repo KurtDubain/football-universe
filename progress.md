@@ -1,5 +1,12 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-23 v4.59.0 Season Archive Handoff
+
+- Completed the third contest-polish phase around the season boundary. The existing rollover correctly generated S1 history and stopped before S2, but opening the S1 archive rendered the S2 transfer operation before the champion and season conclusion, while the long review ended without a deliberate route back into history or the next season.
+- Dashboard now presents the complete Season Review first and closes it with one unframed archive handoff. The handoff states which season was sealed and which season remains untouched, then offers History, Chronicle, the open transfer window, team-driven transfer resolution, and a primary return to the next Matchday.
+- The transfer capability and automatic safety net remain intact, but next-season operations no longer interrupt the completed-season opening. Returning to Matchday changes only the selected view; it does not simulate the next window or mutate the world.
+- All 982 unit tests, ESLint, TypeScript, release-document gates, production/PWA build, production dependency audit, and bundle budgets passed. The production World Response audit passed the full S1-to-S2 rollover at 390x844 and 1440x900, verified champion-before-handoff DOM order, preserved an unplayed S2 opening window, retained free-market history, produced zero horizontal overflow/runtime errors, and generated visually inspected handoff screenshots. The 126-case mobile route matrix and the standard game-start browser client also passed without runtime errors.
+
 ## 2026-08-23 v4.58.0 Key-Node Arrival And Season Rhythm
 
 - Completed the second contest-polish phase around meaningful season stops. The audit found that key-node advancement correctly stopped before a target window, but Dashboard immediately offered the ordinary next-window action, allowing the node to be settled before the player had viewed why it mattered.
