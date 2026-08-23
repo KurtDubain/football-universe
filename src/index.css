@@ -729,6 +729,17 @@ body {
   background: color-mix(in srgb, var(--surface-panel) 94%, var(--action) 6%);
 }
 
+.key-node-brief {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--competition-gold) 34%, var(--border-subtle));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--competition-gold) 11%, transparent), transparent 74%);
+}
+
 .dashboard-shell { position: relative; width: 100%; margin-inline: auto; }
 
 .season-masthead {

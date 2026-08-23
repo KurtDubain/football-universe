@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatchFixture } from '../../types/match';
 import type { CalendarWindow } from '../../types/season';
 import { initializeGameWorld, type GameWorld } from '../season/season-manager';
-import { planNextKeyNode } from './key-node';
+import { isInspectableKeyNode, planNextKeyNode } from './key-node';
 
 function fixture(
   id: string,
@@ -154,5 +154,21 @@ describe('next key node planning', () => {
       fixtureId: 'story',
       blocked: false,
     });
+  });
+
+  it('separates viewable match nodes from guards and season settlement', () => {
+    const { world, favorite } = buildWorld();
+    const cupNode = planNextKeyNode(world, [favorite]);
+    expect(isInspectableKeyNode(cupNode)).toBe(true);
+
+    const atSeasonEnd: GameWorld = {
+      ...world,
+      seasonState: {
+        ...world.seasonState,
+        currentWindowIndex: 3,
+      },
+    };
+    expect(planNextKeyNode(atSeasonEnd, [favorite])).toMatchObject({ reason: 'season_end' });
+    expect(isInspectableKeyNode(planNextKeyNode(atSeasonEnd, [favorite]))).toBe(false);
   });
 });

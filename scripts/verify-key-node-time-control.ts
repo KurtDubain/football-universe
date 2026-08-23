@@ -110,6 +110,38 @@ async function main(): Promise<void> {
         throw new Error(`${viewport.name}: response target label does not match current node`);
       }
 
+      await page.getByTestId('world-response').waitFor();
+      const reachedAction = page.getByTestId('results-next-action');
+      await reachedAction.waitFor();
+      if (await reachedAction.getAttribute('data-reached-key-node') !== 'true') {
+        throw new Error(`${viewport.name}: reached node was not distinguished from an ordinary next window`);
+      }
+      await reachedAction.getByText('已抵达关键节点', { exact: true }).waitFor();
+      const viewNodeButton = page.getByTestId('view-key-node');
+      await viewNodeButton.waitFor();
+      if (await page.getByTestId('dashboard-advance').count() > 0) {
+        throw new Error(`${viewport.name}: reached key node still exposed the direct advance action`);
+      }
+      await page.screenshot({
+        path: `/tmp/football-key-node-${viewport.name}-arrival.png`,
+        animations: 'disabled',
+      });
+      await viewNodeButton.click();
+      const nodeBrief = page.getByTestId('key-node-brief');
+      await nodeBrief.waitFor();
+      await nodeBrief.getByText(/KEY NODE/).waitFor();
+      const afterViewing = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        const index = state.world.seasonState.currentWindowIndex;
+        return {
+          index,
+          completed: state.world.seasonState.calendar[index].completed,
+        };
+      });
+      if (afterViewing.index !== reached.index || afterViewing.completed) {
+        throw new Error(`${viewport.name}: viewing a key node unexpectedly simulated it`);
+      }
+
       await page.getByRole('button', { name: '打开快进菜单' }).click();
       await keyButton.getByText('当前就是关键节点', { exact: true }).waitFor();
       if (!(await keyButton.isDisabled())) {
@@ -139,6 +171,7 @@ async function main(): Promise<void> {
           completed: reached.current.completed,
           mode: reached.response.mode,
           advancedWindows: reached.response.advancedWindows,
+          viewedBeforeSimulation: afterViewing.index === reached.index && !afterViewing.completed,
         },
         runtimeErrors: errors.length,
       });

@@ -1,5 +1,12 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-23 v4.58.0 Key-Node Arrival And Season Rhythm
+
+- Completed the second contest-polish phase around meaningful season stops. The audit found that key-node advancement correctly stopped before a target window, but Dashboard immediately offered the ordinary next-window action, allowing the node to be settled before the player had viewed why it mattered.
+- Key-node reasons now have an explicit inspectable/non-inspectable presentation contract. Followed matches, story climaxes, favorite-team key fixtures, knockout cups, and relegation playoffs receive a pre-match viewing step; pending judgments and season settlement retain their existing specialized flows.
+- A key-node jump now places a compact arrival action above the potentially long World Response, replaces the local direct-advance CTA with “View node”, and carries the same factual reason into the Matchday observation runway. The fast menu shows both the reason and the number of windows it will settle.
+- Focused TypeScript, ESLint, seven key-node tests, the full 139-file / 982-test suite, and the production key-node browser audit passed. At 390x844 and 1440x900, a four-window jump stopped before League Cup R32, viewing the node did not simulate it, layouts had zero horizontal overflow, and screenshots were visually inspected without runtime errors. The complete production smoke tier also passed 10 seasons / 500 advances, 126 responsive route checks, PWA update and recovery, cup brackets, five tournament music identities, tactics, and player/team workflows; steady-state advance p95 measured 34.1 ms normally and 80.1 ms at 4x CPU.
+
 ## 2026-08-23 v4.57.0 First-Experience Convergence
 
 - Completed the first contest-polish phase without adding a tutorial or changing the observer role. The first Dashboard window now identifies itself as the opening observation, carries a compact Theme / Focus / Reveal sequence in the existing header height, labels its primary action “Reveal the first round”, and gives that action more visual weight than the optional prediction control.

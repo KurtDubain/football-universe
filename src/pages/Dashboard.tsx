@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
 import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import type { MatchFixture, MatchResult } from '../types/match';
 import type { GameWorld, NewsItem } from '../engine/season/season-manager';
 import type { TeamBase } from '../types/team';
@@ -42,6 +42,11 @@ import { buildMatchdayNarrativeDigest } from '../engine/observation/narrative-so
 import NarrativeDigest from '../components/NarrativeDigest';
 import SeasonNarrativeOverview from '../components/SeasonNarrativeOverview';
 import { useAdvancePreferences } from '../app/advance-preferences';
+import {
+  getCurrentKeyNodeGuard,
+  isInspectableKeyNode,
+  type KeyNodeReason,
+} from '../engine/observation/key-node';
 
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
@@ -56,6 +61,16 @@ function formatMoneyChip(n: number): string {
 }
 
 type TabKey = 'matchday' | 'results' | 'overview' | 'review';
+
+function keyNodeIcon(reason: KeyNodeReason): IconName {
+  switch (reason) {
+    case 'starred_match': return 'star';
+    case 'story_climax': return 'fire';
+    case 'favorite_match': return 'target';
+    case 'playoff': return 'shield';
+    default: return 'trophy';
+  }
+}
 
 export default function Dashboard() {
   const world = useGameStore((s) => s.world);
@@ -406,6 +421,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
               setLiveResult(r);
             }}
             onSeasonReview={() => selectTab('review')}
+            onObserveNext={() => selectTab('matchday')}
           />
         )}
 
@@ -545,6 +561,10 @@ function MatchdayTab({
   const narrativeMemory = useGameStore((s) => s.narrativeMemory);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
+  const currentKeyNode = useMemo(
+    () => getCurrentKeyNodeGuard(world, favoriteTeamIds, starredFixtureIds),
+    [favoriteTeamIds, starredFixtureIds, world],
+  );
 
   // Player highlights from the last batch of results — capped at 3.
   // Position is refined from `world.squads` when possible (the helper only
@@ -640,6 +660,10 @@ function MatchdayTab({
   const isOpeningObservation = world.seasonState.seasonNumber === 1
     && world.seasonState.currentWindowIndex === 0
     && world.totalElapsedWindows === 0;
+  const inspectableKeyNode = currentWindow.fixtures.length > 0
+    && isInspectableKeyNode(currentKeyNode)
+    ? currentKeyNode
+    : null;
   const actionPresentation = describeDashboardAction({
     phase: 'matchday',
     hasPendingJudgment: Boolean(world.pendingObservationJudgment),
@@ -716,6 +740,32 @@ function MatchdayTab({
             </span>
           )}
         </div>
+
+        {inspectableKeyNode && (
+          <div
+            data-testid="key-node-brief"
+            data-key-node-reason={inspectableKeyNode.reason}
+            className="key-node-brief"
+          >
+            <Icon
+              name={keyNodeIcon(inspectableKeyNode.reason)}
+              size={18}
+              className="shrink-0 text-amber-300"
+              accent="#f4c85b"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="ui-eyebrow text-[10px] text-amber-300">
+                KEY NODE · {inspectableKeyNode.reasonLabel}
+              </div>
+              <p className="mt-0.5 text-xs leading-5 text-slate-300">
+                {inspectableKeyNode.detail}
+              </p>
+            </div>
+            <span className="hidden max-w-44 shrink-0 truncate text-right text-[11px] text-slate-500 sm:block" title={inspectableKeyNode.windowLabel}>
+              {inspectableKeyNode.windowLabel}
+            </span>
+          </div>
+        )}
 
         <ObservationThemePanel
           world={world}
@@ -990,6 +1040,7 @@ function ResultsTab({
   onResultClick,
   onLiveView,
   onSeasonReview,
+  onObserveNext,
 }: {
   world: GameWorld;
   lastResults: MatchResult[];
@@ -997,13 +1048,20 @@ function ResultsTab({
   onResultClick: (r: MatchResult) => void;
   onLiveView: (r: MatchResult) => void;
   onSeasonReview: () => void;
+  onObserveNext: () => void;
 }) {
   const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
+  const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
   const advanceWindow = useGameStore((s) => s.advanceWindow);
   const isAdvancing = useGameStore((s) => s.isAdvancing);
   const currentWindow = useGameStore((s) => s.getCurrentWindow)();
+  const reachedKeyNode = useMemo(() => {
+    if (lastWorldResponse?.mode !== 'key_node' || !currentWindow?.fixtures.length) return null;
+    const plan = getCurrentKeyNodeGuard(world, favoriteTeamIds, starredFixtureIds);
+    return isInspectableKeyNode(plan) ? plan : null;
+  }, [currentWindow, favoriteTeamIds, lastWorldResponse?.mode, starredFixtureIds, world]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const handleAdvance = () => {
     playUiFeedback('advance');
@@ -1044,8 +1102,58 @@ function ResultsTab({
     );
   }
 
+  const nextAction = currentWindow ? (
+    <div
+      data-testid="results-next-action"
+      data-reached-key-node={reachedKeyNode ? 'true' : undefined}
+      className={`flex min-h-11 items-center gap-3 border-y px-3 py-2 ${reachedKeyNode
+        ? 'border-amber-700/55 bg-amber-950/20'
+        : 'border-slate-700/60 bg-slate-900/30'}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className={`text-[11px] font-semibold ${reachedKeyNode ? 'text-amber-300' : 'text-slate-400'}`}>
+          {reachedKeyNode ? '已抵达关键节点' : '下一窗口'}
+        </div>
+        <div
+          className={`truncate text-xs ${reachedKeyNode ? 'text-slate-300' : 'text-slate-500'}`}
+          title={reachedKeyNode
+            ? `${reachedKeyNode.reasonLabel} · ${currentWindow.label} · ${reachedKeyNode.detail}`
+            : currentWindow.label}
+        >
+          {reachedKeyNode ? `${reachedKeyNode.reasonLabel} · ${currentWindow.label}` : currentWindow.label}
+        </div>
+      </div>
+      {reachedKeyNode ? (
+        <button
+          type="button"
+          data-testid="view-key-node"
+          onClick={onObserveNext}
+          className="press-scale flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-amber-600 px-3 text-slate-950 transition-colors hover:bg-amber-500"
+        >
+          <Icon name="eye" size={16} />
+          <span className="text-xs font-bold">查看节点</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-testid="dashboard-advance"
+          aria-label={resultsAction.ariaLabel}
+          aria-busy={isAdvancing}
+          disabled={isAdvancing}
+          onClick={handleAdvance}
+          className="ui-action-feedback flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+        >
+          <Icon name="play" size={16} />
+          <span className="text-xs font-semibold">{resultsAction.label}</span>
+        </button>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-4">
+      {reachedKeyNode && nextAction}
+
       {lastWorldResponse ? (
         <Suspense fallback={<div className="h-32 border-y border-slate-700/60" aria-hidden />}>
           <WorldResponseSummary
@@ -1065,29 +1173,7 @@ function ResultsTab({
         </Suspense>
       )}
 
-      {currentWindow && (
-        <div
-          data-testid="results-next-action"
-          className="flex min-h-11 items-center gap-3 border-y border-slate-700/60 bg-slate-900/30 px-3 py-2"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold text-slate-400">下一窗口</div>
-            <div className="truncate text-xs text-slate-500" title={currentWindow.label}>{currentWindow.label}</div>
-          </div>
-          <button
-            type="button"
-            data-testid="dashboard-advance"
-            aria-label={resultsAction.ariaLabel}
-            aria-busy={isAdvancing}
-            disabled={isAdvancing}
-            onClick={handleAdvance}
-            className="ui-action-feedback flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
-          >
-            <Icon name="play" size={16} />
-            <span className="text-xs font-semibold">{resultsAction.label}</span>
-          </button>
-        </div>
-      )}
+      {!reachedKeyNode && nextAction}
 
       {lastWorldResponse && (
         <button

@@ -671,11 +671,14 @@ export default function Layout({ children }: LayoutProps) {
                       <div className={nextKeyNode.blocked ? 'text-amber-300' : 'text-emerald-300'}>
                         {nextKeyNode.reasonLabel} · {nextKeyNode.windowLabel}
                       </div>
-                      <div className="mt-0.5 text-slate-500">
-                        {nextKeyNode.blocked
-                          ? nextKeyNode.detail
-                          : `将结算 ${nextKeyNode.skipWindows} 个窗口，并在该节点前停下。`}
+                      <div className="mt-0.5 text-slate-400">
+                        {nextKeyNode.detail}
                       </div>
+                      {!nextKeyNode.blocked && (
+                        <div className="mt-0.5 text-slate-500">
+                          将结算 {nextKeyNode.skipWindows} 个窗口，并在该节点前停下。
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="px-1 pb-1 pt-2 text-[11px] text-slate-500">当前赛历没有可前往的后续节点。</div>

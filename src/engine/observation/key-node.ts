@@ -25,6 +25,21 @@ export interface KeyNodePlan {
   teamId?: string;
 }
 
+const INSPECTABLE_KEY_NODE_REASONS = new Set<KeyNodeReason>([
+  'starred_match',
+  'story_climax',
+  'favorite_match',
+  'cup',
+  'playoff',
+]);
+
+/** Nodes with real pre-match context that should be viewed before simulation. */
+export function isInspectableKeyNode(
+  plan: KeyNodePlan | null | undefined,
+): plan is KeyNodePlan {
+  return Boolean(plan && INSPECTABLE_KEY_NODE_REASONS.has(plan.reason));
+}
+
 const CUP_KEY_TYPES = new Set<CalendarWindow['type']>([
   'league_cup',
   'super_cup',
