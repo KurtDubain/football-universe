@@ -153,9 +153,11 @@ pnpm test:ui      # Vitest UI（浏览器面板）
 pnpm lint         # ESLint
 pnpm typecheck    # TypeScript strict + 未使用代码检查
 pnpm build        # TypeScript + 生产/PWA 构建
+pnpm budgets:check # 入口 JS、CSS、图片与 PWA 预缓存硬预算
 pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
 pnpm audit:advance-performance # 移动端推进、重复点击与存档恢复
+pnpm audit:animation-performance # 直播逐帧、P95、4x CPU 与暂停恢复预算
 pnpm audit:coach-stars         # 战术分布、长期球星供给、MOTM、性能与存档增量
 pnpm audit:narrative           # 叙事来源频率、选择平衡、性能与模拟基线对照
 pnpm verify:pwa-update         # 远端版本识别与自动更新
@@ -187,7 +189,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.60.0**
+Current release: **v4.61.0**
 
 64k+ production TypeScript lines · 220+ production source files · 140+ test files · 45+ browser/simulation audit commands
 

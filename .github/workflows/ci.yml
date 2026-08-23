@@ -58,10 +58,10 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod
 
-      - name: Build and check bundle budget
+      - name: Build and check production budgets
         run: |
           pnpm build
-          pnpm bundle:check
+          pnpm budgets:check
 
   browser-audit:
     runs-on: ubuntu-latest

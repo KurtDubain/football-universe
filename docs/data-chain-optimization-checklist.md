@@ -347,7 +347,7 @@ Contract: normal matches use 11 starters and up to three deterministic substitut
 
 - Production baseline before route splitting: main JS `922,298 B` raw / approximately `255.74 KB` gzip, PWA precache approximately `2479.71 KiB`, local cold load `84 ms` DOMContentLoaded / `86 ms` load.
 - Final production build: main JS `270,635 B` raw / `80,997 B` gzip; complete initial static JS graph `646,017 B` raw / `201,737 B` gzip; PWA precache `29` entries / `2213.90 KiB`.
-- `pnpm bundle:check` passes the `500,000 B` main-entry and `700,000 B` full-initial-graph budgets.
+- This phase originally passed `500,000 B` main-entry and `700,000 B` full-initial-graph budgets; current release thresholds are centrally frozen in `src/config/performance-budgets.ts` and enforced by `pnpm budgets:check`.
 - The PWA precache contains every static application-shell dependency and excludes all explicit deferred route chunks; `/history` reloads successfully offline after its first online visit.
 - Full verification passes: ESLint zero findings, TypeScript build, `43` test files / `418` tests, Vite production/PWA build, and fixed-seed production browser audit.
 - Ten-season audit completed `520` advances with `0 errors / 0 warnings` at every rollover. Current-save export/import/reload, browser back, deep-link refresh, and offline revisit all passed.

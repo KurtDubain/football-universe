@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-24 v4.61.0 Production Performance Budgets
+
+- Completed the fifth contest-polish closeout without opening a standalone UI refactor. One shared contract now freezes entry and initial JS, CSS, application and deployed imagery, PWA precache, and normal/4x live-frame budgets; the existing `bundle:check` remains as a compatibility alias for the broader `budgets:check` gate.
+- The gate measures actual production artifacts rather than source estimates: static-import traversal comes from the Vite manifest, CSS and images are scanned from `dist`, and the Workbox manifest is inspected for both declared entries and actual unique on-disk bytes. Smoke/full browser suites now refuse to start when the production budgets fail.
+- Removed three duplicate Workbox declarations for the manifest icon assets while preserving their automatic PWA registration. The generated precache now contains 84 unique entries instead of repeated icon rows.
+- Extracted only the rolling render telemetry from the 1,500-line Pitch Canvas into a tested framework-neutral sampler. The animation audit now checks 60-frame average, P95, and maximum draw cost instead of allowing a loose average-only threshold; animation, score timing, simulation RNG, and save data are unchanged.
+- Final Node 22.22.2 verification passed 141 test files / 994 tests, ESLint, strict TypeScript, changelog/docs/script gates, zero-vulnerability production audit, ordinary and audit PWA builds, and the new production budget gate. The ordinary entry is 195,566 / 62,013 gzip bytes, its initial graph is 458,389 / 153,574 gzip bytes, CSS is 183,485 / 28,174 gzip bytes, application/deployed imagery totals 975,295 / 2,299,078 bytes, and the actual precache is 84 unique entries / 2,053,196 bytes.
+- The final mobile live audit measured average/P95/maximum Canvas draw cost at 0.26/0.40/0.50 ms normally and 0.91/1.40/1.60 ms under 4x CPU, with no score, pause, cover, reopen, particle, long-task, or runtime violation. The real PWA update control recognized v4.61.0 without overflow, its screenshot and the ordinary production game-client screenshot were visually inspected, and the production bundle contains no audit bridge.
+
 ## 2026-08-24 v4.60.0 Competition Climax Semantics
 
 - Completed the fourth contest-polish phase around competition climax recognition. The audit found one stale six-round assumption in match tags after the World Cup moved to three group rounds, while knockout importance, tags, key-node planning, and celebration triggers each parsed stage labels independently.

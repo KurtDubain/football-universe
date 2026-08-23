@@ -1,4 +1,5 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
+import { liveFrameBudgetForCpuRate, type LiveFrameBudget } from '../src/config/performance-budgets';
 
 const baseUrl = (process.env.ANIMATION_AUDIT_URL ?? 'http://127.0.0.1:4173').replace(/\/$/, '');
 
@@ -11,13 +12,18 @@ interface RenderingMetrics {
   particleCap: number;
   renderedFrames: number;
   averageRenderMs: number;
+  p95RenderMs: number;
+  maxRenderMs: number;
   averageFrameIntervalMs: number;
+  p95FrameIntervalMs: number;
   maxFrameIntervalMs: number;
+  consecutiveSlowFrames: number;
   maxConsecutiveSlowFrames: number;
 }
 
 interface ProfileResult {
   cpuRate: number;
+  budget: LiveFrameBudget;
   fixtureId: string;
   rendering: RenderingMetrics;
   longTasks: number[];
@@ -215,16 +221,19 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
     const nextBatchReset = await dialog.getAttribute('data-fixture-id') === nextFixtureId
       && await page.locator('[data-testid="live-minute"]').textContent() === "0'";
 
-    const longTaskBudget = cpuRate === 1 ? 120 : 250;
-    const passed = rendering.averageRenderMs < 20
-      && rendering.averageFrameIntervalMs <= 33
-      && rendering.maxConsecutiveSlowFrames <= 4
+    const budget = liveFrameBudgetForCpuRate(cpuRate);
+    const passed = rendering.averageRenderMs <= budget.averageRenderMs
+      && rendering.p95RenderMs <= budget.p95RenderMs
+      && rendering.maxRenderMs <= budget.maxRenderMs
+      && rendering.averageFrameIntervalMs <= budget.averageFrameIntervalMs
+      && rendering.p95FrameIntervalMs <= budget.p95FrameIntervalMs
+      && rendering.maxConsecutiveSlowFrames <= budget.maxConsecutiveSlowFrames
       && rendering.particleCount <= rendering.particleCap
       && hiddenPaused
       && hiddenClockPaused
       && coveredPaused
       && coveredClockPaused
-      && Math.max(0, ...animationLongTasks) <= longTaskBudget
+      && Math.max(0, ...animationLongTasks) <= budget.maxLongTaskMs
       && unrelatedUpdatePreservedPlayback
       && finalScoreMatches
       && closedUnmountedCanvas
@@ -233,6 +242,7 @@ async function runProfile(cpuRate: number): Promise<ProfileResult> {
       && errors.length === 0;
     const profile = {
       cpuRate,
+      budget,
       fixtureId: expected.fixtureId,
       rendering,
       longTasks: animationLongTasks,

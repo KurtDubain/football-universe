@@ -43,6 +43,11 @@ import {
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
 import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
+import {
+  createRenderMetricsTracker,
+  EMPTY_RENDER_METRICS,
+  type RenderMetricsSnapshot,
+} from './pitch-canvas/render-metrics';
 
 interface Props {
   minute: number;
@@ -109,18 +114,13 @@ interface PitchDebugState {
   } | null;
   homeOnField: Array<{ id: string; number: number; slot: number; x: number; y: number; featured: boolean }>;
   awayOnField: Array<{ id: string; number: number; slot: number; x: number; y: number; featured: boolean }>;
-  rendering: {
+  rendering: RenderMetricsSnapshot & {
     active: boolean;
     pauseReason: 'none' | 'hidden' | 'covered' | 'paused' | 'break' | 'completed';
     quality: RenderBudget['quality'];
     dpr: number;
     particleCount: number;
     particleCap: number;
-    renderedFrames: number;
-    averageRenderMs: number;
-    averageFrameIntervalMs: number;
-    maxFrameIntervalMs: number;
-    maxConsecutiveSlowFrames: number;
   };
 }
 
@@ -303,11 +303,7 @@ function PitchCanvas(props: Props) {
       dpr: 1,
       particleCount: 0,
       particleCap: 350,
-      renderedFrames: 0,
-      averageRenderMs: 0,
-      averageFrameIntervalMs: 0,
-      maxFrameIntervalMs: 0,
-      maxConsecutiveSlowFrames: 0,
+      ...EMPTY_RENDER_METRICS,
     },
   });
 
@@ -398,16 +394,7 @@ function PitchCanvas(props: Props) {
       deviceMemory,
     });
     let currentDpr = 1;
-    const renderDurations: number[] = [];
-    const frameIntervals: number[] = [];
-    let renderedFrames = 0;
-    let consecutiveSlowFrames = 0;
-    let maxConsecutiveSlowFrames = 0;
-    let maxFrameIntervalMs = 0;
-
-    const average = (values: number[]): number => values.length === 0
-      ? 0
-      : values.reduce((sum, value) => sum + value, 0) / values.length;
+    const renderMetrics = createRenderMetricsTracker();
 
     function updateRenderingDebug(
       activeNow: boolean,
@@ -420,11 +407,7 @@ function PitchCanvas(props: Props) {
         dpr: currentDpr,
         particleCount: particlesRef.current.length,
         particleCap: renderBudget.particleCap,
-        renderedFrames,
-        averageRenderMs: average(renderDurations),
-        averageFrameIntervalMs: average(frameIntervals),
-        maxFrameIntervalMs,
-        maxConsecutiveSlowFrames,
+        ...renderMetrics.snapshot(),
       };
     }
 
@@ -504,24 +487,19 @@ function PitchCanvas(props: Props) {
     }
 
     function recordRenderDuration(duration: number): void {
-      renderedFrames++;
-      renderDurations.push(duration);
-      if (renderDurations.length > 60) renderDurations.shift();
+      renderMetrics.recordRenderDuration(duration);
       updateRenderingDebug(true, 'none');
     }
 
     function recordFrameInterval(interval: number): void {
-      frameIntervals.push(interval);
-      if (frameIntervals.length > 60) frameIntervals.shift();
-      maxFrameIntervalMs = Math.max(maxFrameIntervalMs, interval);
-      consecutiveSlowFrames = interval > 33 ? consecutiveSlowFrames + 1 : 0;
-      maxConsecutiveSlowFrames = Math.max(maxConsecutiveSlowFrames, consecutiveSlowFrames);
+      renderMetrics.recordFrameInterval(interval);
       if (renderBudget.quality === 'reduced' || renderBudget.quality === 'degraded') return;
+      const metrics = renderMetrics.snapshot();
       if (!shouldDegradeRenderBudget({
-        renderedFrames,
-        consecutiveSlowFrames,
-        averageFrameIntervalMs: average(frameIntervals),
-        averageRenderMs: average(renderDurations),
+        renderedFrames: metrics.renderedFrames,
+        consecutiveSlowFrames: metrics.consecutiveSlowFrames,
+        averageFrameIntervalMs: metrics.averageFrameIntervalMs,
+        averageRenderMs: metrics.averageRenderMs,
       })) return;
       renderBudget = degradeRenderBudget(renderBudget);
       particlesRef.current = particlesRef.current.slice(-renderBudget.particleCap);

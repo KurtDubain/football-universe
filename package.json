@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.60.0",
+  "version": "4.61.0",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -13,7 +13,8 @@
     "build": "tsc -b && vite build",
     "build:audit": "VITE_ENABLE_AUDIT=true pnpm build",
     "audio:check": "tsx scripts/check-audio-assets.ts",
-    "bundle:check": "tsx scripts/check-bundle-size.ts",
+    "budgets:check": "tsx scripts/check-bundle-size.ts",
+    "bundle:check": "pnpm budgets:check",
     "changelog:check": "tsx scripts/check-changelog.ts",
     "docs:check": "tsx scripts/check-current-docs.ts",
     "music:generate": "tsx scripts/generate-tournament-music.ts",
@@ -70,8 +71,8 @@
     "verify:observation-route": "tsx scripts/verify-observation-theme-route.ts",
     "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts",
     "verify:dashboard-focus": "tsx scripts/verify-dashboard-observation-focus.ts",
-    "verify:smoke": "pnpm build:audit && tsx scripts/run-browser-audit-suite.ts smoke",
-    "verify:full": "pnpm build:audit && tsx scripts/run-browser-audit-suite.ts full"
+    "verify:smoke": "pnpm build:audit && pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts smoke",
+    "verify:full": "pnpm build:audit && pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts full"
   },
   "dependencies": {
     "i18next": "^26.1.0",

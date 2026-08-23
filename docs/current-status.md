@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
-Last reviewed: 2026-08-23
-Current release: v4.60.0
+Last reviewed: 2026-08-24
+Current release: v4.61.0
 Status: release-ready core; active work is limited to human experience validation.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -16,9 +16,11 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 991 unit and component tests across 140 test files.
-- Approximately 64k production TypeScript lines across 237 source files.
+- 994 unit and component tests across 141 test files.
+- Approximately 64k production TypeScript lines across 239 source files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
+- Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
+- Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.
 - The live broadcast uses one tested playback controller and one tested Canvas runtime. The browser matrix verifies ordered same-minute goals, score-on-impact semantics, mobile shootouts, covered-canvas pause, close/reopen behavior, and final-score integrity.
 - Route intent preloading respects reduced-data connections; browser-history return restores route scroll, while high-use player, league, history, legend, and transfer controls retain their session context.
 - First entry now exposes one compact theme-to-focus-to-reveal path. Ordinary rounds stay within the Dashboard feedback layer, while structural competition moments retain full-screen ceremony.
