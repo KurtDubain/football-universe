@@ -1,5 +1,15 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-23 v4.57.0 First-Experience Convergence
+
+- Completed the first contest-polish phase without adding a tutorial or changing the observer role. The first Dashboard window now identifies itself as the opening observation, carries a compact Theme / Focus / Reveal sequence in the existing header height, labels its primary action “Reveal the first round”, and gives that action more visual weight than the optional prediction control.
+- Ordinary league advances no longer mount a full-viewport transition celebration. Dashboard tab motion, result cards, World Response, and observation settlement remain the local feedback; streamers, confetti, fireworks, and the trophy are reserved for knockout progress, relegation playoffs, season rollover, and finals.
+- Closed the stale-shell PWA race where a new Service Worker could activate and claim an old document before the deferred update monitor attached its listener. A mismatched deployment with no observable worker lifecycle now requests one safe session-guarded reload, still waiting for advances, route loading, and dialogs; the same deployment cannot create a reload loop.
+- Removed the 1.3 MiB social preview image from Workbox precache while keeping it in the deployed site. Focused coordinator, celebration, action-vocabulary, TypeScript, and ESLint checks passed before browser and full-suite validation.
+- Final Node 22.22.2 validation passed 139 test files / 981 tests, ESLint, strict TypeScript, changelog/docs/script gates, zero-vulnerability production audit, audit PWA build, and bundle budgets. Workbox precache fell to 89 entries / 2,000.20 KiB from the prior roughly 3.2 MiB while the initial graph remained 457,366 bytes / 153,226 bytes gzip.
+- Browser validation passed the opening observation at six viewports, with the primary action visible inside 390x844 and 430x932, 44px actions, zero overflow, one settled judgment, and no full-screen ordinary-round celebration. Synthetic version mismatch and a real old-to-new build transition each reloaded exactly once; the latter waited through a dialog, retained the save, loaded only the new entry, and reopened History offline.
+- The full smoke suite passed 10 seasons / 500 advances, 126 responsive route checks, standalone/landscape/large-text PWA states, route recovery, tournament music, cup brackets, tactics and player/team workflows without runtime errors. Advance p95 measured 31.3ms normally and 83.2ms at 4x CPU; 20 rapid attempts accepted exactly one advance. The standard game client completed two stable first-observation captures, and mobile/desktop Dashboard plus Settings-update screenshots were visually inspected.
+
 ## 2026-08-20 v4.56.1 Entry Budget And Settings Icon Polish
 
 - The initialized application shell, global layout, navigation, advance controls, and route declarations now load through one recoverable `GameShell` boundary. Welcome and pre-game Team Editor remain directly available, while an existing save still receives the same retry, offline explanation, and safe recovery behavior.

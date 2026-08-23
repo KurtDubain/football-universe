@@ -28,7 +28,6 @@ export default function Celebration({
 
   if (!visible) return null;
 
-  if (type === 'transition') return <TransitionCelebration seed={seed} />;
   if (type === 'streamers') return <StreamersCelebration seed={seed} />;
   if (type === 'fireworks') return <FireworksCelebration seed={seed} withConfetti />;
   if (type === 'trophy') return <TrophyCelebration seed={seed} />;
@@ -79,21 +78,8 @@ function ConfettiCelebration({ count, seed }: { count: number; seed: number }) {
   );
 }
 
-function TransitionCelebration({ seed }: { seed: number }) {
-  return (
-    <div
-      data-testid="transition-celebration"
-      className="fixed inset-0 z-[100] pointer-events-none overflow-hidden motion-reduce:hidden"
-      aria-hidden="true"
-    >
-      <div className="celebration-transition-wash" />
-      <StreamersCelebration seed={seed} compact />
-    </div>
-  );
-}
-
-function StreamersCelebration({ seed, compact = false }: { seed: number; compact?: boolean }) {
-  const count = compact ? 8 : 18;
+function StreamersCelebration({ seed }: { seed: number }) {
+  const count = 18;
   const streamers = Array.from({ length: count }, (_, index) => {
     const side = index % 2 === 0 ? 'left' : 'right';
     const color = CONFETTI_COLORS[(index + seed) % CONFETTI_COLORS.length];
@@ -104,7 +90,7 @@ function StreamersCelebration({ seed, compact = false }: { seed: number; compact
 
   return (
     <div
-      data-testid={compact ? undefined : 'streamers-celebration'}
+      data-testid="streamers-celebration"
       className="fixed inset-0 z-[100] pointer-events-none overflow-hidden motion-reduce:hidden"
       aria-hidden="true"
     >

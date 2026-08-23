@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { shouldCelebrate } from './celebration-logic';
 
 describe('advance celebration hierarchy', () => {
-  it('uses a restrained transition for an ordinary matchday', () => {
+  it('keeps ordinary matchdays inside the dashboard instead of covering the screen', () => {
     expect(shouldCelebrate('league', '第 8 轮', [
       { competitionType: 'league', roundLabel: '第 8 轮' },
-    ])).toBe('transition');
+    ])).toBeNull();
   });
 
   it('marks knockout progression with streamers without implying a trophy', () => {

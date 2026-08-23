@@ -97,7 +97,7 @@ export default function ObservationPanel({
 
   if (!expanded) {
     return (
-      <div className={advanceButton ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-2' : undefined}>
+      <div className={advanceButton ? 'grid grid-cols-[minmax(0,0.82fr)_minmax(8.5rem,1.18fr)] gap-2' : undefined}>
         <button
           type="button"
           onClick={() => {

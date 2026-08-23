@@ -61,7 +61,7 @@ export function shouldCelebrate(
   windowType: string,
   roundLabel: string,
   results: { competitionType: string; roundLabel: string }[],
-): CelebrationType {
+): CelebrationType | null {
   if (results.some(result => result.roundLabel === 'Final' || result.roundLabel === '决赛')) return 'trophy';
   if (windowType === 'season_end') return 'fireworks';
   if (windowType === 'relegation_playoff') return 'confetti';
@@ -74,5 +74,5 @@ export function shouldCelebrate(
     || windowType === 'world_cup';
   if (isCupWindow && isKnockoutStage) return 'streamers';
 
-  return 'transition';
+  return null;
 }

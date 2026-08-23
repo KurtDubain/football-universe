@@ -40,7 +40,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'og-image.png'],
+      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: '足球联赛宇宙 Football Universe',
         short_name: '足球宇宙',
@@ -63,6 +63,7 @@ export default defineConfig({
         clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,webmanifest}'],
         globIgnores: [
+          'og-image.png',
           'assets/{AdvancedSearch,Calendar,Chronicle,CoachDetail,Coaches,Compare,Cup,History,League,Legends,Market,MemorableMatches,PlayerDetail,Players,Settings,TeamDetail,TeamEditor,Teams,Transfers}-*.js',
           'assets/match-opener-domestic-cup-v1-*.webp',
           'assets/match-opener-continental-v1-*.webp',

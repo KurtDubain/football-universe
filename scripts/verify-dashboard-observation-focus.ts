@@ -66,7 +66,7 @@ async function main(): Promise<void> {
       const advance = runway.getByTestId('dashboard-advance');
       const secondaryFocus = focus.locator('[data-secondary="true"]');
       await focus.getByText(/关键球员/).first().waitFor();
-      await advance.getByText('揭晓本轮', { exact: true }).waitFor();
+      await advance.getByText('揭晓首轮', { exact: true }).waitFor();
       const collapsedLayout = await page.evaluate(() => {
         const runwayElement = document.querySelector<HTMLElement>('[data-testid="observation-runway"]');
         const themeElement = runwayElement?.querySelector<HTMLElement>('[data-testid="observation-theme"]');
@@ -79,6 +79,10 @@ async function main(): Promise<void> {
         const judgmentRect = judgmentElement?.getBoundingClientRect();
         const advanceRect = advanceElement?.getBoundingClientRect();
         const secondaryRect = secondaryElement?.getBoundingClientRect();
+        const openingPath = runwayElement
+          ? [...runwayElement.querySelectorAll<HTMLElement>('.opening-observation-path li span')]
+            .map(element => element.textContent?.trim())
+          : [];
         const focusIds = [...document.querySelectorAll<HTMLElement>('[data-testid="focus-matches"] [data-fixture-id]')]
           .map(element => element.dataset.fixtureId)
           .filter(Boolean);
@@ -95,6 +99,8 @@ async function main(): Promise<void> {
             && judgmentElement
             && advanceElement
           ),
+          opening: runwayElement?.dataset.opening === 'true',
+          openingPath,
           themeTop: themeRect?.top ?? Number.POSITIVE_INFINITY,
           focusTop: focusRect?.top ?? Number.POSITIVE_INFINITY,
           judgmentTop: judgmentRect?.top ?? Number.POSITIVE_INFINITY,
@@ -108,6 +114,9 @@ async function main(): Promise<void> {
       });
       if (!collapsedLayout.runwayContainsAll || collapsedLayout.primaryActions !== 1) {
         throw new Error(`${viewport.name}: observation controls are not unified ${JSON.stringify(collapsedLayout)}`);
+      }
+      if (!collapsedLayout.opening || collapsedLayout.openingPath.join('>') !== '主题>焦点>揭晓') {
+        throw new Error(`${viewport.name}: first observation path is unclear ${JSON.stringify(collapsedLayout)}`);
       }
       if (collapsedLayout.duplicateNoticeIds.length > 0) {
         throw new Error(`${viewport.name}: focus fixture repeated in secondary notices ${JSON.stringify(collapsedLayout)}`);
@@ -148,7 +157,7 @@ async function main(): Promise<void> {
       await star.click();
       await runway.getByRole('button', { name: '推进本轮并无剧透观看已锁定的焦点比赛' }).waitFor();
       await focus.locator('button[aria-label="取消锁定焦点观战"]').click();
-      await runway.getByRole('button', { name: '揭晓本轮比赛结果' }).waitFor();
+      await runway.getByRole('button', { name: '揭晓首轮比赛结果' }).waitFor();
 
       await judgment.click();
       const expandedPanel = runway.getByTestId('observation-panel');
@@ -173,6 +182,14 @@ async function main(): Promise<void> {
       await liveDialog.getByRole('button', { name: '退出', exact: true }).click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       await page.getByTestId('observation-settlement').waitFor({ timeout: 15_000 });
+      const ordinaryCelebrations = await page.locator([
+        '[data-testid="streamers-celebration"]',
+        '[data-testid="fireworks-celebration"]',
+        '[data-testid="trophy-celebration"]',
+      ].join(',')).count();
+      if (ordinaryCelebrations !== 0) {
+        throw new Error(`${viewport.name}: ordinary first round mounted a full-screen celebration`);
+      }
       const resultsNextAction = page.getByTestId('results-next-action');
       await resultsNextAction.waitFor();
       if (

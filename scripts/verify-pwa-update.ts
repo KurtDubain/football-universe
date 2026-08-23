@@ -27,9 +27,16 @@ async function main(): Promise<void> {
   if (serviceWorkerSource.includes('version.json')) {
     throw new Error('version.json must bypass the Service Worker precache');
   }
+  if (serviceWorkerSource.includes('og-image.png')) {
+    throw new Error('The social preview image must not delay the PWA precache install');
+  }
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.addInitScript(() => {
+    const count = Number.parseInt(sessionStorage.getItem('pwa-update-document-count') ?? '0', 10);
+    sessionStorage.setItem('pwa-update-document-count', String(count + 1));
+  });
   let remoteBuildId = deployedVersion.buildId;
   await context.route('**/version.json?*', route => route.fulfill({
     status: 200,
@@ -70,6 +77,11 @@ async function main(): Promise<void> {
 
     remoteBuildId = auditBuildId;
     await page.getByTestId('check-app-update').click();
+    await page.waitForFunction(() => Number(sessionStorage.getItem('pwa-update-document-count')) === 2);
+    await page.getByRole('heading', { name: '设置' }).waitFor();
+    await page.waitForFunction(() => Boolean((window as typeof window & {
+      __appUpdateAudit?: { getState: () => { registered: boolean } };
+    }).__appUpdateAudit?.getState().registered));
     await page.getByTestId('app-update-status').filter({ hasText: `发现 v${packageVersion}` }).waitFor();
     await page.waitForFunction(expectedBuildId => {
       const monitor = (window as typeof window & {
@@ -86,6 +98,7 @@ async function main(): Promise<void> {
         __appUpdateAudit?: { getState: () => unknown };
       }).__appUpdateAudit?.getState(),
       controlled: Boolean(navigator.serviceWorker.controller),
+      documentCount: Number(sessionStorage.getItem('pwa-update-document-count')),
       overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
     }));
 
@@ -105,6 +118,7 @@ async function main(): Promise<void> {
       || !monitor.registered
       || (monitor.updateRequests ?? 0) < 1
       || (monitor.completedUpdateRequests ?? 0) < 1
+      || auditState.documentCount !== 2
     ) {
       throw new Error(`Remote deployment was not detected: ${JSON.stringify(auditState)}`);
     }

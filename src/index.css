@@ -839,6 +839,21 @@ body {
 .dashboard-tabs .ui-segmented-option[aria-selected='true'] { background: transparent; color: var(--paper); }
 .dashboard-tabs .ui-segmented-option[aria-selected='true']::after { position: absolute; inset: auto 0.6rem -0.2rem; height: 3px; background: var(--action); content: ''; }
 
+.opening-observation-path {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+}
+
+.opening-observation-path li { display: flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
+.opening-observation-path li + li::before { margin-right: 0.15rem; color: var(--border-strong); content: '/'; }
+.opening-observation-path strong { color: var(--competition-gold); font-family: 'DIN Alternate', 'Arial Narrow', 'Inter', sans-serif; }
+.opening-observation-path li:last-child span { color: var(--text-secondary); font-weight: 700; }
+
 .dashboard-tab-content { animation-duration: var(--motion-normal); animation-timing-function: var(--ease-out); animation-fill-mode: both; }
 .dashboard-tab-content[data-tab-direction='forward'] { animation-name: tab-enter-forward; }
 .dashboard-tab-content[data-tab-direction='backward'] { animation-name: tab-enter-backward; }
@@ -1404,12 +1419,6 @@ body {
   100% { transform: scale(2.5); opacity: 0; }
 }
 
-@keyframes celebration-transition-wash {
-  0% { opacity: 0; transform: scaleX(0.25); }
-  38% { opacity: 0.28; transform: scaleX(1); }
-  100% { opacity: 0; transform: scaleX(1); }
-}
-
 @keyframes celebration-streamer-left {
   0% { opacity: 0; transform: translate3d(-3vw, 16vh, 0) rotate(-24deg) scaleY(0.45); }
   16% { opacity: 1; }
@@ -1436,14 +1445,6 @@ body {
   20% { opacity: 0.95; transform: scale(1); }
   58% { opacity: 0.45; transform: scale(2.2); }
   100% { opacity: 0; transform: scale(3); }
-}
-
-.celebration-transition-wash {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(63,185,120,0.2) 48%, rgba(215,173,85,0.18) 52%, transparent);
-  transform-origin: center;
-  animation: celebration-transition-wash 1.15s var(--ease-out) both;
 }
 
 .celebration-streamer {

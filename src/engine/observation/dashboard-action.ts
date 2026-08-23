@@ -8,11 +8,13 @@ export function describeDashboardAction({
   hasPendingJudgment = false,
   hasStarredFocus = false,
   isAdvancing = false,
+  isOpeningObservation = false,
 }: {
   phase: 'matchday' | 'results';
   hasPendingJudgment?: boolean;
   hasStarredFocus?: boolean;
   isAdvancing?: boolean;
+  isOpeningObservation?: boolean;
 }): DashboardActionPresentation {
   if (isAdvancing) {
     return { label: '模拟中...', ariaLabel: '正在模拟' };
@@ -28,6 +30,9 @@ export function describeDashboardAction({
   }
   if (hasPendingJudgment) {
     return { label: '揭晓判断', ariaLabel: '揭晓本轮观察判断' };
+  }
+  if (isOpeningObservation) {
+    return { label: '揭晓首轮', ariaLabel: '揭晓首轮比赛结果' };
   }
   return { label: '揭晓本轮', ariaLabel: '揭晓本轮比赛结果' };
 }

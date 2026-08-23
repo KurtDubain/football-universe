@@ -187,7 +187,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.56.1**
+Current release: **v4.57.0**
 
 63k+ production TypeScript lines · 220+ production source files · 130+ test files · 45+ browser/simulation audit commands
 

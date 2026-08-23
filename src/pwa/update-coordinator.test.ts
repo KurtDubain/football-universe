@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canReloadForAppUpdate,
+  claimDeploymentReload,
+  clearDeploymentReloadClaim,
   createSafeUpdateCoordinator,
+  deploymentReloadIdentity,
   parseRemoteAppVersion,
 } from './update-coordinator';
 
@@ -30,6 +33,24 @@ describe('app update coordinator', () => {
     expect(canReloadForAppUpdate({ visible: true, isAdvancing: true, hasBlockingDialog: false, isRouteLoading: false })).toBe(false);
     expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: true, isRouteLoading: false })).toBe(false);
     expect(canReloadForAppUpdate({ visible: true, isAdvancing: false, hasBlockingDialog: false, isRouteLoading: true })).toBe(false);
+  });
+
+  it('claims at most one fallback reload for the same remote deployment', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    const identity = deploymentReloadIdentity({ version: '4.57.0', buildId: 'deploy-57' });
+
+    expect(identity).toBe('build:deploy-57');
+    expect(claimDeploymentReload(storage, identity)).toBe(true);
+    expect(claimDeploymentReload(storage, identity)).toBe(false);
+    expect(claimDeploymentReload(storage, 'build:deploy-58')).toBe(true);
+
+    clearDeploymentReloadClaim(storage);
+    expect(claimDeploymentReload(storage, identity)).toBe(true);
   });
 
   it('waits through an unsafe operation and reloads once after it becomes safe', () => {

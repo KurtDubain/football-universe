@@ -637,11 +637,15 @@ function MatchdayTab({
     ...(narrativeDigest.feature?.fixtureIds ?? []),
     ...narrativeDigest.signals.flatMap(item => item.fixtureIds ?? []),
   ]);
+  const isOpeningObservation = world.seasonState.seasonNumber === 1
+    && world.seasonState.currentWindowIndex === 0
+    && world.totalElapsedWindows === 0;
   const actionPresentation = describeDashboardAction({
     phase: 'matchday',
     hasPendingJudgment: Boolean(world.pendingObservationJudgment),
     hasStarredFocus: focusMatches.some(entry => starredFixtureIds.includes(entry.fixture.id)),
     isAdvancing,
+    isOpeningObservation,
   });
 
   // Group every fixture so headers keep truthful counts. Focus fixtures are
@@ -672,11 +676,23 @@ function MatchdayTab({
 
   return (
     <div className="space-y-5">
-      <section data-testid="observation-runway" className="observation-runway">
+      <section
+        data-testid="observation-runway"
+        data-opening={isOpeningObservation ? 'true' : undefined}
+        className="observation-runway"
+      >
         <div className="flex min-h-11 items-center gap-2 border-b border-slate-700/60 px-3 py-2">
           <Icon name="eye" size={16} className="shrink-0 text-emerald-400" />
-          <span className="shrink-0 text-xs font-bold text-slate-100">本轮观察</span>
-          {primaryTeam && (
+          <span className="shrink-0 text-xs font-bold text-slate-100">
+            {isOpeningObservation ? '首次观察' : '本轮观察'}
+          </span>
+          {isOpeningObservation ? (
+            <ol className="opening-observation-path" aria-label="首次观察路线">
+              <li><strong>01</strong><span>主题</span></li>
+              <li><strong>02</strong><span>焦点</span></li>
+              <li><strong>03</strong><span>揭晓</span></li>
+            </ol>
+          ) : primaryTeam ? (
             <>
               <span className="text-slate-700">|</span>
               <TeamBadge
@@ -693,10 +709,12 @@ function MatchdayTab({
                 {primaryTeam.shortName}
               </Link>
             </>
+          ) : null}
+          {!isOpeningObservation && (
+            <span className="ml-auto min-w-0 truncate text-right text-[11px] text-slate-500" title={currentWindow.label}>
+              {currentWindow.label}
+            </span>
           )}
-          <span className="ml-auto min-w-0 truncate text-right text-[11px] text-slate-500" title={currentWindow.label}>
-            {currentWindow.label}
-          </span>
         </div>
 
         <ObservationThemePanel

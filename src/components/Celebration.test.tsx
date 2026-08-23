@@ -21,12 +21,9 @@ describe('Celebration', () => {
     vi.useRealTimers();
   });
 
-  it('renders distinct transition, streamer, fireworks and trophy layers', () => {
+  it('renders distinct streamer, fireworks and trophy layers', () => {
     const root = createRoot(host);
-    act(() => root.render(<Celebration active type="transition" seed={3} />));
-    expect(document.body.querySelector('[data-testid="transition-celebration"]')).not.toBeNull();
-
-    act(() => root.render(<Celebration key="streamers" active type="streamers" seed={3} />));
+    act(() => root.render(<Celebration active type="streamers" seed={3} />));
     expect(document.body.querySelector('[data-testid="streamers-celebration"]')).not.toBeNull();
 
     act(() => root.render(<Celebration key="fireworks" active type="fireworks" seed={3} />));
@@ -38,12 +35,12 @@ describe('Celebration', () => {
     act(() => root.unmount());
   });
 
-  it('removes a transition after its bounded duration', () => {
+  it('removes streamers after their bounded duration', () => {
     const root = createRoot(host);
-    const duration = celebrationDuration('transition');
-    act(() => root.render(<Celebration active type="transition" />));
+    const duration = celebrationDuration('streamers');
+    act(() => root.render(<Celebration active type="streamers" />));
     act(() => vi.advanceTimersByTime(duration));
-    expect(document.body.querySelector('[data-testid="transition-celebration"]')).toBeNull();
+    expect(document.body.querySelector('[data-testid="streamers-celebration"]')).toBeNull();
     act(() => root.unmount());
   });
 });

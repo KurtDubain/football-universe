@@ -3,6 +3,40 @@ export interface RemoteAppVersion {
   buildId: string | null;
 }
 
+const APP_UPDATE_RELOAD_MARKER = 'football-app-update-reload';
+
+interface ReloadMarkerStorage {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+}
+
+export function deploymentReloadIdentity(remote: RemoteAppVersion): string {
+  return remote.buildId ? `build:${remote.buildId}` : `version:${remote.version}`;
+}
+
+export function claimDeploymentReload(
+  storage: ReloadMarkerStorage,
+  identity: string,
+): boolean {
+  try {
+    if (storage.getItem(APP_UPDATE_RELOAD_MARKER) === identity) return false;
+    storage.setItem(APP_UPDATE_RELOAD_MARKER, identity);
+    return true;
+  } catch {
+    // A denied sessionStorage should not prevent an otherwise valid update.
+    return true;
+  }
+}
+
+export function clearDeploymentReloadClaim(storage: ReloadMarkerStorage): void {
+  try {
+    storage.removeItem(APP_UPDATE_RELOAD_MARKER);
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts.
+  }
+}
+
 export interface ReloadSafetySnapshot {
   visible: boolean;
   isAdvancing: boolean;

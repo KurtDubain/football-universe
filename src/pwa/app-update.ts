@@ -2,8 +2,12 @@ import { useGameStore } from '../store/game-store';
 import { APP_VERSION } from '../version';
 import {
   canReloadForAppUpdate,
+  claimDeploymentReload,
+  clearDeploymentReloadClaim,
   createSafeUpdateCoordinator,
+  deploymentReloadIdentity,
   parseRemoteAppVersion,
+  type RemoteAppVersion,
 } from './update-coordinator';
 import { ROUTE_RESOURCE_ERROR_EVENT, ROUTE_RESOURCE_SETTLED_EVENT } from './events';
 
@@ -113,12 +117,24 @@ export function startAppUpdateMonitor(): () => void {
   let lastRemoteVersion: string | null = null;
   let lastRemoteBuildId: string | null = null;
   let expectingControllerChange = false;
+  let reloadClaimedThisPage = false;
   let removeRegistrationListener: (() => void) | null = null;
 
   const coordinator = createSafeUpdateCoordinator({
     isSafeToReload,
     reload: () => window.location.reload(),
   });
+
+  const requestSafeReload = (remote?: RemoteAppVersion) => {
+    const identity = remote
+      ? deploymentReloadIdentity(remote)
+      : `worker:${APP_VERSION}:${__APP_BUILD_ID__}`;
+    if (reloadClaimedThisPage) return;
+    reloadClaimedThisPage = true;
+    if (!claimDeploymentReload(window.sessionStorage, identity)) return;
+    publishUpdateState({ phase: 'ready', pendingReload: true });
+    coordinator.requestReload();
+  };
 
   const checkNow = (manual = false): Promise<boolean> => {
     if (!navigator.onLine) {
@@ -158,6 +174,7 @@ export function startAppUpdateMonitor(): () => void {
           ? remote.buildId === __APP_BUILD_ID__
           : remote.version === APP_VERSION;
         if (sameDeployment) {
+          clearDeploymentReloadClaim(window.sessionStorage);
           if (manual) {
             // Also ask the browser to revalidate sw.js. This catches the narrow
             // window where version.json and the worker reach an edge at different times.
@@ -186,6 +203,18 @@ export function startAppUpdateMonitor(): () => void {
         updateRequests += 1;
         await registration?.update();
         completedUpdateRequests += 1;
+
+        // A newer worker may have activated and claimed this stale document
+        // before this deferred monitor attached its controllerchange listener.
+        // If no worker lifecycle is now observable, converge with one guarded
+        // safe reload instead of requiring repeated manual refreshes.
+        if (
+          !expectingControllerChange
+          && !registration?.installing
+          && !registration?.waiting
+        ) {
+          requestSafeReload(remote);
+        }
         return true;
       } catch {
         if (manual) publishUpdateState({ phase: 'error', checkedAt: Date.now() });
@@ -207,8 +236,7 @@ export function startAppUpdateMonitor(): () => void {
       if (worker.state === 'activated') {
         worker.removeEventListener('statechange', handleStateChange);
         if (isUpdate) {
-          publishUpdateState({ phase: 'ready', pendingReload: true });
-          coordinator.requestReload();
+          requestSafeReload();
         }
       } else if (worker.state === 'redundant') {
         worker.removeEventListener('statechange', handleStateChange);
@@ -220,8 +248,9 @@ export function startAppUpdateMonitor(): () => void {
 
   const handleControllerChange = () => {
     if (expectingControllerChange) {
-      publishUpdateState({ phase: 'ready', pendingReload: true });
-      coordinator.requestReload();
+      requestSafeReload(lastRemoteVersion
+        ? { version: lastRemoteVersion, buildId: lastRemoteBuildId }
+        : undefined);
     }
   };
   navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
@@ -246,8 +275,7 @@ export function startAppUpdateMonitor(): () => void {
     if (activeRegistration.installing) handleUpdateFound();
     if (activeRegistration.waiting && navigator.serviceWorker.controller) {
       expectingControllerChange = true;
-      publishUpdateState({ phase: 'ready', pendingReload: true });
-      coordinator.requestReload();
+      requestSafeReload();
     }
     void checkNow();
   }).catch(error => {

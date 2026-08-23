@@ -7,6 +7,13 @@ describe('dashboard action vocabulary', () => {
     expect(describeDashboardAction({ phase: 'results' }).label).toBe('继续观察');
   });
 
+  it('gives the first reveal a distinct opening label', () => {
+    expect(describeDashboardAction({
+      phase: 'matchday',
+      isOpeningObservation: true,
+    })).toEqual({ label: '揭晓首轮', ariaLabel: '揭晓首轮比赛结果' });
+  });
+
   it('distinguishes pending judgments and starred live viewing', () => {
     expect(describeDashboardAction({
       phase: 'matchday',
