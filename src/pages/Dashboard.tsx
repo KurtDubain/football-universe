@@ -325,7 +325,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
                   <TeamBadge teamId={tid} shortName={fav.shortName} color={fav.color} size={28} />
                   <Link
                     to={`/team/${tid}`}
-                    className="min-w-0 font-semibold text-[var(--text-primary)] hover:text-white"
+                    className="shrink-0 whitespace-nowrap font-semibold text-[var(--text-primary)] hover:text-white"
                     title={fav.name}
                   >
                     <span className="sm:hidden">{fav.shortName}</span>
@@ -745,7 +745,7 @@ function MatchdayTab({
           )}
         </div>
 
-        {inspectableKeyNode && (
+        {inspectableKeyNode && !isOpeningObservation && (
           <div
             data-testid="key-node-brief"
             data-key-node-reason={inspectableKeyNode.reason}

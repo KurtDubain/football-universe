@@ -1,5 +1,14 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-08-24 v4.60.0 Competition Climax Semantics
+
+- Completed the fourth contest-polish phase around competition climax recognition. The audit found one stale six-round assumption in match tags after the World Cup moved to three group rounds, while knockout importance, tags, key-node planning, and celebration triggers each parsed stage labels independently.
+- Added one compact competition-stage contract backed by configured group-round counts. It normalizes Chinese and English R16/quarter-final/semi-final/final labels and recognizes the World Cup and continental third rounds plus the Super Cup sixth round as factual group-stage finales.
+- Group finales now receive focus importance, a visible “小组收官” fixture tag, a protected pre-match key-node arrival, and restrained streamers after completion. A same-window storyline climax remains visible in the observation layer but no longer hides the structural stage title; earlier story nodes still retain chronological priority.
+- Mobile primary-team short names no longer split across lines. The expanded production browser audit genuinely advanced a fresh S1 world to Super Cup Group R6 at 390x844 and 1440x900, verified the unplayed arrival, stage tag, single-window completion, streamer layer, world response, zero overflow, and zero runtime errors; both clean pre-match screenshots were visually inspected.
+- The final cross-phase first-observation audit caught that a current key-match brief added in phase two duplicated the opening Theme / Focus / Reveal runway and pushed the 390x844 primary action below the viewport. Opening observation now keeps the fixture focus and advance guard without repeating that strip; the action bottom returned to 842.6px, and all six first-route viewports passed.
+- Final verification passed 140 test files / 991 tests, strict TypeScript, ESLint, production/PWA build, release-document and bundle gates, production dependency audit, responsive routes, and the standard game client.
+
 ## 2026-08-23 v4.59.0 Season Archive Handoff
 
 - Completed the third contest-polish phase around the season boundary. The existing rollover correctly generated S1 history and stopped before S2, but opening the S1 archive rendered the S2 transfer operation before the champion and season conclusion, while the long review ended without a deliberate route back into history or the next season.

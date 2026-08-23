@@ -182,5 +182,42 @@ describe('observer fixture importance', () => {
       world,
       [],
     ).reasons).toContain('1/4决赛');
+    expect(computeFixtureImportance(
+      { ...template, roundLabel: '四强' },
+      world,
+      [],
+    ).reasons).toContain('半决赛');
+    expect(computeFixtureImportance(
+      { ...template, roundLabel: '八强' },
+      world,
+      [],
+    ).reasons).toContain('1/4决赛');
+    expect(computeFixtureImportance(
+      { ...template, roundLabel: '16强' },
+      world,
+      [],
+    ).reasons).toContain('淘汰赛');
+  });
+
+  it('surfaces the final group round as a factual qualification-stage focus', () => {
+    const world = initializeGameWorld(20260718);
+    const template = getCurrentWindow(world)!.fixtures[0];
+    const closing = computeFixtureImportance({
+      ...template,
+      competitionType: 'world_cup_group',
+      competitionName: '环球冠军杯',
+      roundLabel: 'Group A - R3',
+      isNeutralVenue: true,
+    }, world, []);
+    const ordinary = computeFixtureImportance({
+      ...template,
+      competitionType: 'world_cup_group',
+      competitionName: '环球冠军杯',
+      roundLabel: 'Group A - R2',
+      isNeutralVenue: true,
+    }, world, []);
+
+    expect(closing.reasons).toContain('小组收官');
+    expect(closing.score - ordinary.score).toBe(4);
   });
 });

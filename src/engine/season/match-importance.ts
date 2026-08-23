@@ -1,6 +1,12 @@
 import { GameWorld } from './season-manager';
 import { MatchFixture } from '../../types/match';
 import { isDerby } from '../../config/derbies';
+import {
+  getKnockoutRoundRank,
+  isGroupStageClosingRound,
+} from '../competitions/stage-semantics';
+
+export { getKnockoutRoundRank } from '../competitions/stage-semantics';
 
 export interface FixtureImportance {
   fixtureId: string;
@@ -16,28 +22,13 @@ interface FocusPriority {
   marquee: number;
 }
 
-export function getKnockoutRoundRank(roundLabel: string): number {
-  const lower = roundLabel.toLowerCase();
-  const upper = roundLabel.trim().toUpperCase();
-  if (lower.includes('quarter') || roundLabel.includes('1/4') || upper.startsWith('QF')) return 2;
-  if (lower.includes('semi') || roundLabel.includes('半决') || upper.startsWith('SF')) return 3;
-  if (
-    lower.includes('round of 16')
-    || lower.includes('round-of-16')
-    || roundLabel.includes('1/8')
-    || roundLabel.includes('淘汰')
-    || upper.startsWith('R16')
-  ) return 1;
-  if (lower.trim() === 'final' || roundLabel.trim() === '决赛') return 4;
-  return 0;
-}
-
 function getFocusPriority(
   fixture: MatchFixture,
   world: GameWorld,
   primaryFavoriteTeamId: string | null,
 ): FocusPriority {
-  const knockout = getKnockoutRoundRank(fixture.roundLabel);
+  const knockout = getKnockoutRoundRank(fixture.roundLabel)
+    || Number(isGroupStageClosingRound(fixture.competitionType, fixture.roundLabel));
   const top4Ids = new Set(world.league1Standings.slice(0, 4).map(entry => entry.teamId));
   const bottom5Ids = new Set(world.league1Standings.slice(-5).map(entry => entry.teamId));
   const home = world.teamBases[fixture.homeTeamId];
@@ -146,6 +137,11 @@ export function computeFixtureImportance(
   } else if (knockoutRoundRank === 1) {
     score += 4;
     reasons.push('淘汰赛');
+  }
+
+  if (isGroupStageClosingRound(fixture.competitionType, fixture.roundLabel)) {
+    score += 4;
+    reasons.push('小组收官');
   }
 
   if (fixture.competitionType === 'world_cup' || fixture.competitionType === 'world_cup_group') {

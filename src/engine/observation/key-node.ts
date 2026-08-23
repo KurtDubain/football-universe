@@ -2,6 +2,7 @@ import type { MatchFixture } from '../../types/match';
 import type { CalendarWindow } from '../../types/season';
 import { computeFixtureImportance } from '../season/match-importance';
 import type { GameWorld } from '../season/season-manager';
+import { isGroupStageClosingRound } from '../competitions/stage-semantics';
 
 export type KeyNodeReason =
   | 'pending_judgment'
@@ -55,6 +56,7 @@ const FAVORITE_IMPORTANCE_REASONS = new Set([
   '半决赛',
   '1/4决赛',
   '环球杯',
+  '小组收官',
 ]);
 
 function fixtureTeamId(fixture: MatchFixture, teamIds: ReadonlySet<string>): string | undefined {
@@ -147,6 +149,19 @@ function planForWindow(
         : `已关注的${starred.competitionName}${starred.roundLabel}将在本轮进行。`,
       blocked: includeCurrentGuards,
       fixtureId: starred.id,
+    };
+  }
+
+  if (isGroupStageClosingRound(window.type, window.label)) {
+    return {
+      seasonNumber,
+      windowIndex,
+      windowLabel: window.label,
+      skipWindows,
+      reason: 'cup',
+      reasonLabel: '小组赛收官',
+      detail: '本轮结束后将产生淘汰赛席位，先观察最终出线形势。',
+      blocked: skipWindows === 0,
     };
   }
 

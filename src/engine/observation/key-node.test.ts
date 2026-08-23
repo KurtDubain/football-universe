@@ -136,6 +136,47 @@ describe('next key node planning', () => {
     });
   });
 
+  it('stops at a configured group-stage finale before later knockout rounds', () => {
+    const { world, favorite, other } = buildWorld();
+    const groupWorld: GameWorld = {
+      ...world,
+      activeStorylines: [{
+        id: 'group-stage-story',
+        type: 'dark_horse',
+        teamId: favorite,
+        seasonNumber: world.seasonState.seasonNumber,
+        startedWindow: 0,
+        startedElapsedWindow: 0,
+        phase: '高潮',
+        evidence: ['测试证据'],
+        lastUpdatedWindow: 0,
+        lastUpdatedElapsedWindow: 0,
+        quietWindows: 0,
+      }],
+      seasonState: {
+        ...world.seasonState,
+        calendar: [
+          window(0, 'league', '普通联赛'),
+          window(1, 'world_cup_group', '环球冠军杯 小组赛R2'),
+          window(2, 'world_cup_group', '环球冠军杯 小组赛R3', [
+            fixture('group-r3', favorite, other, 'world_cup_group', 'Group A - R3'),
+          ]),
+          window(3, 'world_cup', '环球冠军杯 16强'),
+        ],
+      },
+    };
+
+    const plan = planNextKeyNode(groupWorld, []);
+    expect(plan).toMatchObject({
+      windowIndex: 2,
+      skipWindows: 2,
+      reason: 'cup',
+      reasonLabel: '小组赛收官',
+      blocked: false,
+    });
+    expect(isInspectableKeyNode(plan)).toBe(true);
+  });
+
   it('recognizes a starred current fixture as a protected node', () => {
     const { world } = buildWorld();
     expect(planNextKeyNode(world, [], ['current'])).toMatchObject({

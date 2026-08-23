@@ -1,5 +1,9 @@
 import { isDerby, getDerbyName } from '../config/derbies';
 import type { TeamBase } from '../types/team';
+import {
+  getKnockoutRoundRank,
+  isGroupStageClosingRound,
+} from '../engine/competitions/stage-semantics';
 import type { CelebrationType } from './celebration-types';
 
 export type MatchTag = {
@@ -18,17 +22,19 @@ export function getMatchTags(
   teamBases?: Record<string, TeamBase>,
 ): MatchTag[] {
   const tags: MatchTag[] = [];
-  const rl = roundLabel.toLowerCase();
+  const knockoutRound = getKnockoutRoundRank(roundLabel);
 
   if (isDerby(homeTeamId, awayTeamId, teamBases)) {
     tags.push({ label: getDerbyName(homeTeamId, awayTeamId, teamBases) ?? '德比战', color: 'bg-orange-600 text-white', glow: true });
   }
-  if (rl.includes('final') || rl.includes('决赛') || roundLabel === 'Final') {
+  if (knockoutRound === 4) {
     tags.push({ label: '决赛', color: 'bg-amber-500 text-white', glow: true });
-  } else if (rl.includes('sf') || rl.includes('四强')) {
+  } else if (knockoutRound === 3) {
     tags.push({ label: '四强', color: 'bg-purple-600 text-white' });
-  } else if (rl.includes('qf') || rl.includes('八强')) {
+  } else if (knockoutRound === 2) {
     tags.push({ label: '八强', color: 'bg-blue-600 text-white' });
+  } else if (knockoutRound === 1) {
+    tags.push({ label: '16强', color: 'bg-sky-700 text-white' });
   }
   if (competitionType === 'relegation_playoff') {
     tags.push({ label: '保级战', color: 'bg-red-600 text-white', glow: true });
@@ -51,8 +57,8 @@ export function getMatchTags(
       tags.push({ label: '收官之战', color: 'bg-emerald-700 text-white' });
     }
   }
-  if ((competitionType === 'super_cup_group' || competitionType === 'world_cup_group') && rl.includes('6')) {
-    tags.push({ label: '生死战', color: 'bg-red-500 text-white' });
+  if (isGroupStageClosingRound(competitionType, roundLabel)) {
+    tags.push({ label: '小组收官', color: 'bg-red-600 text-white' });
   }
   return tags;
 }
@@ -62,12 +68,19 @@ export function shouldCelebrate(
   roundLabel: string,
   results: { competitionType: string; roundLabel: string }[],
 ): CelebrationType | null {
-  if (results.some(result => result.roundLabel === 'Final' || result.roundLabel === '决赛')) return 'trophy';
+  if (results.some(result => getKnockoutRoundRank(result.roundLabel) === 4)) return 'trophy';
   if (windowType === 'season_end') return 'fireworks';
   if (windowType === 'relegation_playoff') return 'confetti';
+  if (isGroupStageClosingRound(windowType, roundLabel)) {
+    return 'streamers';
+  }
 
-  const stage = roundLabel.toLowerCase();
-  const isKnockoutStage = /(^|\s)(r16|qf|sf)(\s|$)|16强|八强|四强|半决赛|淘汰赛/.test(stage);
+  const windowRoundRank = getKnockoutRoundRank(roundLabel);
+  const isKnockoutStage = (windowRoundRank > 0 && windowRoundRank < 4)
+    || results.some(result => {
+      const rank = getKnockoutRoundRank(result.roundLabel);
+      return rank > 0 && rank < 4;
+    });
   const isCupWindow = windowType === 'league_cup'
     || windowType === 'super_cup'
     || windowType === 'continental_cup'

@@ -22,6 +22,7 @@ type AuditState = {
   } | null;
   newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
+  advanceWindow: () => Promise<boolean>;
 };
 
 type AuditWindow = Window & {
@@ -157,6 +158,55 @@ async function main(): Promise<void> {
         path: `/tmp/football-key-node-${viewport.name}-guarded.png`,
         animations: 'disabled',
       });
+      await page.getByRole('button', { name: '打开快进菜单' }).click();
+      await menu.waitFor({ state: 'hidden' });
+
+      await page.evaluate(async () => {
+        const store = (window as AuditWindow).__gameStore!;
+        await store.getState().newGame(20260726);
+        store.getState().setFavoriteTeams([]);
+        for (let step = 0; step < 80; step++) {
+          const state = store.getState();
+          const index = state.world.seasonState.currentWindowIndex;
+          const current = state.world.seasonState.calendar[index];
+          if (current?.type === 'super_cup_group' && /(?:R\s*6|第\s*6\s*轮)/i.test(current.label)) return;
+          if (!(await state.advanceWindow())) {
+            throw new Error('advance stopped before the Super Cup group finale');
+          }
+        }
+        throw new Error('Super Cup group finale was not found');
+      });
+
+      const matchdayTab = page.getByRole('tab', { name: '比赛日', exact: true });
+      await matchdayTab.click();
+      const groupFinaleBrief = page.getByTestId('key-node-brief');
+      await groupFinaleBrief.waitFor();
+      await groupFinaleBrief.getByText(/KEY NODE · 小组赛收官/).waitFor();
+      await page.getByText('小组收官', { exact: true }).first().waitFor();
+      const groupFinaleBefore = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        const index = state.world.seasonState.currentWindowIndex;
+        return { index, current: state.world.seasonState.calendar[index] };
+      });
+      if (groupFinaleBefore.current.completed) {
+        throw new Error(`${viewport.name}: group finale was completed before observation`);
+      }
+      const groupFinaleScreenshot = `/tmp/football-key-node-${viewport.name}-group-finale.png`;
+      await page.screenshot({ path: groupFinaleScreenshot, animations: 'disabled' });
+
+      await page.getByTestId('dashboard-advance').click();
+      await page.getByTestId('streamers-celebration').waitFor({ timeout: 10_000 });
+      await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
+      const groupFinaleAfter = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        return {
+          index: state.world.seasonState.currentWindowIndex,
+          response: state.lastWorldResponse,
+        };
+      });
+      if (groupFinaleAfter.index !== groupFinaleBefore.index + 1 || !groupFinaleAfter.response) {
+        throw new Error(`${viewport.name}: group finale did not complete into one bounded world response`);
+      }
 
       if (errors.length > 0) {
         throw new Error(`${viewport.name}: runtime errors ${errors.join(' | ')}`);
@@ -172,6 +222,12 @@ async function main(): Promise<void> {
           mode: reached.response.mode,
           advancedWindows: reached.response.advancedWindows,
           viewedBeforeSimulation: afterViewing.index === reached.index && !afterViewing.completed,
+        },
+        groupFinale: {
+          label: groupFinaleBefore.current.label,
+          viewedBeforeSimulation: !groupFinaleBefore.current.completed,
+          responseMode: groupFinaleAfter.response.mode,
+          screenshot: groupFinaleScreenshot,
         },
         runtimeErrors: errors.length,
       });
