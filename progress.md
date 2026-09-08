@@ -2,6 +2,7 @@ Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题�
 
 ## 2026-09-08 Chronicle, Season Statistics, Floating Actions, And Achievement Hall
 
+- Follow-up: fixed a presentation conservation bug where a followed-team achievement could be removed when non-followed teams formed a same-season, same-type group. The focused regression test now proves the followed card and global group coexist and every source achievement ID appears exactly once.
 - Corrected the Chronicle champion timeline so its multi-title label starts with the top-flight title and adds only trophies won by that same club in the same season, including continental trophies from the authoritative team trophy archive. A World Cup badge now also belongs only to a league champion that actually won it.
 - Added one shared season competition selector for Season Review and Chronicle. Complete archived scores produce all-competition matches, goals, and goals per match without shootout kicks; incomplete legacy archives fall back to explicitly labelled league totals from team season records.
 - Added stable achievement presentation grouping without changing achievement generation or persistence. Followed-team achievements remain individual and rank first, rare world achievements follow, repeated global achievements group only by season and achievement type, and the first view is capped at six expandable items.

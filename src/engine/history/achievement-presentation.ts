@@ -147,14 +147,7 @@ export function buildAchievementPresentation(
     }
   }
 
-  const groupedKeys = new Set(
-    [...globalGroups.entries()]
-      .filter(([, group]) => group.length > 1)
-      .map(([key]) => key),
-  );
-  const items: AchievementPresentationItem[] = singles
-    .filter(item => !groupedKeys.has(`${item.seasonNumber}:${item.achievementType}`))
-    .map(item => item);
+  const items: AchievementPresentationItem[] = [...singles];
 
   for (const [groupKey, group] of globalGroups) {
     if (group.length < 2) continue;

@@ -47,6 +47,38 @@ describe('buildAchievementPresentation', () => {
     expect(result).toHaveLength(3);
   });
 
+  it('keeps a followed achievement beside the matching non-followed group exactly once', () => {
+    const rows = [
+      achievement('first_relegation', 'datong', 1, '降级深渊'),
+      achievement('first_relegation', 'other-a', 1, '降级深渊'),
+      achievement('first_relegation', 'other-b', 1, '降级深渊'),
+    ];
+    const result = buildAchievementPresentation(
+      rows,
+      ['datong'],
+      ['datong', 'other-a', 'other-b'],
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      kind: 'single',
+      teamId: 'datong',
+      followed: true,
+    });
+    expect(result[1]).toMatchObject({
+      kind: 'group',
+      teamIds: ['other-a', 'other-b'],
+      followed: false,
+    });
+
+    const representedIds = result.flatMap(item => item.kind === 'single'
+      ? [item.achievement.id]
+      : item.entries.map(entry => entry.achievement.id));
+    expect(representedIds).toHaveLength(rows.length);
+    expect(new Set(representedIds).size).toBe(rows.length);
+    expect([...representedIds].sort()).toEqual(rows.map(row => row.id).sort());
+  });
+
   it('never merges the same achievement type across seasons', () => {
     const result = buildAchievementPresentation([
       achievement('first_relegation', 'a', 1, '降级深渊'),
