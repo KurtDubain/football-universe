@@ -5,6 +5,8 @@ import {
   getObserverLensOptions,
   OBSERVER_SEED_CANDIDATES,
   RECOMMENDED_EXPERIENCE_SEED,
+  scoreObserverOpening,
+  scoreWorldMomentCadence,
 } from './observer-experience';
 
 describe('observer experience configuration', () => {
@@ -24,6 +26,34 @@ describe('observer experience configuration', () => {
     expect(defaultTeams).toEqual(snapshot);
   });
 
+  it('rewards a restrained world-moment cadence and penalizes saturation', () => {
+    expect(scoreWorldMomentCadence(1)).toBeGreaterThan(scoreWorldMomentCadence(0));
+    expect(scoreWorldMomentCadence(3)).toBeGreaterThan(scoreWorldMomentCadence(1));
+    expect(scoreWorldMomentCadence(6)).toBeLessThan(scoreWorldMomentCadence(3));
+  });
+
+  it('slightly favors the default challenger lens and explicit opening drama', () => {
+    const quiet = {
+      importanceScore: 8,
+      meaningfulReasonCount: 0,
+      goals: 2,
+      margin: 0,
+      lateGoals: 0,
+      redCards: 0,
+      deniedGoals: 0,
+      upset: false,
+    };
+    expect(scoreObserverOpening({ ...quiet, lens: 'challenger' }))
+      .toBeGreaterThan(scoreObserverOpening({ ...quiet, lens: 'giant' }));
+    expect(scoreObserverOpening({
+      ...quiet,
+      lens: 'challenger',
+      meaningfulReasonCount: 1,
+      lateGoals: 1,
+      deniedGoals: 1,
+    })).toBeGreaterThan(scoreObserverOpening({ ...quiet, lens: 'challenger' }));
+  });
+
   it('gives every recommended lens a readable first match and the default lens late drama', () => {
     const world = initializeGameWorld(RECOMMENDED_EXPERIENCE_SEED);
     const result = executeCurrentWindow(world);
@@ -33,11 +63,13 @@ describe('observer experience configuration', () => {
     )));
 
     expect(focusResults.every(Boolean)).toBe(true);
-    expect(focusResults.every(match => match && match.homeGoals + match.awayGoals >= 2)).toBe(true);
+    expect(focusResults.every(match => match && Math.abs(match.homeGoals - match.awayGoals) <= 1)).toBe(true);
     const challengerResult = focusResults[lenses.findIndex(option => option.id === 'challenger')];
     expect(Math.abs(
       (challengerResult?.homeGoals ?? 0) - (challengerResult?.awayGoals ?? 0),
     )).toBeLessThanOrEqual(1);
+    expect((challengerResult?.homeGoals ?? 0) + (challengerResult?.awayGoals ?? 0))
+      .toBeGreaterThanOrEqual(2);
     expect(challengerResult?.events.some(event => (
       (event.type === 'goal' || event.type === 'own_goal') && event.minute >= 75
     ))).toBe(true);

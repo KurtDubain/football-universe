@@ -23,6 +23,10 @@ const KEYBOARD_STEP = 12;
 const DRAG_THRESHOLD = 6;
 const POSITION_STORAGE_KEY = 'floating-advance-position-v2';
 
+function isMobileDocked(): boolean {
+  return window.matchMedia?.('(max-width: 639px)').matches ?? window.innerWidth < 640;
+}
+
 function getViewportBounds(): FloatingViewportBounds {
   const viewport = window.visualViewport;
   const viewportLeft = viewport?.offsetLeft ?? 0;
@@ -116,6 +120,7 @@ export default function FloatingAdvanceButton({
   const [position, setPosition] = useState<FloatingPosition | null>(readSavedPosition);
   const latestPositionRef = useRef<FloatingPosition | null>(position);
   const [dragging, setDragging] = useState(false);
+  const [mobileDocked, setMobileDocked] = useState(isMobileDocked);
 
   const updatePosition = useCallback((next: FloatingPosition | null) => {
     latestPositionRef.current = next;
@@ -163,7 +168,16 @@ export default function FloatingAdvanceButton({
     };
   }, [clampCurrentPosition, updatePosition]);
 
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 639px)');
+    if (!media) return;
+    const updateDockMode = () => setMobileDocked(media.matches);
+    media.addEventListener('change', updateDockMode);
+    return () => media.removeEventListener('change', updateDockMode);
+  }, []);
+
   const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    if (isMobileDocked()) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -178,6 +192,7 @@ export default function FloatingAdvanceButton({
   }, []);
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    if (isMobileDocked()) return;
     const drag = dragRef.current;
     if (drag.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - drag.startX;
@@ -195,6 +210,7 @@ export default function FloatingAdvanceButton({
   }, [clampCurrentPosition, updatePosition]);
 
   const finishDrag = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    if (isMobileDocked()) return;
     if (dragRef.current.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -254,9 +270,15 @@ export default function FloatingAdvanceButton({
       type="button"
       data-testid="floating-advance"
       data-dragging={dragging ? 'true' : 'false'}
-      aria-label={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置` : '赛季已完成'}
+      aria-label={stageLabel
+        ? `推进到下一阶段：${stageLabel}${mobileDocked ? '' : '；拖动可调整位置'}`
+        : '赛季已完成'}
       aria-busy={isAdvancing}
-      title={stageLabel ? `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位` : '赛季已完成'}
+      title={stageLabel
+        ? mobileDocked
+          ? `推进到下一阶段：${stageLabel}`
+          : `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位`
+        : '赛季已完成'}
       disabled={disabled}
       className={`ui-action-feedback floating-advance-overlay fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
       style={position ? { left: position.x, top: position.y } : undefined}
@@ -270,7 +292,7 @@ export default function FloatingAdvanceButton({
       <span className={isAdvancing ? 'animate-spin motion-reduce:animate-none' : ''}>
         <Icon name={isAdvancing ? 'refresh' : 'play'} size={18} />
       </span>
-      <span className="sr-only sm:not-sr-only sm:text-sm sm:font-semibold">
+      <span className="text-sm font-semibold">
         {isAdvancing ? (busyLabel ?? '结算中') : '推进'}
       </span>
       <span className={`absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-[var(--action)] sm:static sm:h-1.5 sm:w-1.5 sm:ring-0 ${accentClass}`} aria-hidden="true" />

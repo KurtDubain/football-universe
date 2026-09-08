@@ -8,7 +8,7 @@ export const OBSERVER_SEED_CANDIDATES = Array.from(
 // Selected by scripts/audit-observer-seeds.ts from the candidates above. The
 // audit balances six-window observation depth, narrative variety, meaningful
 // choices, and restrained match drama across the three guided lenses.
-export const RECOMMENDED_EXPERIENCE_SEED = 20260717;
+export const RECOMMENDED_EXPERIENCE_SEED = 20260709;
 
 export type ObserverLens = 'giant' | 'challenger' | 'underdog' | 'neutral';
 
@@ -17,6 +17,40 @@ export interface ObserverLensOption {
   label: string;
   description: string;
   teamId: string | null;
+}
+
+export interface ObserverOpeningSignals {
+  lens: Exclude<ObserverLens, 'neutral'>;
+  importanceScore: number;
+  meaningfulReasonCount: number;
+  goals: number;
+  margin: number;
+  lateGoals: number;
+  redCards: number;
+  deniedGoals: number;
+  upset: boolean;
+}
+
+export function scoreWorldMomentCadence(count: number): number {
+  const bounded = Math.max(0, Math.floor(count));
+  if (bounded === 0) return -2;
+  if (bounded <= 3) return [0, 5, 9, 12][bounded];
+  return 12 - (bounded - 3) * 5;
+}
+
+export function scoreObserverOpening(signals: ObserverOpeningSignals): number {
+  const lensWeight = signals.lens === 'challenger' ? 1.35 : 1;
+  const quality = signals.importanceScore * 1.5
+    + Math.min(2, signals.meaningfulReasonCount) * 3
+    + Math.min(3, signals.goals) * 2
+    + (signals.margin <= 1 ? 12 : signals.margin === 2 ? 6 : 0)
+    + signals.lateGoals * 3
+    + signals.redCards * 3
+    + signals.deniedGoals * 2
+    + Number(signals.upset) * 5
+    - Math.max(0, signals.margin - 1) * 5
+    - Math.max(0, signals.goals - 5) * 3;
+  return quality * lensWeight;
 }
 
 function byOverallThenReputation(a: TeamBase, b: TeamBase): number {

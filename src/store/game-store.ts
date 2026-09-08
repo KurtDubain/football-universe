@@ -99,6 +99,7 @@ interface GameStore {
   newAchievements: Achievement[];
 
   dismissAchievement: () => void;
+  dismissAchievements: (achievementIds: readonly string[]) => void;
 
   newGame: (seed?: number, options?: {
     gameMode?: import('../types/game-mode').GameMode;
@@ -249,6 +250,12 @@ export const useGameStore = create<GameStore>()(
 
       dismissAchievement: () => {
         set(s => ({ newAchievements: s.newAchievements.slice(1) }));
+      },
+      dismissAchievements: (achievementIds) => {
+        const dismissed = new Set(achievementIds);
+        set(s => ({
+          newAchievements: s.newAchievements.filter(achievement => !dismissed.has(achievement.id)),
+        }));
       },
 
       newGame: async (seed?: number, options?: {

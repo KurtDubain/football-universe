@@ -3,8 +3,7 @@ import type { Achievement } from '../engine/achievements';
 import { Icon, IconName } from './Icon';
 
 interface Props {
-  achievement: Achievement;
-  remainingCount?: number;
+  achievements: Achievement[];
   onDismiss: () => void;
 }
 
@@ -48,30 +47,39 @@ const ACHIEVEMENT_ICON: Record<string, IconName> = {
   legend_team: 'star-glow',
 };
 
-export default function AchievementToast({ achievement, remainingCount = 0, onDismiss }: Props) {
+export default function AchievementToast({ achievements, onDismiss }: Props) {
   const [visible, setVisible] = useState(false);
+  const achievement = achievements[0];
+  const batchKey = achievements.map(item => item.id).join('|');
 
   useEffect(() => {
     const fadeIn = setTimeout(() => setVisible(true), 50);
     const fadeOut = setTimeout(() => setVisible(false), 2800);
     const dismiss = setTimeout(onDismiss, 3200);
     return () => { clearTimeout(fadeIn); clearTimeout(fadeOut); clearTimeout(dismiss); };
-  }, [achievement.id, onDismiss]);
+  }, [batchKey, onDismiss]);
+
+  if (!achievement) return null;
 
   // Get icon from achievement id (extract base id like 'unbeaten' from 'unbeaten-teamId-S1')
   const baseId = achievement.id.split('-')[0];
-  const iconName = ACHIEVEMENT_ICON[baseId] ?? 'trophy';
+  const iconName = achievements.length > 1 ? 'trophy' : ACHIEVEMENT_ICON[baseId] ?? 'trophy';
+  const isSummary = achievements.length > 1;
+  const summaryTitles = achievements.slice(0, 3).map(item => item.title).join('、');
 
   return (
     <div
       aria-live="polite"
-      className={`fixed top-[calc(env(safe-area-inset-top)+6rem)] left-3 right-3 sm:top-20 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[200] transition-all duration-500 ${
+      data-testid="achievement-toast"
+      className={`achievement-toast-shell fixed top-[calc(env(safe-area-inset-top)+6rem)] left-3 right-3 sm:top-20 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[200] transition-all duration-500 ${
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'
       }`}
     >
       <button
         type="button"
-        aria-label={`成就解锁：${achievement.title}，关闭提示`}
+        aria-label={isSummary
+          ? `本季解锁${achievements.length}项成就，关闭提示`
+          : `成就解锁：${achievement.title}，关闭提示`}
         onClick={onDismiss}
         className="w-full sm:w-[22rem] bg-slate-950/95 backdrop-blur-md border border-amber-500/60 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer animate-glow-pulse hover:border-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
       >
@@ -79,12 +87,17 @@ export default function AchievementToast({ achievement, remainingCount = 0, onDi
           <Icon name={iconName} size={32} accent="#fbbf24" />
         </span>
         <span className="min-w-0">
-          <span className="block text-[10px] text-amber-300 font-semibold uppercase tracking-wider">成就解锁</span>
-          <span className="block text-sm font-bold text-white break-words">{achievement.title}</span>
-          <span className="block text-xs text-amber-100/80 mt-0.5 break-words">{achievement.description}</span>
-          {remainingCount > 0 && (
-            <span className="block text-[11px] text-amber-300 mt-1">另有 {remainingCount} 项，点击继续</span>
-          )}
+          <span className="block text-[10px] text-amber-300 font-semibold uppercase tracking-wider">
+            {isSummary ? '赛季成就入档' : '成就解锁'}
+          </span>
+          <span className="block text-sm font-bold text-white break-words">
+            {isSummary ? `本季解锁 ${achievements.length} 项` : achievement.title}
+          </span>
+          <span className="block text-xs text-amber-100/80 mt-0.5 break-words">
+            {isSummary
+              ? `${summaryTitles}${achievements.length > 3 ? `等${achievements.length}项` : ''}，已全部写入成就档案。`
+              : achievement.description}
+          </span>
         </span>
       </button>
     </div>

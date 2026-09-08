@@ -909,6 +909,7 @@ function recordCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
     visualKind: 'legacy',
     visualLevel: 'chapter',
     presentationPriority: 72,
+    seasonBoundaryRole: 'historic_resolution',
     fingerprint: createNarrativeFingerprint([season, player.uuid, challenger.goals, record.row.season, record.playerId, record.row.goals]),
     changedAt: world.totalElapsedWindows ?? 0,
     weights: { importance: 82, relevance: options.favoritePlayerIds.includes(player.uuid) ? 88 : 20, continuity: 76, historical: 68 },

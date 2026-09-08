@@ -27,6 +27,13 @@ export type NarrativeSubjectType =
 export type NarrativeVisualKind = 'stage' | 'rise' | 'fall' | 'legacy' | 'transfer';
 export type NarrativeVisualLevel = 'signal' | 'chapter' | 'world_moment';
 export type NarrativeEditorialState = 'new' | 'changed' | 'ongoing';
+export type SeasonBoundaryEditorialRole =
+  | 'focus_fate'
+  | 'major_historic_resolution'
+  | 'top_champion'
+  | 'historic_resolution'
+  | 'cup_or_movement'
+  | 'routine';
 
 export interface NarrativeFact {
   /** Stable within one candidate so merged sources can retain unique facts. */
@@ -81,6 +88,8 @@ export interface NarrativeCandidate {
   visualLevel?: NarrativeVisualLevel;
   /** Runtime-only tie-breaker for the most mature presentation of one arc. */
   presentationPriority?: number;
+  /** Runtime-only season-close role. It never enters saves or presentation output. */
+  seasonBoundaryRole?: SeasonBoundaryEditorialRole;
   fingerprint: string;
   changedAt: number;
   weights: NarrativeWeights;
@@ -91,7 +100,7 @@ export interface NarrativeCandidate {
 /** Presentation-safe shape: internal ranking weights are deliberately absent. */
 export type NarrativeItem = Omit<
   NarrativeCandidate,
-  'weights' | 'reservedForObservationTheme' | 'presentationPriority' | 'visualLevel'
+  'weights' | 'reservedForObservationTheme' | 'presentationPriority' | 'seasonBoundaryRole' | 'visualLevel'
 > & {
   visualLevel: NarrativeVisualLevel;
   editorialState: NarrativeEditorialState;
@@ -119,4 +128,5 @@ export interface NarrativeSelectionContext {
   elapsedWindow: number;
   favoriteTeamIds?: readonly string[];
   favoritePlayerIds?: readonly string[];
+  seasonBoundary?: boolean;
 }

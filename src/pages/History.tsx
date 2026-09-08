@@ -846,7 +846,27 @@ function SeasonHistorySummaryPanel({ summary }: { summary: SeasonHistorySummary 
                   )}
                 </div>
                 <p className="mt-1 text-[11px] leading-5 text-slate-400">{event.detail}</p>
-                {event.links.length > 0 && (
+                {(event.linkGroups?.length ?? 0) > 0 ? (
+                  <div className="mt-2 space-y-2">
+                    {event.linkGroups?.map(group => (
+                      <div key={`${event.id}-${group.label}`} className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                        <span className="text-[10px] font-semibold text-slate-500">{group.label}</span>
+                        <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+                          {group.links.map(link => (
+                            <Link
+                              key={`${event.id}-${group.label}-${link.to}`}
+                              to={link.to}
+                              data-link-kind={link.kind}
+                              className="text-[11px] font-medium text-sky-300 hover:text-white"
+                            >
+                              {link.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : event.links.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                     {event.links.map(link => (
                       <Link

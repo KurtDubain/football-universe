@@ -239,4 +239,133 @@ describe('advance world response', () => {
     expect(boundary.seasonChanged).toBe(true);
     expect(boundary.nextSeason).toBe(2);
   });
+
+  it('keeps the top-flight champion ahead of a simultaneous major transfer at season close', () => {
+    const world = initializeGameWorld(20260709);
+    const [fromTeamId, toTeamId] = Object.keys(world.teamBases);
+    const player = world.squads[fromTeamId][0];
+    const endWorld = {
+      ...world,
+      seasonState: { ...world.seasonState, seasonNumber: 2 },
+      transferHistory: [{
+        season: 1,
+        windowIndex: 40,
+        playerId: player.uuid,
+        playerName: player.name,
+        playerNumber: player.number,
+        position: player.position,
+        fromTeamId,
+        fromTeamName: world.teamBases[fromTeamId].name,
+        toTeamId,
+        toTeamName: world.teamBases[toTeamId].name,
+        type: 'transfer' as const,
+        fee: 90,
+        reason: '重大转会',
+      }],
+    };
+    const championNews = news('S1-W40-trophy-l1', 'trophy', 'major');
+    const response = buildAdvanceWorldResponse(
+      'season_end',
+      [outcome(40, [], [championNews])],
+      endWorld,
+      [],
+      null,
+    )!;
+
+    expect(response.narrative?.feature).toMatchObject({ id: `news:${championNews.id}` });
+    expect(response.keyNews[0].id).toBe(championNews.id);
+  });
+
+  it('keeps the top-flight champion in the editorial pool when routine season news is denser', () => {
+    const world = initializeGameWorld(20260709);
+    const championNews = news('S1-W40-trophy-l1', 'trophy', 'major');
+    const routineNews = Array.from({ length: 12 }, (_, index) => (
+      news(`S1-W40-prize-${index}`, 'prize_money')
+    ));
+    const endWorld = {
+      ...world,
+      seasonState: { ...world.seasonState, seasonNumber: 2 },
+    };
+    const response = buildAdvanceWorldResponse(
+      'season_end',
+      [outcome(40, [], [championNews, ...routineNews])],
+      endWorld,
+      [],
+      null,
+    )!;
+
+    expect(response.narrative?.feature).toMatchObject({ id: `news:${championNews.id}` });
+    expect(response.narrative?.more.some(item => item.id === 'news:S1-W40-prize-11')).toBe(true);
+  });
+
+  it('lets a major historical milestone lead without dropping the top-flight champion', () => {
+    const world = initializeGameWorld(20260709);
+    const championNews = news('S1-W40-trophy-l1', 'trophy', 'major');
+    const dynastyNews = news('S1-W40-crown-dynasty', 'trophy', 'major');
+    const endWorld = {
+      ...world,
+      seasonState: { ...world.seasonState, seasonNumber: 2 },
+    };
+    const response = buildAdvanceWorldResponse(
+      'season_end',
+      [outcome(40, [], [championNews, dynastyNews])],
+      endWorld,
+      [],
+      null,
+    )!;
+
+    expect(response.narrative?.feature).toMatchObject({ id: `news:${dynastyNews.id}` });
+    expect([
+      response.narrative?.worldMoment,
+      ...(response.narrative?.signals ?? []),
+      ...(response.narrative?.more ?? []),
+    ].some(item => item?.id === `news:${championNews.id}`)).toBe(true);
+  });
+
+  it.each([
+    ['成功升级', true, false],
+    ['遗憾降级', false, true],
+  ] as const)('leads with the followed team fate: %s', (label, promoted, relegated) => {
+    const world = initializeGameWorld(20260709);
+    const primary = Object.keys(world.teamBases)[0];
+    const endWorld = {
+      ...world,
+      seasonState: { ...world.seasonState, seasonNumber: 2 },
+      observerSeasonTrajectories: [{
+        seasonNumber: 1,
+        teamId: primary,
+        leagueLevel: 1 as const,
+        checkpoints: [],
+        expectedPosition: 8,
+      }],
+      teamSeasonRecords: {
+        ...world.teamSeasonRecords,
+        [primary]: [{
+          seasonNumber: 1,
+          leagueLevel: 1 as const,
+          leaguePosition: promoted ? 2 : 15,
+          leaguePlayed: 30,
+          leagueWon: 12,
+          leagueDrawn: 8,
+          leagueLost: 10,
+          leagueGF: 40,
+          leagueGA: 38,
+          leaguePoints: 44,
+          coachId: Object.keys(world.coachBases)[0],
+          promoted,
+          relegated,
+        }],
+      },
+    };
+    const response = buildAdvanceWorldResponse(
+      'season_end',
+      [outcome(40, [], [news('S1-W40-trophy-l1', 'trophy', 'major')])],
+      endWorld,
+      [primary],
+      primary,
+    )!;
+
+    expect(response.narrative?.feature?.title).toContain(label);
+    expect(response.narrative?.feature?.subjectIds).toContain(primary);
+  });
 });

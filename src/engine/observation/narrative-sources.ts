@@ -20,6 +20,7 @@ import {
   mergeNarrativeCandidates,
 } from './narrative-director';
 import { buildWorldNarrativeCandidates } from './narrative-world-scan';
+import { buildSeasonObservationArchive } from './season-archive';
 import type { ObservationTheme } from './observation-theme';
 import type { AdvanceWindowOutcome } from './world-response';
 import type {
@@ -30,6 +31,7 @@ import type {
   NarrativeMemoryEntry,
   NarrativeSource,
   NarrativeVisualKind,
+  SeasonBoundaryEditorialRole,
 } from './narrative-types';
 
 interface MatchdayNarrativeOptions {
@@ -210,6 +212,7 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       visualKind: storyVisual(story.type),
       visualLevel: story.outcome === 'success' ? 'world_moment' as const : 'chapter' as const,
       presentationPriority: story.outcome === 'success' ? 100 : 85,
+      seasonBoundaryRole: 'historic_resolution' as const,
       fingerprint: createNarrativeFingerprint([
         story.id,
         story.outcome,
@@ -592,15 +595,48 @@ function newsChangedAt(world: GameWorld, news: NewsItem): number {
   return 0;
 }
 
+function newsSeasonBoundaryRole(news: NewsItem): SeasonBoundaryEditorialRole {
+  if (
+    (news.type === 'trophy' && news.id.includes('crown-'))
+    || (news.type === 'storyline' && news.importance === 'major')
+  ) return 'major_historic_resolution';
+  if (news.type === 'trophy' && news.id.includes('trophy-l1')) return 'top_champion';
+  if (news.type === 'retirement' || news.type === 'storyline') return 'historic_resolution';
+  if (news.type === 'trophy' || news.type === 'promotion' || news.type === 'relegation') {
+    return 'cup_or_movement';
+  }
+  return 'routine';
+}
+
+function seasonBoundaryNewsPriority(news: NewsItem): number {
+  const role = newsSeasonBoundaryRole(news);
+  if (role === 'major_historic_resolution') return 5;
+  if (role === 'top_champion') return 4;
+  if (role === 'historic_resolution') return 3;
+  if (role === 'cup_or_movement') return 2;
+  return 1;
+}
+
 function newsCandidates(
   world: GameWorld,
   newsItems: NewsItem[],
   excludedTypes: ReadonlySet<NewsItem['type']>,
+  seasonBoundary = false,
 ): NarrativeCandidate[] {
-  return newsItems
-    .filter(news => !excludedTypes.has(news.type) && news.importance !== 'minor')
-    .slice(-12)
-    .reverse()
+  const eligibleNews = newsItems
+    .filter(news => !excludedTypes.has(news.type) && news.importance !== 'minor');
+  const selectedNews = seasonBoundary
+    ? eligibleNews
+      .map((news, index) => ({ news, index }))
+      .sort((left, right) => (
+        seasonBoundaryNewsPriority(right.news) - seasonBoundaryNewsPriority(left.news)
+        || right.index - left.index
+      ))
+      .slice(0, 12)
+      .map(entry => entry.news)
+    : eligibleNews.slice(-12).reverse();
+
+  return selectedNews
     .map(news => {
       const teamIds = news.subject?.teamIds ?? [];
       const playerIds = news.subject?.playerIds ?? [];
@@ -641,6 +677,7 @@ function newsCandidates(
         visualKind: newsVisualKind(news),
         visualLevel: newsVisualLevel(news),
         presentationPriority: news.importance === 'major' ? 75 : 40,
+        seasonBoundaryRole: newsSeasonBoundaryRole(news),
         fingerprint: createNarrativeFingerprint([news.id, news.type, news.description]),
         changedAt: newsChangedAt(world, news),
         weights: {
@@ -651,6 +688,58 @@ function newsCandidates(
         },
       };
     });
+}
+
+function seasonBoundaryFocusCandidate(options: ResultNarrativeOptions): NarrativeCandidate | null {
+  const teamId = options.primaryFavoriteTeamId;
+  const completedSeason = options.endWorld.seasonState.seasonNumber - 1;
+  if (!teamId || completedSeason < 1) return null;
+  const trajectory = (options.endWorld.observerSeasonTrajectories ?? [])
+    .find(entry => entry.seasonNumber === completedSeason && entry.teamId === teamId);
+  const record = options.endWorld.teamSeasonRecords[teamId]
+    ?.find(entry => entry.seasonNumber === completedSeason);
+  if (!trajectory || !record) return null;
+  const archive = buildSeasonObservationArchive(options.endWorld, trajectory, record);
+  const team = options.endWorld.teamBases[teamId];
+  const tone = archive.finalFate.tone;
+  return {
+    id: `season-fate:${completedSeason}:${teamId}`,
+    arcKey: `team:${teamId}:season:${completedSeason}:fate`,
+    eventKey: `S${completedSeason}:focus-fate:${teamId}`,
+    source: 'competition',
+    subjectType: 'team',
+    subjectIds: [teamId],
+    seasonNumber: completedSeason,
+    seasonPhase: '赛季落幕',
+    title: `${team?.shortName ?? teamId}：${archive.finalFate.label}`,
+    summary: archive.finalFate.detail,
+    evidence: [fact(
+      'competition',
+      `season-fate:${completedSeason}:${teamId}:league`,
+      '最终命运',
+      archive.finalFate.detail,
+    )],
+    consequences: archive.cupPaths.slice(0, 2).map((path, index) => fact(
+      'competition',
+      `season-fate:${completedSeason}:${teamId}:cup:${index}`,
+      path.label,
+      path.result,
+    )),
+    nextWatch: archive.nextWatch,
+    destinations: [teamDestination(teamId)],
+    visualKind: tone === 'positive' ? 'rise' : tone === 'caution' ? 'fall' : 'stage',
+    visualLevel: 'chapter',
+    presentationPriority: 100,
+    seasonBoundaryRole: 'focus_fate',
+    fingerprint: createNarrativeFingerprint([
+      completedSeason,
+      teamId,
+      archive.finalFate,
+      archive.cupPaths,
+    ]),
+    changedAt: options.endWorld.totalElapsedWindows ?? 0,
+    weights: { importance: 94, relevance: 100, continuity: 92, historical: 82 },
+  };
 }
 
 export function buildMatchdayNarrativeDigest(options: MatchdayNarrativeOptions): NarrativeDigest {
@@ -883,6 +972,7 @@ function resultCandidate(
         ? 'chapter'
         : 'signal',
     presentationPriority: final ? 100 : deviation.tier === 'major_upset' ? 92 : deviation.isUpset ? 72 : 45,
+    seasonBoundaryRole: final ? 'cup_or_movement' : 'routine',
     fingerprint: createNarrativeFingerprint([
       result.fixtureId,
       scoreLabel(result),
@@ -919,6 +1009,9 @@ function rawResultPriority(
 }
 
 export function buildResultNarrativeDigest(options: ResultNarrativeOptions): NarrativeDigest {
+  const seasonBoundary = options.outcomes.some(
+    outcome => outcome.seasonNumber !== options.endWorld.seasonState.seasonNumber,
+  );
   const rankedResults = options.outcomes.flatMap((outcome, outcomeIndex) => (
     outcome.results.map((result, resultIndex) => ({
       outcome,
@@ -956,17 +1049,22 @@ export function buildResultNarrativeDigest(options: ResultNarrativeOptions): Nar
     }
   }
   const candidates = [
+    ...(seasonBoundary ? [seasonBoundaryFocusCandidate(options)].filter(
+      (candidate): candidate is NarrativeCandidate => Boolean(candidate),
+    ) : []),
     ...rankedResults.map(entry => resultCandidate(entry.result, entry.outcome, options)),
     ...endWorldCandidates,
     ...newsCandidates(
       options.endWorld,
       allNews,
       new Set(['match_result', 'upset', 'streak']),
+      seasonBoundary,
     ),
   ];
   return directNarrative(candidates, [...transitionMemory.values()], {
     elapsedWindow: options.endWorld.totalElapsedWindows ?? 0,
     favoriteTeamIds: options.favoriteTeamIds,
     favoritePlayerIds: options.favoritePlayerIds,
+    seasonBoundary,
   });
 }

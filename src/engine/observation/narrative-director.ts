@@ -139,6 +139,9 @@ function mergeCandidatePair(
     visualKind: preferred.visualKind ?? secondary.visualKind,
     visualLevel: preferred.visualLevel ?? 'signal',
     presentationPriority: preferred.presentationPriority,
+    seasonBoundaryRole: [left, right]
+      .sort((a, b) => seasonBoundaryEditorialPriority(b) - seasonBoundaryEditorialPriority(a))[0]
+      .seasonBoundaryRole,
     storylineType: preferred.storylineType ?? secondary.storylineType,
     seasonPhase: preferred.seasonPhase ?? secondary.seasonPhase,
     fingerprint: createNarrativeFingerprint(componentFingerprints),
@@ -220,6 +223,28 @@ function candidateScore(
     + clampScore(candidate.weights.historical) * 0.10;
 }
 
+/**
+ * Season settlement has a different editorial job from an ordinary matchday.
+ * The role is presentation-only and reads existing candidate facts; it neither
+ * consumes RNG nor changes simulation order.
+ */
+export function seasonBoundaryEditorialPriority(candidate: NarrativeCandidate): number {
+  switch (candidate.seasonBoundaryRole) {
+    case 'focus_fate':
+      return 500;
+    case 'major_historic_resolution':
+      return 475;
+    case 'top_champion':
+      return 450;
+    case 'historic_resolution':
+      return 425;
+    case 'cup_or_movement':
+      return 350;
+    default:
+      return 0;
+  }
+}
+
 function editorialState(
   candidate: NarrativeCandidate,
   memory: readonly NarrativeMemoryEntry[],
@@ -237,12 +262,14 @@ function toNarrativeItem(
     weights: _weights,
     reservedForObservationTheme: _reserved,
     presentationPriority: _presentationPriority,
+    seasonBoundaryRole: _seasonBoundaryRole,
     visualLevel,
     ...item
   } = candidate;
   void _weights;
   void _reserved;
   void _presentationPriority;
+  void _seasonBoundaryRole;
   return {
     ...item,
     visualLevel: visualLevel ?? 'signal',
@@ -273,7 +300,14 @@ export function directNarrative(
   const selectable = merged.filter(candidate => !candidate.reservedForObservationTheme);
   const ranked = selectable
     .map(candidate => ({ candidate, score: candidateScore(candidate, memory, context) }))
-    .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id));
+    .sort((left, right) => (
+      (context.seasonBoundary
+        ? seasonBoundaryEditorialPriority(right.candidate)
+          - seasonBoundaryEditorialPriority(left.candidate)
+        : 0)
+      || right.score - left.score
+      || left.candidate.id.localeCompare(right.candidate.id)
+    ));
   const featureEntry = ranked.find(entry => (
     entry.score >= NARRATIVE_FEATURE_THRESHOLD
     || (

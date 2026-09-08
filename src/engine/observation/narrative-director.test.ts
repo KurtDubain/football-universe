@@ -202,6 +202,33 @@ describe('narrative director', () => {
     expect(directNarrative([historical], memory, context).feature?.id).toBe('historical');
   });
 
+  it('applies the season-boundary policy without making a champion override a major record', () => {
+    const transfer = candidate('transfer', {
+      source: 'transfer',
+      seasonBoundaryRole: 'routine',
+      weights: { importance: 100, relevance: 100, continuity: 100, historical: 80 },
+    });
+    const champion = candidate('champion', {
+      source: 'news',
+      seasonBoundaryRole: 'top_champion',
+      weights: { importance: 86, relevance: 5, continuity: 10, historical: 90 },
+    });
+    const record = candidate('record', {
+      source: 'record',
+      seasonBoundaryRole: 'major_historic_resolution',
+      weights: { importance: 82, relevance: 10, continuity: 76, historical: 100 },
+    });
+
+    expect(directNarrative([transfer, champion], [], {
+      elapsedWindow: 40,
+      seasonBoundary: true,
+    }).feature?.id).toBe('champion');
+    expect(directNarrative([transfer, champion, record], [], {
+      elapsedWindow: 40,
+      seasonBoundary: true,
+    }).feature?.id).toBe('record');
+  });
+
   it('keeps presentation memory bounded and remembers every displayed arc', () => {
     let memory: NarrativeMemoryEntry[] = Array.from({ length: MAX_NARRATIVE_MEMORY }, (_, index) => ({
       arcKey: `old:${index}`,

@@ -250,6 +250,7 @@ async function main(): Promise<void> {
   try {
     for (const viewport of [
       { name: 'mobile-320', width: 320, height: 568, isMobile: true, hasTouch: true },
+      { name: 'mobile-390', width: 390, height: 844, isMobile: true, hasTouch: true },
       { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
     ]) {
       const context = await browser.newContext({
@@ -268,12 +269,12 @@ async function main(): Promise<void> {
       await context.close();
     }
 
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const page = await context.newPage();
-    page.on('console', message => captureError(message, errors));
-    page.on('pageerror', error => errors.push(error.message));
     const performanceReports: Record<string, number>[] = [];
     for (const seasons of checkpoints) {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const page = await context.newPage();
+      page.on('console', message => captureError(message, errors));
+      page.on('pageerror', error => errors.push(error.message));
       performanceReports.push({
         seasons,
         ...await measureLongHistory(
@@ -283,8 +284,8 @@ async function main(): Promise<void> {
           seasons,
         ),
       });
+      await context.close();
     }
-    await context.close();
 
     if (errors.length > 0) throw new Error(`Runtime errors: ${errors.join(' | ')}`);
     console.log(JSON.stringify({ passed: true, reports, performanceReports }, null, 2));

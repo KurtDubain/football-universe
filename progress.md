@@ -1,5 +1,13 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-08 Experience Convergence Follow-up
+
+- Added an explicit season-boundary editorial policy without changing simulation order, RNG, or persisted data. The followed team's final fate leads when available; major historical resolutions and the top-flight champion remain protected ahead of cups, promotion/relegation, and routine transfer, prize, or coach news. Dense season-end news can no longer push the champion out before candidate selection.
+- Reworked season history summaries around structured event identity rather than visible title text. Story endings name their team subjects, same-type endings merge without dropping destinations, and promotion/relegation links are grouped by direction and tier while retaining the existing seven-event ceiling.
+- Moved the mobile advance control into the layout flow with 44px touch geometry and safe-area padding. Season-end achievement bursts now appear as one archived summary and dismiss exactly the represented IDs, so later unlocks cannot be removed accidentally.
+- Recalibrated the observer seed scorer around the actual default challenger lens, meaningful opener events, and a healthy one-to-three World Moment cadence. Seed `20260709` now leads the audited candidate set over `20260717` without any seed-specific engine logic.
+- Isolated history performance checkpoints from session-scoped UI range state and gave only the measured four-season World Cup identity integration test a local timeout. Node 22.22.2 validation passed 142 test files / 1,005 tests, strict TypeScript, ESLint, the production PWA build, frozen budgets, observer-seed audit, responsive route checks, and season-boundary/history/floating-control browser audits.
+
 ## 2026-08-24 v4.61.0 Production Performance Budgets
 
 - Completed the fifth contest-polish closeout without opening a standalone UI refactor. One shared contract now freezes entry and initial JS, CSS, application and deployed imagery, PWA precache, and normal/4x live-frame budgets; the existing `bundle:check` remains as a compatibility alias for the broader `budgets:check` gate.

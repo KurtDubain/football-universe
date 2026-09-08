@@ -22,6 +22,10 @@ export interface SeasonHistoryEvent {
   title: string;
   detail: string;
   links: SeasonHistoryLink[];
+  linkGroups?: Array<{
+    label: string;
+    links: SeasonHistoryLink[];
+  }>;
   replayStatus?: 'available' | 'summary_only';
 }
 
@@ -107,11 +111,11 @@ function seasonCupWinners(
     .sort((a, b) => a.type.localeCompare(b.type) || a.teamId.localeCompare(b.teamId));
 }
 
-function seasonStories(
+function seasonStoryGroups(
   history: Storyline[] | undefined,
   seasonNumber: number,
-): Storyline[] {
-  return (history ?? [])
+): Storyline[][] {
+  const stories = (history ?? [])
     .filter(storyline =>
       storyline.seasonNumber === seasonNumber
       && storyline.phase === '落幕'
@@ -121,8 +125,27 @@ function seasonStories(
       Number(b.outcome === 'success') - Number(a.outcome === 'success')
       || (b.endedWindow ?? b.lastUpdatedWindow) - (a.endedWindow ?? a.lastUpdatedWindow)
       || a.id.localeCompare(b.id),
-    )
-    .slice(0, 2);
+    );
+  const grouped = new Map<StorylineType, Storyline[]>();
+  for (const story of stories) {
+    grouped.set(story.type, [...(grouped.get(story.type) ?? []), story]);
+  }
+  return [...grouped.values()].slice(0, 2);
+}
+
+function movementLinkGroups(
+  world: Pick<GameWorld, 'teamBases'>,
+  entries: Array<{ teamId: string; from: number; to: number }>,
+  direction: '升级' | '降级',
+): NonNullable<SeasonHistoryEvent['linkGroups']> {
+  const groups = new Map<string, SeasonHistoryLink[]>();
+  for (const entry of entries) {
+    const label = `${direction} · ${entry.from}级 → ${entry.to}级`;
+    groups.set(label, [...(groups.get(label) ?? []), teamLink(world, entry.teamId)]);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+    .map(([label, links]) => ({ label, links: uniqueLinks(links) }));
 }
 
 function buildSeasonEvents(
@@ -182,18 +205,17 @@ function buildSeasonEvents(
     links: uniqueLinks(cupLinks),
   });
 
-  const promotedLinks = honor.promoted.map(entry =>
-    teamLink(world, entry.teamId, `${entry.from}级升${entry.to}级`),
-  );
-  const relegatedLinks = honor.relegated.map(entry =>
-    teamLink(world, entry.teamId, `${entry.from}级降${entry.to}级`),
-  );
+  const linkGroups = [
+    ...movementLinkGroups(world, honor.promoted, '升级'),
+    ...movementLinkGroups(world, honor.relegated, '降级'),
+  ];
   events.push({
     id: `S${seasonNumber}-movement`,
     type: 'movement',
     title: '联赛版图发生变化',
     detail: `升级${honor.promoted.length}队，降级${honor.relegated.length}队。`,
-    links: [...promotedLinks, ...relegatedLinks],
+    links: linkGroups.flatMap(group => group.links),
+    linkGroups,
   });
 
   const trajectory = (world.observerSeasonTrajectories ?? [])
@@ -226,13 +248,17 @@ function buildSeasonEvents(
     });
   }
 
-  for (const storyline of seasonStories(world.storylineHistory, seasonNumber)) {
+  for (const stories of seasonStoryGroups(world.storylineHistory, seasonNumber)) {
+    const storyline = stories[0];
+    const names = stories.map(story => teamName(world, story.teamId));
     events.push({
-      id: `S${seasonNumber}-story-${storyline.id}`,
+      id: `S${seasonNumber}-story-${storyline.type}`,
       type: 'story',
-      title: `故事落幕：${STORY_LABELS[storyline.type]}`,
-      detail: storyline.conclusion ?? storyline.evidence.join(' · '),
-      links: [teamLink(world, storyline.teamId)],
+      title: `${names.join('、')}：${STORY_LABELS[storyline.type]}落幕`,
+      detail: stories.map(story => (
+        `${teamName(world, story.teamId)}：${story.conclusion ?? story.evidence.join(' · ')}`
+      )).join('；'),
+      links: uniqueLinks(stories.map(story => teamLink(world, story.teamId))),
     });
   }
 

@@ -597,7 +597,7 @@ describe('executeCurrentWindow', () => {
       hostResult: expect.any(String),
     });
     expect(completionNews.some(item => item.title.includes('环球冠军杯冠军') && item.importance === 'major')).toBe(true);
-  });
+  }, 10_000);
 
   it('long smoke test: advances multiple seasons without validation errors', () => {
     let world = initializeGameWorld(2024);

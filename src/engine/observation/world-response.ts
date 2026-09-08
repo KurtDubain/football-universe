@@ -89,6 +89,17 @@ function newsPriority(item: NewsItem): number {
   return 1;
 }
 
+function seasonBoundaryNewsPriority(item: NewsItem): number {
+  if (item.type === 'trophy' && item.id.includes('trophy-l1')) return 500;
+  if (
+    item.type === 'retirement'
+    || item.type === 'storyline'
+    || (item.type === 'trophy' && item.id.includes('crown-'))
+  ) return 450;
+  if (item.type === 'trophy' || item.type === 'promotion' || item.type === 'relegation') return 400;
+  return 0;
+}
+
 export function buildAdvanceWorldResponse(
   mode: AdvanceMode,
   outcomes: AdvanceWindowOutcome[],
@@ -137,9 +148,14 @@ export function buildAdvanceWorldResponse(
     .slice(-MAX_STORY_UPDATES)
     .reverse();
   const duplicatedMatchTypes = new Set<NewsItem['type']>(['match_result', 'upset', 'streak', 'storyline']);
+  const seasonChanged = first.seasonNumber !== endWorld.seasonState.seasonNumber;
   const keyNews = uniqueNews(allNews.filter(item => !duplicatedMatchTypes.has(item.type)))
     .map((item, index) => ({ item, index }))
-    .sort((a, b) => newsPriority(b.item) - newsPriority(a.item) || b.index - a.index)
+    .sort((a, b) => (
+      (seasonChanged ? seasonBoundaryNewsPriority(b.item) - seasonBoundaryNewsPriority(a.item) : 0)
+      || newsPriority(b.item) - newsPriority(a.item)
+      || b.index - a.index
+    ))
     .slice(0, MAX_KEY_NEWS)
     .map(entry => entry.item);
   const completedMatches = outcomes.reduce((total, outcome) => total + outcome.results.length, 0);
@@ -174,7 +190,7 @@ export function buildAdvanceWorldResponse(
     toLabel: last.windowLabel,
     nextSeason: endWorld.seasonState.seasonNumber,
     nextWindowLabel: endWorld.seasonState.calendar[endWorld.seasonState.currentWindowIndex]?.label,
-    seasonChanged: first.seasonNumber !== endWorld.seasonState.seasonNumber,
+    seasonChanged,
     featuredResults,
     observationSettlements: allSettlements.slice(-1),
     storyUpdates,

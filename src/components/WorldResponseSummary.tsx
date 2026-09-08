@@ -215,9 +215,18 @@ export default function WorldResponseSummary({
     item.source === 'match_result' && item.fixtureIds?.includes(primaryFixtureId ?? '')
   )) ?? narrativeItems.find(item => item.source === 'match_result');
   const structuredMoment = response.narrative?.worldMoment;
+  const narrativeFeature = response.narrative?.feature;
+  const seasonBoundaryLead = response.seasonChanged
+    && narrativeFeature?.source !== 'match_result'
+    ? narrativeFeature
+    : undefined;
+  const displayedStructuredMoment = structuredMoment?.arcKey === seasonBoundaryLead?.arcKey
+    ? undefined
+    : structuredMoment;
   const narrativeChanges = narrativeItems
     .filter(item => item.source !== 'match_result')
     .filter(item => item.arcKey !== structuredMoment?.arcKey)
+    .filter(item => item.arcKey !== seasonBoundaryLead?.arcKey)
     .filter(item => item.editorialState === 'new' || item.editorialState === 'changed')
     .filter((item, index, all) => all.findIndex(entry => entry.arcKey === item.arcKey) === index)
     .slice(0, 4);
@@ -286,13 +295,42 @@ export default function WorldResponseSummary({
         </div>
       )}
 
-      {structuredMoment ? (
+      {seasonBoundaryLead && (
+        <article
+          data-testid="season-boundary-editorial-lead"
+          className="mt-3 border-l-2 border-emerald-500 bg-emerald-950/20 px-3 py-3"
+        >
+          <div className="flex items-start gap-2.5">
+            <Icon name="eye" size={17} className="mt-0.5 shrink-0 text-emerald-300" />
+            <div className="min-w-0 flex-1">
+              <p className="ui-eyebrow text-[10px] text-emerald-400">SEASON VERDICT</p>
+              <h3 className="mt-0.5 text-sm font-bold text-slate-100">{seasonBoundaryLead.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-400">{seasonBoundaryLead.summary}</p>
+              {(seasonBoundaryLead.destinations?.length ?? 0) > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                  {seasonBoundaryLead.destinations?.map(destination => destination.to && (
+                    <Link
+                      key={destination.key}
+                      to={destination.to}
+                      className="inline-flex min-h-11 items-center text-xs font-semibold text-emerald-300 hover:text-emerald-200"
+                    >
+                      {destination.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </article>
+      )}
+
+      {displayedStructuredMoment ? (
         <div className="mt-3">
           <WorldMomentFeature
-            kind={structuredMoment.visualKind!}
-            title={structuredMoment.title}
-            description={structuredMoment.summary}
-            seasonNumber={structuredMoment.seasonNumber}
+            kind={displayedStructuredMoment.visualKind!}
+            title={displayedStructuredMoment.title}
+            description={displayedStructuredMoment.summary}
+            seasonNumber={displayedStructuredMoment.seasonNumber}
           />
         </div>
       ) : null}

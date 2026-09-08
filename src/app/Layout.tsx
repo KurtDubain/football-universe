@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { type ReactNode, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
@@ -811,20 +811,19 @@ export default function Layout({ children }: LayoutProps) {
         >
           {children}
         </main>
+        <AchievementToastContainer />
+        <div className="mobile-advance-dock">
+          <FloatingAdvanceButton
+            stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
+            accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
+            isAdvancing={isAdvancing}
+            busyLabel={advanceLabel ?? undefined}
+            disabled={isAdvancing || !currentWindow}
+            onAdvance={handleFloatingAdvance}
+          />
+        </div>
       </div>
 
-      {/* Floating advance button */}
-      <FloatingAdvanceButton
-        stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
-        accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
-        isAdvancing={isAdvancing}
-        busyLabel={advanceLabel ?? undefined}
-        disabled={isAdvancing || !currentWindow}
-        onAdvance={handleFloatingAdvance}
-      />
-
-      {/* Achievement toast */}
-      <AchievementToastContainer />
       {saveError && (
         <div role="alert" className="fixed left-3 right-3 bottom-3 sm:left-auto sm:w-96 z-[120] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
           <span className="text-xs flex-1">存档写入失败，当前进度仍保留在本页内存中。请先释放浏览器存储空间，再继续操作。</span>
@@ -850,13 +849,16 @@ export default function Layout({ children }: LayoutProps) {
 
 function AchievementToastContainer() {
   const newAchievements = useGameStore(s => s.newAchievements);
-  const dismissAchievement = useGameStore(s => s.dismissAchievement);
+  const dismissAchievements = useGameStore(s => s.dismissAchievements);
+  const achievementIds = newAchievements.map(achievement => achievement.id).join('|');
+  const dismissBatch = useCallback(() => {
+    dismissAchievements(achievementIds.split('|').filter(Boolean));
+  }, [achievementIds, dismissAchievements]);
   if (newAchievements.length === 0) return null;
   return (
     <AchievementToast
-      achievement={newAchievements[0]}
-      remainingCount={newAchievements.length - 1}
-      onDismiss={dismissAchievement}
+      achievements={newAchievements}
+      onDismiss={dismissBatch}
     />
   );
 }

@@ -279,9 +279,55 @@ describe('season history summary', () => {
 
     expect(summary.events.filter(event => event.type === 'story').map(event => event.title))
       .toEqual(expect.arrayContaining([
-        '故事落幕：联赛不败征程',
-        '故事落幕：杯赛巨人杀手',
+        '甲队：联赛不败征程落幕',
+        '甲队：杯赛巨人杀手落幕',
       ]));
+  });
+
+  it('merges same-type story endings by entity without text-based deduplication', () => {
+    const story = {
+      seasonNumber: 6,
+      startedWindow: 1,
+      startedElapsedWindow: 1,
+      phase: '落幕' as const,
+      evidence: ['权威记录'],
+      lastUpdatedWindow: 30,
+      lastUpdatedElapsedWindow: 30,
+      quietWindows: 0,
+      outcome: 'failure' as const,
+      conclusion: '相同结论',
+      type: 'giant_crisis' as const,
+    };
+    const summary = buildSeasonHistorySummary(source({
+      honorHistory: [honor(6, 'a')],
+      storylineHistory: [
+        { ...story, id: 'crisis-a', teamId: 'a' },
+        { ...story, id: 'crisis-b', teamId: 'b' },
+      ],
+    }), 6)!;
+    const ending = summary.events.find(event => event.type === 'story')!;
+
+    expect(ending.title).toBe('甲队、乙队：豪门危机落幕');
+    expect(ending.detail).toBe('甲队：相同结论；乙队：相同结论');
+    expect(ending.links.map(link => link.to)).toEqual(['/team/a', '/team/b']);
+  });
+
+  it('groups promotion and relegation links by direction and level', () => {
+    const record = honor(7, 'a');
+    record.promoted = [
+      { teamId: 'a', from: 2, to: 1 },
+      { teamId: 'b', from: 3, to: 2 },
+    ];
+    record.relegated = [{ teamId: 'b', from: 1, to: 2 }];
+    const movement = buildSeasonHistorySummary(source({ honorHistory: [record] }), 7)!
+      .events.find(event => event.type === 'movement')!;
+
+    expect(movement.linkGroups?.map(group => group.label)).toEqual([
+      '升级 · 2级 → 1级',
+      '升级 · 3级 → 2级',
+      '降级 · 1级 → 2级',
+    ]);
+    expect(movement.links).toHaveLength(3);
   });
 
   it('marks only substantial three-season decline', () => {

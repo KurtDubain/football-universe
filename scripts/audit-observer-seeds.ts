@@ -1,6 +1,8 @@
 import {
   getObserverLensOptions,
   OBSERVER_SEED_CANDIDATES,
+  scoreObserverOpening,
+  scoreWorldMomentCadence,
   type ObserverLens,
 } from '../src/config/observer-experience';
 import {
@@ -191,7 +193,7 @@ function auditSeed(seed: number): SeedAudit {
     + observationThemeWindows
     + featureWindows
     + narrativeSourceDiversity * 5
-    - Math.max(0, worldMomentWindows - 3) * 2;
+    + scoreWorldMomentCadence(worldMomentWindows);
   const closeFirstMatches = firstFocusMatches.filter(entry => entry.margin <= 1).length;
   const firstExperienceReady = firstFocusMatches.length === 3
     && firstFocusMatches.every(entry => entry.importanceScore >= 4)
@@ -201,19 +203,19 @@ function auditSeed(seed: number): SeedAudit {
     && closeFirstMatches === 3
     && Boolean(challenger && challenger.goals > 0);
   const firstExperienceScore = firstFocusMatches.reduce(
-    (total, entry) => total
-      + (
-        entry.importanceScore * 1.5
-        + Math.min(3, entry.reasons.length) * 2
-        + Math.min(3, entry.goals) * 2
-        + (entry.margin <= 1 ? 12 : entry.margin === 2 ? 6 : 0)
-        + entry.lateGoals * 2
-        + entry.redCards * 2
-        + entry.deniedGoals
-        + Number(entry.upset) * 3
-        - Math.max(0, entry.margin - 1) * 5
-        - Math.max(0, entry.goals - 5) * 3
-      ) * (entry.lens === 'challenger' ? 1.5 : 1),
+    (total, entry) => total + scoreObserverOpening({
+      lens: entry.lens,
+      importanceScore: entry.importanceScore,
+      meaningfulReasonCount: entry.reasons.filter(
+        reason => !reason.includes('观察球队出战'),
+      ).length,
+      goals: entry.goals,
+      margin: entry.margin,
+      lateGoals: entry.lateGoals,
+      redCards: entry.redCards,
+      deniedGoals: entry.deniedGoals,
+      upset: entry.upset,
+    }),
     challenger && challenger.margin <= 1 ? 10 : 0,
   );
 

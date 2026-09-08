@@ -67,10 +67,15 @@ async function verifyRouteCoverage(
       const styles = getComputedStyle(element);
       return { position: styles.position, display: styles.display, zIndex: Number(styles.zIndex) };
     });
-    if (presentation.position !== 'fixed' || presentation.display === 'none' || presentation.zIndex < 100) {
-      throw new Error(`${viewport.name} ${path}: floating control lost overlay presentation ${JSON.stringify(presentation)}`);
+    const expectedPosition = viewport.isMobile ? 'static' : 'fixed';
+    if (
+      presentation.position !== expectedPosition
+      || presentation.display === 'none'
+      || (!viewport.isMobile && presentation.zIndex < 100)
+    ) {
+      throw new Error(`${viewport.name} ${path}: advance control lost its expected presentation ${JSON.stringify(presentation)}`);
     }
-    const margin = 10;
+    const margin = viewport.isMobile ? 4 : 10;
     if (
       box.x < margin
       || box.y < margin
@@ -78,6 +83,14 @@ async function verifyRouteCoverage(
       || box.y + box.height > viewport.height - margin
     ) {
       throw new Error(`${viewport.name} ${path}: floating control escaped the visual viewport`);
+    }
+    if (viewport.isMobile) {
+      const overlap = await page.evaluate(() => {
+        const content = document.querySelector<HTMLElement>('.app-route-content')?.getBoundingClientRect();
+        const control = document.querySelector<HTMLElement>('[data-testid="floating-advance"]')?.getBoundingClientRect();
+        return content && control ? Math.max(0, Math.min(content.bottom, control.bottom) - Math.max(content.top, control.top)) : -1;
+      });
+      if (overlap !== 0) throw new Error(`${viewport.name} ${path}: dock overlaps route content by ${overlap}px`);
     }
   }
   return paths;
@@ -160,8 +173,9 @@ async function main(): Promise<void> {
       if (!initial || initial.width < minimumWidth || initial.height < 44) {
         throw new Error(`${viewport.name}: persistent shortcut is missing or undersized`);
       }
-      if (!initialPresentation || initialPresentation.position !== 'fixed' || initialPresentation.display === 'none') {
-        throw new Error(`${viewport.name}: shortcut is not a fixed overlay`);
+      const expectedPosition = viewport.isMobile ? 'static' : 'fixed';
+      if (!initialPresentation || initialPresentation.position !== expectedPosition || initialPresentation.display === 'none') {
+        throw new Error(`${viewport.name}: shortcut does not use ${expectedPosition} positioning`);
       }
       const expectedPadding = viewport.isMobile ? 12 : 20;
       if (Math.abs(initialPresentation.contentPaddingBottom - expectedPadding) > 1) {
@@ -195,8 +209,8 @@ async function main(): Promise<void> {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.waitForTimeout(80);
         const compact = await page.getByTestId('floating-advance').boundingBox();
-        if (!compact || compact.width > 52 || compact.height < 44) {
-          throw new Error(`${viewport.name}: shortcut disappeared or failed to compact below the mobile breakpoint`);
+        if (!compact || compact.width < 360 || compact.height < 44) {
+          throw new Error(`${viewport.name}: shortcut disappeared or failed to dock below the mobile breakpoint`);
         }
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.waitForTimeout(80);
@@ -224,7 +238,7 @@ async function main(): Promise<void> {
       await page.screenshot({ path: screenshot, animations: 'disabled' });
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
-        persistentOverlay: true,
+        presentation: viewport.isMobile ? 'mobile-layout-dock' : 'desktop-floating-overlay',
         initial,
         initialPresentation,
         dragged,

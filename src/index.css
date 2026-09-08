@@ -1055,6 +1055,8 @@ body {
   bottom: max(16px, env(safe-area-inset-bottom));
 }
 
+.mobile-advance-dock { display: contents; }
+
 .app-sidebar {
   box-shadow: inset -1px 0 rgb(255 255 255 / 1.5%);
 }
@@ -1143,6 +1145,40 @@ body {
   .app-route-content {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     overscroll-behavior: contain;
+  }
+  .mobile-advance-dock {
+    z-index: 65;
+    display: flex;
+    flex: none;
+    padding: 0.375rem max(0.75rem, env(safe-area-inset-right)) max(0.375rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-floating);
+  }
+  .achievement-toast-shell {
+    position: static;
+    z-index: 65;
+    flex: none;
+    transform: none;
+    padding: 0.375rem 0.75rem 0;
+    background: var(--surface-floating);
+  }
+  .achievement-toast-shell > button {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+  .mobile-advance-dock .floating-advance-overlay {
+    position: static !important;
+    width: 100%;
+    min-height: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--radius-control);
+    touch-action: manipulation;
+  }
+  .mobile-advance-dock .floating-advance-overlay > span:last-child {
+    position: static;
+    width: 0.375rem;
+    height: 0.375rem;
+    box-shadow: none;
   }
   .matchday-focus-fixture[data-secondary='true'] {
     min-height: 2.75rem;
