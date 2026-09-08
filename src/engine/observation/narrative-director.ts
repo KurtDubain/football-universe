@@ -155,6 +155,9 @@ function mergeCandidatePair(
     reservedForObservationTheme: Boolean(
       left.reservedForObservationTheme || right.reservedForObservationTheme
     ),
+    reservedForObserverAction: Boolean(
+      left.reservedForObserverAction || right.reservedForObserverAction
+    ),
   };
 }
 
@@ -261,6 +264,7 @@ function toNarrativeItem(
   const {
     weights: _weights,
     reservedForObservationTheme: _reserved,
+    reservedForObserverAction: _observerAction,
     presentationPriority: _presentationPriority,
     seasonBoundaryRole: _seasonBoundaryRole,
     visualLevel,
@@ -268,6 +272,7 @@ function toNarrativeItem(
   } = candidate;
   void _weights;
   void _reserved;
+  void _observerAction;
   void _presentationPriority;
   void _seasonBoundaryRole;
   return {
@@ -315,9 +320,16 @@ export function directNarrative(
       && entry.candidate.weights.importance >= 55
     )
   ));
-  const signalEntries = ranked
+  const observerActionEntry = ranked.find(entry => entry.candidate.reservedForObserverAction);
+  const rankedSignals = ranked
     .filter(entry => entry !== featureEntry && entry.score >= NARRATIVE_SIGNAL_THRESHOLD)
     .slice(0, MAX_NARRATIVE_SIGNALS);
+  const signalEntries = observerActionEntry && observerActionEntry !== featureEntry
+    ? [
+        observerActionEntry,
+        ...rankedSignals.filter(entry => entry !== observerActionEntry),
+      ].slice(0, MAX_NARRATIVE_SIGNALS)
+    : rankedSignals;
   const worldMomentEntry = ranked.find(entry => (
     entry.candidate.visualLevel === 'world_moment'
     && Boolean(entry.candidate.visualKind)

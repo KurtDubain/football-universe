@@ -95,12 +95,14 @@ export interface NarrativeCandidate {
   weights: NarrativeWeights;
   /** Slot A is rendered by ObservationThemePanel and must not be repeated. */
   reservedForObservationTheme?: boolean;
+  /** Keeps the latest explicit observer action in a visible digest slot. */
+  reservedForObserverAction?: boolean;
 }
 
 /** Presentation-safe shape: internal ranking weights are deliberately absent. */
 export type NarrativeItem = Omit<
   NarrativeCandidate,
-  'weights' | 'reservedForObservationTheme' | 'presentationPriority' | 'seasonBoundaryRole' | 'visualLevel'
+  'weights' | 'reservedForObservationTheme' | 'reservedForObserverAction' | 'presentationPriority' | 'seasonBoundaryRole' | 'visualLevel'
 > & {
   visualLevel: NarrativeVisualLevel;
   editorialState: NarrativeEditorialState;

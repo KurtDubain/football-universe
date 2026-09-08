@@ -5,6 +5,7 @@ import { emptyPlayerStat } from '../players/stats';
 import { initializeGameWorld, type GameWorld } from '../season/season-manager';
 import {
   buildCompetitionLandscapes,
+  buildSeasonNarrativeOverview,
   buildWorldNarrativeCandidates,
   WORLD_NARRATIVE_CAPS,
 } from './narrative-world-scan';
@@ -99,6 +100,19 @@ function result(teamId: string, opponentId: string, won: boolean, fixtureId: str
 }
 
 describe('world narrative scan', () => {
+  it('does not turn the initialized table order into a rank or trend conclusion', () => {
+    const world = initializeGameWorld(20260908);
+    const teamId = world.league1Standings[0].teamId;
+    const overview = buildSeasonNarrativeOverview(world, teamId, []);
+
+    expect(overview.observedTeam).toMatchObject({
+      teamId,
+      title: `${world.teamBases[teamId].shortName}等待首轮`,
+      detail: '新赛季尚未产生比赛结果，排名尚未形成。',
+    });
+    expect(overview.observedTeam?.title).not.toContain('当前第');
+  });
+
   it('lets at most two position leaders compete for space, applies watch relevance, and never mutates the world', () => {
     const world = initializeGameWorld(20260812);
     world.playerStatSegments = undefined;
@@ -277,6 +291,57 @@ describe('world narrative scan', () => {
     });
     expect(transfer?.summary).toContain('新的生涯篇章');
     expect(transfer?.evidence?.[0].detail).toContain('转会');
+  });
+
+  it('reserves a detailed narrative candidate for a low-value observer signing', () => {
+    const world = initializeGameWorld(20260908);
+    const player = Object.values(world.squads).flat()
+      .sort((left, right) => left.rating - right.rating || left.uuid.localeCompare(right.uuid))[0];
+    const teamId = player.teamId;
+    world.transferHistory = [{
+      season: world.seasonState.seasonNumber,
+      windowIndex: world.seasonState.currentWindowIndex,
+      playerId: player.uuid,
+      playerName: player.name,
+      playerNumber: player.number,
+      position: player.position,
+      fromTeamId: '__free_market__',
+      fromTeamName: '自由市场',
+      toTeamId: teamId,
+      toTeamName: world.teamBases[teamId].name,
+      type: 'free_agent',
+      fee: 3,
+      reason: '玩家从自由市场签下',
+      observerInitiated: true,
+      observerImpact: {
+        focusTeamId: teamId,
+        focusTeamName: world.teamBases[teamId].name,
+        teamBaseOverall: world.teamBases[teamId].overall,
+        squadAverageBefore: 61.2,
+        squadAverageAfter: 61.6,
+        positionCountBefore: 4,
+        positionCountAfter: 5,
+        playerDepthRankAfter: 4,
+        cashBefore: 30,
+        cashAfter: 27,
+      },
+    }];
+
+    const candidate = scan(world, [teamId])
+      .find(item => item.id.startsWith('transfer-complete:'));
+
+    expect(candidate).toMatchObject({
+      seasonPhase: '你的转会决定',
+      presentationPriority: 86,
+    });
+    expect(candidate?.summary).toContain('第4顺位');
+    expect(candidate?.evidence?.map(item => item.label)).toEqual(expect.arrayContaining([
+      '阵容影响',
+      '现金变化',
+      '数值口径',
+    ]));
+    expect(candidate?.evidence?.find(item => item.label === '数值口径')?.detail)
+      .toContain('球队基础OVR');
   });
 
   it('derives title, promotion, relegation, final, continental, and World Cup signals from structured state', () => {

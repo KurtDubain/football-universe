@@ -11,7 +11,13 @@ import {
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from './transfer-application';
-import type { IncomingOffer, OutgoingTarget, TransferRecord } from '../../types/transfer';
+import type {
+  IncomingOffer,
+  ObserverTransferImpact,
+  OutgoingTarget,
+  TransferRecord,
+} from '../../types/transfer';
+import type { Player, PlayerPosition } from '../../types/player';
 import { estimateFreeAgentSigningCost } from './transfer-decision';
 
 function transferSeason(world: GameWorld): number {
@@ -24,6 +30,57 @@ function transferWindowIndex(world: GameWorld): number {
 
 function transferNewsId(record: TransferRecord, suffix = record.toTeamId): string {
   return `manual-transfer:S${record.season}:W${record.windowIndex}:${record.playerId}:${suffix}`;
+}
+
+function roundRating(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function averageSquadRating(squad: readonly Player[]): number {
+  if (squad.length === 0) return 0;
+  return roundRating(squad.reduce((sum, player) => sum + player.rating, 0) / squad.length);
+}
+
+function playerDepthRank(squad: readonly Player[], playerId: string, position: PlayerPosition): number | undefined {
+  const index = [...squad]
+    .filter(player => player.position === position)
+    .sort((left, right) => right.rating - left.rating || left.uuid.localeCompare(right.uuid))
+    .findIndex(player => player.uuid === playerId);
+  return index >= 0 ? index + 1 : undefined;
+}
+
+function buildObserverTransferImpact(params: {
+  world: GameWorld;
+  focusTeamId: string;
+  player: Player;
+  beforeSquad: readonly Player[];
+  afterSquad: readonly Player[];
+  cashBefore: number;
+  cashAfter: number;
+  displacedPlayer?: Player;
+}): ObserverTransferImpact {
+  const { world, focusTeamId, player, beforeSquad, afterSquad, displacedPlayer } = params;
+  return {
+    focusTeamId,
+    focusTeamName: world.teamBases[focusTeamId]?.name ?? focusTeamId,
+    teamBaseOverall: world.teamBases[focusTeamId]?.overall ?? 0,
+    squadAverageBefore: averageSquadRating(beforeSquad),
+    squadAverageAfter: averageSquadRating(afterSquad),
+    positionCountBefore: beforeSquad.filter(candidate => candidate.position === player.position).length,
+    positionCountAfter: afterSquad.filter(candidate => candidate.position === player.position).length,
+    playerDepthRankBefore: playerDepthRank(beforeSquad, player.uuid, player.position),
+    playerDepthRankAfter: playerDepthRank(afterSquad, player.uuid, player.position),
+    cashBefore: roundRating(params.cashBefore),
+    cashAfter: roundRating(params.cashAfter),
+    ...(displacedPlayer ? {
+      displacedPlayer: {
+        playerId: displacedPlayer.uuid,
+        playerName: displacedPlayer.name,
+        rating: displacedPlayer.rating,
+        position: displacedPlayer.position,
+      },
+    } : {}),
+  };
 }
 
 function newsFromTransferRecord(record: TransferRecord, titlePrefix = '转会'): NewsItem {
@@ -137,10 +194,23 @@ function applyBalancedTransfer(params: {
   toTeamName: string;
   fee: number;
   reason: string;
+  observerFocusTeamId: string;
 }): GameWorld {
-  const { world, playerId, fromTeamId, fromTeamName, toTeamId, toTeamName, fee, reason } = params;
+  const {
+    world,
+    playerId,
+    fromTeamId,
+    fromTeamName,
+    toTeamId,
+    toTeamName,
+    fee,
+    reason,
+    observerFocusTeamId,
+  } = params;
   const fromSquad = world.squads[fromTeamId] ?? [];
   const toSquad = world.squads[toTeamId] ?? [];
+  const observerSquadBefore = world.squads[observerFocusTeamId] ?? [];
+  const observerCashBefore = world.teamFinances[observerFocusTeamId]?.cash ?? 0;
   const player = fromSquad.find((p) => p.uuid === playerId);
   if (!player) return world;
   if (fromSquad.length >= 11 && fromSquad.length <= 18) return world;
@@ -167,18 +237,31 @@ function applyBalancedTransfer(params: {
   teamFinances = debitFinance(teamFinances, toTeamId, fee, season, currentSeason);
 
   const windowIndex = transferWindowIndex(world);
-  const transferRecord = createTransferRecord({
-    season,
-    windowIndex,
-    player: movedPlayer,
-    fromTeamId,
-    fromTeamName,
-    toTeamId,
-    toTeamName,
-    type: 'transfer',
-    fee,
-    reason,
-  });
+  const transferRecord: TransferRecord = {
+    ...createTransferRecord({
+      season,
+      windowIndex,
+      player: movedPlayer,
+      fromTeamId,
+      fromTeamName,
+      toTeamId,
+      toTeamName,
+      type: 'transfer',
+      fee,
+      reason,
+    }),
+    observerInitiated: true,
+    observerImpact: buildObserverTransferImpact({
+      world,
+      focusTeamId: observerFocusTeamId,
+      player: movedPlayer,
+      beforeSquad: observerSquadBefore,
+      afterSquad: squads[observerFocusTeamId] ?? [],
+      cashBefore: observerCashBefore,
+      cashAfter: teamFinances[observerFocusTeamId]?.cash ?? 0,
+      displacedPlayer: observerFocusTeamId === toTeamId ? released : undefined,
+    }),
+  };
   const replacementRecord: TransferRecord | null = released ? createTransferRecord({
     season,
     windowIndex,
@@ -227,6 +310,7 @@ export function applyOfferTransfer(
     toTeamName: offer.buyerName,
     fee,
     reason: '玩家接受报价',
+    observerFocusTeamId: offer.ownerTeamId,
   });
 }
 
@@ -245,6 +329,7 @@ export function applyOutgoingBid(
     toTeamName: world.teamBases[target.toTeamId]?.name ?? target.toTeamId,
     fee,
     reason: '玩家主动报价',
+    observerFocusTeamId: target.toTeamId,
   });
 }
 
@@ -282,18 +367,30 @@ export function signFreeAgent(
     ),
   };
 
-  const transferRecord = createTransferRecord({
-    season,
-    windowIndex: transferWindowIndex(world),
-    player: applied.movedPlayer,
-    fromTeamId: FREE_MARKET_TEAM_ID,
-    fromTeamName: '自由市场',
-    toTeamId,
-    toTeamName: world.teamBases[toTeamId]?.name ?? toTeamId,
-    type: 'free_agent',
-    fee: signingCost,
-    reason: '玩家从自由市场签下',
-  });
+  const transferRecord: TransferRecord = {
+    ...createTransferRecord({
+      season,
+      windowIndex: transferWindowIndex(world),
+      player: applied.movedPlayer,
+      fromTeamId: FREE_MARKET_TEAM_ID,
+      fromTeamName: '自由市场',
+      toTeamId,
+      toTeamName: world.teamBases[toTeamId]?.name ?? toTeamId,
+      type: 'free_agent',
+      fee: signingCost,
+      reason: '玩家从自由市场签下',
+    }),
+    observerInitiated: true,
+    observerImpact: buildObserverTransferImpact({
+      world,
+      focusTeamId: toTeamId,
+      player: applied.movedPlayer,
+      beforeSquad: world.squads[toTeamId] ?? [],
+      afterSquad: applied.squads[toTeamId] ?? [],
+      cashBefore: finance.cash,
+      cashAfter: teamFinances[toTeamId]?.cash ?? 0,
+    }),
+  };
 
   return {
     ...world,

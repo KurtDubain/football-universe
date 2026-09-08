@@ -5,6 +5,27 @@
 
 export type TransferType = 'transfer' | 'free' | 'loan' | 'free_agent';
 
+export interface ObserverTransferImpact {
+  /** Favorite club whose decision the player made in the transfer window. */
+  focusTeamId: string;
+  focusTeamName: string;
+  teamBaseOverall: number;
+  squadAverageBefore: number;
+  squadAverageAfter: number;
+  positionCountBefore: number;
+  positionCountAfter: number;
+  playerDepthRankBefore?: number;
+  playerDepthRankAfter?: number;
+  cashBefore: number;
+  cashAfter: number;
+  displacedPlayer?: {
+    playerId: string;
+    playerName: string;
+    rating: number;
+    position: 'GK' | 'DF' | 'MF' | 'FW';
+  };
+}
+
 export interface TransferRecord {
   season: number;
   windowIndex: number; // when the transfer was processed (typically last window)
@@ -20,6 +41,9 @@ export interface TransferRecord {
   type: TransferType;
   fee?: number;        // in millions, optional
   reason: string;      // human-readable e.g. "强援加盟", "自由转会"
+  /** Optional presentation snapshot for an explicit observer transfer action. */
+  observerInitiated?: boolean;
+  observerImpact?: ObserverTransferImpact;
 }
 
 // ── Phase 2 — favorite team transfer window ──

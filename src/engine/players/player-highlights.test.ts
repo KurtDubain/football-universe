@@ -65,6 +65,11 @@ describe('detectPlayerHighlights', () => {
     expect(highlights[0].playerName).toBe('张伟');
     expect(highlights[0].priority).toBe(10);
     expect(highlights[0].detail).toBe('3 球');
+    expect(highlights[0]).toMatchObject({
+      sourceCompetitionName: '顶级联赛',
+      sourceRoundLabel: 'R1',
+      sourceWindowLabel: '顶级联赛 · R1',
+    });
   });
 
   it('detects a late-drama winner (绝杀) — minute >= 85, margin 1', () => {

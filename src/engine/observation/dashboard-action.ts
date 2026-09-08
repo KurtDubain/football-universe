@@ -20,7 +20,7 @@ export function describeDashboardAction({
     return { label: '模拟中...', ariaLabel: '正在模拟' };
   }
   if (phase === 'results') {
-    return { label: '继续观察', ariaLabel: '继续观察下一轮' };
+    return { label: '继续观察', ariaLabel: '返回当前未赛比赛日' };
   }
   if (hasStarredFocus && hasPendingJudgment) {
     return { label: '观战并揭晓', ariaLabel: '推进本轮并无剧透观看焦点比赛，同时揭晓判断' };

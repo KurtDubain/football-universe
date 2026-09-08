@@ -192,11 +192,12 @@ async function main(): Promise<void> {
       }
       const resultsNextAction = page.getByTestId('results-next-action');
       await resultsNextAction.waitFor();
+      const returnAction = resultsNextAction.getByRole('button', { name: '返回当前未赛比赛日' });
       if (
-        await page.getByTestId('dashboard-advance').count() !== 1
-        || (await resultsNextAction.getByRole('button', { name: '继续观察下一轮' }).boundingBox())?.height !== 44
+        await page.getByTestId('dashboard-advance').count() !== 0
+        || (await returnAction.boundingBox())?.height !== 44
       ) {
-        throw new Error(`${viewport.name}: results did not preserve one 44px continuation action`);
+        throw new Error(`${viewport.name}: results did not preserve one 44px return action`);
       }
       const duplicateResultNews = await page.evaluate(() => {
         const featuredIds = [...document.querySelectorAll<HTMLElement>('[data-testid="world-response-match"]')]

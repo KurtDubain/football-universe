@@ -191,7 +191,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 
 Current release: **v4.61.0**
 
-64k+ production TypeScript lines · 220+ production source files · 140+ test files · 45+ browser/simulation audit commands
+65k+ production TypeScript lines · 220+ production source files · 140+ test files · 45+ browser/simulation audit commands
 
 当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 

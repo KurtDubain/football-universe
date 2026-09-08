@@ -2,6 +2,7 @@ import type { StandingEntry } from '../../types/league';
 import type { MatchResult } from '../../types/match';
 import type { Player, PlayerPosition, PlayerTeamSeasonStats } from '../../types/player';
 import type { CalendarWindow } from '../../types/season';
+import type { TransferRecord } from '../../types/transfer';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import {
   computePlayerPerformance,
@@ -13,6 +14,7 @@ import type { GameWorld } from '../season/season-manager';
 import {
   describeStoryline,
   getStorylineArcKey,
+  STORYLINE_MIN_LEAGUE_MATCHES,
   type Storyline,
   type StorylineSignal,
 } from '../season/storylines';
@@ -638,6 +640,80 @@ function coachCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate
     .slice(0, WORLD_NARRATIVE_CAPS.coach);
 }
 
+function isObserverTransfer(record: TransferRecord): boolean {
+  return record.observerInitiated === true || record.reason.startsWith('玩家');
+}
+
+function transferRecordKey(record: TransferRecord): string {
+  return `${record.season}:${record.windowIndex}:${record.playerId}:${record.fromTeamId}:${record.toTeamId}`;
+}
+
+function selectedTransferRecords(
+  records: readonly TransferRecord[],
+  playerById: ReadonlyMap<string, Player>,
+): TransferRecord[] {
+  const observerRecord = [...records]
+    .filter(isObserverTransfer)
+    .sort((left, right) => right.windowIndex - left.windowIndex
+      || transferRecordKey(left).localeCompare(transferRecordKey(right)))[0];
+  const major = [...records]
+    .filter(record => (record.fee ?? 0) >= 30 || (playerById.get(record.playerId)?.rating ?? 0) >= 82)
+    .sort((left, right) => (right.fee ?? 0) - (left.fee ?? 0)
+      || (playerById.get(right.playerId)?.rating ?? 0) - (playerById.get(left.playerId)?.rating ?? 0)
+      || transferRecordKey(left).localeCompare(transferRecordKey(right)));
+  const selected = new Map<string, TransferRecord>();
+  if (observerRecord) selected.set(transferRecordKey(observerRecord), observerRecord);
+  for (const record of major) {
+    if (selected.size >= 3) break;
+    selected.set(transferRecordKey(record), record);
+  }
+  return [...selected.values()];
+}
+
+function observerTransferDetail(record: TransferRecord): string | null {
+  const impact = record.observerImpact;
+  if (!impact) return null;
+  if (impact.focusTeamId === record.toTeamId) {
+    const depth = impact.playerDepthRankAfter
+      ? `${POSITION_LABELS[record.position]}第${impact.playerDepthRankAfter}顺位`
+      : `${POSITION_LABELS[record.position]}位置新增选择`;
+    const replacement = impact.displacedPlayer
+      ? `，替换${impact.displacedPlayer.playerName}（能力${impact.displacedPlayer.rating}）`
+      : `，位置储备${impact.positionCountBefore}人增至${impact.positionCountAfter}人`;
+    return `${depth}${replacement}`;
+  }
+  const depth = impact.playerDepthRankBefore
+    ? `放走原${POSITION_LABELS[record.position]}第${impact.playerDepthRankBefore}顺位`
+    : `放走一名${POSITION_LABELS[record.position]}`;
+  return `${depth}，位置储备${impact.positionCountBefore}人变为${impact.positionCountAfter}人`;
+}
+
+function observerTransferEvidence(record: TransferRecord): NarrativeFact[] {
+  const impact = record.observerImpact;
+  if (!impact) return [];
+  const cashDelta = Math.round((impact.cashAfter - impact.cashBefore) * 10) / 10;
+  return [
+    fact(
+      'transfer',
+      `transfer:${record.playerId}:${record.toTeamId}:squad-impact`,
+      '阵容影响',
+      `${observerTransferDetail(record)}；阵容球员均值${impact.squadAverageBefore.toFixed(1)} → ${impact.squadAverageAfter.toFixed(1)}。`,
+    ),
+    fact(
+      'transfer',
+      `transfer:${record.playerId}:${record.toTeamId}:cash-impact`,
+      '现金变化',
+      `€${impact.cashBefore}M → €${impact.cashAfter}M（${cashDelta >= 0 ? '+' : ''}${cashDelta}M）。`,
+    ),
+    fact(
+      'transfer',
+      `transfer:${record.playerId}:${record.toTeamId}:ovr-scope`,
+      '数值口径',
+      `球队基础OVR仍为${impact.teamBaseOverall}，它代表长期球队底座；本次即时变化体现在阵容球员均值与位置深度。`,
+    ),
+  ];
+}
+
 function transferCandidates(options: WorldNarrativeScanOptions): NarrativeCandidate[] {
   const { world } = options;
   const season = world.seasonState.seasonNumber;
@@ -648,46 +724,62 @@ function transferCandidates(options: WorldNarrativeScanOptions): NarrativeCandid
   const performances = segmentsByPlayer(world);
   const latestTransferSeason = Math.max(0, ...(world.transferHistory ?? []).map(record => record.season));
   if (latestTransferSeason < season - 1) return [];
-  const major = (world.transferHistory ?? [])
-    .filter(record => record.season === latestTransferSeason)
-    .filter(record => (record.fee ?? 0) >= 30 || (playerById.get(record.playerId)?.rating ?? 0) >= 82)
-    .sort((a, b) => (b.fee ?? 0) - (a.fee ?? 0)
-      || (playerById.get(b.playerId)?.rating ?? 0) - (playerById.get(a.playerId)?.rating ?? 0)
-      || a.playerId.localeCompare(b.playerId))
-    .slice(0, 3);
-  const candidates: NarrativeCandidate[] = major.map(record => ({
-    id: `transfer-complete:${record.season}:${record.windowIndex}:${record.playerId}:${record.toTeamId}`,
-    arcKey: `transfer:${record.playerId}:${record.toTeamId}`,
-    eventKey: `S${record.season}:transfer:${record.windowIndex}:${record.playerId}:${record.toTeamId}`,
-    source: 'transfer',
-    subjectType: 'player',
-    subjectIds: [record.playerId, record.fromTeamId, record.toTeamId],
-    seasonNumber: record.season,
-    seasonPhase: '转会落定',
-    title: `${record.playerName}加盟${record.toTeamName}`,
-    summary: `${record.fromTeamName} → ${record.toTeamName}${record.fee ? ` · €${record.fee}M` : ''}，新的生涯篇章由此开始。`,
-    evidence: [fact(
-      'transfer',
-      `transfer:${record.playerId}:${record.toTeamId}`,
-      record.reason,
-      `${POSITION_LABELS[record.position]} · ${record.type === 'loan' ? '租借' : record.type === 'transfer' ? '转会' : '自由加盟'}${record.fee ? ` · €${record.fee}M` : ''}`,
-    )],
-    nextWatch: '观察球员在新球队的实际出场与赛季表现',
-    destinations: [playerDestination(record.playerId), teamDestination(record.fromTeamId), teamDestination(record.toTeamId)],
-    visualKind: 'transfer',
-    visualLevel: (record.fee ?? 0) >= 60 || (playerById.get(record.playerId)?.rating ?? 0) >= 88
-      ? 'world_moment'
-      : 'chapter',
-    presentationPriority: Math.min(92, 58 + Math.floor((record.fee ?? 0) / 2)),
-    fingerprint: createNarrativeFingerprint([record]),
-    changedAt: seasonEventChangedAt(world, record.season, record.windowIndex),
-    weights: {
-      importance: Math.min(92, 62 + (record.fee ?? 0) * 0.35 + Math.max(0, (playerById.get(record.playerId)?.rating ?? 75) - 75)),
-      relevance: favoriteTeams.has(record.fromTeamId) || favoriteTeams.has(record.toTeamId) ? 74 : 18,
-      continuity: 58,
-      historical: (record.fee ?? 0) >= 60 ? 55 : 25,
-    },
-  }));
+  const major = selectedTransferRecords(
+    (world.transferHistory ?? []).filter(record => record.season === latestTransferSeason),
+    playerById,
+  );
+  const candidates: NarrativeCandidate[] = major.map(record => {
+    const observerInitiated = isObserverTransfer(record);
+    const impactDetail = observerTransferDetail(record);
+    return {
+      id: `transfer-complete:${record.season}:${record.windowIndex}:${record.playerId}:${record.toTeamId}`,
+      arcKey: `transfer:${record.playerId}:${record.toTeamId}`,
+      eventKey: `S${record.season}:transfer:${record.windowIndex}:${record.playerId}:${record.toTeamId}`,
+      source: 'transfer',
+      subjectType: 'player',
+      subjectIds: [record.playerId, record.fromTeamId, record.toTeamId],
+      seasonNumber: record.season,
+      seasonPhase: observerInitiated ? '你的转会决定' : '转会落定',
+      title: `${record.playerName}加盟${record.toTeamName}`,
+      summary: `${record.fromTeamName} → ${record.toTeamName}${record.fee ? ` · €${record.fee}M` : ''}${impactDetail ? `；${impactDetail}。` : '，新的生涯篇章由此开始。'}`,
+      evidence: [
+        fact(
+          'transfer',
+          `transfer:${record.playerId}:${record.toTeamId}`,
+          record.reason,
+          `${POSITION_LABELS[record.position]} · ${record.type === 'loan' ? '租借' : record.type === 'transfer' ? '转会' : '自由加盟'}${record.fee ? ` · €${record.fee}M` : ''}`,
+        ),
+        ...observerTransferEvidence(record),
+      ],
+      nextWatch: '观察球员在新球队的实际出场与赛季表现',
+      destinations: [
+        playerDestination(record.playerId),
+        ...([record.fromTeamId, record.toTeamId]
+          .filter(teamId => Boolean(world.teamBases[teamId]))
+          .map(teamDestination)),
+      ],
+      visualKind: 'transfer',
+      visualLevel: (record.fee ?? 0) >= 60 || (playerById.get(record.playerId)?.rating ?? 0) >= 88
+        ? 'world_moment'
+        : 'chapter',
+      presentationPriority: observerInitiated
+        ? 86
+        : Math.min(92, 58 + Math.floor((record.fee ?? 0) / 2)),
+      fingerprint: createNarrativeFingerprint([record]),
+      changedAt: seasonEventChangedAt(world, record.season, record.windowIndex),
+      weights: {
+        importance: observerInitiated
+          ? 86
+          : Math.min(92, 62 + (record.fee ?? 0) * 0.35 + Math.max(0, (playerById.get(record.playerId)?.rating ?? 75) - 75)),
+        relevance: observerInitiated
+          ? 100
+          : favoriteTeams.has(record.fromTeamId) || favoriteTeams.has(record.toTeamId) ? 74 : 18,
+        continuity: observerInitiated ? 72 : 58,
+        historical: (record.fee ?? 0) >= 60 ? 55 : 25,
+      },
+      reservedForObserverAction: observerInitiated,
+    };
+  });
 
   for (const record of major) {
     const player = playerById.get(record.playerId);
@@ -741,7 +833,7 @@ export function buildCompetitionLandscapes(world: GameWorld): CompetitionLandsca
     const played = table[0]?.played ?? 0;
     const total = Math.max(1, (table.length - 1) * 2);
     const progress = Math.min(1, played / total);
-    if (played >= 4) {
+    if (played >= STORYLINE_MIN_LEAGUE_MATCHES) {
       const leaders = table.slice(0, 3);
       const gap = leaders[0].points - leaders.at(-1)!.points;
       if (gap <= (progress >= 0.7 ? 6 : 4)) {
@@ -941,8 +1033,16 @@ export function buildSeasonNarrativeOverview(
     : 0;
   const observedTeam = primaryTeamId && observedRow ? {
     teamId: primaryTeamId,
-    title: `${world.teamBases[primaryTeamId]?.shortName ?? primaryTeamId}当前第${observedRank}`,
-    detail: `${observedRow.played}场${observedRow.points}分，赛前期望约第${expectedRank}，目前${observedRank < expectedRank ? `高出${expectedRank - observedRank}位` : observedRank > expectedRank ? `低于${observedRank - expectedRank}位` : '与预期一致'}。`,
+    title: observedRow.played === 0
+      ? `${world.teamBases[primaryTeamId]?.shortName ?? primaryTeamId}等待首轮`
+      : observedRow.played < STORYLINE_MIN_LEAGUE_MATCHES
+        ? `${world.teamBases[primaryTeamId]?.shortName ?? primaryTeamId}开局样本`
+        : `${world.teamBases[primaryTeamId]?.shortName ?? primaryTeamId}当前第${observedRank}`,
+    detail: observedRow.played === 0
+      ? '新赛季尚未产生比赛结果，排名尚未形成。'
+      : observedRow.played < STORYLINE_MIN_LEAGUE_MATCHES
+        ? `${observedRow.played}场${observedRow.points}分，当前第${observedRank}；样本仍少，暂不判断是否偏离赛前预期。`
+        : `${observedRow.played}场${observedRow.points}分，赛前期望约第${expectedRank}，目前${observedRank < expectedRank ? `高出${expectedRank - observedRank}位` : observedRank > expectedRank ? `低于${observedRank - expectedRank}位` : '与预期一致'}。`,
   } : undefined;
 
   const activeArcs: Array<{ story: Storyline; signal: StorylineSignal }> = (world.activeStorylines ?? [])

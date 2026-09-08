@@ -19,10 +19,26 @@ type RouteSnapshot = {
 
 type AuditState = {
   favoriteTeamId: string | null;
+  favoriteTeamIds: string[];
   observationThemePreference: ObservationThemePreference;
   world: {
     seasonState: { seasonNumber: number; currentWindowIndex: number };
     teamStates: Record<string, { leagueLevel: 1 | 2 | 3 }>;
+    teamSeasonRecords: Record<string, Array<{
+      seasonNumber: number;
+      leagueLevel: 1 | 2 | 3;
+      leaguePosition: number;
+      leaguePlayed: number;
+      leagueWon: number;
+      leagueDrawn: number;
+      leagueLost: number;
+      leagueGF: number;
+      leagueGA: number;
+      leaguePoints: number;
+      coachId: string;
+      promoted: boolean;
+      relegated: boolean;
+    }>>;
     league1Standings: Array<{ teamId: string; played: number; points: number }>;
     league2Standings: Array<{ teamId: string; played: number; points: number }>;
     league3Standings: Array<{ teamId: string; played: number; points: number }>;
@@ -30,10 +46,14 @@ type AuditState = {
     rngState: number;
   };
   advanceWindow: () => Promise<boolean>;
+  newGame: (seed: number) => Promise<void>;
 };
 
 type AuditWindow = Window & {
-  __gameStore?: { getState: () => AuditState };
+  __gameStore?: {
+    getState: () => AuditState;
+    setState: (state: Partial<AuditState>) => void;
+  };
 };
 
 function captureError(message: ConsoleMessage, errors: string[]): void {
@@ -83,7 +103,12 @@ async function main(): Promise<void> {
       const theme = page.getByTestId('observation-theme');
       await theme.waitFor();
       const initialText = ((await theme.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-      if (!initialText.includes('黑马挑战') || !initialText.includes('下一观察：')) {
+      if (
+        !initialText.includes('黑马挑战')
+        || !initialText.includes('下一观察：')
+        || !initialText.includes('排名尚未形成')
+        || /当前第\d|黑马轮廓正在形成/.test(initialText)
+      ) {
         throw new Error(`${viewport.name}: recommended observation theme is incomplete`);
       }
       const initial = await page.evaluate(readRouteSnapshot);
@@ -104,11 +129,20 @@ async function main(): Promise<void> {
       });
 
       await page.getByRole('tab', { name: '比赛日' }).click();
+      const afterOneText = ((await theme.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      if (!afterOneText.includes('只有1场样本') || afterOneText.includes('黑马轮廓正在形成')) {
+        throw new Error(`${viewport.name}: one match was presented as an established trend`);
+      }
       await page.getByTestId('dashboard-advance').click();
       await page.getByTestId('world-response').waitFor({ timeout: 15_000 });
       const afterTwo = await page.evaluate(readRouteSnapshot);
       if (afterTwo.windowIndex < initial.windowIndex + 2 || afterTwo.primaryPlayed < 2) {
         throw new Error(`${viewport.name}: two ordinary windows did not settle`);
+      }
+      await page.getByRole('tab', { name: '比赛日' }).click();
+      const afterTwoText = ((await theme.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      if (!afterTwoText.includes('只有2场样本') || afterTwoText.includes('黑马轮廓正在形成')) {
+        throw new Error(`${viewport.name}: two matches were presented as an established trend`);
       }
 
       let storySnapshot = afterTwo;
@@ -174,16 +208,66 @@ async function main(): Promise<void> {
       await theme.scrollIntoViewIfNeeded();
       const screenshot = `/tmp/football-observation-route-${viewport.name}-theme.png`;
       await page.screenshot({ path: screenshot, animations: 'disabled' });
+
+      const relegatedTeamId = await page.evaluate(async () => {
+        const store = (window as AuditWindow).__gameStore;
+        if (!store) throw new Error('Audit store unavailable for relegated opening');
+        await store.getState().newGame(20260718);
+        const state = store.getState();
+        const teamId = Object.keys(state.world.teamStates)
+          .find(id => state.world.teamStates[id].leagueLevel === 2);
+        if (!teamId) throw new Error('No second-level team available for relegated opening');
+        const world = structuredClone(state.world);
+        world.seasonState.seasonNumber = 2;
+        world.teamSeasonRecords[teamId] = [{
+          seasonNumber: 1,
+          leagueLevel: 1,
+          leaguePosition: 14,
+          leaguePlayed: 26,
+          leagueWon: 5,
+          leagueDrawn: 6,
+          leagueLost: 15,
+          leagueGF: 24,
+          leagueGA: 45,
+          leaguePoints: 21,
+          coachId: 'audit-coach',
+          promoted: false,
+          relegated: true,
+        }];
+        store.setState({
+          world,
+          favoriteTeamId: teamId,
+          favoriteTeamIds: [teamId],
+          observationThemePreference: 'auto',
+        });
+        return teamId;
+      });
+      await theme.locator('span').filter({ hasText: /^升级 \/ 保级$/ }).waitFor();
+      const relegatedOpeningText = ((await theme.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      if (
+        !relegatedOpeningText.includes('升级路线')
+        || !relegatedOpeningText.includes('排名尚未形成')
+        || /联赛第\d|当前第\d|直升区/.test(relegatedOpeningText)
+      ) {
+        throw new Error(`${viewport.name}: relegated opening invented a ranking ${relegatedOpeningText}`);
+      }
+      const relegatedScreenshot = `/tmp/football-observation-route-${viewport.name}-relegated-opening.png`;
+      await theme.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: relegatedScreenshot, animations: 'disabled' });
       if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors ${errors.join(' | ')}`);
 
       reports.push({
         viewport: `${viewport.width}x${viewport.height}`,
         initial,
         afterTwo,
+        afterTwoTheme: afterTwoText,
         storySnapshot,
         finalTheme: finalText,
         overflow,
         screenshot,
+        relegatedTeamId,
+        relegatedOpeningText,
+        relegatedScreenshot,
         runtimeErrors: errors.length,
       });
       await context.close();

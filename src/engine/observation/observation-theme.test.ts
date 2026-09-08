@@ -69,12 +69,56 @@ describe('observation themes', () => {
     expect(theme?.type).toBe(type);
     expect(theme?.evidence.length).toBeGreaterThanOrEqual(3);
     expect(theme?.progress).toBe(0);
+    if (type !== 'player_growth') {
+      expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).toContain('排名尚未形成');
+      expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toMatch(/联赛第\d|当前第\d|安全区|直升区/);
+    }
     expect(world).toEqual(before);
     if (type === 'player_growth') {
       expect(theme?.playerId).toBeTruthy();
       expect(theme?.evidence.join(' ')).toMatch(/当前能力 \d+/);
       expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toContain('潜力');
     }
+  });
+
+  it('keeps early table facts visible without declaring a trend before the storyline threshold', () => {
+    const world = initializeGameWorld(20260718);
+    const teamId = teamByTier(world, 'mid');
+    const row = world.league1Standings.find(entry => entry.teamId === teamId)!;
+    Object.assign(row, { played: 2, won: 1, drawn: 1, points: 4 });
+
+    const theme = buildObservationTheme(world, teamId, 'dark_horse_challenge');
+
+    expect(theme?.summary).toContain('暂不把它定义为赛季走势');
+    expect(theme?.evidence).toContain(`联赛第${world.league1Standings.indexOf(row) + 1}/${world.league1Standings.length}`);
+    expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toMatch(/黑马轮廓|挑战尚未真正启动|偏离.*预期/);
+  });
+
+  it('puts a relegated club on its promotion route without inventing an opening rank', () => {
+    const world = initializeGameWorld(20260718);
+    const teamId = teamAtLevel(world, 2);
+    world.seasonState.seasonNumber = 2;
+    world.teamSeasonRecords[teamId] = [{
+      seasonNumber: 1,
+      leagueLevel: 1,
+      leaguePosition: 14,
+      leaguePlayed: 26,
+      leagueWon: 5,
+      leagueDrawn: 6,
+      leagueLost: 15,
+      leagueGF: 24,
+      leagueGA: 45,
+      leaguePoints: 21,
+      coachId: 'coach',
+      promoted: false,
+      relegated: true,
+    }];
+
+    expect(recommendObservationTheme(world, teamId)).toBe('promotion_survival');
+    const theme = buildObservationTheme(world, teamId, 'auto');
+    expect(theme?.title).toContain('升级路线');
+    expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).toContain('排名尚未形成');
+    expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toMatch(/联赛第\d|当前第\d|直升区/);
   });
 
   it('updates visible progress and player contribution after authoritative matches', () => {

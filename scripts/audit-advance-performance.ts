@@ -107,8 +107,7 @@ async function runSample(page: Page): Promise<AdvanceSample> {
     const busyImmediate = store.getState().isAdvancing;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const feedbackFrameMs = performance.now() - start;
-    const busyButton = [...document.querySelectorAll('button')]
-      .some((button) => button.textContent?.includes('模拟中') || button.textContent?.trim() === '...');
+    const busyButton = Boolean(document.querySelector('button[aria-busy="true"]'));
     const busyAtFirstFrame = store.getState().isAdvancing && busyButton;
     await advance;
     const actionMs = performance.now() - start;

@@ -12,8 +12,16 @@ type AuditStore = {
   getState: () => {
     world: {
       teamBases: Record<string, unknown>;
+      rngState: number;
       seasonState: { seasonNumber: number; currentWindowIndex: number };
-      transferHistory: Array<{ fromTeamId: string; toTeamId: string }>;
+      transferHistory: Array<{
+        playerId: string;
+        playerName: string;
+        fromTeamId: string;
+        toTeamId: string;
+        observerInitiated?: boolean;
+        observerImpact?: { focusTeamId: string; cashBefore: number; cashAfter: number };
+      }>;
       transferWindow?: { status: string } | null;
     };
     lastWorldResponse: {
@@ -47,11 +55,15 @@ type AuditStore = {
         }>;
       };
     } | null;
+    advanceTick: number;
+    favoriteTeamIds: string[];
+    lastResults: MatchResult[];
     newGame: (seed: number) => Promise<void>;
     setFavoriteTeams: (ids: string[]) => void;
     advanceWindow: () => Promise<boolean>;
     batchAdvance: (count: number) => Promise<boolean>;
     advanceUntil: (type: 'season_end') => Promise<boolean>;
+    signFromFreeAgentPool: (playerId: string, teamId?: string) => void;
     closeTransferWindow: (autoResolveRest: boolean) => void;
   };
   setState: (state: { advanceError: string | null }) => void;
@@ -184,10 +196,39 @@ async function main(): Promise<void> {
       if (singleLayout.overflow > 1) {
         throw new Error(`${viewport.name}: horizontal overflow ${singleLayout.overflow}px`);
       }
-      const nextActionBox = await page.getByTestId('results-next-action').getByTestId('dashboard-advance').boundingBox();
+      const nextActionBox = await page.getByTestId('results-next-action')
+        .getByTestId('results-return-to-matchday')
+        .boundingBox();
       if (!nextActionBox || nextActionBox.height < 44) {
-        throw new Error(`${viewport.name}: next Advance action is inaccessible`);
+        throw new Error(`${viewport.name}: return-to-Matchday action is inaccessible`);
       }
+      const beforeReturn = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        return {
+          season: state.world.seasonState.seasonNumber,
+          windowIndex: state.world.seasonState.currentWindowIndex,
+          rngState: state.world.rngState,
+          advanceTick: state.advanceTick,
+          results: JSON.stringify(state.lastResults),
+        };
+      });
+      await page.getByTestId('results-return-to-matchday').click();
+      await page.getByRole('tab', { name: '比赛日', exact: true }).waitFor();
+      const afterReturn = await page.evaluate(() => {
+        const state = (window as AuditWindow).__gameStore!.getState();
+        return {
+          season: state.world.seasonState.seasonNumber,
+          windowIndex: state.world.seasonState.currentWindowIndex,
+          rngState: state.world.rngState,
+          advanceTick: state.advanceTick,
+          results: JSON.stringify(state.lastResults),
+        };
+      });
+      if (JSON.stringify(afterReturn) !== JSON.stringify(beforeReturn)) {
+        throw new Error(`${viewport.name}: returning to Matchday mutated the world ${JSON.stringify({ beforeReturn, afterReturn })}`);
+      }
+      await page.getByRole('tab', { name: /战报/ }).click();
+      await page.getByTestId('world-response').waitFor();
       await page.screenshot({
         path: `/tmp/football-world-response-${viewport.name}-single.png`,
         animations: 'disabled',
@@ -322,8 +363,50 @@ async function main(): Promise<void> {
       const transferWindowOpen = await page.evaluate(() => (
         window as AuditWindow
       ).__gameStore!.getState().world.transferWindow?.status === 'open');
+      let manualSigning: null | { playerName: string; focusTeamId: string; cashChange: number } = null;
+      let manualTransferFeedbackScreenshot: string | null = null;
       if (transferWindowOpen) {
-        await page.getByTestId('season-handoff-transfer').waitFor();
+        const transferLink = page.getByTestId('season-handoff-transfer');
+        await transferLink.waitFor();
+        await transferLink.click();
+        await page.waitForURL(url => url.pathname === '/market');
+        const historyCount = await page.evaluate(() => (
+          window as AuditWindow
+        ).__gameStore!.getState().world.transferHistory.length);
+        const signingButton = page.getByRole('button', { name: '签下', exact: true }).and(page.locator(':enabled')).first();
+        await signingButton.waitFor({ state: 'visible' });
+        await signingButton.click();
+        await page.waitForFunction((before) => (
+          (window as AuditWindow).__gameStore!.getState().world.transferHistory.length > before
+        ), historyCount);
+        manualSigning = await page.evaluate(() => {
+          const record = [...(window as AuditWindow).__gameStore!.getState().world.transferHistory]
+            .reverse()
+            .find(item => item.observerInitiated && item.observerImpact);
+          if (!record?.observerImpact) throw new Error('Manual signing has no impact snapshot');
+          return {
+            playerName: record.playerName,
+            focusTeamId: record.observerImpact.focusTeamId,
+            cashChange: record.observerImpact.cashAfter - record.observerImpact.cashBefore,
+          };
+        });
+        await page.goBack({ waitUntil: 'networkidle' });
+        await page.waitForURL(url => url.pathname === '/');
+        await page.getByTestId('dashboard').waitFor();
+        const transferNarrative = page.locator('[data-narrative-source="transfer"]')
+          .filter({ hasText: manualSigning.playerName })
+          .first();
+        await transferNarrative.waitFor({ state: 'visible' });
+        if (!((await transferNarrative.textContent()) ?? '').includes('顺位')) {
+          throw new Error(`${viewport.name}: manual signing feedback omitted lineup/depth impact`);
+        }
+        await transferNarrative.scrollIntoViewIfNeeded();
+        manualTransferFeedbackScreenshot = `/tmp/football-world-response-${viewport.name}-manual-transfer.png`;
+        await page.screenshot({
+          path: manualTransferFeedbackScreenshot,
+          animations: 'disabled',
+          fullPage: false,
+        });
         await page.evaluate(() => (
           window as AuditWindow
         ).__gameStore!.getState().closeTransferWindow(false));
@@ -373,6 +456,8 @@ async function main(): Promise<void> {
         } : null,
         seasonBoundary: afterRollover,
         transferWindowOpen,
+        manualSigning,
+        manualTransferFeedbackScreenshot,
         freeMarketMoves,
         featuredMatches: await page.getByTestId('world-response-match').count(),
         runtimeErrors: errors.length,

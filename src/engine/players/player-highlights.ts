@@ -34,6 +34,10 @@ export interface PlayerHighlight {
   eventCount: number;
   /** Source fixture, for callers who want to jump to the match detail. */
   fixtureId: string;
+  /** Frozen source identity. These always describe the completed match. */
+  sourceCompetitionName: string;
+  sourceRoundLabel: string;
+  sourceWindowLabel: string;
 }
 
 /** Internal: tracks all events a player produced in one match. */
@@ -48,6 +52,19 @@ interface PlayerMatchAggregate {
   latestGoalMinute: number;
   /** Total events — used as a tiebreaker. */
   totalEvents: number;
+}
+
+function highlightSource(result: MatchResult): Pick<
+  PlayerHighlight,
+  'sourceCompetitionName' | 'sourceRoundLabel' | 'sourceWindowLabel'
+> {
+  const competition = result.competitionName.trim() || '正式比赛';
+  const round = result.roundLabel.trim() || '已赛轮次';
+  return {
+    sourceCompetitionName: competition,
+    sourceRoundLabel: round,
+    sourceWindowLabel: `${competition} · ${round}`,
+  };
 }
 
 function aggregateByPlayer(events: MatchEvent[]): Map<string, PlayerMatchAggregate> {
@@ -142,6 +159,7 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
         priority: 10,
         eventCount: a.totalEvents,
         fixtureId: result.fixtureId,
+        ...highlightSource(result),
       });
     }
 
@@ -173,6 +191,7 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
           priority: 8,
           eventCount: lateHero.totalEvents,
           fixtureId: result.fixtureId,
+          ...highlightSource(result),
         });
       }
     }
@@ -196,6 +215,7 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
         priority: 6,
         eventCount: a.totalEvents,
         fixtureId: result.fixtureId,
+        ...highlightSource(result),
       });
     }
 
@@ -223,6 +243,7 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
         priority: 5,
         eventCount: a.totalEvents,
         fixtureId: result.fixtureId,
+        ...highlightSource(result),
       });
     }
   }

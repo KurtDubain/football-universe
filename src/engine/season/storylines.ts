@@ -53,6 +53,7 @@ export const MAX_ACTIVE_STORYLINES = 8;
 export const MAX_STORYLINE_HISTORY = 60;
 export const MAX_STORYLINE_COOLDOWNS = 64;
 export const MAX_STORYLINES_PER_SEASON = 8;
+export const STORYLINE_MIN_LEAGUE_MATCHES = 4;
 export const STORYLINE_QUIET_WINDOWS = 2;
 export const STORYLINE_COOLDOWN_WINDOWS = 6;
 export const UNBEATEN_RUN_TRIGGER_LONG = 7;
@@ -398,7 +399,7 @@ function detectCupGiantKillerSignal(
 
 export function detectTeamStorylineSignals(world: GameWorld, teamId: string): StorylineSignal[] {
   const situation = getTeamSituation(world, teamId);
-  if (!situation || situation.row.played < 4) return [];
+  if (!situation || situation.row.played < STORYLINE_MIN_LEAGUE_MATCHES) return [];
   const { team, state, standings, row, rank, expected, relegationLine, safetyGap } = situation;
   const totalGames = Math.max(1, (standings.length - 1) * 2);
   const progress = row.played / totalGames;

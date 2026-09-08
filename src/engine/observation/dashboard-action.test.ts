@@ -4,7 +4,10 @@ import { describeDashboardAction } from './dashboard-action';
 describe('dashboard action vocabulary', () => {
   it('describes ordinary reveal and post-result continuation', () => {
     expect(describeDashboardAction({ phase: 'matchday' }).label).toBe('揭晓本轮');
-    expect(describeDashboardAction({ phase: 'results' }).label).toBe('继续观察');
+    expect(describeDashboardAction({ phase: 'results' })).toEqual({
+      label: '继续观察',
+      ariaLabel: '返回当前未赛比赛日',
+    });
   });
 
   it('gives the first reveal a distinct opening label', () => {

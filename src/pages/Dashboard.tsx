@@ -1037,7 +1037,7 @@ export function FixtureGroupList({
 //  Tab: 战报
 // ══════════════════════════════════════════════════════════════════════
 
-function ResultsTab({
+export function ResultsTab({
   world,
   lastResults,
   lastNews,
@@ -1058,8 +1058,6 @@ function ResultsTab({
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const lastObservationSettlements = useGameStore((s) => s.lastObservationSettlements);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
-  const advanceWindow = useGameStore((s) => s.advanceWindow);
-  const isAdvancing = useGameStore((s) => s.isAdvancing);
   const currentWindow = useGameStore((s) => s.getCurrentWindow)();
   const reachedKeyNode = useMemo(() => {
     if (lastWorldResponse?.mode !== 'key_node' || !currentWindow?.fixtures.length) return null;
@@ -1067,12 +1065,6 @@ function ResultsTab({
     return isInspectableKeyNode(plan) ? plan : null;
   }, [currentWindow, favoriteTeamIds, lastWorldResponse?.mode, starredFixtureIds, world]);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const handleAdvance = () => {
-    playUiFeedback('advance');
-    void advanceWindow().then(advanced => {
-      if (!advanced) playUiFeedback('reject');
-    });
-  };
   const favoriteTeamNames = favoriteTeamIds
     .flatMap(teamId => {
       const team = world.teamBases[teamId];
@@ -1096,7 +1088,7 @@ function ResultsTab({
       getNewsTier(news, favoriteTeamNames) === 'headline'
       && worldMomentKindForNews(news) !== null
     ));
-  const resultsAction = describeDashboardAction({ phase: 'results', isAdvancing });
+  const resultsAction = describeDashboardAction({ phase: 'results' });
 
   if (!lastWorldResponse && lastResults.length === 0 && curatedNews.length === 0) {
     return (
@@ -1140,14 +1132,12 @@ function ResultsTab({
       ) : (
         <button
           type="button"
-          data-testid="dashboard-advance"
+          data-testid="results-return-to-matchday"
           aria-label={resultsAction.ariaLabel}
-          aria-busy={isAdvancing}
-          disabled={isAdvancing}
-          onClick={handleAdvance}
-          className="ui-action-feedback flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+          onClick={onObserveNext}
+          className="ui-action-feedback flex min-h-11 shrink-0 items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)]"
         >
-          <Icon name="play" size={16} />
+          <Icon name="eye" size={16} />
           <span className="text-xs font-semibold">{resultsAction.label}</span>
         </button>
       )}

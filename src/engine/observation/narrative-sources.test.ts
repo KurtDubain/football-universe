@@ -54,6 +54,61 @@ function result(homeTeamId: string, awayTeamId: string): MatchResult {
 }
 
 describe('narrative source adapters', () => {
+  it.each([
+    {
+      sourceCompetition: '顶级联赛',
+      sourceRound: '第3轮',
+      currentWindowLabel: '联赛杯八强',
+    },
+    {
+      sourceCompetition: '联赛杯',
+      sourceRound: '四强',
+      currentWindowLabel: '顶级联赛第8轮',
+    },
+  ])('labels $sourceCompetition highlights as completed-match recaps before $currentWindowLabel', ({
+    sourceCompetition,
+    sourceRound,
+    currentWindowLabel,
+  }) => {
+    const world = initializeGameWorld(20260908);
+    const current = world.seasonState.calendar[world.seasonState.currentWindowIndex];
+    const player = Object.values(world.squads).flat()[0];
+    const opponentId = Object.keys(world.teamBases).find(teamId => teamId !== player.teamId)!;
+    const digest = buildMatchdayNarrativeDigest({
+      world,
+      currentWindow: { ...current, label: currentWindowLabel },
+      observationTheme: null,
+      focusMatches: [],
+      playerHighlights: [{
+        playerId: player.uuid,
+        playerName: player.name,
+        teamId: player.teamId,
+        opponentTeamId: opponentId,
+        position: player.position,
+        label: '绝杀',
+        emoji: '',
+        color: '',
+        detail: '89′ 绝杀进球',
+        priority: 10,
+        eventCount: 2,
+        fixtureId: `previous-${sourceCompetition}`,
+        sourceCompetitionName: sourceCompetition,
+        sourceRoundLabel: sourceRound,
+        sourceWindowLabel: `${sourceCompetition} · ${sourceRound}`,
+      }],
+      favoriteTeamIds: [player.teamId],
+      favoritePlayerIds: [player.uuid],
+      primaryFavoriteTeamId: player.teamId,
+      memory: [],
+    });
+    const highlight = [digest.feature, ...digest.signals, ...digest.more]
+      .find(item => item?.source === 'player_highlight');
+
+    expect(highlight?.seasonPhase).toBe(`上轮回顾 · ${sourceCompetition} · ${sourceRound}`);
+    expect(highlight?.seasonPhase).not.toContain(currentWindowLabel);
+    expect(highlight?.evidence?.[0].detail).toContain(`${sourceCompetition} · ${sourceRound}`);
+  });
+
   it('merges the observation arc, preserves prior Matchday sources, and exposes no hidden potential', () => {
     const world = initializeGameWorld(20260812);
     const currentWindow = world.seasonState.calendar[world.seasonState.currentWindowIndex];
@@ -115,6 +170,9 @@ describe('narrative source adapters', () => {
         priority: 8,
         eventCount: 2,
         fixtureId: 'previous-fixture',
+        sourceCompetitionName: '顶级联赛',
+        sourceRoundLabel: '第1轮',
+        sourceWindowLabel: '顶级联赛 · 第1轮',
       }],
       favoriteTeamIds: [observedTeamId],
       favoritePlayerIds: [candidatePlayer.uuid],
@@ -127,6 +185,8 @@ describe('narrative source adapters', () => {
     expect(digest.signals.length).toBeLessThanOrEqual(2);
     expect(digest.observationRelationFixtureIds).toContain(forcedFocus[0].fixture.id);
     expect(visible.some(item => item.source === 'player_highlight')).toBe(true);
+    expect(visible.find(item => item.source === 'player_highlight')?.seasonPhase)
+      .toBe('上轮回顾 · 顶级联赛 · 第1轮');
     expect(visible.some(item => item.source === 'transfer_rumor')).toBe(true);
     expect(visible.some(item => item.title === '保级线直接对话')).toBe(false);
     expect(JSON.stringify({ observationTheme, digest })).not.toContain('peakRating');

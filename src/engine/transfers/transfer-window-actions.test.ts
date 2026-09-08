@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyOfferTransfer, signFreeAgent } from './transfer-window-actions';
+import { applyOfferTransfer, applyOutgoingBid, signFreeAgent } from './transfer-window-actions';
 import type { GameWorld } from '../season/season-manager';
 import type { Player, PlayerSeasonStats } from '../../types/player';
 import type { FinanceState, TeamBase } from '../../types/team';
-import type { IncomingOffer } from '../../types/transfer';
+import type { IncomingOffer, OutgoingTarget } from '../../types/transfer';
 
 function makeTeam(id: string, overall: number): TeamBase {
   return {
@@ -237,6 +237,14 @@ describe('transfer-window store actions', () => {
       toTeamId: 'buyer',
       type: 'transfer',
       fee: 40,
+      observerInitiated: true,
+      observerImpact: {
+        focusTeamId: 'seller',
+        cashBefore: 100,
+        cashAfter: 140,
+        positionCountBefore: 2,
+        positionCountAfter: 1,
+      },
     });
     expect(out.transferHistory[1]).toMatchObject({
       playerId: 'p-release',
@@ -276,6 +284,43 @@ describe('transfer-window store actions', () => {
     });
   });
 
+  it('captures replacement, depth, squad quality, and cash for an observer purchase', () => {
+    const world = buildWorld();
+    const target: OutgoingTarget = {
+      id: 'target-1',
+      playerId: 'p-sell',
+      playerName: 'p-sell',
+      playerPosition: 'FW',
+      playerRating: 84,
+      fromTeamId: 'seller',
+      fromTeamName: 'seller',
+      toTeamId: 'buyer',
+      suggestedFee: 40,
+      resolution: 'pending',
+    };
+
+    const out = applyOutgoingBid(world, target, 40);
+    const record = out.transferHistory[0];
+
+    expect(record.observerImpact).toMatchObject({
+      focusTeamId: 'buyer',
+      teamBaseOverall: 90,
+      squadAverageBefore: 74,
+      squadAverageAfter: 86,
+      positionCountBefore: 2,
+      positionCountAfter: 2,
+      playerDepthRankAfter: 2,
+      cashBefore: 100,
+      cashAfter: 60,
+      displacedPlayer: {
+        playerId: 'p-release',
+        playerName: 'p-release',
+        rating: 60,
+        position: 'FW',
+      },
+    });
+  });
+
   it('attributes free-agent signings to transferWindow.season', () => {
     const world = {
       ...buildWorld(),
@@ -297,6 +342,14 @@ describe('transfer-window store actions', () => {
       playerId: 'p-free',
       toTeamId: 'buyer',
       type: 'free_agent',
+      observerInitiated: true,
+      observerImpact: {
+        focusTeamId: 'buyer',
+        cashBefore: 100,
+        cashAfter: 95,
+        positionCountBefore: 2,
+        positionCountAfter: 3,
+      },
     });
     expect(out!.newsLog.at(-1)).toMatchObject({
       id: 'manual-transfer:S3:W0:p-free:buyer',

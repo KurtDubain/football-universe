@@ -6,6 +6,7 @@ import {
   detectStorylineSignals,
   expectedStoryPosition,
   getStorylineArcKey,
+  STORYLINE_MIN_LEAGUE_MATCHES,
 } from '../season/storylines';
 
 export type ObservationThemeType =
@@ -145,6 +146,32 @@ function statsEvidence(stats: PlayerSeasonStats | undefined): string {
   return `${stats.appearances}场 ${stats.goals}球 ${stats.assists}助`;
 }
 
+function provisionalStanding(
+  situation: TeamSituation,
+): Pick<ObservationTheme, 'summary' | 'evidence'> | null {
+  if (situation.row.played === 0) {
+    return {
+      summary: '新赛季尚未产生比赛结果，排名和走势都还没有形成。',
+      evidence: [
+        '联赛排名尚未形成',
+        '0场 0分',
+        `至少进行${STORYLINE_MIN_LEAGUE_MATCHES}场后再判断赛季走势`,
+      ],
+    };
+  }
+  if (situation.row.played < STORYLINE_MIN_LEAGUE_MATCHES) {
+    return {
+      summary: `目前只有${situation.row.played}场样本，先记录真实排名与积分，暂不把它定义为赛季走势。`,
+      evidence: [
+        `联赛第${situation.rank}/${situation.standings.length}`,
+        `${situation.row.played}场 ${situation.row.points}分`,
+        `达到${STORYLINE_MIN_LEAGUE_MATCHES}场后形成首个趋势判断`,
+      ],
+    };
+  }
+  return null;
+}
+
 export function recommendObservationTheme(
   world: GameWorld,
   primaryTeamId: string | null,
@@ -155,7 +182,10 @@ export function recommendObservationTheme(
   if (!team || !state) return 'pure_observation';
 
   const previous = world.teamSeasonRecords[primaryTeamId]?.at(-1);
-  if (previous?.seasonNumber === world.seasonState.seasonNumber - 1 && previous.promoted) {
+  if (
+    previous?.seasonNumber === world.seasonState.seasonNumber - 1
+    && (previous.promoted || previous.relegated)
+  ) {
     return 'promotion_survival';
   }
   if (team.tier === 'elite' || team.expectation >= 4) return 'giant_defense';
@@ -172,15 +202,16 @@ function giantTheme(world: GameWorld, situation: TeamSituation): ObservationThem
   const expected = expectedStoryPosition(situation.standings.length, team.expectation);
   const leader = situation.standings[0];
   const gap = Math.max(0, leader.points - situation.row.points);
+  const provisional = provisionalStanding(situation);
   return {
     type: 'giant_defense',
     arcKey: `team:${situation.teamId}:season-expectation`,
     label: THEME_LABELS.giant_defense,
     title: `${team.name}能否守住上位区`,
-    summary: situation.rank <= expected
+    summary: provisional?.summary ?? (situation.rank <= expected
       ? `当前排名达到赛前第${expected}左右的预期，接下来要观察优势能否延续。`
-      : `当前落后赛前第${expected}左右的预期${situation.rank - expected}位，赛季正在出现偏差。`,
-    evidence: [
+      : `当前落后赛前第${expected}左右的预期${situation.rank - expected}位，赛季正在出现偏差。`),
+    evidence: provisional?.evidence ?? [
       `联赛第${situation.rank}/${situation.standings.length}`,
       `${situation.row.played}场 ${situation.row.points}分`,
       situation.rank === 1 ? '当前领跑' : `距榜首${gap}分`,
@@ -195,17 +226,18 @@ function darkHorseTheme(world: GameWorld, situation: TeamSituation): Observation
   const team = world.teamBases[situation.teamId];
   const expected = expectedStoryPosition(situation.standings.length, team.expectation);
   const delta = expected - situation.rank;
+  const provisional = provisionalStanding(situation);
   return {
     type: 'dark_horse_challenge',
     arcKey: `team:${situation.teamId}:story:dark_horse`,
     label: THEME_LABELS.dark_horse_challenge,
     title: `${team.name}挑战既有秩序`,
-    summary: delta > 0
+    summary: provisional?.summary ?? (delta > 0
       ? `目前比赛前第${expected}左右的预期高出${delta}位，黑马轮廓正在形成。`
       : delta === 0
         ? `目前与赛前第${expected}左右的预期一致，突破仍需要新的关键结果。`
-        : `目前比赛前预期低${Math.abs(delta)}位，挑战尚未真正启动。`,
-    evidence: [
+        : `目前比赛前预期低${Math.abs(delta)}位，挑战尚未真正启动。`),
+    evidence: provisional?.evidence ?? [
       `预期约第${expected}`,
       `当前第${situation.rank}/${situation.standings.length}`,
       `${situation.row.played}场 ${situation.row.points}分`,
@@ -219,6 +251,7 @@ function darkHorseTheme(world: GameWorld, situation: TeamSituation): Observation
 function promotionSurvivalTheme(world: GameWorld, situation: TeamSituation): ObservationTheme {
   const team = world.teamBases[situation.teamId];
   const level = world.teamStates[situation.teamId]?.leagueLevel ?? 1;
+  const provisional = provisionalStanding(situation);
   if (level === 1) {
     const firstRelegationIndex = Math.max(0, situation.standings.length - 3);
     const firstRelegation = situation.standings[firstRelegationIndex];
@@ -232,8 +265,8 @@ function promotionSurvivalTheme(world: GameWorld, situation: TeamSituation): Obs
       arcKey: `team:${situation.teamId}:survival`,
       label: THEME_LABELS.promotion_survival,
       title: `${team.name}的顶级联赛生存线`,
-      summary: safe ? `球队目前位于安全区，领先降级线${gap}分。` : `球队目前处于降级区，距离安全线${gap}分。`,
-      evidence: [
+      summary: provisional?.summary ?? (safe ? `球队目前位于安全区，领先降级线${gap}分。` : `球队目前处于降级区，距离安全线${gap}分。`),
+      evidence: provisional?.evidence ?? [
         `联赛第${situation.rank}/${situation.standings.length}`,
         safe ? `高出降级线${gap}分` : `距安全线${gap}分`,
         `${situation.row.played}场 ${situation.row.points}分`,
@@ -254,8 +287,8 @@ function promotionSurvivalTheme(world: GameWorld, situation: TeamSituation): Obs
     arcKey: `team:${situation.teamId}:promotion`,
     label: THEME_LABELS.promotion_survival,
     title: `${team.name}的升级路线`,
-    summary: inPromotionPlaces ? `球队目前处于直升区，领先区外${gap}分。` : `球队目前距离直升区${gap}分。`,
-    evidence: [
+    summary: provisional?.summary ?? (inPromotionPlaces ? `球队目前处于直升区，领先区外${gap}分。` : `球队目前距离直升区${gap}分。`),
+    evidence: provisional?.evidence ?? [
       `第${level}级联赛第${situation.rank}`,
       inPromotionPlaces ? `直升区内${gap}分` : `距直升区${gap}分`,
       `${situation.row.played}场 ${situation.row.points}分`,

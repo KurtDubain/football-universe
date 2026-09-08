@@ -122,6 +122,22 @@ describe('narrative director', () => {
     )).toBe(false);
   });
 
+  it('keeps an explicit observer action in a visible slot under a crowded digest', () => {
+    const observerAction = candidate('manual-transfer', {
+      source: 'transfer',
+      reservedForObserverAction: true,
+      weights: { importance: 20, relevance: 10, continuity: 10, historical: 5 },
+    });
+    const digest = directNarrative([
+      ...Array.from({ length: 8 }, (_, index) => candidate(`headline-${index}`)),
+      observerAction,
+    ], [], { elapsedWindow: 10 });
+
+    expect([digest.feature, ...digest.signals].map(item => item?.id))
+      .toContain(observerAction.id);
+    expect(digest.more.map(item => item.id)).not.toContain(observerAction.id);
+  });
+
   it('allows an empty feature when candidates stay below the quality threshold', () => {
     const quiet = candidate('quiet', {
       weights: { importance: 10, relevance: 0, continuity: 0, historical: 0 },
