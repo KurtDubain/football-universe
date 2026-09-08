@@ -1756,7 +1756,7 @@ function SeasonArchiveHandoff({
   const currentWindow = world.seasonState.calendar[world.seasonState.currentWindowIndex];
 
   return (
-    <section data-testid="season-archive-handoff" className="border-y border-emerald-800/45 bg-emerald-950/10 px-3 py-4 sm:px-4">
+    <section data-testid="season-archive-handoff" data-floating-advance-obstacle className="border-y border-emerald-800/45 bg-emerald-950/10 px-3 py-4 sm:px-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2.5">
           <Icon name="clipboard" size={19} className="mt-0.5 shrink-0 text-emerald-300" />

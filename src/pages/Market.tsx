@@ -237,7 +237,7 @@ export default function Market() {
       </Section>
 
       {/* Action footer */}
-      <div className="sticky bottom-0 bg-slate-900/95 backdrop-blur border-t border-slate-700/50 -mx-3 px-3 py-3 flex items-center justify-between flex-wrap gap-2 z-50">
+      <div data-testid="market-action-footer" data-floating-advance-obstacle className="sticky bottom-0 bg-slate-900/95 backdrop-blur border-t border-slate-700/50 -mx-3 px-3 py-3 flex items-center justify-between flex-wrap gap-2 z-50">
         <div className="text-xs text-slate-500 basis-full sm:basis-auto">
           {pendingOffers.length + pendingTargets.length > 0
             ? `还有 ${pendingOffers.length} 个待定报价 + ${pendingTargets.length} 个候选未操作`

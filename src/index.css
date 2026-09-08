@@ -36,6 +36,8 @@
   --motion-normal: 220ms;
   --motion-slow: 360ms;
   --ease-out: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Compatibility aliases while existing screens migrate incrementally. */
   --bg-primary: var(--surface-page);

@@ -25,6 +25,10 @@ import { StoryChapterMark } from './StoryChapterMark';
 import TeamBadge from './TeamBadge';
 import { DecorativeImage } from './DecorativeImage';
 import championCeremonyArtwork from '../assets/visual/champion-ceremony-v1.webp';
+import {
+  formatSeasonCompetitionStats,
+  selectSeasonCompetitionStats,
+} from '../engine/history/season-summary-selectors';
 
 interface Props {
   world: GameWorld;
@@ -69,8 +73,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   }
 
   const l1Records = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
-  const totalGoals = seasonRecords.reduce((s, r) => s + r.leagueGF, 0);
-  const totalMatches = seasonRecords.reduce((s, r) => s + r.leaguePlayed, 0) / 2;
+  const competitionStats = selectSeasonCompetitionStats(world, seasonNumber);
 
   const bestDefense = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGA < b.leagueGA ? r : b) : null;
   const bestAttack = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGF > b.leagueGF ? r : b) : null;
@@ -178,7 +181,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
               </h2>
             </div>
           </div>
-          <p className="text-xs text-slate-300">{Math.round(totalMatches)}场比赛 · {totalGoals}粒进球 · 场均{totalMatches > 0 ? (totalGoals / totalMatches).toFixed(1) : '0'}球</p>
+          <p data-testid="season-competition-stats" className="text-xs text-slate-300">
+            {formatSeasonCompetitionStats(competitionStats)}
+          </p>
         </div>
       </div>
 

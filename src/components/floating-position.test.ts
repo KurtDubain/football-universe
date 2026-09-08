@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  avoidFloatingObstacles,
   clampFloatingPosition,
   createFloatingPositionMemory,
   restoreFloatingPosition,
@@ -55,5 +56,41 @@ describe('clampFloatingPosition', () => {
       { width: 56, height: 56 },
       viewport,
     )).toEqual({ x: 322, y: 776 });
+  });
+});
+
+describe('avoidFloatingObstacles', () => {
+  const viewport = { left: 200, top: 48, width: 1080, height: 672 };
+  const control = { width: 96, height: 48 };
+
+  it('moves the control above a visible bottom action region', () => {
+    expect(avoidFloatingObstacles(
+      { x: 1172, y: 656 },
+      control,
+      viewport,
+      [{ left: 900, top: 620, right: 1280, bottom: 720 }],
+    )).toEqual({ x: 1172, y: 560 });
+  });
+
+  it('keeps a dragged position unchanged when it is clear', () => {
+    expect(avoidFloatingObstacles(
+      { x: 212, y: 260 },
+      control,
+      viewport,
+      [{ left: 900, top: 620, right: 1280, bottom: 720 }],
+    )).toEqual({ x: 212, y: 260 });
+  });
+
+  it('avoids multiple action regions while staying inside the viewport', () => {
+    const result = avoidFloatingObstacles(
+      { x: 1172, y: 656 },
+      control,
+      viewport,
+      [
+        { left: 900, top: 620, right: 1280, bottom: 720 },
+        { left: 1040, top: 540, right: 1280, bottom: 608 },
+      ],
+    );
+    expect(result).toEqual({ x: 1172, y: 480 });
   });
 });

@@ -17,7 +17,75 @@ export interface FloatingViewportBounds {
   height: number;
 }
 
+export interface FloatingObstacleRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export const FLOATING_EDGE_MARGIN = 12;
+export const FLOATING_OBSTACLE_GAP = 12;
+
+function intersectsObstacle(
+  position: FloatingPosition,
+  element: { width: number; height: number },
+  obstacle: FloatingObstacleRect,
+  gap: number,
+): boolean {
+  return position.x < obstacle.right + gap
+    && position.x + element.width > obstacle.left - gap
+    && position.y < obstacle.bottom + gap
+    && position.y + element.height > obstacle.top - gap;
+}
+
+export function avoidFloatingObstacles(
+  preferredPosition: FloatingPosition,
+  element: { width: number; height: number },
+  viewport: FloatingViewportBounds,
+  obstacles: readonly FloatingObstacleRect[],
+  gap = FLOATING_OBSTACLE_GAP,
+): FloatingPosition {
+  const preferred = clampFloatingPosition(preferredPosition, element, viewport);
+  const collides = (candidate: FloatingPosition) => obstacles.some(obstacle => (
+    intersectsObstacle(candidate, element, obstacle, gap)
+  ));
+  if (!collides(preferred)) return preferred;
+
+  const candidates: FloatingPosition[] = [];
+  for (const obstacle of obstacles) {
+    const xPositions = [
+      preferred.x,
+      obstacle.left - gap - element.width,
+      obstacle.right + gap,
+    ];
+    const yPositions = [
+      obstacle.top - gap - element.height,
+      obstacle.bottom + gap,
+      preferred.y,
+    ];
+    for (const y of yPositions) {
+      for (const x of xPositions) {
+        candidates.push(clampFloatingPosition({ x, y }, element, viewport));
+      }
+    }
+  }
+  candidates.push(
+    clampFloatingPosition({ x: viewport.left, y: viewport.top }, element, viewport),
+    clampFloatingPosition({ x: viewport.left + viewport.width, y: viewport.top }, element, viewport),
+    clampFloatingPosition({ x: viewport.left, y: viewport.top + viewport.height }, element, viewport),
+    clampFloatingPosition({ x: viewport.left + viewport.width, y: viewport.top + viewport.height }, element, viewport),
+  );
+
+  const clearCandidates = candidates.filter(candidate => !collides(candidate));
+  if (clearCandidates.length === 0) return preferred;
+  clearCandidates.sort((a, b) => {
+    const distanceA = (a.x - preferred.x) ** 2 + (a.y - preferred.y) ** 2;
+    const distanceB = (b.x - preferred.x) ** 2 + (b.y - preferred.y) ** 2;
+    return distanceA - distanceB || a.y - b.y || a.x - b.x;
+  });
+  return clearCandidates[0];
+}
 
 export function clampFloatingPosition(
   position: FloatingPosition,

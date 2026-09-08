@@ -5,7 +5,7 @@ const baseUrl = (process.env.VERIFY_URL ?? 'http://127.0.0.1:4173').replace(/\/$
 const viewports = [
   { name: 'mobile-320', width: 320, height: 568, isMobile: true, hasTouch: true },
   { name: 'mobile-390', width: 390, height: 844, isMobile: true, hasTouch: true },
-  { name: 'mobile-430', width: 430, height: 932, isMobile: true, hasTouch: true },
+  { name: 'desktop-low', width: 1280, height: 720, isMobile: false, hasTouch: false },
   { name: 'desktop', width: 1440, height: 900, isMobile: false, hasTouch: false },
 ] as const;
 const requestedViewport = process.env.VERIFY_VIEWPORT;
@@ -18,6 +18,63 @@ type AuditIds = {
 
 function captureError(message: ConsoleMessage, errors: string[]): void {
   if (message.type() === 'error') errors.push(message.text());
+}
+
+async function assertNoObstacleOverlap(
+  page: import('playwright').Page,
+  label: string,
+): Promise<unknown> {
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const layout = await page.evaluate(() => {
+    const control = document.querySelector<HTMLElement>('[data-testid="floating-advance"]')?.getBoundingClientRect();
+    const obstacles = [...document.querySelectorAll<HTMLElement>('[data-floating-advance-obstacle]')]
+      .map(element => {
+        const rect = element.getBoundingClientRect();
+        const scrollContainer = element.closest<HTMLElement>('.app-route-content')?.getBoundingClientRect();
+        return {
+          element,
+          style: getComputedStyle(element),
+          rect: scrollContainer ? {
+            left: Math.max(rect.left, scrollContainer.left),
+            top: Math.max(rect.top, scrollContainer.top),
+            right: Math.min(rect.right, scrollContainer.right),
+            bottom: Math.min(rect.bottom, scrollContainer.bottom),
+            width: Math.max(0, Math.min(rect.right, scrollContainer.right) - Math.max(rect.left, scrollContainer.left)),
+            height: Math.max(0, Math.min(rect.bottom, scrollContainer.bottom) - Math.max(rect.top, scrollContainer.top)),
+          } : rect,
+        };
+      })
+      .filter(({ rect, style }) => (
+        rect.width > 0
+        && rect.height > 0
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && rect.right > 0
+        && rect.left < window.innerWidth
+        && rect.bottom > 0
+        && rect.top < window.innerHeight
+      ));
+    if (!control) return null;
+    return {
+      control: { left: control.left, top: control.top, right: control.right, bottom: control.bottom },
+      avoidanceActive: document.querySelector<HTMLElement>('[data-testid="floating-advance"]')?.dataset.avoidanceActive,
+      obstacles: obstacles.map(({ element, rect }) => ({
+        testId: element.dataset.testid,
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        intersects: control.left < rect.right
+          && control.right > rect.left
+          && control.top < rect.bottom
+          && control.bottom > rect.top,
+      })),
+    };
+  });
+  if (!layout) throw new Error(`${label}: floating control is missing`);
+  const collision = layout.obstacles.find(obstacle => obstacle.intersects);
+  if (collision) throw new Error(`${label}: floating control overlaps ${JSON.stringify(collision)}`);
+  return layout;
 }
 
 async function verifyRouteCoverage(
@@ -131,6 +188,7 @@ async function main(): Promise<void> {
           __gameStore?: {
             getState: () => {
               newGame: (nextSeed: number) => Promise<void>;
+              setFavoriteTeams: (teamIds: string[]) => void;
               world: {
                 teamBases: Record<string, unknown>;
                 coachBases: Record<string, unknown>;
@@ -142,6 +200,7 @@ async function main(): Promise<void> {
         await store?.getState().newGame(seed);
         const world = store!.getState().world;
         const teamId = Object.keys(world.teamBases)[0];
+        store!.getState().setFavoriteTeams([teamId]);
         localStorage.removeItem('floating-advance-position-v2');
         localStorage.setItem('floating-btn', '0');
         return {
@@ -232,6 +291,83 @@ async function main(): Promise<void> {
       }
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       if (overflow > 1) throw new Error(`${viewport.name}: page overflows by ${overflow}px`);
+
+      const ordinaryLayout = await assertNoObstacleOverlap(page, `${viewport.name} ordinary matchday`);
+      const ordinaryScreenshot = `/tmp/football-floating-obstacle-${viewport.name}-matchday.png`;
+      await page.screenshot({ path: ordinaryScreenshot, animations: 'disabled' });
+
+      const rolledOver = await page.evaluate(async () => {
+        const store = (window as typeof window & {
+          __gameStore?: {
+            getState: () => {
+              advanceUntil: (type: 'season_end') => Promise<boolean>;
+              batchAdvance: (count: number) => Promise<boolean>;
+            };
+          };
+        }).__gameStore!;
+        const reachedBoundary = await store.getState().advanceUntil('season_end');
+        if (!reachedBoundary) return false;
+        return store.getState().batchAdvance(10);
+      });
+      if (!rolledOver) throw new Error(`${viewport.name}: could not create a completed season for layout checks`);
+
+      await page.waitForFunction(() => new URL(window.location.href).pathname === '/');
+      await page.getByTestId('open-season-review').click();
+      const handoff = page.getByTestId('season-archive-handoff');
+      await handoff.waitFor();
+      const reviewStats = await page.getByTestId('season-competition-stats').first().textContent();
+      const handoffBottomAction = page.getByTestId('auto-resolve-season-transfer');
+      if (await handoffBottomAction.count() > 0) await handoffBottomAction.scrollIntoViewIfNeeded();
+      else await page.getByTestId('observe-next-season').scrollIntoViewIfNeeded();
+      const handoffLayout = await assertNoObstacleOverlap(page, `${viewport.name} season handoff`);
+      const handoffScreenshot = `/tmp/football-floating-obstacle-${viewport.name}-handoff.png`;
+      await page.screenshot({ path: handoffScreenshot, animations: 'disabled' });
+
+      let draggedObstacleLayout: unknown = null;
+      if (!viewport.isMobile) {
+        const draggable = page.getByTestId('floating-advance');
+        const dragStart = await draggable.boundingBox();
+        if (!dragStart) throw new Error(`${viewport.name}: floating control missing before obstacle drag`);
+        await page.mouse.move(dragStart.x + dragStart.width / 2, dragStart.y + dragStart.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(viewport.width - 44, viewport.height - 38, { steps: 8 });
+        await page.mouse.up();
+        await page.waitForTimeout(100);
+        const memoryAfterDrag = await page.evaluate(() => localStorage.getItem('floating-advance-position-v2'));
+        draggedObstacleLayout = await assertNoObstacleOverlap(page, `${viewport.name} dragged season handoff`);
+        const memoryAfterAvoidance = await page.evaluate(() => localStorage.getItem('floating-advance-position-v2'));
+        if (!memoryAfterDrag || memoryAfterAvoidance !== memoryAfterDrag) {
+          throw new Error(`${viewport.name}: transient obstacle avoidance overwrote the user's stored position`);
+        }
+      }
+
+      await page.goto(`${baseUrl}/market?audit=1`, { waitUntil: 'networkidle' });
+      const marketFooter = page.getByTestId('market-action-footer');
+      await marketFooter.waitFor();
+      const marketLayout = await assertNoObstacleOverlap(page, `${viewport.name} market footer`);
+      const marketScreenshot = `/tmp/football-floating-obstacle-${viewport.name}-market.png`;
+      await page.screenshot({ path: marketScreenshot, animations: 'disabled' });
+
+      await page.goto(`${baseUrl}/history?audit=1`, { waitUntil: 'networkidle' });
+      const visibleAchievementItems = await page.locator('[data-testid="achievement-card"], [data-testid="achievement-group"]').count();
+      if (visibleAchievementItems > 6) {
+        throw new Error(`${viewport.name}: achievement hall rendered ${visibleAchievementItems} default items`);
+      }
+      const achievementScreenshot = `/tmp/football-achievement-hall-${viewport.name}.png`;
+      await page.screenshot({ path: achievementScreenshot, animations: 'disabled' });
+      await page.getByTestId('season-history-toggle').first().click();
+      const historyObstacle = page.locator('[data-floating-advance-obstacle]').last();
+      await historyObstacle.scrollIntoViewIfNeeded();
+      const historyLayout = await assertNoObstacleOverlap(page, `${viewport.name} expanded history`);
+      const historyScreenshot = `/tmp/football-floating-obstacle-${viewport.name}-history.png`;
+      await page.screenshot({ path: historyScreenshot, animations: 'disabled' });
+
+      await page.goto(`${baseUrl}/chronicle?audit=1`, { waitUntil: 'networkidle' });
+      await page.getByTestId('chronicle-season-1').click();
+      const chronicleStats = await page.getByTestId('season-competition-stats').textContent();
+      if (!reviewStats || chronicleStats !== reviewStats) {
+        throw new Error(`${viewport.name}: season stats disagree ${JSON.stringify({ reviewStats, chronicleStats })}`);
+      }
       if (errors.length > 0) throw new Error(`${viewport.name}: runtime errors: ${errors.join(' | ')}`);
 
       const screenshot = `/tmp/football-floating-advance-${viewport.name}.png`;
@@ -247,6 +383,18 @@ async function main(): Promise<void> {
         before,
         afterTap,
         overflow,
+        ordinaryLayout,
+        handoffLayout,
+        draggedObstacleLayout,
+        marketLayout,
+        historyLayout,
+        reviewStats,
+        chronicleStats,
+        ordinaryScreenshot,
+        handoffScreenshot,
+        marketScreenshot,
+        achievementScreenshot,
+        historyScreenshot,
         screenshot,
       });
       await context.close();

@@ -6,7 +6,7 @@ import { useGameStore } from '../store/game-store';
 import { getTeamName, getCoachName } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import SeasonReview from '../components/SeasonReview';
-import type { Achievement } from '../engine/achievements';
+import AchievementHall from '../components/AchievementHall';
 import type { GameWorld, GodHandIntervention } from '../engine/season/season-manager';
 import { PageHeader, PageShell, SegmentedControl } from '../components/ui';
 import { rankClubCoefficients } from '../engine/rankings/club-coefficient';
@@ -22,12 +22,13 @@ import { continentalCupConfig } from '../config/competitions';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
+  const favoriteTeamIds = useGameStore((s) => s.favoriteTeamIds);
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
-  return <HistoryContent world={world} />;
+  return <HistoryContent world={world} favoriteTeamIds={favoriteTeamIds} />;
 }
 
-function HistoryContent({ world }: { world: GameWorld }) {
+function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favoriteTeamIds: string[] }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
   const [detailedSeason, setDetailedSeason] = useState<number | null>(null);
   const [seasonRange, setSeasonRange] = useUiSessionState<'recent10' | 'recent40' | 'all'>('ui.history.range', 'recent10');
@@ -269,18 +270,11 @@ function HistoryContent({ world }: { world: GameWorld }) {
           )}
 
           {(world.achievements ?? []).length > 0 && (
-            <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">成就殿堂</h3>
-              <div className="flex flex-wrap gap-2">
-                {(world.achievements ?? []).map((a: Achievement) => (
-                  <div key={a.id} className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-3 py-2 text-xs">
-                    <span className="text-amber-400 font-semibold">{a.title}</span>
-                    <span className="text-slate-500 ml-1.5">S{a.seasonNumber}</span>
-                    <p className="text-slate-400 text-[10px] mt-0.5">{a.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <AchievementHall
+              achievements={world.achievements ?? []}
+              followedTeamIds={favoriteTeamIds}
+              teamBases={world.teamBases}
+            />
           )}
 
           {honors.length === 0 ? (
@@ -386,7 +380,7 @@ function HistoryContent({ world }: { world: GameWorld }) {
                         {expandedSummary?.seasonNumber === record.seasonNumber && (
                           <SeasonHistorySummaryPanel summary={expandedSummary} />
                         )}
-                        <div className="mt-3 border-t border-slate-700/60 pt-3">
+                        <div data-floating-advance-obstacle className="mt-3 border-t border-slate-700/60 pt-3">
                           <button
                             type="button"
                             data-testid="toggle-season-detail"

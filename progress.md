@@ -1,5 +1,13 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-08 Chronicle, Season Statistics, Floating Actions, And Achievement Hall
+
+- Corrected the Chronicle champion timeline so its multi-title label starts with the top-flight title and adds only trophies won by that same club in the same season, including continental trophies from the authoritative team trophy archive. A World Cup badge now also belongs only to a league champion that actually won it.
+- Added one shared season competition selector for Season Review and Chronicle. Complete archived scores produce all-competition matches, goals, and goals per match without shootout kicks; incomplete legacy archives fall back to explicitly labelled league totals from team season records.
+- Added stable achievement presentation grouping without changing achievement generation or persistence. Followed-team achievements remain individual and rank first, rare world achievements follow, repeated global achievements group only by season and achievement type, and the first view is capped at six expandable items.
+- Added centralized floating-action obstacle markers and transient collision avoidance. Desktop controls move clear of visible season handoff, transfer footer, and history action regions while preserving the user's stored drag position; mobile retains its flow dock and safe-area spacing.
+- Validation passed 145 test files / 1,024 tests, strict TypeScript, ESLint, production PWA build, bundle budgets, history-summary browser verification, and the expanded floating-action audit at 320x568, 390x844, 1280x720, and 1440x900. The audited S1 rendered the same all-competition line in both season pages: 446 matches, 1,001 goals, 2.24 goals per match.
+
 ## 2026-09-08 Experience Convergence Follow-up
 
 - Added an explicit season-boundary editorial policy without changing simulation order, RNG, or persisted data. The followed team's final fate leads when available; major historical resolutions and the top-flight champion remain protected ahead of cups, promotion/relegation, and routine transfer, prize, or coach news. Dense season-end news can no longer push the champion out before candidate selection.

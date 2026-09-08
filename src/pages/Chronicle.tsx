@@ -5,6 +5,11 @@ import { getTeamName, getTeamShortName, getCoachName } from '../utils/format';
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
 import { SegmentedControl } from '../components/ui';
+import {
+  countTopFlightChampionTitles,
+  formatSeasonCompetitionStats,
+  selectSeasonCompetitionStats,
+} from '../engine/history/season-summary-selectors';
 
 type SeasonRow = SeasonRecord & { teamId: string };
 
@@ -59,8 +64,8 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
     champion: h.league1Champion,
     name: getTeamName(h.league1Champion, tb),
     color: tb[h.league1Champion]?.color ?? '#666',
-    cups: [h.leagueCupWinner, h.superCupWinner, h.worldCupWinner].filter(Boolean).length,
-    worldCup: !!h.worldCupWinner,
+    titleCount: countTopFlightChampionTitles(h, world.teamTrophies[h.league1Champion]),
+    worldCup: h.worldCupWinner === h.league1Champion,
   }));
 
   // Dynasty detection (consecutive wins by same team)
@@ -146,12 +151,13 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
         </div>
         <div className="divide-y divide-slate-700/30">
           {champTimeline.map(c => (
-            <button key={c.season} onClick={() => onSelectSeason(c.season)}
+            <button key={c.season} data-testid={`chronicle-season-${c.season}`} onClick={() => onSelectSeason(c.season)}
+              data-title-count={c.titleCount}
               className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-700/30 transition-colors cursor-pointer text-left">
               <span className="text-xs text-slate-500 w-8 shrink-0">S{c.season}</span>
               <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
               <span className="text-sm text-slate-200 font-medium flex-1">{c.name}</span>
-              {c.cups >= 2 && <span className="text-[11px] sm:text-[9px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded">{c.cups}冠</span>}
+              {c.titleCount >= 2 && <span className="text-[11px] sm:text-[9px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded">{c.titleCount}冠</span>}
               {c.worldCup && <span className="text-[11px] sm:text-[9px] bg-sky-900/40 text-sky-400 px-1.5 py-0.5 rounded">WC</span>}
               <span className="text-slate-600 text-xs">→</span>
             </button>
@@ -218,8 +224,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
 
   // Match history for this season
   const seasonMatches = (world.matchHistory ?? []).filter(m => m.season === seasonNumber);
-  const totalGoals = seasonMatches.reduce((s, m) => s + m.homeGoals + m.awayGoals, 0);
-  const avgGoals = seasonMatches.length > 0 ? (totalGoals / seasonMatches.length).toFixed(2) : '0';
+  const competitionStats = selectSeasonCompetitionStats(world, seasonNumber);
 
   // Best stats from records
   const allRecs = [...l1, ...l2, ...l3];
@@ -362,10 +367,8 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
       {/* Header with rich narrative */}
       <div className="py-5 bg-gradient-to-r from-amber-900/20 via-slate-800 to-amber-900/20 rounded-lg border border-amber-700/30 px-4 sm:px-6">
         <h2 className="text-2xl font-black text-slate-100 text-center">第{seasonNumber}赛季</h2>
-        <div className="flex justify-center gap-4 mt-1 text-[10px] text-slate-500">
-          <span>{seasonMatches.length}场比赛</span>
-          <span>{totalGoals}粒进球</span>
-          <span>场均{avgGoals}球</span>
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-slate-500">
+          <span data-testid="season-competition-stats">{formatSeasonCompetitionStats(competitionStats)}</span>
           {honor.worldCupWinner && <span className="text-sky-400">⭐ 世界杯年</span>}
           {honor.worldCupHostId && <span className="text-emerald-400">主办：{getTeamName(honor.worldCupHostId, tb)}</span>}
         </div>

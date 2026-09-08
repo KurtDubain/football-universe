@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { Icon } from './Icon';
 import {
+  avoidFloatingObstacles,
   clampFloatingPosition,
   createFloatingPositionMemory,
   FLOATING_EDGE_MARGIN,
@@ -52,6 +53,45 @@ function getElementSize(element: HTMLElement | null): { width: number; height: n
   return window.innerWidth < 640
     ? { width: 48, height: 48 }
     : { width: 96, height: 48 };
+}
+
+function getSafeAreaInset(property: '--safe-area-right' | '--safe-area-bottom'): number {
+  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(property));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getDefaultPosition(
+  element: { width: number; height: number },
+  viewport: FloatingViewportBounds,
+): FloatingPosition {
+  return clampFloatingPosition({
+    x: viewport.left + viewport.width - element.width - Math.max(12, getSafeAreaInset('--safe-area-right')),
+    y: viewport.top + viewport.height - element.height - Math.max(16, getSafeAreaInset('--safe-area-bottom')),
+  }, element, viewport);
+}
+
+function samePosition(a: FloatingPosition | null, b: FloatingPosition | null): boolean {
+  if (!a || !b) return a === b;
+  return Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
+}
+
+function getVisibleObstacles(viewport: FloatingViewportBounds) {
+  const viewportRight = viewport.left + viewport.width;
+  const viewportBottom = viewport.top + viewport.height;
+  return [...document.querySelectorAll<HTMLElement>('[data-floating-advance-obstacle]')]
+    .filter(element => {
+      const style = getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    })
+    .map(element => element.getBoundingClientRect())
+    .filter(rect => (
+      rect.width > 0
+      && rect.height > 0
+      && rect.right > viewport.left
+      && rect.left < viewportRight
+      && rect.bottom > viewport.top
+      && rect.top < viewportBottom
+    ));
 }
 
 function readSavedPosition(): FloatingPosition | null {
@@ -118,6 +158,7 @@ export default function FloatingAdvanceButton({
   });
   const suppressClickRef = useRef(false);
   const [position, setPosition] = useState<FloatingPosition | null>(readSavedPosition);
+  const [avoidancePosition, setAvoidancePosition] = useState<FloatingPosition | null>(null);
   const latestPositionRef = useRef<FloatingPosition | null>(position);
   const [dragging, setDragging] = useState(false);
   const [mobileDocked, setMobileDocked] = useState(isMobileDocked);
@@ -125,11 +166,36 @@ export default function FloatingAdvanceButton({
   const updatePosition = useCallback((next: FloatingPosition | null) => {
     latestPositionRef.current = next;
     setPosition(next);
+    setAvoidancePosition(null);
   }, []);
 
   const clampCurrentPosition = useCallback((next: FloatingPosition): FloatingPosition => (
     clampFloatingPosition(next, getElementSize(containerRef.current), getViewportBounds())
   ), []);
+
+  const recalibratePosition = useCallback(() => {
+    if (isMobileDocked()) {
+      setAvoidancePosition(current => current ? null : current);
+      return;
+    }
+    const element = containerRef.current;
+    if (!element) return;
+    const size = getElementSize(element);
+    const viewport = getViewportBounds();
+    const current = latestPositionRef.current;
+    const preferred = current
+      ? clampFloatingPosition(current, size, viewport)
+      : getDefaultPosition(size, viewport);
+    if (current && !samePosition(current, preferred)) {
+      latestPositionRef.current = preferred;
+      setPosition(preferred);
+      persistPosition(preferred, element);
+    }
+    const avoided = avoidFloatingObstacles(preferred, size, viewport, getVisibleObstacles(viewport));
+    setAvoidancePosition(previous => samePosition(avoided, preferred)
+      ? previous ? null : previous
+      : samePosition(previous, avoided) ? previous : avoided);
+  }, []);
 
   useLayoutEffect(() => {
     // The route content box only exists after commit, so resolve saved relative
@@ -150,23 +216,48 @@ export default function FloatingAdvanceButton({
   }, [clampCurrentPosition, updatePosition]);
 
   useEffect(() => {
-    const keepVisible = () => {
-      const current = latestPositionRef.current;
-      if (!current) return;
-      const clamped = clampCurrentPosition(current);
-      updatePosition(clamped);
-      persistPosition(clamped, containerRef.current);
+    let frame = 0;
+    const scheduleCalibration = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(recalibratePosition);
     };
     const viewport = window.visualViewport;
-    window.addEventListener('resize', keepVisible);
-    viewport?.addEventListener('resize', keepVisible);
-    viewport?.addEventListener('scroll', keepVisible);
-    return () => {
-      window.removeEventListener('resize', keepVisible);
-      viewport?.removeEventListener('resize', keepVisible);
-      viewport?.removeEventListener('scroll', keepVisible);
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(scheduleCalibration);
+    const observeLayout = () => {
+      resizeObserver?.disconnect();
+      const routeContent = document.querySelector<HTMLElement>('.app-route-content');
+      if (routeContent) resizeObserver?.observe(routeContent);
+      for (const obstacle of document.querySelectorAll<HTMLElement>('[data-floating-advance-obstacle]')) {
+        resizeObserver?.observe(obstacle);
+      }
+      scheduleCalibration();
     };
-  }, [clampCurrentPosition, updatePosition]);
+    const mutationObserver = new MutationObserver(observeLayout);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', scheduleCalibration);
+    window.addEventListener('orientationchange', scheduleCalibration);
+    document.addEventListener('scroll', scheduleCalibration, true);
+    viewport?.addEventListener('resize', scheduleCalibration);
+    viewport?.addEventListener('scroll', scheduleCalibration);
+    observeLayout();
+    return () => {
+      cancelAnimationFrame(frame);
+      mutationObserver.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', scheduleCalibration);
+      window.removeEventListener('orientationchange', scheduleCalibration);
+      document.removeEventListener('scroll', scheduleCalibration, true);
+      viewport?.removeEventListener('resize', scheduleCalibration);
+      viewport?.removeEventListener('scroll', scheduleCalibration);
+    };
+  }, [recalibratePosition]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(recalibratePosition);
+    return () => cancelAnimationFrame(frame);
+  }, [mobileDocked, position, recalibratePosition]);
 
   useEffect(() => {
     const media = window.matchMedia?.('(max-width: 639px)');
@@ -270,6 +361,7 @@ export default function FloatingAdvanceButton({
       type="button"
       data-testid="floating-advance"
       data-dragging={dragging ? 'true' : 'false'}
+      data-avoidance-active={avoidancePosition ? 'true' : 'false'}
       aria-label={stageLabel
         ? `推进到下一阶段：${stageLabel}${mobileDocked ? '' : '；拖动可调整位置'}`
         : '赛季已完成'}
@@ -280,8 +372,11 @@ export default function FloatingAdvanceButton({
           : `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位`
         : '赛季已完成'}
       disabled={disabled}
-      className={`ui-action-feedback floating-advance-overlay fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
-      style={position ? { left: position.x, top: position.y } : undefined}
+      className={`ui-action-feedback floating-advance-overlay fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position || avoidancePosition ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
+      style={avoidancePosition || position ? {
+        left: (avoidancePosition ?? position)!.x,
+        top: (avoidancePosition ?? position)!.y,
+      } : undefined}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
