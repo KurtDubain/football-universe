@@ -1,8 +1,8 @@
 # Football Universe Current Status
 
-Last reviewed: 2026-09-08
-Current release: v4.61.0
-Status: release-ready core; active work is limited to human experience validation.
+Last reviewed: 2026-09-09
+Current release: v4.61.1
+Status: core-mechanism convergence batch 1 is released; later balance batches remain deliberately deferred.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
 
@@ -16,8 +16,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 1,005 unit and component tests across 142 test files.
-- Approximately 64k production TypeScript lines across 239 source files.
+- 1,034 unit and component tests across 146 test files.
+- Approximately 65k production TypeScript lines across 242 source files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.
@@ -32,6 +32,7 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - Cup-stage meaning now comes from one shared contract: Chinese and English knockout labels rank consistently, while World Cup/continental third rounds and Super Cup sixth rounds surface as group-stage finales with focused match tags, protected key-node arrival, and restrained transition feedback.
 - A remote deployment mismatch converges through one guarded safe reload even when the stale page missed the worker lifecycle event; the social preview image remains deployable without delaying PWA precache installation.
 - Node 22.22.2 and pnpm 10.34.5 are the release toolchain.
+- Every remote push is treated as a release: bump `package.json` and `APP_VERSION`, add the matching in-game changelog entry, and synchronize the current-version documentation before pushing.
 
 ## Active Work
 

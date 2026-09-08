@@ -1,6 +1,6 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
-## 2026-09-09 Core Mechanism Convergence - Batch 1
+## 2026-09-09 v4.61.1 Core Mechanism Convergence - Batch 1
 
 - Confirmed and fixed the four first-batch issues without entering the choice-value or long-term calibration batches. Results now return to the current unplayed Matchday without mutating the world or save; the persistent global Advance remains the explicit one-window simulation action, and key-node viewing keeps its existing guard.
 - Opening observation facts now distinguish zero matches, early samples, and established trends. Zero-match standings say the rank is not formed, factual rank appears after the first match, and storyline judgments reuse the existing four-match threshold. Newly relegated clubs are automatically placed on the existing promotion/survival route without receiving a synthetic opening rank.
