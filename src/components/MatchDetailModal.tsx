@@ -14,6 +14,7 @@ import {
   getTeamShortName,
   getCoachStyleLabel,
   formatForm,
+  cnRoundLabel,
 } from '../utils/format';
 import { shootoutEventLabel } from './match-live/live-commentary';
 import {
@@ -217,7 +218,7 @@ function PreMatchView({
           <div className="text-center px-4 shrink-0">
             <div className="text-2xl font-black text-slate-500">VS</div>
             <div className="text-xs text-slate-600 mt-0.5">
-              {fixture.competitionName} - {fixture.roundLabel}
+              {fixture.competitionName} - {cnRoundLabel(fixture.roundLabel)}
             </div>
             {fixture.isNeutralVenue && (
               <div className="mt-0.5 text-[10px] font-medium text-amber-400">中立场</div>
@@ -583,7 +584,7 @@ function PostMatchView({
             </div>
             {/* ET / Penalty indicator */}
             <div className="text-xs text-slate-500 mt-1 space-x-2">
-              <span>{result.competitionName} - {result.roundLabel}</span>
+              <span>{result.competitionName} - {cnRoundLabel(result.roundLabel)}</span>
               {result.extraTime && (
                 <span className="text-amber-400">
                   加时 {result.etHomeGoals ?? 0}-{result.etAwayGoals ?? 0}

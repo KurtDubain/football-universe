@@ -5,11 +5,41 @@ export type PlaybackMode = 'highlights' | 'live' | 'immersive';
 export const PLAYBACK_MODE_OPTIONS: ReadonlyArray<{
   value: PlaybackMode;
   label: string;
+  description: string;
+  recommended?: boolean;
 }> = [
-  { value: 'highlights', label: '精华' },
-  { value: 'live', label: '直播' },
-  { value: 'immersive', label: '沉浸' },
+  { value: 'highlights', label: '精华', description: '跳过平淡时段，保留关键攻防', recommended: true },
+  { value: 'live', label: '完整', description: '逐分钟推进整场比赛' },
+  { value: 'immersive', label: '沉浸', description: '完整播放，节奏更舒缓' },
 ];
+
+const PLAYBACK_MODE_STORAGE_KEY = 'football-universe:match-playback-mode';
+
+export function isPlaybackMode(value: unknown): value is PlaybackMode {
+  return value === 'highlights' || value === 'live' || value === 'immersive';
+}
+
+export function readPlaybackModePreference(storage?: Pick<Storage, 'getItem'>): PlaybackMode {
+  try {
+    const target = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    const stored = target?.getItem(PLAYBACK_MODE_STORAGE_KEY);
+    return isPlaybackMode(stored) ? stored : 'highlights';
+  } catch {
+    return 'highlights';
+  }
+}
+
+export function writePlaybackModePreference(
+  mode: PlaybackMode,
+  storage?: Pick<Storage, 'setItem'>,
+): void {
+  try {
+    const target = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    target?.setItem(PLAYBACK_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Storage can be unavailable in private browsing; playback remains usable.
+  }
+}
 
 const HIGHLIGHT_EVENT_TYPES = new Set<MatchEvent['type']>([
   'goal',

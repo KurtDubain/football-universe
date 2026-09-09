@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../store/game-store';
-import { selectWorldFeedbackCue, type UiFeedbackCue } from './feedback-policy';
+import {
+  seasonFeedbackOutcomeForRecord,
+  selectWorldFeedbackCue,
+  type UiFeedbackCue,
+} from './feedback-policy';
 import { playGameFeedback, playUiFeedback, suspendGameAudio, unlockGameAudio } from './game-feedback';
 import { getFeedbackPreferences } from './preferences';
 
 export default function GameFeedbackBridge() {
   const advanceTick = useGameStore(state => state.advanceTick);
   const lastWorldResponse = useGameStore(state => state.lastWorldResponse);
+  const primaryFavoriteTeamId = useGameStore(state => state.favoriteTeamId);
+  const world = useGameStore(state => state.world);
   const previousAdvanceTick = useRef(advanceTick);
 
   useEffect(() => {
@@ -42,9 +48,19 @@ export default function GameFeedbackBridge() {
   useEffect(() => {
     if (advanceTick === previousAdvanceTick.current) return;
     previousAdvanceTick.current = advanceTick;
-    const cue = selectWorldFeedbackCue(lastWorldResponse);
+    const completedSeason = lastWorldResponse?.nextSeason != null
+      ? lastWorldResponse.nextSeason - 1
+      : null;
+    const primaryRecord = primaryFavoriteTeamId && completedSeason != null
+      ? world?.teamSeasonRecords[primaryFavoriteTeamId]
+        ?.find(record => record.seasonNumber === completedSeason)
+      : undefined;
+    const cue = selectWorldFeedbackCue(
+      lastWorldResponse,
+      seasonFeedbackOutcomeForRecord(primaryRecord),
+    );
     if (cue) playGameFeedback(cue);
-  }, [advanceTick, lastWorldResponse]);
+  }, [advanceTick, lastWorldResponse, primaryFavoriteTeamId, world]);
 
   return null;
 }

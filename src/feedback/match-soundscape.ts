@@ -22,6 +22,9 @@ export type MatchSoundCue =
   | 'free_kick'
   | 'none';
 
+export type MatchSoundEmphasis = 'equalizer' | 'turnaround' | 'late_winner';
+export type MatchStageOutcome = 'standard' | 'advance' | 'champion';
+
 export interface MatchAtmosphereSnapshot {
   minute: number;
   maxMinute: number;
@@ -38,7 +41,8 @@ export interface MatchSoundscape {
   updatePresentation: (snapshot: MatchPresentationAtmosphere) => void;
   playEvent: (event: MatchEvent) => void;
   playPresentation: (cue: MatchPresentationCue) => void;
-  playStage: (stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime') => void;
+  playEmphasis: (emphasis: MatchSoundEmphasis) => void;
+  playStage: (stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime', outcome?: MatchStageOutcome) => void;
   setMuted: (muted: boolean) => void;
   setProfile: (profile: SoundProfile) => void;
   setLevels: (effectsVolume: number) => void;
@@ -592,7 +596,32 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     }
   }
 
-  playStage(stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime'): void {
+  playEmphasis(emphasis: MatchSoundEmphasis): void {
+    if ((!this.started && !this.start()) || !this.context || !this.accentGain
+      || !this.crowdReactionGain || !this.eventNoise) return;
+    const context = this.context;
+    const accent = this.accentGain;
+    if (emphasis === 'equalizer') {
+      scheduleOscillator(context, accent, 330, 0.08, 0.18, 0.014, 'triangle', 440);
+      scheduleOscillator(context, accent, 440, 0.24, 0.2, 0.016, 'triangle', 554);
+    } else if (emphasis === 'turnaround') {
+      scheduleOscillator(context, accent, 294, 0.08, 0.16, 0.014, 'triangle', 392);
+      scheduleOscillator(context, accent, 392, 0.22, 0.18, 0.016, 'triangle', 494);
+      scheduleOscillator(context, accent, 494, 0.38, 0.24, 0.018, 'triangle', 659);
+    } else {
+      scheduleWhistle(context, accent, 0.08);
+      scheduleOscillator(context, accent, 330, 0.18, 0.2, 0.016, 'triangle', 494);
+      scheduleOscillator(context, accent, 494, 0.36, 0.24, 0.019, 'triangle', 659);
+      scheduleOscillator(context, accent, 659, 0.56, 0.3, 0.018, 'triangle', 784);
+      scheduleNoiseBurst(context, this.crowdReactionGain, this.eventNoise, 0.075, 1.15, 980, 0.1);
+    }
+    reportSoundscape({ type: 'event', cue: emphasis });
+  }
+
+  playStage(
+    stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime',
+    outcome: MatchStageOutcome = 'standard',
+  ): void {
     if ((!this.started && !this.start()) || !this.context || !this.actionGain
       || !this.crowdReactionGain || !this.eventNoise) return;
     scheduleWhistle(this.context, this.actionGain);
@@ -600,7 +629,17 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     if (stage === 'shootout') {
       scheduleNoiseBurst(this.context, this.crowdReactionGain, this.eventNoise, 0.07, 1.2, 540, 0.12);
     }
-    reportSoundscape({ type: 'stage', cue: stage });
+    if (stage === 'fulltime' && this.accentGain) {
+      if (outcome === 'advance' || outcome === 'champion') {
+        scheduleOscillator(this.context, this.accentGain, 392, 0.5, 0.2, 0.015, 'triangle', 523);
+        scheduleOscillator(this.context, this.accentGain, 523, 0.68, 0.24, 0.017, 'triangle', 659);
+      }
+      if (outcome === 'champion') {
+        scheduleOscillator(this.context, this.accentGain, 659, 0.9, 0.34, 0.019, 'triangle', 784);
+        scheduleNoiseBurst(this.context, this.crowdReactionGain, this.eventNoise, 0.08, 1.5, 1050, 0.22);
+      }
+    }
+    reportSoundscape({ type: 'stage', cue: outcome === 'standard' ? stage : `${stage}_${outcome}` });
   }
 
   setMuted(muted: boolean): void {

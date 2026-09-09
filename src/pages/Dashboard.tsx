@@ -30,12 +30,14 @@ import {
   getStandingRank,
   getStandingPositionLabel,
   getWindowTypeLabel,
+  cnRoundLabel,
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
 import { describeDashboardAction } from '../engine/observation/dashboard-action';
+import { describeTransferWindowHandoff } from '../engine/transfers/transfer-window-summary';
 import { SegmentedControl } from '../components/ui';
 import { WorldMomentFeature } from '../components/WorldMomentFeature';
 import { worldMomentKindForNews } from '../components/world-moment';
@@ -188,6 +190,12 @@ function DashboardContent({ world }: { world: GameWorld }) {
   }, [world?.transferWindow?.status, lastWorldResponse?.id]);
 
   const currentWindow = getCurrentWindow();
+  const openingObservation = world.seasonState.seasonNumber === 1
+    && world.seasonState.currentWindowIndex === 0
+    && world.totalElapsedWindows === 0;
+  const transferWindowPresentation = transferWindowHandoff
+    ? describeTransferWindowHandoff(transferWindowHandoff)
+    : null;
 
   // Find the matching fixture for a result
   const findFixtureForResult = (result: MatchResult): MatchFixture => {
@@ -275,7 +283,11 @@ function DashboardContent({ world }: { world: GameWorld }) {
   });
 
   return (
-    <div data-testid="dashboard" className="dashboard-shell max-w-6xl flex flex-col h-full tabular-nums">
+    <div
+      data-testid="dashboard"
+      data-opening={openingObservation ? 'true' : undefined}
+      className="dashboard-shell max-w-6xl flex flex-col h-full tabular-nums"
+    >
       <DashboardMasthead world={world} currentWindow={currentWindow} favoriteTeamId={favoriteTeamId} />
 
       {transferWindowHandoff && (
@@ -293,22 +305,22 @@ function DashboardContent({ world }: { world: GameWorld }) {
                   {transferWindowHandoff.mode === 'auto' ? '自动处理' : '按当前决定完成'}
                 </span>
               </div>
-              {transferWindowHandoff.mode === 'auto' && (
-                <p className="mt-1 text-slate-400">
-                  自动策略拒绝 {transferWindowHandoff.autoRejectedOffers} 份待定报价，跳过 {transferWindowHandoff.autoSkippedTargets} 个待定目标。
-                </p>
-              )}
-              <p className="mt-1 leading-5 text-slate-400">
-                本窗口接受 {transferWindowHandoff.acceptedOffers} 份报价、拒绝 {transferWindowHandoff.rejectedOffers} 份；完成 {transferWindowHandoff.completedTargets} 个引援目标、未完成 {transferWindowHandoff.uncompletedTargets} 个。
-                {' '}签约：{transferWindowHandoff.signedPlayerNames.length > 0
-                  ? transferWindowHandoff.signedPlayerNames.join('、')
-                  : '无人'}。
+              <p className="mt-1 leading-5 text-slate-300">
+                {transferWindowPresentation?.conclusion}
               </p>
               <p className="text-[11px] text-slate-500">
-                现金变化：{transferWindowHandoff.cashChanges.map(change => (
-                  `${change.teamName} ${change.delta === 0 ? '无变化' : `${change.delta > 0 ? '+' : ''}${formatMoney(change.delta)}`}`
-                )).join('、') || '无关注球队'}
+                {transferWindowPresentation?.cashChanged
+                  ? `现金变化 · ${transferWindowHandoff.cashChanges.filter(change => change.delta !== 0).map(change => (
+                    `${change.teamName} ${change.delta > 0 ? '+' : ''}${formatMoney(change.delta)}`
+                  )).join('、')}`
+                  : '现金无变化'}
               </p>
+              {(transferWindowPresentation?.details.length ?? 0) > 0 && (
+                <details className="mt-1 text-[11px] text-slate-500">
+                  <summary className="min-h-11 cursor-pointer py-3 text-cyan-300 sm:min-h-0 sm:py-0">查看处理明细</summary>
+                  <p className="pb-1 leading-5">{transferWindowPresentation?.details.join(' · ')}</p>
+                </details>
+              )}
             </div>
             <button
               type="button"
@@ -839,6 +851,7 @@ function MatchdayTab({
           preference={observationThemePreference}
           onPreferenceChange={setObservationThemePreference}
           embedded
+          compact={isOpeningObservation}
         />
 
         {/* Focus matches stay inside the same observation flow. */}
@@ -917,9 +930,15 @@ function MatchdayTab({
                       <div className="focus-fixture-main mb-1 flex items-center justify-between">
                       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
                         <TeamBadge teamId={fixture.homeTeamId} shortName={ht.shortName} color={ht.color} size={26} />
-                        <span className="truncate font-semibold text-slate-100" title={ht.name}>{ht.shortName}</span>
+                        <span className="truncate font-semibold text-slate-100" title={ht.name}>
+                          <span className="sm:hidden">{ht.shortName}</span>
+                          <span className="hidden sm:inline">{ht.name}</span>
+                        </span>
                         <span className="mx-0.5 text-slate-500">vs</span>
-                        <span className="truncate font-semibold text-slate-100" title={at.name}>{at.shortName}</span>
+                        <span className="truncate font-semibold text-slate-100" title={at.name}>
+                          <span className="sm:hidden">{at.shortName}</span>
+                          <span className="hidden sm:inline">{at.name}</span>
+                        </span>
                         <TeamBadge teamId={fixture.awayTeamId} shortName={at.shortName} color={at.color} size={26} />
                       </div>
                     </div>
@@ -941,7 +960,7 @@ function MatchdayTab({
                       {displayReasons.slice(0, reasonLimit).map((r, i) => (
                         <span key={i} className="rounded bg-amber-900/30 px-1.5 py-0.5 text-[11px] text-amber-200">{r}</span>
                       ))}
-                      <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {fixture.roundLabel}</span>
+                      <span className="ml-auto text-[11px] text-slate-500">{fixture.competitionName} · {cnRoundLabel(fixture.roundLabel)}</span>
                     </div>
                     </button>
                   </div>

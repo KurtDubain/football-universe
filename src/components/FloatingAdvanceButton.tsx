@@ -132,6 +132,8 @@ function persistPosition(position: FloatingPosition | null, element: HTMLElement
 
 interface FloatingAdvanceButtonProps {
   stageLabel?: string;
+  label?: string;
+  actionAriaLabel?: string;
   accentClass?: string;
   isAdvancing: boolean;
   busyLabel?: string;
@@ -141,6 +143,8 @@ interface FloatingAdvanceButtonProps {
 
 export default function FloatingAdvanceButton({
   stageLabel,
+  label = '推进',
+  actionAriaLabel,
   accentClass = 'bg-[var(--text-muted)]',
   isAdvancing,
   busyLabel,
@@ -363,13 +367,13 @@ export default function FloatingAdvanceButton({
       data-dragging={dragging ? 'true' : 'false'}
       data-avoidance-active={avoidancePosition ? 'true' : 'false'}
       aria-label={stageLabel
-        ? `推进到下一阶段：${stageLabel}${mobileDocked ? '' : '；拖动可调整位置'}`
+        ? `${actionAriaLabel ?? `推进到下一阶段：${stageLabel}`}${mobileDocked ? '' : '；拖动可调整位置'}`
         : '赛季已完成'}
       aria-busy={isAdvancing}
       title={stageLabel
         ? mobileDocked
-          ? `推进到下一阶段：${stageLabel}`
-          : `推进到下一阶段：${stageLabel}；拖动可调整位置，方向键微调，Home 复位`
+          ? (actionAriaLabel ?? `推进到下一阶段：${stageLabel}`)
+          : `${actionAriaLabel ?? `推进到下一阶段：${stageLabel}`}；拖动可调整位置，方向键微调，Home 复位`
         : '赛季已完成'}
       disabled={disabled}
       className={`ui-action-feedback floating-advance-overlay fixed z-[100] flex h-12 w-12 touch-none items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--action)] text-white shadow-xl transition-[background-color,box-shadow,transform] hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:w-auto sm:min-w-24 sm:gap-2 sm:rounded-lg sm:px-4 ${position || avoidancePosition ? '' : 'floating-advance-docked'} ${dragging ? 'scale-105 cursor-grabbing ring-2 ring-[var(--focus-ring)]' : 'cursor-pointer'}`}
@@ -388,7 +392,7 @@ export default function FloatingAdvanceButton({
         <Icon name={isAdvancing ? 'refresh' : 'play'} size={18} />
       </span>
       <span className="text-sm font-semibold">
-        {isAdvancing ? (busyLabel ?? '结算中') : '推进'}
+        {isAdvancing ? (busyLabel ?? '结算中') : label}
       </span>
       <span className={`absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-[var(--action)] sm:static sm:h-1.5 sm:w-1.5 sm:ring-0 ${accentClass}`} aria-hidden="true" />
     </button>

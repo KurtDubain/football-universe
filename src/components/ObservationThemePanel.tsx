@@ -21,18 +21,21 @@ export default function ObservationThemePanel({
   preference,
   onPreferenceChange,
   embedded = false,
+  compact = false,
 }: {
   world: GameWorld;
   primaryTeamId: string | null;
   preference: ObservationThemePreference;
   onPreferenceChange: (preference: ObservationThemePreference) => void;
   embedded?: boolean;
+  compact?: boolean;
 }) {
   const theme = buildObservationTheme(world, primaryTeamId, preference);
 
   return (
     <section
       data-testid="observation-theme"
+      data-compact={compact ? 'true' : undefined}
       className={embedded
         ? 'bg-slate-900/30'
         : 'overflow-hidden rounded-lg border border-emerald-800/50 bg-slate-900/55'}
@@ -79,16 +82,16 @@ export default function ObservationThemePanel({
               {theme.seasonPhase} · {theme.played}/{theme.totalMatches}轮
             </span>
           </div>
-          <p className="mt-1 line-clamp-1 text-xs leading-5 text-slate-400 sm:line-clamp-none">{theme.summary}</p>
+          <p className={`mt-1 line-clamp-1 text-xs leading-5 text-slate-400 ${compact ? '' : 'sm:line-clamp-none'}`}>{theme.summary}</p>
 
-          <div className="mt-2 hidden h-1 overflow-hidden rounded bg-slate-800 sm:block" aria-label={`赛季进度 ${Math.round(theme.progress * 100)}%`}>
+          <div className={`${compact ? 'hidden' : 'mt-2 hidden sm:block'} h-1 overflow-hidden rounded bg-slate-800`} aria-label={`赛季进度 ${Math.round(theme.progress * 100)}%`}>
             <div
               className="h-full rounded bg-emerald-500 transition-[width] motion-reduce:transition-none"
               style={{ width: `${Math.round(theme.progress * 100)}%` }}
             />
           </div>
 
-          <div className="mt-2 hidden flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 sm:flex">
+          <div className={`${compact ? 'hidden' : 'mt-2 hidden sm:flex'} flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500`}>
             {theme.evidence.map(item => <span key={item}>{item}</span>)}
           </div>
           <div className="mt-1.5 flex min-w-0 items-start gap-1.5 text-xs text-slate-300">

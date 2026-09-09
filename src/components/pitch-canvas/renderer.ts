@@ -216,6 +216,7 @@ export function drawPlayer(
   actionProgress = 0,
   visualScale = 1,
   featured = false,
+  teamSide: 'home' | 'away' = 'home',
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -373,21 +374,31 @@ export function drawPlayer(
   ctx.save();
   ctx.translate(px, py);
   if (facingLength > 0.01) ctx.rotate(Math.atan2(directionY, directionX));
+  const bodyRadiusX = action === 'save' ? 5.7 + actionWave * 2.5 : action === 'receive' ? 5.7 + actionWave * 0.7 : 5.7;
+  const bodyRadiusY = action === 'save' ? 4.8 - actionWave * 1.2 : action === 'receive' ? 4.8 - actionWave * 0.45 : 4.8;
   ctx.beginPath();
-  ctx.ellipse(
-    0,
-    0,
-    action === 'save' ? 5.7 + actionWave * 2.5 : action === 'receive' ? 5.7 + actionWave * 0.7 : 5.7,
-    action === 'save' ? 4.8 - actionWave * 1.2 : action === 'receive' ? 4.8 - actionWave * 0.45 : 4.8,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  if (teamSide === 'home') {
+    ctx.ellipse(0, 0, bodyRadiusX, bodyRadiusY, 0, 0, Math.PI * 2);
+  } else {
+    const radius = Math.max(bodyRadiusX, bodyRadiusY);
+    for (let index = 0; index < 6; index++) {
+      const angle = Math.PI / 6 + index * Math.PI / 3;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * bodyRadiusY;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
   ctx.fillStyle = color; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.strokeStyle = teamSide === 'home' ? 'rgba(255,255,255,0.92)' : 'rgba(147,197,253,0.96)';
+  ctx.lineWidth = 1.15;
+  ctx.stroke();
   ctx.restore();
 
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 6.5px sans-serif'; ctx.textAlign = 'center';
+  ctx.strokeStyle = 'rgba(2,6,23,0.9)'; ctx.lineWidth = 1.4;
+  ctx.strokeText(String(num), px, py + 2.2);
   ctx.fillText(String(num), px, py + 2.2);
 
   if (facingLength > 0.01) {

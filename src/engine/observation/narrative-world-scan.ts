@@ -10,6 +10,7 @@ import {
   type PlayerPerformanceResult,
 } from '../players/player-performance';
 import { getKnockoutRoundRank } from '../season/match-importance';
+import { cnRoundLabel } from '../../utils/format';
 import type { GameWorld } from '../season/season-manager';
 import {
   describeStoryline,
@@ -936,9 +937,9 @@ function competitionCandidates(options: WorldNarrativeScanOptions): NarrativeCan
       fixtureIds: [fixture.id],
       seasonNumber: season,
       seasonPhase: fixture.roundLabel,
-      title: isFinal ? `${fixture.competitionName}决赛` : `${fixture.competitionName}进入${fixture.roundLabel}`,
+      title: isFinal ? `${fixture.competitionName}决赛` : `${fixture.competitionName}进入${cnRoundLabel(fixture.roundLabel)}`,
       summary: `${home?.name ?? fixture.homeTeamId}对阵${away?.name ?? fixture.awayTeamId}${fixture.isNeutralVenue ? '，比赛在中立场进行。' : '。'}`,
-      evidence: [fact('competition', `competition:${fixture.id}:stage`, '赛事节点', `${fixture.competitionName} · ${fixture.roundLabel}${fixture.isNeutralVenue ? ' · 中立场' : ''}`)],
+      evidence: [fact('competition', `competition:${fixture.id}:stage`, '赛事节点', `${fixture.competitionName} · ${cnRoundLabel(fixture.roundLabel)}${fixture.isNeutralVenue ? ' · 中立场' : ''}`)],
       nextWatch: isFinal ? '冠军将在这场比赛后产生' : '观察谁能继续留在洲际舞台',
       destinations: [fixtureDestination(fixture.id)],
       visualKind: 'stage',

@@ -76,6 +76,7 @@ let root: Root;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  window.localStorage.setItem('football-universe:match-playback-mode', 'live');
   setFeedbackPreferences({ soundEnabled: true, hapticsEnabled: false });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -254,14 +255,15 @@ describe('MatchLive playback state machine', () => {
     expect(button('声音').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('defaults to live mode and lets highlights cross quiet periods quickly', () => {
+  it('recommends highlights for first-time playback and crosses quiet periods quickly', () => {
     const events: MatchEvent[] = [
       { minute: 20, type: 'goal', teamId: 'home', playerId: 'p1', description: '关键进球' },
     ];
+    window.localStorage.removeItem('football-universe:match-playback-mode');
     render(<MatchLive result={makeResult('live-highlights', events)} teamBases={teamBases} onClose={() => undefined} />);
 
-    expect(button('直播').getAttribute('aria-pressed')).toBe('true');
-    act(() => button('精华').click());
+    expect(button('精华').getAttribute('aria-pressed')).toBe('true');
+    expect(document.body.querySelector('[data-testid="playback-mode-description"]')?.textContent).toContain('推荐');
     advanceTicks(3, 120);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("15'");
     advanceTicks(5, 520);
@@ -384,6 +386,7 @@ describe('MatchLive playback state machine', () => {
     advance(liveTickDelay(121, events[1]));
     advance(liveTickDelay(121, null, events[2]));
     advance(liveTickDelay(122, events[2]));
+    advance(720);
 
     expect(score('主队比分')).toBe('1');
     expect(score('客队比分')).toBe('0');
@@ -463,6 +466,7 @@ describe('MatchLive playback state machine', () => {
       .toBe('star-home,star-away');
 
     act(() => button('跳过').click());
+    advance(720);
     expect(document.body.querySelector('[data-testid="live-featured-review"]')?.textContent).toContain('1球');
     expect(document.body.querySelector('[data-testid="live-featured-review"]')?.textContent).toContain('赛前边际 +1.8');
   });

@@ -5,6 +5,8 @@ import {
   playbackBreakDelay,
   playbackMotionRate,
   playbackTickDelay,
+  readPlaybackModePreference,
+  writePlaybackModePreference,
 } from './playback-mode';
 
 const events: MatchEvent[] = [
@@ -64,5 +66,18 @@ describe('match live playback modes', () => {
     expect(playbackBreakDelay('immersive', false)).toBe(3600);
     expect(playbackBreakDelay('highlights', false)).toBe(650);
     expect(playbackBreakDelay('live', true)).toBe(250);
+  });
+
+  it('recommends highlights without overwriting a saved playback choice', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    expect(readPlaybackModePreference(storage)).toBe('highlights');
+    writePlaybackModePreference('immersive', storage);
+    expect(readPlaybackModePreference(storage)).toBe('immersive');
+    values.set('football-universe:match-playback-mode', 'invalid');
+    expect(readPlaybackModePreference(storage)).toBe('highlights');
   });
 });

@@ -97,7 +97,10 @@ export default function ObservationPanel({
 
   if (!expanded) {
     return (
-      <div className={advanceButton ? 'grid grid-cols-[minmax(0,0.82fr)_minmax(8.5rem,1.18fr)] gap-2' : undefined}>
+      <div
+        data-floating-advance-obstacle={advanceButton ? true : undefined}
+        className={advanceButton ? 'grid grid-cols-[minmax(0,0.82fr)_minmax(8.5rem,1.18fr)] gap-2' : undefined}
+      >
         <button
           type="button"
           onClick={() => {
@@ -211,7 +214,7 @@ export default function ObservationPanel({
           </div>
         </div>
       </section>
-      {advanceButton && <div className="mt-2">{advanceButton}</div>}
+      {advanceButton && <div data-floating-advance-obstacle className="mt-2">{advanceButton}</div>}
     </>
   );
 }

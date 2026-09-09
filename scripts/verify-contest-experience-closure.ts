@@ -194,10 +194,10 @@ async function runRoute(page: Page, viewportName: string): Promise<Record<string
     throw new Error(`${viewportName}: natural Chinese list punctuation was not rendered`);
   }
   const storylineText = (await page.getByTestId('season-storylines').textContent())?.replace(/\s+/g, '') ?? '';
-  if (storylineText.includes('推进至Final后止步') && storylineText.includes('最深阶段SF')) {
+  if (storylineText.includes('推进至决赛后止步') && storylineText.includes('最深阶段四强')) {
     throw new Error(`${viewportName}: cup conclusion and evidence still disagree`);
   }
-  if (!storylineText.includes('推进至Final后止步') || !storylineText.includes('最深阶段Final')) {
+  if (!storylineText.includes('推进至决赛后止步') || !storylineText.includes('最深阶段决赛')) {
     throw new Error(`${viewportName}: expected canonical Final cup campaign was not archived`);
   }
   await assertNoHorizontalOverflow(page, `${viewportName} archive`);
@@ -215,8 +215,8 @@ async function runRoute(page: Page, viewportName: string): Promise<Record<string
   await page.getByRole('button', { name: '全自动剩余', exact: true }).click();
   const handoff = page.getByTestId('transfer-window-handoff-summary');
   await handoff.waitFor();
-  await handoff.getByText('自动策略拒绝', { exact: false }).waitFor();
-  await handoff.getByText('签约：', { exact: false }).waitFor();
+  await handoff.getByText(/球队跳过\d+个引援目标，本窗口无人加盟或离队。/).waitFor();
+  await handoff.getByText('现金无变化', { exact: true }).waitFor();
   const finalState = await storeState(page);
   if (finalState.world.seasonState.seasonNumber !== 2 || finalState.world.seasonState.currentWindowIndex !== 0) {
     throw new Error(`${viewportName}: transfer handoff unexpectedly advanced the S2 opener`);

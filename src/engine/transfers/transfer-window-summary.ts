@@ -19,8 +19,45 @@ export interface TransferWindowHandoffSummary {
   cashChanges: TransferCashChange[];
 }
 
+export interface TransferWindowHandoffPresentation {
+  conclusion: string;
+  details: string[];
+  cashChanged: boolean;
+}
+
 const ACCEPTED_OFFER_RESOLUTIONS = new Set(['accepted', 'countered_accepted']);
 const REJECTED_OFFER_RESOLUTIONS = new Set(['rejected', 'countered_rejected', 'withdrawn']);
+
+export function describeTransferWindowHandoff(
+  summary: TransferWindowHandoffSummary,
+): TransferWindowHandoffPresentation {
+  const arrivals = summary.signedPlayerNames.length;
+  const departures = summary.acceptedOffers;
+  let conclusion: string;
+  if (arrivals > 0 || departures > 0) {
+    const changes = [
+      arrivals > 0 ? `签下${summary.signedPlayerNames.join('、')}` : null,
+      departures > 0 ? `同意${departures}份离队报价` : null,
+    ].filter((item): item is string => Boolean(item));
+    conclusion = `球队${changes.join('，')}。`;
+  } else if (summary.mode === 'auto' && summary.autoSkippedTargets > 0) {
+    conclusion = `球队跳过${summary.autoSkippedTargets}个引援目标，本窗口无人加盟或离队。`;
+  } else {
+    conclusion = '本窗口无人加盟或离队。';
+  }
+
+  const details = [
+    summary.rejectedOffers > 0 ? `拒绝${summary.rejectedOffers}份报价` : null,
+    summary.completedTargets > 0 ? `完成${summary.completedTargets}个引援目标` : null,
+    summary.uncompletedTargets > 0 ? `未完成${summary.uncompletedTargets}个引援目标` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    conclusion,
+    details,
+    cashChanged: summary.cashChanges.some(change => change.delta !== 0),
+  };
+}
 
 export function buildTransferWindowHandoffSummary(
   beforeWorld: GameWorld,

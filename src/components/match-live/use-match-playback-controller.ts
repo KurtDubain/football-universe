@@ -5,6 +5,8 @@ import {
   isHighlightEvent,
   playbackBreakDelay,
   playbackTickDelay,
+  readPlaybackModePreference,
+  writePlaybackModePreference,
   type PlaybackMode,
 } from './playback-mode';
 import {
@@ -77,7 +79,10 @@ export function useMatchPlaybackController({
   result,
   openerVisible,
 }: PlaybackControllerOptions) {
-  const [playback, dispatch] = useReducer(playbackReducer, initialPlaybackState);
+  const [playback, dispatch] = useReducer(playbackReducer, {
+    ...initialPlaybackState,
+    mode: readPlaybackModePreference(),
+  });
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
   const [reducedMotion, setReducedMotion] = useState(() =>
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -196,7 +201,10 @@ export function useMatchPlaybackController({
   const skip = useCallback(() => {
     dispatch({ type: 'skip', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
   }, [allEvents, result.homeTeamId, timelineMax]);
-  const setMode = useCallback((mode: PlaybackMode) => dispatch({ type: 'setMode', mode }), []);
+  const setMode = useCallback((mode: PlaybackMode) => {
+    writePlaybackModePreference(mode);
+    dispatch({ type: 'setMode', mode });
+  }, []);
   const togglePause = useCallback(() => dispatch({ type: 'togglePause' }), []);
 
   return {

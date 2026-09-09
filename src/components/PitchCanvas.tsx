@@ -1276,6 +1276,7 @@ function PitchCanvas(props: Props) {
             : isAttacker ? attackerActionProgress : phaseProgress,
           playerVisualScale,
           liveFeaturedPlayerIds.has(player.playerId),
+          'home',
         );
       }
       for (const player of visibleAway) {
@@ -1308,6 +1309,7 @@ function PitchCanvas(props: Props) {
             : isAttacker ? attackerActionProgress : phaseProgress,
           playerVisualScale,
           liveFeaturedPlayerIds.has(player.playerId),
+          'away',
         );
       }
 

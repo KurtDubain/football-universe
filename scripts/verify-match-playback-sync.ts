@@ -61,6 +61,13 @@ try {
   await page.waitForFunction(() => document.querySelector('[aria-label="主队比分"]')?.textContent === '2', undefined, { timeout: 8_000 });
   const screenshot = '/tmp/football-match-playback-sync.png';
   await page.screenshot({ path: screenshot, animations: 'disabled' });
+  await dialog.getByRole('button', { name: /跳过/ }).click();
+  await dialog.getByTestId('live-final-reveal').waitFor();
+  const archiveButton = dialog.getByRole('button', { name: '归档中', exact: true });
+  if (!(await archiveButton.isDisabled())) throw new Error('Final controls appeared before the archive pause');
+  await dialog.getByTestId('live-final-outcome').waitFor();
+  const finalScreenshot = '/tmp/football-match-playback-final.png';
+  await page.screenshot({ path: finalScreenshot, animations: 'disabled' });
   if (errors.length > 0) throw new Error(`Runtime errors: ${errors.join(' | ')}`);
 
   console.log(JSON.stringify({
@@ -69,6 +76,7 @@ try {
     firstPreImpactScore: await preImpact.jsonValue(),
     secondPreImpactScore: await secondPreImpact.jsonValue(),
     screenshot,
+    finalScreenshot,
   }, null, 2));
 } finally {
   await browser.close();

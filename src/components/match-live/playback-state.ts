@@ -35,7 +35,7 @@ export type PlaybackAction =
 
 export const initialPlaybackState: PlaybackState = {
   minute: 0,
-  mode: 'live',
+  mode: 'highlights',
   phase: 'playing',
   consumedEventCount: 0,
   pendingEventIndex: null,

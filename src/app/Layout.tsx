@@ -30,6 +30,30 @@ import {
 } from '../feedback/game-feedback';
 import { preloadRouteForPath } from './route-modules';
 
+function describeFloatingAdvanceAction({
+  hasPendingJudgment,
+  hasStarredFocus,
+  isOpeningObservation,
+}: {
+  hasPendingJudgment: boolean;
+  hasStarredFocus: boolean;
+  isOpeningObservation: boolean;
+}): { label: string; ariaLabel: string } {
+  if (hasStarredFocus && hasPendingJudgment) {
+    return { label: '观战并揭晓', ariaLabel: '推进本轮并无剧透观看焦点比赛，同时揭晓判断' };
+  }
+  if (hasStarredFocus) {
+    return { label: '进入焦点直播', ariaLabel: '推进本轮并无剧透观看已锁定的焦点比赛' };
+  }
+  if (hasPendingJudgment) {
+    return { label: '揭晓判断', ariaLabel: '揭晓本轮观察判断' };
+  }
+  if (isOpeningObservation) {
+    return { label: '揭晓首轮', ariaLabel: '揭晓首轮比赛结果' };
+  }
+  return { label: '揭晓本轮', ariaLabel: '揭晓本轮比赛结果' };
+}
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -347,6 +371,21 @@ export default function Layout({ children }: LayoutProps) {
     : { completedWindows: 0, totalWindows: 0, currentWindowNumber: null };
   const calendarLen = windowDisplay.totalWindows;
   const completedWindows = windowDisplay.completedWindows;
+  const openingObservation = Boolean(
+    world
+    && world.seasonState.seasonNumber === 1
+    && world.seasonState.currentWindowIndex === 0
+    && world.totalElapsedWindows === 0,
+  );
+  const floatingAction = location.pathname === '/' && currentWindow
+    ? describeFloatingAdvanceAction({
+      hasPendingJudgment: Boolean(world?.pendingObservationJudgment),
+      hasStarredFocus: starredFixtureIds.some(fixtureId => (
+        currentWindow.fixtures.some(fixture => fixture.id === fixtureId)
+      )),
+      isOpeningObservation: openingObservation,
+    })
+    : null;
 
   const navContent = (
     <>
@@ -825,6 +864,8 @@ export default function Layout({ children }: LayoutProps) {
         <div className="mobile-advance-dock">
           <FloatingAdvanceButton
             stageLabel={currentWindow ? getWindowTypeLabel(currentWindow.type) : undefined}
+            label={floatingAction?.label}
+            actionAriaLabel={floatingAction?.ariaLabel}
             accentClass={currentWindow ? getWindowTypeColor(currentWindow.type) : undefined}
             isAdvancing={isAdvancing}
             busyLabel={advanceLabel ?? undefined}

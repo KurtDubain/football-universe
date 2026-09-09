@@ -465,9 +465,9 @@ describe('cup giant-killer stories', () => {
       competitionName: '联赛杯',
       phase: '落幕',
       conclusion: expect.stringContaining('联赛杯'),
-      evidence: expect.arrayContaining(['最深阶段 SF']),
+      evidence: expect.arrayContaining(['最深阶段 四强']),
     });
-    expect(eliminated.storylineHistory?.at(-1)?.conclusion).toContain('SF后止步');
+    expect(eliminated.storylineHistory?.at(-1)?.conclusion).toContain('四强后止步');
     expect(eliminated.storylineHistory?.at(-1)?.conclusion).not.toContain('Final');
     expect(eliminated.storylineCooldowns?.at(-1)?.key).toContain('cup_giant_killer');
   });
@@ -489,9 +489,9 @@ describe('cup giant-killer stories', () => {
     )).world;
     const archived = eliminated.storylineHistory?.at(-1);
 
-    expect(archived?.conclusion).toContain('Final后止步');
-    expect(archived?.evidence).toContain('最深阶段 Final');
-    expect(archived?.evidence).not.toContain('最深阶段 SF');
+    expect(archived?.conclusion).toContain('决赛后止步');
+    expect(archived?.evidence).toContain('最深阶段 决赛');
+    expect(archived?.evidence).not.toContain('最深阶段 四强');
   });
 
   it('records a champion conclusion at the season boundary', () => {

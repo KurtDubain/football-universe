@@ -283,7 +283,7 @@ async function main(): Promise<void> {
       })(),
     }));
     if (!seasonProbe.probe?.deliveries.some(item => (
-      item.cue === 'season_end' && item.audioPlayed && item.hapticPlayed
+      item.cue === 'season_relegation' && item.audioPlayed && item.hapticPlayed
     ))) {
       throw new Error(`Season feedback did not play: ${JSON.stringify(seasonProbe)}`);
     }
@@ -296,12 +296,12 @@ async function main(): Promise<void> {
         };
       }).__feedbackProbe!;
       return {
-        deliveries: probe.deliveries.filter(item => item.cue === 'season_end'),
+        deliveries: probe.deliveries.filter(item => item.cue === 'season_relegation'),
         tones: probe.starts.length,
         vibrations: probe.vibrations,
       };
     });
-    if (seasonDelivery.deliveries.length !== 1 || seasonDelivery.tones !== 6
+    if (seasonDelivery.deliveries.length !== 1 || seasonDelivery.tones !== 4
       || seasonDelivery.vibrations.length !== 1) {
       throw new Error(`Season feedback was not bounded: ${JSON.stringify(seasonDelivery)}`);
     }

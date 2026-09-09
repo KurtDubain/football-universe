@@ -85,7 +85,7 @@ async function verifyViewport(
     await canvas.waitFor({ state: 'visible' });
     const opener = dialog.getByTestId('key-match-opener');
     if (await opener.isVisible()) {
-      await opener.getByRole('button', { name: '跳过转播开场' }).click();
+      await opener.getByRole('button', { name: '跳过转播开场' }).click({ force: true }).catch(() => undefined);
       await opener.waitFor({ state: 'hidden' });
     }
     await dialog.getByTestId('live-controls').waitFor({ state: 'visible' });
@@ -94,8 +94,13 @@ async function verifyViewport(
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     });
 
-    const defaultMode = await dialog.getByRole('button', { name: '直播', exact: true }).getAttribute('aria-pressed');
-    if (defaultMode !== 'true') throw new Error(`${name}: live is not the default playback mode`);
+    const defaultMode = await dialog.getByRole('button', { name: '精华', exact: true }).getAttribute('aria-pressed');
+    if (defaultMode !== 'true') throw new Error(`${name}: highlights is not the first-time recommended playback mode`);
+    await dialog.getByRole('button', { name: '完整', exact: true }).click();
+    await page.waitForFunction(() => {
+      const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
+      return render ? JSON.parse(render()).playbackMode === 'live' : false;
+    });
 
     const before = await page.evaluate(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
@@ -165,7 +170,7 @@ async function verifyViewport(
     if (name.startsWith('mobile') && undersizedButtons.length > 0) throw new Error(`${name}: undersized live buttons: ${undersizedButtons.join(', ')}`);
     if (controlsOverflow > 1) throw new Error(`${name}: live controls overflow by ${controlsOverflow}px`);
     if (!before || !after || (before.ball.x === after.ball.x && before.ball.y === after.ball.y)) throw new Error(`${name}: deterministic time step did not move the ball`);
-    if (before?.playbackMode !== 'live') throw new Error(`${name}: text state omitted the default playback mode`);
+    if (before?.playbackMode !== 'live') throw new Error(`${name}: text state omitted the selected complete playback mode`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors: ${errors.join(' | ')}`);
 
     const readMinute = async () => Number.parseInt(

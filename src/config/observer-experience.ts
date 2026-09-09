@@ -78,7 +78,7 @@ export function getObserverLensOptions(teams: TeamBase[]): ObserverLensOption[] 
     {
       id: 'challenger',
       label: '挑战者',
-      description: '观察中游球队冲击既有秩序',
+      description: '观察弱旅如何在顶级联赛生存、反击与逆袭',
       teamId: challenger?.id ?? null,
     },
     {

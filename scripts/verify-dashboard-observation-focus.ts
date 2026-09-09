@@ -6,8 +6,9 @@ const viewports = [
   { name: 'mobile-390', width: 390, height: 844, isMobile: true, hasTouch: true, compact: true, firstViewWorkflow: true },
   { name: 'mobile-430', width: 430, height: 932, isMobile: true, hasTouch: true, compact: true, firstViewWorkflow: true },
   { name: 'tablet', width: 768, height: 1024, isMobile: true, hasTouch: true, compact: false, firstViewWorkflow: false },
-  { name: 'desktop-1280', width: 1280, height: 800, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: false },
-  { name: 'desktop-1440', width: 1440, height: 900, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: false },
+  { name: 'desktop-1280', width: 1280, height: 720, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: true },
+  { name: 'desktop-1366', width: 1366, height: 768, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: true },
+  { name: 'desktop-1440', width: 1440, height: 900, isMobile: false, hasTouch: false, compact: false, firstViewWorkflow: true },
 ] as const;
 
 type AuditState = {
@@ -18,7 +19,6 @@ type AuditState = {
   };
   newGame: (seed: number) => Promise<void>;
   setFavoriteTeams: (ids: string[]) => void;
-  setObservationThemePreference: (preference: 'dark_horse_challenge') => void;
 };
 
 type AuditWindow = Window & {
@@ -49,10 +49,9 @@ async function main(): Promise<void> {
       const initial = await page.evaluate(async () => {
         const store = (window as AuditWindow).__gameStore;
         if (!store) throw new Error('Audit store unavailable');
-        await store.getState().newGame(20260718);
-        const ids = Object.keys(store.getState().world.teamBases).slice(0, 1);
+        await store.getState().newGame(20260709);
+        const ids = ['datong'];
         store.getState().setFavoriteTeams(ids);
-        store.getState().setObservationThemePreference('dark_horse_challenge');
         return {
           favorites: ids,
           windowIndex: store.getState().world.seasonState.currentWindowIndex,
@@ -109,6 +108,7 @@ async function main(): Promise<void> {
           judgmentHeight: judgmentRect?.height ?? 0,
           advanceHeight: advanceRect?.height ?? 0,
           secondaryHeight: secondaryRect?.height ?? 0,
+          floatingLabel: document.querySelector<HTMLElement>('[data-testid="floating-advance"]')?.textContent?.trim() ?? '',
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       });
@@ -131,14 +131,14 @@ async function main(): Promise<void> {
       if (collapsedLayout.judgmentHeight < 44 || collapsedLayout.advanceHeight < 44) {
         throw new Error(`${viewport.name}: undersized observation action ${JSON.stringify(collapsedLayout)}`);
       }
+      if (!collapsedLayout.floatingLabel.includes('揭晓首轮')) {
+        throw new Error(`${viewport.name}: floating action does not match the opening action ${JSON.stringify(collapsedLayout)}`);
+      }
       if (viewport.firstViewWorkflow && collapsedLayout.advanceBottom > viewport.height + 1) {
         throw new Error(`${viewport.name}: primary action is below the first viewport ${collapsedLayout.advanceBottom}`);
       }
-      if (viewport.compact && collapsedLayout.secondaryHeight > 56) {
+      if (collapsedLayout.secondaryHeight > 56) {
         throw new Error(`${viewport.name}: secondary focus did not compact ${collapsedLayout.secondaryHeight}`);
-      }
-      if (!viewport.compact && collapsedLayout.secondaryHeight < 60) {
-        throw new Error(`${viewport.name}: desktop secondary focus lost its full context`);
       }
       if (collapsedLayout.overflow > 1) {
         throw new Error(`${viewport.name}: horizontal overflow ${collapsedLayout.overflow}px`);

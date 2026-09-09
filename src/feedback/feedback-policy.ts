@@ -1,11 +1,15 @@
 import { analyzeDestinyDeviation } from '../engine/match/analysis';
 import type { AdvanceWorldResponse } from '../engine/observation/world-response';
+import type { SeasonRecord } from '../types/team';
 
 export type GameFeedbackCue =
   | 'start'
   | 'goal'
   | 'major_upset'
   | 'story_upgrade'
+  | 'season_champion'
+  | 'season_promotion'
+  | 'season_relegation'
   | 'season_end';
 
 export type UiFeedbackCue =
@@ -19,9 +23,29 @@ export type UiFeedbackCue =
 
 export type FeedbackCue = GameFeedbackCue | UiFeedbackCue;
 
-export function selectWorldFeedbackCue(response: AdvanceWorldResponse | null): GameFeedbackCue | null {
+export type SeasonFeedbackOutcome = 'champion' | 'promotion' | 'relegation' | 'neutral';
+
+export function seasonFeedbackOutcomeForRecord(
+  record: Pick<SeasonRecord, 'leagueLevel' | 'leaguePosition' | 'promoted' | 'relegated'> | undefined,
+): SeasonFeedbackOutcome {
+  if (!record) return 'neutral';
+  if (record.relegated) return 'relegation';
+  if (record.promoted) return 'promotion';
+  if (record.leagueLevel === 1 && record.leaguePosition === 1) return 'champion';
+  return 'neutral';
+}
+
+export function selectWorldFeedbackCue(
+  response: AdvanceWorldResponse | null,
+  seasonOutcome: SeasonFeedbackOutcome = 'neutral',
+): GameFeedbackCue | null {
   if (!response) return null;
-  if (response.seasonChanged) return 'season_end';
+  if (response.seasonChanged) {
+    if (seasonOutcome === 'champion') return 'season_champion';
+    if (seasonOutcome === 'promotion') return 'season_promotion';
+    if (seasonOutcome === 'relegation') return 'season_relegation';
+    return 'season_end';
+  }
   if (response.featuredResults.some(({ result }) => (
     analyzeDestinyDeviation(result).tier === 'major_upset'
   ))) {
@@ -34,5 +58,9 @@ export function selectWorldFeedbackCue(response: AdvanceWorldResponse | null): G
 }
 
 export function shouldVibrateForCue(cue: FeedbackCue): boolean {
-  return cue === 'major_upset' || cue === 'season_end';
+  return cue === 'major_upset'
+    || cue === 'season_end'
+    || cue === 'season_champion'
+    || cue === 'season_promotion'
+    || cue === 'season_relegation';
 }

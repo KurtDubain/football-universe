@@ -12,6 +12,9 @@ describe('feedback cue mastering', () => {
     );
     expect(feedbackVolumeLiftForCue('goal')).toBe(FEEDBACK_VOLUME_LIFT.event);
     expect(feedbackVolumeLiftForCue('start')).toBe(FEEDBACK_VOLUME_LIFT.musical);
+    expect(feedbackVolumeLiftForCue('season_champion')).toBe(FEEDBACK_VOLUME_LIFT.musical);
+    expect(feedbackVolumeLiftForCue('season_promotion')).toBe(FEEDBACK_VOLUME_LIFT.musical);
+    expect(feedbackVolumeLiftForCue('season_relegation')).toBe(FEEDBACK_VOLUME_LIFT.musical);
     expect(feedbackVolumeLiftForCue('selection')).toBeGreaterThan(FEEDBACK_VOLUME_LIFT.ui);
     expect(FEEDBACK_VOLUME_LIFT.ui).toBeGreaterThan(5);
     expect(FEEDBACK_VOLUME_LIFT.event).toBeGreaterThan(5);

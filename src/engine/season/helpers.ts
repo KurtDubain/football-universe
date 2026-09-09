@@ -6,6 +6,8 @@ import type { GameWorld } from './season-manager';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { isUpsetResult } from '../match/analysis';
 
+export { cnRoundLabel } from '../../utils/format';
+
 export function buildSimulationContext(
   fixture: MatchFixture,
   world: GameWorld,
@@ -76,11 +78,6 @@ export function countTrailingNotResult(form: ('W'|'D'|'L')[], exclude: 'W'|'D'|'
     else break;
   }
   return count;
-}
-
-export function cnRoundLabel(name: string): string {
-  const map: Record<string, string> = { R32: '32强', R16: '16强', QF: '八强', SF: '四强', Final: '决赛' };
-  return map[name] ?? map[name.split('-')[0]] ?? name;
 }
 
 export function countCompletedSuperCupGroupWindows(calendar: { type: string; completed: boolean }[]): number {

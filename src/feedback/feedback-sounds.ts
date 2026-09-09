@@ -20,6 +20,9 @@ export const FEEDBACK_CUE_TRIM: Readonly<Record<FeedbackCue, number>> = {
   goal: 1,
   major_upset: 1,
   story_upgrade: 1,
+  season_champion: 1,
+  season_promotion: 1,
+  season_relegation: 1,
   season_end: 1,
   advance: 0.95,
   selection: 1.5,
@@ -49,6 +52,27 @@ const CUE_TONES: Record<FeedbackCue, Tone[]> = {
   story_upgrade: [
     { offset: 0, duration: 0.15, frequency: 392, type: 'sine', volume: 0.022 },
     { offset: 0.12, duration: 0.2, frequency: 523.25, type: 'sine', volume: 0.028 },
+  ],
+  season_champion: [
+    { offset: 0, duration: 2.8, frequency: 130.81, type: 'sine', volume: 0.011, endFrequency: 132 },
+    { offset: 0.1, duration: 2.65, frequency: 196, type: 'sine', volume: 0.011, endFrequency: 198 },
+    { offset: 0.24, duration: 2.45, frequency: 261.63, type: 'triangle', volume: 0.012, endFrequency: 263 },
+    { offset: 0.62, duration: 0.58, frequency: 392, type: 'triangle', volume: 0.018, endFrequency: 523.25 },
+    { offset: 1.24, duration: 0.68, frequency: 523.25, type: 'triangle', volume: 0.019, endFrequency: 659.25 },
+    { offset: 1.98, duration: 0.82, frequency: 659.25, type: 'triangle', volume: 0.018, endFrequency: 987.77 },
+  ],
+  season_promotion: [
+    { offset: 0, duration: 1.9, frequency: 146.83, type: 'sine', volume: 0.01, endFrequency: 164.81 },
+    { offset: 0.16, duration: 1.7, frequency: 220, type: 'sine', volume: 0.01, endFrequency: 246.94 },
+    { offset: 0.38, duration: 0.5, frequency: 329.63, type: 'triangle', volume: 0.015, endFrequency: 440 },
+    { offset: 0.96, duration: 0.62, frequency: 440, type: 'triangle', volume: 0.017, endFrequency: 659.25 },
+    { offset: 1.62, duration: 0.5, frequency: 659.25, type: 'triangle', volume: 0.014, endFrequency: 783.99 },
+  ],
+  season_relegation: [
+    { offset: 0, duration: 2.2, frequency: 146.83, type: 'sine', volume: 0.011, endFrequency: 110 },
+    { offset: 0.12, duration: 2, frequency: 220, type: 'sine', volume: 0.009, endFrequency: 164.81 },
+    { offset: 0.48, duration: 0.72, frequency: 293.66, type: 'triangle', volume: 0.012, endFrequency: 196 },
+    { offset: 1.72, duration: 0.55, frequency: 196, type: 'sine', volume: 0.009, endFrequency: 220 },
   ],
   season_end: [
     { offset: 0, duration: 2.8, frequency: 130.81, type: 'sine', volume: 0.011, endFrequency: 132 },
@@ -88,7 +112,10 @@ const CUE_TONES: Record<FeedbackCue, Tone[]> = {
 
 export function feedbackVolumeLiftForCue(cue: FeedbackCue): number {
   let busLift: number;
-  if (cue === 'start' || cue === 'season_end') busLift = FEEDBACK_VOLUME_LIFT.musical;
+  if (cue === 'start' || cue === 'season_end' || cue === 'season_champion'
+    || cue === 'season_promotion' || cue === 'season_relegation') {
+    busLift = FEEDBACK_VOLUME_LIFT.musical;
+  }
   else if (cue === 'advance' || cue === 'selection' || cue === 'confirm'
     || cue === 'toggle_on' || cue === 'toggle_off' || cue === 'intervention'
     || cue === 'reject') busLift = FEEDBACK_VOLUME_LIFT.ui;

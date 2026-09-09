@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
-import { formatChineseList, getTeamName, getTeamShortName } from '../utils/format';
+import { cnRoundLabel, formatChineseList, getTeamName, getTeamShortName } from '../utils/format';
 import {
   getPlayerRowPerformance,
   getSeasonOverallRows,
@@ -159,14 +159,14 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   return (
     <div className="season-review-annual space-y-4">
       {/* Narrative Header */}
-      <div data-testid="season-champion-hero" className="relative min-h-[220px] overflow-hidden rounded-lg border border-amber-700/30 bg-slate-900">
+      <div data-testid="season-champion-hero" className="relative min-h-[164px] overflow-hidden rounded-lg border border-amber-700/30 bg-slate-900 sm:min-h-[220px]">
         <DecorativeImage
           src={championCeremonyArtwork}
           testId="champion-ceremony-art"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.98)_0%,rgba(2,6,23,0.82)_48%,rgba(2,6,23,0.2)_100%)]" aria-hidden="true" />
-        <div className="relative flex min-h-[220px] max-w-2xl flex-col justify-end px-4 py-5 sm:px-7">
+        <div className="relative flex min-h-[164px] max-w-2xl flex-col justify-end px-4 py-4 sm:min-h-[220px] sm:px-7 sm:py-5">
           <div className="mb-3 flex items-center gap-2">
             <TeamBadge
               teamId={honor.league1Champion}
@@ -187,18 +187,19 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
         </div>
       </div>
 
-      {seasonNarrative && (
-        <p className="border-y border-slate-700/60 py-3 text-xs leading-relaxed text-slate-400 sm:text-sm">
-          {seasonNarrative}
-        </p>
-      )}
-
       {primaryTrajectory && primaryRecord && (
         <PrimaryTeamTrajectory
           trajectory={primaryTrajectory}
           record={primaryRecord}
           world={world}
         />
+      )}
+
+      {seasonNarrative && (
+        <details className="border-y border-slate-700/60 py-2 text-xs text-slate-400 sm:text-sm">
+          <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-slate-300">赛季总述</summary>
+          <p className="pb-2 leading-relaxed">{seasonNarrative}</p>
+        </details>
       )}
 
       {/* Champions grid */}
@@ -792,6 +793,17 @@ function PrimaryTeamTrajectory({
               {getTeamName(trajectory.teamId, world.teamBases)}
             </Link>
           </div>
+          <div data-testid="season-review-quick-summary" className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+            <span className={fateTone}>结局：{archive.finalFate.label}</span>
+            {themeResult && (
+              <span className={themeTone}>主题：{themeResult.label} · {themeResult.verdict}</span>
+            )}
+            {contributor && (
+              <Link to={`/player/${contributor.playerId}`} className="text-slate-300 hover:text-emerald-300">
+                关键人物：{contributor.identity.playerName}
+              </Link>
+            )}
+          </div>
           <p className="mt-1 text-[11px] text-slate-500">
             {trajectory.leagueLevel === 1 ? '顶级联赛' : trajectory.leagueLevel === 2 ? '甲级联赛' : '乙级联赛'}
             {' · '}
@@ -807,41 +819,6 @@ function PrimaryTeamTrajectory({
               {archive.finalFate.detail}
             </div>
           </div>
-          <span className={`rounded border px-2 py-1 text-[11px] font-semibold ${impressionTone[archive.impression.tone]}`}>
-            {archive.impression.label}
-          </span>
-          <button
-            type="button"
-            onClick={exportArchive}
-            disabled={exportState === 'working'}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded border border-slate-600 px-3 text-xs text-slate-300 transition-colors hover:border-emerald-600 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
-          >
-            <Icon name="outbox" size={15} />
-            {exportState === 'working'
-              ? '生成中'
-              : exportState === 'done'
-                ? '已保存'
-                : exportState === 'error'
-                  ? '导出失败'
-                  : '保存档案图'}
-          </button>
-        </div>
-      </div>
-
-      <div className="mx-1 mt-3 border-y border-slate-700/60 py-3 sm:mx-2">
-        <div className="text-[11px] font-semibold text-slate-400">观察印象</div>
-        <p className="mt-1 text-xs leading-5 text-slate-300">{archive.impression.detail}</p>
-        <div className="mt-1 text-[11px] text-slate-500">
-          {archive.judgment.total > 0 ? (
-            <>
-              本季命中 {archive.judgment.correct}/{archive.judgment.total}
-              {archive.impression.sampleState === 'rated' && archive.judgment.accuracy !== null
-                ? ` · ${Math.round(archive.judgment.accuracy * 100)}%`
-                : ' · 样本积累中'}
-              {' · '}当前连中 {archive.judgment.currentStreak}
-              {' · '}最佳 {archive.judgment.bestStreak}
-            </>
-          ) : '本季未留下赛前判断'}
         </div>
       </div>
 
@@ -873,28 +850,7 @@ function PrimaryTeamTrajectory({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 px-1 sm:grid-cols-4 sm:px-2">
-        {trajectory.checkpoints.map((checkpoint) => (
-          <div key={checkpoint.phase} className="relative border-l-2 border-slate-700 pl-2.5">
-            <div className="text-[10px] text-slate-500">{CHECKPOINT_LABELS[checkpoint.phase]}</div>
-            <div className="mt-0.5 text-sm font-black text-slate-100">第{checkpoint.position}名</div>
-            <div className="text-[11px] text-slate-500">
-              {checkpoint.played}场 {checkpoint.points}分 · 净胜球
-              {checkpoint.goalDifference > 0 ? '+' : ''}{checkpoint.goalDifference}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 grid gap-x-5 gap-y-3 border-t border-slate-700/50 px-1 pt-3 text-xs sm:grid-cols-2 sm:px-2">
-        <div>
-          <div className="text-[10px] text-slate-500">杯赛足迹</div>
-          <div className="mt-0.5 leading-5 text-slate-300">
-            {archive.cupPaths.length > 0
-              ? archive.cupPaths.map(path => `${path.label}${path.result}`).join(' · ')
-              : '本季无杯赛征程'}
-          </div>
-        </div>
+      <div className="mt-3 grid gap-x-5 gap-y-3 border-y border-slate-700/50 px-1 py-3 text-xs sm:grid-cols-2 sm:px-2">
         <div>
           <div className="text-[10px] text-slate-500">赛季关键人物</div>
           {contributor ? (
@@ -929,7 +885,7 @@ function PrimaryTeamTrajectory({
                 </div>
               )}
               <div className="text-[11px] leading-5 text-slate-500">
-                {deviation.competitionName} · {deviation.roundLabel}
+                {deviation.competitionName} · {cnRoundLabel(deviation.roundLabel)}
                 {' · '}实际走向赛前概率 {deviation.actualProbability}%
               </div>
             </>
@@ -941,6 +897,67 @@ function PrimaryTeamTrajectory({
               主教练：{world.coachBases[record.coachId].name}
             </Link>
           )}
+        </div>
+        <div className="sm:col-span-2">
+          <button
+            type="button"
+            onClick={exportArchive}
+            disabled={exportState === 'working'}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded border border-slate-600 px-3 text-xs text-slate-300 transition-colors hover:border-emerald-600 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Icon name="outbox" size={15} />
+            {exportState === 'working'
+              ? '生成中'
+              : exportState === 'done'
+                ? '已保存'
+                : exportState === 'error'
+                  ? '导出失败'
+                  : '保存档案图'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mx-1 mt-3 py-2 sm:mx-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-[11px] font-semibold text-slate-400">观察印象</div>
+          <span className={`rounded border px-2 py-1 text-[11px] font-semibold ${impressionTone[archive.impression.tone]}`}>
+            {archive.impression.label}
+          </span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-slate-300">{archive.impression.detail}</p>
+        <div className="mt-1 text-[11px] text-slate-500">
+          {archive.judgment.total > 0 ? (
+            <>
+              本季命中 {archive.judgment.correct}/{archive.judgment.total}
+              {archive.impression.sampleState === 'rated' && archive.judgment.accuracy !== null
+                ? ` · ${Math.round(archive.judgment.accuracy * 100)}%`
+                : ' · 样本积累中'}
+              {' · '}当前连中 {archive.judgment.currentStreak}
+              {' · '}最佳 {archive.judgment.bestStreak}
+            </>
+          ) : '本季未留下赛前判断'}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-700/50 px-1 pt-3 sm:grid-cols-4 sm:px-2">
+        {trajectory.checkpoints.map((checkpoint) => (
+          <div key={checkpoint.phase} className="relative border-l-2 border-slate-700 pl-2.5">
+            <div className="text-[10px] text-slate-500">{CHECKPOINT_LABELS[checkpoint.phase]}</div>
+            <div className="mt-0.5 text-sm font-black text-slate-100">第{checkpoint.position}名</div>
+            <div className="text-[11px] text-slate-500">
+              {checkpoint.played}场 {checkpoint.points}分 · 净胜球
+              {checkpoint.goalDifference > 0 ? '+' : ''}{checkpoint.goalDifference}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mx-1 mt-3 border-t border-slate-700/50 pt-3 text-xs sm:mx-2">
+        <div className="text-[10px] text-slate-500">杯赛足迹</div>
+        <div className="mt-0.5 leading-5 text-slate-300">
+          {archive.cupPaths.length > 0
+            ? archive.cupPaths.map(path => `${path.label}${path.result}`).join(' · ')
+            : '本季无杯赛征程'}
         </div>
       </div>
 

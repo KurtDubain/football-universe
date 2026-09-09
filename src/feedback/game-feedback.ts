@@ -20,6 +20,9 @@ const RATE_LIMIT_MS: Record<FeedbackCue, number> = {
   goal: 250,
   major_upset: 2_000,
   story_upgrade: 2_000,
+  season_champion: 2_000,
+  season_promotion: 2_000,
+  season_relegation: 2_000,
   season_end: 2_000,
   advance: 280,
   selection: 70,
@@ -99,7 +102,9 @@ export function suspendGameAudio(): void {
 function playAudioCue(cue: FeedbackCue): boolean {
   const preferences = getFeedbackPreferences();
   if (!preferences.soundEnabled || audioUnavailableEnvironment()) return false;
-  const volumeScale = cue === 'start' || cue === 'season_end'
+  const seasonCue = cue === 'season_end' || cue === 'season_champion'
+    || cue === 'season_promotion' || cue === 'season_relegation';
+  const volumeScale = cue === 'start' || seasonCue
     ? preferences.musicVolume
     : preferences.effectsVolume;
   if (volumeScale <= 0) return false;
@@ -108,7 +113,7 @@ function playAudioCue(cue: FeedbackCue): boolean {
   if (!unlockGameAudio() || !audioContext) return false;
   const context = audioContext;
   lastCueAt.set(cue, timestamp);
-  const isMusical = cue === 'start' || cue === 'season_end';
+  const isMusical = cue === 'start' || seasonCue;
   const isMajor = cue === 'goal' || cue === 'major_upset' || cue === 'story_upgrade';
   const isRoutine = cue === 'selection' || cue === 'toggle_on' || cue === 'toggle_off';
   duckAmbientMusic(isMajor
@@ -137,7 +142,9 @@ function playHapticCue(cue: FeedbackCue): boolean {
   const timestamp = now();
   if (timestamp - lastHapticAt < 2_000) return false;
   try {
-    const accepted = navigator.vibrate(cue === 'season_end' ? [18, 40, 24] : 22);
+    const seasonCue = cue === 'season_end' || cue === 'season_champion'
+      || cue === 'season_promotion' || cue === 'season_relegation';
+    const accepted = navigator.vibrate(seasonCue ? [18, 40, 24] : 22);
     if (accepted) lastHapticAt = timestamp;
     return accepted;
   } catch {

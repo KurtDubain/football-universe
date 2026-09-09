@@ -113,7 +113,13 @@ async function main(): Promise<void> {
       await page.screenshot({ path: `/tmp/football-squad-boost-${viewport.name}.png`, animations: 'disabled' });
 
       await page.goto(`${baseUrl}/settings?audit=1`, { waitUntil: 'networkidle' });
-      await page.getByText('v4.54.0', { exact: true }).first().waitFor({ state: 'visible' });
+      const narrativeRelease = page.locator('details').filter({
+        has: page.getByText('v4.54.0', { exact: true }),
+      });
+      await narrativeRelease.locator('summary').click();
+      if (await narrativeRelease.getAttribute('open') === null) {
+        throw new Error(`${viewport.name}: v4.54.0 changelog entry did not expand`);
+      }
       await page.getByText('每一段足球故事，都开始有来处和后续', { exact: true }).first()
         .waitFor({ state: 'visible' });
       await page.getByText(/比赛日新增统一的“世界脉搏”/).first().waitFor({ state: 'visible' });

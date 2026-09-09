@@ -46,6 +46,11 @@ import {
   PLAYER_IMPACT_UNIT_LABELS,
 } from '../engine/players/star-presence';
 import { computeMatchPlayerImpacts } from '../engine/players/match-player-impact';
+import { cnRoundLabel } from '../utils/format';
+import {
+  describeFinalMoment,
+  describeLiveEventMoment,
+} from './match-live/moment-emphasis';
 
 interface Props {
   result: MatchResult;
@@ -69,6 +74,7 @@ export default function MatchLive(props: Props) {
 function MatchLiveSession({ result, teamBases, onClose, featured = false }: Props) {
   const [locallyMuted, setLocallyMuted] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [finalActionsReady, setFinalActionsReady] = useState(false);
   const feedbackPreferences = useFeedbackPreferences();
   const prestigeOpener = featured || result.roundLabel === 'Final' || result.roundLabel === '决赛';
   const openerFinal = result.roundLabel === 'Final' || result.roundLabel === '决赛';
@@ -140,6 +146,16 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     return new Map(computeMatchPlayerImpacts({ ...result, winnerTeamId })
       .map(impact => [impact.playerId, impact]));
   }, [result]);
+  const liveMoment = useMemo(
+    () => describeLiveEventMoment(result, shownEvents, playback.flashEvent),
+    [playback.flashEvent, result, shownEvents],
+  );
+  const finalMoment = useMemo(() => describeFinalMoment(result), [result]);
+  const selectedPlaybackMode = PLAYBACK_MODE_OPTIONS.find(option => option.value === playback.mode)
+    ?? PLAYBACK_MODE_OPTIONS[0];
+  const featuredEventPlayer = playback.flashEvent?.playerId
+    ? featuredPlayers.find(player => player.playerId === playback.flashEvent?.playerId)
+    : undefined;
 
   useEffect(() => {
     if (!showOpener) return;
@@ -149,6 +165,15 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     );
     return () => window.clearTimeout(timer);
   }, [reducedMotion, showOpener]);
+
+  useEffect(() => {
+    if (!finished) {
+      setFinalActionsReady(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setFinalActionsReady(true), reducedMotion ? 80 : 720);
+    return () => window.clearTimeout(timer);
+  }, [finished, reducedMotion]);
 
   useLayoutEffect(
     () => holdTournamentMusic(matchMusicHoldOwner),
@@ -203,6 +228,19 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     playback.phase,
     showOpener,
     timelineMax,
+  ]);
+
+  useEffect(() => {
+    if (!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible) return;
+    if (liveMoment?.kind === 'equalizer' || liveMoment?.kind === 'turnaround' || liveMoment?.kind === 'late_winner') {
+      soundscapeRef.current?.playEmphasis(liveMoment.kind);
+    }
+  }, [
+    feedbackPreferences.soundEnabled,
+    liveMoment?.kind,
+    locallyMuted,
+    pageVisible,
+    playback.flashVersion,
   ]);
 
   const handlePresentationCue = useCallback((cue: MatchPresentationCue) => {
@@ -264,8 +302,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     if (playback.phase === 'halftime') soundscapeRef.current?.playStage('halftime');
     else if (playback.phase === 'extra_time_break') soundscapeRef.current?.playStage('extra_time');
     else if (playback.phase === 'shootout_break') soundscapeRef.current?.playStage('shootout');
-    else if (playback.phase === 'finished') soundscapeRef.current?.playStage('fulltime');
-  }, [feedbackPreferences.soundEnabled, locallyMuted, playback.phase]);
+    else if (playback.phase === 'finished') {
+      const outcome = finalMoment.kind === 'champion'
+        ? 'champion'
+        : finalMoment.kind === 'advance' ? 'advance' : 'standard';
+      soundscapeRef.current?.playStage('fulltime', outcome);
+    }
+  }, [feedbackPreferences.soundEnabled, finalMoment.kind, locallyMuted, playback.phase]);
 
   const commentaryEntries = useMemo(() => buildLiveCommentaryHistory({
     events: shownEvents,
@@ -379,7 +422,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   </div>
                 </div>
               </div>
-              <div className="mt-4 text-center text-xs text-slate-300">{result.competitionName} · {result.roundLabel}</div>
+              <div className="mt-4 text-center text-xs text-slate-300">{result.competitionName} · {cnRoundLabel(result.roundLabel)}</div>
             </div>
           </div>
         )}
@@ -395,7 +438,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         <div className="broadcast-ribbon bg-slate-800/80 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${finished ? 'bg-red-500' : 'bg-green-500 animate-breathe'}`} />
-            <span className="truncate text-[11px] text-slate-400">{result.competitionName} · {result.roundLabel}</span>
+            <span className="truncate text-[11px] text-slate-400">{result.competitionName} · {cnRoundLabel(result.roundLabel)}</span>
           </div>
           <span data-testid="live-minute" className={`text-[10px] px-2 py-0.5 rounded-full ${finished ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
             {finished
@@ -469,9 +512,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           </div>
           <div
             data-testid="live-stage"
+            data-kind={finished && finalActionsReady ? finalMoment.kind : undefined}
             className="broadcast-stage-label absolute bottom-1 left-1/2 -translate-x-1/2 rounded-sm border border-white/10 bg-black/45 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-300"
           >
-            {stageLabel}{paused ? ' · 已暂停' : ''}
+            {finished && finalActionsReady
+              ? <span data-testid="live-final-outcome">{finalMoment.label}</span>
+              : stageLabel}
+            {paused ? ' · 已暂停' : ''}
           </div>
         </div>
 
@@ -550,7 +597,25 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               />
             )}
 
-            <div className="px-3 py-2 lg:px-4 lg:py-3">
+            <div className="relative px-3 py-2 lg:px-4 lg:py-3">
+              {(liveMoment || featuredEventPlayer) && !finished && (
+                <div
+                  data-testid="live-moment-emphasis"
+                  data-kind={liveMoment?.kind ?? 'featured'}
+                  className="pointer-events-none absolute left-1/2 top-4 z-10 flex max-w-[calc(100%-3rem)] -translate-x-1/2 items-center gap-2 rounded-sm border border-white/15 bg-slate-950/88 px-3 py-1.5 text-center shadow-lg motion-reduce:animate-none"
+                >
+                  <span className={`shrink-0 whitespace-nowrap text-[10px] font-black ${liveMoment?.kind === 'red_card' ? 'text-red-300' : 'text-amber-300'}`}>
+                    {liveMoment?.label ?? '焦点球员'}
+                  </span>
+                  {(liveMoment?.playerName || featuredEventPlayer) && (
+                    <span className="min-w-0 truncate text-[10px] font-semibold text-white">
+                      {liveMoment?.playerName ?? featuredEventPlayer?.playerName}
+                      {featuredEventPlayer ? ` · ${featuredEventPlayer.position}` : ''}
+                    </span>
+                  )}
+                  {liveMoment?.detail && <span className="hidden text-[9px] text-slate-400 sm:inline">{liveMoment.detail}</span>}
+                </div>
+              )}
               <PitchCanvas
                 minute={playback.minute}
                 maxMinute={maxMin}
@@ -615,11 +680,11 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {finished && (
           <div className="space-y-2 px-4 pb-3 text-center animate-slide-up">
             <div data-testid="live-final-reveal" className="ui-eyebrow text-[9px] text-[var(--competition-gold)]">
-              终场哨 · 比赛归档完成
+              终场哨
             </div>
-            {result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
-            {result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
-            {featuredPlayers.length > 0 && (
+            {finalActionsReady && result.extraTime && <span className="text-[10px] text-amber-400 block">加时赛 {result.etHomeGoals ?? 0} - {result.etAwayGoals ?? 0}</span>}
+            {finalActionsReady && result.penalties && <span className="text-[10px] text-amber-400 block">点球大战 {result.penaltyHome} - {result.penaltyAway}</span>}
+            {finalActionsReady && featuredPlayers.length > 0 && (
               <div data-testid="live-featured-review" className="border-t border-slate-800/70 pt-2 text-left">
                 <div className="mb-1.5 text-[9px] font-semibold text-slate-500">焦点球员赛后观察</div>
                 <div className="grid gap-x-5 gap-y-1 sm:grid-cols-2">
@@ -649,7 +714,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           inert={showOpener || undefined}
           className="grid shrink-0 grid-cols-1 gap-2 border-t border-slate-800/60 bg-slate-900 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
         >
-          <div className="flex min-w-0 gap-1">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex min-w-0 gap-1">
             <div
               role="group"
               aria-label="播放模式"
@@ -661,6 +727,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   type="button"
                   aria-pressed={playback.mode === option.value}
                   data-testid={`playback-mode-${option.value}`}
+                  title={`${option.label}：${option.description}${option.recommended ? '（推荐）' : ''}`}
                   onClick={() => {
                     if (playback.mode === option.value) return;
                     playUiFeedback('selection');
@@ -705,11 +772,15 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               />
               <span>{!feedbackPreferences.soundEnabled ? '全局静音' : locallyMuted ? '本场静音' : '声音'}</span>
             </button>
+            </div>
+            <span data-testid="playback-mode-description" className="truncate text-[9px] text-slate-500">
+              {selectedPlaybackMode.label}{selectedPlaybackMode.recommended ? ' · 推荐' : ''}：{selectedPlaybackMode.description}
+            </span>
           </div>
           <div className="flex justify-end gap-2">
             {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
-            <button onClick={requestClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer">
-              {finished ? '关闭' : '退出'}
+            <button disabled={finished && !finalActionsReady} onClick={requestClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer disabled:cursor-wait disabled:text-slate-600">
+              {finished ? (finalActionsReady ? '关闭' : '归档中') : '退出'}
             </button>
           </div>
         </div>

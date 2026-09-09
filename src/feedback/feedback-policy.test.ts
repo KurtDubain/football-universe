@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AdvanceWorldResponse } from '../engine/observation/world-response';
 import type { MatchResult } from '../types/match';
-import { selectWorldFeedbackCue, shouldVibrateForCue } from './feedback-policy';
+import {
+  seasonFeedbackOutcomeForRecord,
+  selectWorldFeedbackCue,
+  shouldVibrateForCue,
+} from './feedback-policy';
 
 function result(actualProbability: number): MatchResult {
   return {
@@ -102,12 +106,26 @@ describe('game feedback policy', () => {
     }))).toBe('season_end');
   });
 
+  it('uses the followed club season record to distinguish boundary outcomes', () => {
+    const base = { leagueLevel: 1 as const, leaguePosition: 8, promoted: false, relegated: false };
+    expect(seasonFeedbackOutcomeForRecord(undefined)).toBe('neutral');
+    expect(seasonFeedbackOutcomeForRecord({ ...base, leaguePosition: 1 })).toBe('champion');
+    expect(seasonFeedbackOutcomeForRecord({ ...base, leagueLevel: 2, leaguePosition: 1, promoted: true })).toBe('promotion');
+    expect(seasonFeedbackOutcomeForRecord({ ...base, leaguePosition: 16, relegated: true })).toBe('relegation');
+    expect(selectWorldFeedbackCue(response({ seasonChanged: true }), 'champion')).toBe('season_champion');
+    expect(selectWorldFeedbackCue(response({ seasonChanged: true }), 'promotion')).toBe('season_promotion');
+    expect(selectWorldFeedbackCue(response({ seasonChanged: true }), 'relegation')).toBe('season_relegation');
+  });
+
   it('reserves haptics for major upsets and season endings', () => {
     expect(shouldVibrateForCue('start')).toBe(false);
     expect(shouldVibrateForCue('goal')).toBe(false);
     expect(shouldVibrateForCue('story_upgrade')).toBe(false);
     expect(shouldVibrateForCue('major_upset')).toBe(true);
     expect(shouldVibrateForCue('season_end')).toBe(true);
+    expect(shouldVibrateForCue('season_champion')).toBe(true);
+    expect(shouldVibrateForCue('season_promotion')).toBe(true);
+    expect(shouldVibrateForCue('season_relegation')).toBe(true);
     expect(shouldVibrateForCue('advance')).toBe(false);
     expect(shouldVibrateForCue('intervention')).toBe(false);
   });

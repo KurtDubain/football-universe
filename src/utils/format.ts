@@ -60,6 +60,26 @@ export function formatChineseList(items: readonly string[], conjunction = '和')
   return `${items.slice(0, -1).join('、')}${conjunction}${items.at(-1)}`;
 }
 
+export function cnRoundLabel(name: string): string {
+  const map: Record<string, string> = {
+    R32: '32强',
+    R16: '16强',
+    QF: '八强',
+    SF: '四强',
+    Final: '决赛',
+    'Round of 16': '16强',
+    'Quarter-final': '八强',
+    'Semi-final': '四强',
+  };
+  if (map[name]) return map[name];
+  const numberedRound = /^Round\s+(\d+)$/i.exec(name.trim());
+  if (numberedRound) return `第${numberedRound[1]}轮`;
+  const hyphenToken = name.split('-')[0];
+  if (map[hyphenToken]) return map[hyphenToken];
+  const token = Object.keys(map).find(key => name.startsWith(`${key} `));
+  return token ? `${map[token]}${name.slice(token.length)}` : name;
+}
+
 export function formatForm(form: ('W' | 'D' | 'L')[]): { label: string; color: string }[] {
   return form.map((r) => {
     switch (r) {

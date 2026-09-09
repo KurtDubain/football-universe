@@ -1,5 +1,6 @@
 import type { StandingEntry } from '../../types/league';
 import type { MatchResult } from '../../types/match';
+import { cnRoundLabel } from '../../utils/format';
 import { analyzeDestinyDeviation, resolveMatchOutcome } from '../match/analysis';
 import { getKnockoutRoundRank } from './match-importance';
 import type { GameWorld, NewsItem } from './season-manager';
@@ -347,7 +348,7 @@ function cupCampaignEvidence(campaign: CupCampaignSummary): string[] {
   const bestUpset = bestCupUpset(campaign);
   return [
     `${campaign.competitionName} · ${campaign.upsetWins.length}场冷门胜利`,
-    `最深阶段 ${campaign.deepestRoundLabel}`,
+    `最深阶段 ${cnRoundLabel(campaign.deepestRoundLabel)}`,
     bestUpset
       ? `最意外一战赛前胜出概率${probabilityLabel(
         analyzeDestinyDeviation(bestUpset.result).actualProbability,
@@ -392,12 +393,12 @@ function detectCupGiantKillerSignal(
     type: 'cup_giant_killer',
     phase,
     title: `${situation.team.name}成为杯赛巨人杀手`,
-    body: `在${campaign.competitionName}已经赢下${campaign.upsetWins.length}场明确冷门，最深推进至${campaign.deepestRoundLabel}。`,
+    body: `在${campaign.competitionName}已经赢下${campaign.upsetWins.length}场明确冷门，最深推进至${cnRoundLabel(campaign.deepestRoundLabel)}。`,
     evidence: cupCampaignEvidence(campaign),
     nextWatch: campaign.champion
       ? '这段巨人杀手征程已经捧杯，等待写入赛季档案'
       : nextFixture
-        ? `下一站：${nextFixture.roundLabel}`
+        ? `下一站：${cnRoundLabel(nextFixture.roundLabel)}`
         : '这段杯赛征程还能走多远',
     priority: 38 + campaign.upsetWins.length * 8 + campaign.deepestStage * 6
       + Number(campaign.champion) * 12,
@@ -592,7 +593,7 @@ function concludeStoryline(
     conclusion = campaign
       ? campaign.champion
         ? `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门并最终夺冠，巨人杀手征程得到兑现。`
-        : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${campaign.deepestRoundLabel}${campaign.eliminated ? '后止步。' : '并在赛季末写入档案。'}`
+        : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${cnRoundLabel(campaign.deepestRoundLabel)}${campaign.eliminated ? '后止步。' : '并在赛季末写入档案。'}`
       : `${storyline.competitionName ?? '杯赛'}的巨人杀手征程已结束，详细赛果无法继续重建。`;
   } else if (storyline.type === 'dark_horse') {
     outcome = finalSeason
