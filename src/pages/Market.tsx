@@ -19,7 +19,7 @@ import {
  *   - Incoming offers (elite teams bidding for YOUR stars)
  *   - Outgoing targets (rumored players you could bid for)
  *   - Free agent pool (market-value-scaled signing premium)
- * Plus action buttons. "完成" closes the window + advances to next season.
+ * Plus action buttons. Closing commits the staged decisions and returns to S2.
  *
  * Auto-redirects to / if no window is open.
  */
@@ -71,7 +71,7 @@ export default function Market() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-2xl font-bold text-amber-300 inline-flex items-center gap-2"><Icon name="stadium" size={26} accent="#fbbf24" /> 转会窗口 S{tw.season}</h1>
-            <p className="text-xs text-slate-400 mt-1">仅你的收藏球队需要决策,其他球队已自动处理</p>
+            <p className="text-xs text-slate-400 mt-1">仅你的收藏球队需要决策，其他球队已自动处理</p>
           </div>
           {favTeamFinances && (
             <div className="text-right">
@@ -252,8 +252,10 @@ export default function Market() {
           )}
           <button
             onClick={() => closeTransferWindow(false)}
-            className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 rounded text-white font-semibold flex-1 sm:flex-none inline-flex items-center justify-center gap-1"
-          ><Icon name="check" size={12} /> 完成转会窗口</button>
+            disabled={pendingOffers.length + pendingTargets.length > 0}
+            title={pendingOffers.length + pendingTargets.length > 0 ? '先逐项处理，或使用全自动剩余' : '按当前决定完成转会窗口'}
+            className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded text-white font-semibold flex-1 sm:flex-none inline-flex items-center justify-center gap-1"
+          ><Icon name="check" size={12} /> 按当前决定完成</button>
         </div>
       </div>
     </div>

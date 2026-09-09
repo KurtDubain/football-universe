@@ -1,8 +1,8 @@
 # Football Universe Current Status
 
 Last reviewed: 2026-09-09
-Current release: v4.61.1
-Status: core-mechanism convergence batch 1 is released; later balance batches remain deliberately deferred.
+Current release: v4.61.2
+Status: the pre-submission experience loop is closed; later balance batches remain deliberately deferred.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
 
@@ -16,8 +16,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 1,034 unit and component tests across 146 test files.
-- Approximately 65k production TypeScript lines across 242 source files.
+- 1,043 unit and component tests across 148 test files.
+- 65,856 production lines across 243 production files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.
@@ -26,6 +26,7 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - First entry now exposes one compact theme-to-focus-to-reveal path. Ordinary rounds stay within the Dashboard feedback layer, while structural competition moments retain full-screen ceremony.
 - Key-node jumps now stop as a visible pre-match arrival: the results view explains the reached node before the world report, and the matchday view carries the same cup, storyline, followed-match, or playoff reason into observation without changing simulation order.
 - Season rollover now keeps completed-season meaning ahead of next-season operations: the champion archive opens first, then hands off to history, chronicle, transfers, or the untouched next matchday through one bounded closing section.
+- New reports reset to their score and headline while preserving scroll within the same report. Recommended themes can follow promotion or relegation at a season boundary, zero-match tables never expose seeded order as rank, and transfer auto-resolution leaves a concise visible handoff.
 - Season-boundary editing now gives the followed team's final fate first claim, then preserves top-flight champions, major historical resolutions, cups, promotion, and relegation ahead of routine transfer, prize, and coach news. History summaries identify every storyline subject and group promotion/relegation links by direction and tier without adding persisted data.
 - Mobile advance controls now live in the layout flow at 320–430px instead of covering route content. Concurrent season-end achievements collapse into one dismissible archive notice while every unlock remains stored.
 - The recommended observer experience is seed `20260709`: all three lenses retain viable opening matches, while the default challenger route combines a 2:2 opener with three World Moment windows in the first six advances. The selection comes from the shared scoring audit, not seed-specific simulation behavior.

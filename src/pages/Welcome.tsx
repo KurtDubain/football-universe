@@ -13,7 +13,6 @@ import {
   RECOMMENDED_EXPERIENCE_SEED,
   type ObserverLens,
 } from '../config/observer-experience';
-import type { ObservationThemePreference } from '../engine/observation/observation-theme';
 import { playGameFeedback } from '../feedback/game-feedback';
 import welcomeUniverseArtwork from '../assets/visual/welcome-annual-v2.webp';
 import { DecorativeImage } from '../components/DecorativeImage';
@@ -59,18 +58,15 @@ export default function Welcome() {
       ? RECOMMENDED_EXPERIENCE_SEED
       : seed.trim() ? Number.parseInt(seed.trim(), 10) : undefined;
 
-    const recommendedTheme: Record<ObserverLens, ObservationThemePreference> = {
-      giant: 'giant_defense',
-      challenger: 'dark_horse_challenge',
-      underdog: 'promotion_survival',
-      neutral: 'pure_observation',
-    };
     try {
       playGameFeedback('start');
       await newGame(typeof seedNumber === 'number' && Number.isFinite(seedNumber) ? seedNumber : undefined, {
         gameMode: startPath === 'recommended' ? 'free' : mode,
         favoriteTeamIds: selectedTeamId ? [selectedTeamId] : [],
-        observationThemePreference: startPath === 'recommended' ? recommendedTheme[lens] : 'auto',
+        // A recommended lens is a starting suggestion, not a permanent manual lock.
+        // `auto` resolves to the same opening theme and can follow promotion/relegation
+        // at the next season boundary. Explicit in-game selections remain explicit.
+        observationThemePreference: 'auto',
       });
       navigate('/');
     } catch (error) {
@@ -263,6 +259,7 @@ export default function Welcome() {
               )}
               <button
                 type="button"
+                data-testid="start-observation"
                 onClick={() => void handleStart()}
                 disabled={starting}
                 className="press-scale flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-lg shadow-black/30 transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700"

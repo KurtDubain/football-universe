@@ -1,5 +1,6 @@
 import { GameWorld } from '../season/season-manager';
 import { getCurrentPlayerStatRows } from '../players/player-stat-selectors';
+import { getStandingRank } from '../../utils/format';
 
 export type SearchEntity = 'team' | 'player' | 'coach';
 
@@ -115,8 +116,8 @@ function searchTeams(world: GameWorld, f: TeamFilters): TeamSearchResult[] {
     if (f.hasCupTrophy && cupTrophies === 0) continue;
 
     const standings = teamState.leagueLevel === 1 ? world.league1Standings : teamState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
-    const currentRank = standings.findIndex((s) => s.teamId === team.id) + 1;
-    if (f.currentlyTopN !== undefined && (currentRank === 0 || currentRank > f.currentlyTopN)) continue;
+    const currentRank = getStandingRank(standings, team.id);
+    if (f.currentlyTopN !== undefined && (currentRank === null || currentRank > f.currentlyTopN)) continue;
 
     results.push({
       teamId: team.id,
@@ -127,7 +128,7 @@ function searchTeams(world: GameWorld, f: TeamFilters): TeamSearchResult[] {
       overall: team.overall,
       championships,
       cupTrophies,
-      currentRank: currentRank || 99,
+      currentRank: currentRank ?? 99,
     });
   }
   results.sort((a, b) => b.overall - a.overall);

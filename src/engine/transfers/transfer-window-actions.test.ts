@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { applyOfferTransfer, applyOutgoingBid, signFreeAgent } from './transfer-window-actions';
+import {
+  applyOfferTransfer,
+  applyOutgoingBid,
+  autoResolveRemaining,
+  signFreeAgent,
+} from './transfer-window-actions';
+import { buildTransferWindowHandoffSummary } from './transfer-window-summary';
 import type { GameWorld } from '../season/season-manager';
 import type { Player, PlayerSeasonStats } from '../../types/player';
 import type { FinanceState, TeamBase } from '../../types/team';
@@ -160,6 +166,51 @@ function buildWorld(): GameWorld {
 }
 
 describe('transfer-window store actions', () => {
+  it('summarizes automatic rejections and skipped targets without inventing activity', () => {
+    const before = buildWorld();
+    before.transferWindow!.incomingOffers = [{
+      id: 'offer-auto',
+      playerId: 'p-sell',
+      playerName: 'p-sell',
+      playerPosition: 'FW',
+      playerRating: 84,
+      ownerTeamId: 'seller',
+      ownerTeamName: 'seller',
+      buyerId: 'buyer',
+      buyerName: 'buyer',
+      fee: 40,
+      resolution: 'pending',
+    }];
+    before.transferWindow!.outgoingTargets = [{
+      id: 'target-auto',
+      playerId: 'p-sell',
+      playerName: 'p-sell',
+      playerPosition: 'FW',
+      playerRating: 84,
+      fromTeamId: 'seller',
+      fromTeamName: 'seller',
+      toTeamId: 'buyer',
+      suggestedFee: 40,
+      resolution: 'pending',
+    }];
+
+    const resolved = autoResolveRemaining(before);
+    const summary = buildTransferWindowHandoffSummary(before, resolved, ['buyer'], 'auto');
+
+    expect(summary).toMatchObject({
+      mode: 'auto',
+      autoRejectedOffers: 1,
+      autoSkippedTargets: 1,
+      acceptedOffers: 0,
+      rejectedOffers: 1,
+      completedTargets: 0,
+      uncompletedTargets: 1,
+      signedPlayerNames: [],
+      cashChanges: [{ teamId: 'buyer', delta: 0 }],
+    });
+    expect(resolved.rngState).toBe(before.rngState);
+  });
+
   it('keeps a staged offer from overdrawing the buyer after finances changed', () => {
     const world = buildWorld();
     world.teamFinances.buyer = makeFinance(10);
@@ -318,6 +369,14 @@ describe('transfer-window store actions', () => {
         rating: 60,
         position: 'FW',
       },
+    });
+
+    out.transferWindow!.outgoingTargets = [{ ...target, resolution: 'bid_accepted', bidFee: 40 }];
+    const summary = buildTransferWindowHandoffSummary(world, out, ['buyer'], 'manual');
+    expect(summary).toMatchObject({
+      completedTargets: 1,
+      signedPlayerNames: ['p-sell'],
+      cashChanges: [{ teamId: 'buyer', delta: -40 }],
     });
   });
 

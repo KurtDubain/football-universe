@@ -26,6 +26,9 @@ import {
   getTeamShortName,
   formatForm,
   getCoachName,
+  getSeasonWindowDisplay,
+  getStandingRank,
+  getStandingPositionLabel,
   getWindowTypeLabel,
 } from '../utils/format';
 import { formatMoney } from '../engine/economy/finance';
@@ -47,7 +50,6 @@ import {
   isInspectableKeyNode,
   type KeyNodeReason,
 } from '../engine/observation/key-node';
-
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
 const WorldResponseSummary = lazy(() => import('../components/WorldResponseSummary'));
@@ -91,6 +93,8 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const favoriteTeamId = useGameStore((s) => s.favoriteTeamId);
   const advanceTick = useGameStore((s) => s.advanceTick);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
+  const transferWindowHandoff = useGameStore((s) => s.lastTransferWindowHandoff);
+  const dismissTransferWindowHandoff = useGameStore((s) => s.dismissTransferWindowHandoff);
   const advancePreferences = useAdvancePreferences();
 
   const [activeTab, setActiveTab] = useState<TabKey>(() => (
@@ -98,6 +102,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
   ));
   const [tabDirection, setTabDirection] = useState<'forward' | 'backward'>('forward');
   const prevAdvanceTick = useRef(advanceTick);
+  const previousWorldResponseId = useRef(lastWorldResponse?.id ?? null);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const tabScrollPositions = useRef<Record<TabKey, number>>({ matchday: 0, results: 0, overview: 0, review: 0 });
 
@@ -117,6 +122,15 @@ function DashboardContent({ world }: { world: GameWorld }) {
   useEffect(() => {
     if (advanceTick === prevAdvanceTick.current) return;
     prevAdvanceTick.current = advanceTick;
+
+    const responseId = lastWorldResponse?.id ?? null;
+    if (responseId && responseId !== previousWorldResponseId.current) {
+      tabScrollPositions.current.results = 0;
+      if (activeTab === 'results' && tabContentRef.current) {
+        tabContentRef.current.scrollTop = 0;
+      }
+    }
+    previousWorldResponseId.current = responseId;
 
     const prevWindow = world?.seasonState.calendar[world.seasonState.currentWindowIndex - 1];
     if (!prevWindow && !lastWorldResponse) return;
@@ -264,6 +278,50 @@ function DashboardContent({ world }: { world: GameWorld }) {
     <div data-testid="dashboard" className="dashboard-shell max-w-6xl flex flex-col h-full tabular-nums">
       <DashboardMasthead world={world} currentWindow={currentWindow} favoriteTeamId={favoriteTeamId} />
 
+      {transferWindowHandoff && (
+        <section
+          data-testid="transfer-window-handoff-summary"
+          className="mt-2 border-y border-cyan-700/35 bg-cyan-950/15 px-3 py-3 text-xs text-slate-300"
+          aria-label={`S${transferWindowHandoff.season}转会窗口处理结果`}
+        >
+          <div className="flex items-start gap-3">
+            <Icon name="handshake" size={18} className="mt-0.5 shrink-0 text-cyan-300" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold text-slate-100">S{transferWindowHandoff.season} 转会窗口已交接</h2>
+                <span className="rounded-sm bg-cyan-900/40 px-1.5 py-0.5 text-[11px] text-cyan-200">
+                  {transferWindowHandoff.mode === 'auto' ? '自动处理' : '按当前决定完成'}
+                </span>
+              </div>
+              {transferWindowHandoff.mode === 'auto' && (
+                <p className="mt-1 text-slate-400">
+                  自动策略拒绝 {transferWindowHandoff.autoRejectedOffers} 份待定报价，跳过 {transferWindowHandoff.autoSkippedTargets} 个待定目标。
+                </p>
+              )}
+              <p className="mt-1 leading-5 text-slate-400">
+                本窗口接受 {transferWindowHandoff.acceptedOffers} 份报价、拒绝 {transferWindowHandoff.rejectedOffers} 份；完成 {transferWindowHandoff.completedTargets} 个引援目标、未完成 {transferWindowHandoff.uncompletedTargets} 个。
+                {' '}签约：{transferWindowHandoff.signedPlayerNames.length > 0
+                  ? transferWindowHandoff.signedPlayerNames.join('、')
+                  : '无人'}。
+              </p>
+              <p className="text-[11px] text-slate-500">
+                现金变化：{transferWindowHandoff.cashChanges.map(change => (
+                  `${change.teamName} ${change.delta === 0 ? '无变化' : `${change.delta > 0 ? '+' : ''}${formatMoney(change.delta)}`}`
+                )).join('、') || '无关注球队'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissTransferWindowHandoff}
+              aria-label="关闭转会窗口处理摘要"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+            >
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* ═══════ Favorite Team Cards (up to 3) ═══════ */}
       {favoriteTeamIds.length > 0 && (() => {
         // Surface any negative-cash favorites as a Phase H alert banner.
@@ -301,7 +359,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
             if (!fav || !favState) return null;
             const standings = favState.leagueLevel === 1 ? world.league1Standings : favState.leagueLevel === 2 ? world.league2Standings : world.league3Standings;
             const posEntry = standings.find(s => s.teamId === tid);
-            const pos = posEntry ? standings.indexOf(posEntry) + 1 : '-';
+            const positionLabel = getStandingPositionLabel(standings, tid);
             const pts = posEntry?.points ?? 0;
             const coachName = (() => {
               const cid = teamCoachMap.get(tid);
@@ -332,7 +390,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
                     <span className="hidden sm:inline">{fav.name}</span>
                   </Link>
                   {isPrimary && <span className="observer-primary-label shrink-0 px-1.5 py-0.5 text-[11px] font-semibold">主要观察</span>}
-                  <span className="text-[var(--text-muted)] shrink-0">#{pos} · {pts}分 · OVR {fav.overall}</span>
+                  <span data-testid="favorite-team-standing" className="text-[var(--text-muted)] shrink-0">{positionLabel} · {pts}分 · OVR {fav.overall}</span>
                   <div className="flex gap-0.5 shrink-0 ml-auto">
                     {formatForm(favState.recentForm.slice(-5)).map((f, i) => (
                       <span key={i} className={`w-4 h-4 rounded text-[11px] font-bold text-white flex items-center justify-center ${f.color}`}>{f.label}</span>
@@ -394,6 +452,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
           tabSwipeRef.current = node;
           tabContentRef.current = node;
         }}
+        data-testid="dashboard-tab-content"
         data-tab-direction={tabDirection}
         onScroll={event => { tabScrollPositions.current[activeTab] = event.currentTarget.scrollTop; }}
         className="dashboard-tab-content flex-1 overflow-auto pt-4 pb-2 touch-pan-y"
@@ -488,11 +547,14 @@ function DashboardMasthead({
   currentWindow: ReturnType<ReturnType<typeof useGameStore.getState>['getCurrentWindow']>;
   favoriteTeamId: string | null;
 }) {
-  const completedWindows = world.seasonState.calendar.filter(window => window.completed).length;
-  const totalWindows = world.seasonState.calendar.length;
-  const currentNumber = currentWindow
-    ? Math.min(world.seasonState.currentWindowIndex + 1, totalWindows)
-    : totalWindows;
+  const {
+    completedWindows,
+    totalWindows,
+    currentWindowNumber,
+  } = getSeasonWindowDisplay(
+    world.seasonState.calendar,
+    world.seasonState.currentWindowIndex,
+  );
   const primaryTeam = favoriteTeamId ? world.teamBases[favoriteTeamId] : null;
   const progress = totalWindows > 0 ? (completedWindows / totalWindows) * 100 : 0;
 
@@ -528,9 +590,9 @@ function DashboardMasthead({
             <span><small>观察视角</small><strong>全局</strong></span>
           </div>
         )}
-        <div className="season-window-counter">
+        <div className="season-window-counter" data-testid="dashboard-window-progress">
           <span>窗口</span>
-          <strong>{currentNumber}<small>/{totalWindows}</small></strong>
+          <strong>{currentWindowNumber ?? totalWindows}<small>/{totalWindows}</small></strong>
         </div>
       </div>
       <div className="season-progress-track" aria-hidden="true">
@@ -1429,11 +1491,16 @@ function OverviewTab({ world }: { world: GameWorld }) {
                 </tr>
               </thead>
               <tbody>
-                {standings.slice(0, 5).map((entry, i) => {
+                {standings.every(entry => entry.played === 0) ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-5 text-center text-slate-500">排名未形成</td>
+                  </tr>
+                ) : standings.slice(0, 5).map((entry) => {
                   const teamBase = world.teamBases[entry.teamId];
+                  const rank = getStandingRank(standings, entry.teamId);
                   return (
                     <tr key={entry.teamId} className="border-t border-slate-700/50 hover:bg-slate-700/30">
-                      <td className="px-2 py-1.5 text-slate-500">{i + 1}</td>
+                      <td className="px-2 py-1.5 text-slate-500">{rank ?? '—'}</td>
                       <td className="px-1 py-1.5">
                         <div className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: teamBase?.color ?? '#64748b' }} />

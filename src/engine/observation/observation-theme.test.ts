@@ -119,6 +119,10 @@ describe('observation themes', () => {
     expect(theme?.title).toContain('升级路线');
     expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).toContain('排名尚未形成');
     expect(`${theme?.summary} ${theme?.evidence.join(' ')}`).not.toMatch(/联赛第\d|当前第\d|直升区/);
+
+    const manuallySelected = buildObservationTheme(world, teamId, 'dark_horse_challenge');
+    expect(manuallySelected?.type).toBe('dark_horse_challenge');
+    expect(manuallySelected?.label).toBe('黑马挑战');
   });
 
   it('updates visible progress and player contribution after authoritative matches', () => {

@@ -40,6 +40,10 @@ import {
 } from '../engine/observation/observation-theme';
 import { FAVORITE_PLAYER_LIMIT } from '../engine/players/star-presence';
 import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
+import {
+  buildTransferWindowHandoffSummary,
+  type TransferWindowHandoffSummary,
+} from '../engine/transfers/transfer-window-summary';
 
 const ADVANCE_ERROR_MESSAGE = '本次推进没有完成，本次操作未提交。请重试；若问题持续，请刷新页面。';
 
@@ -97,9 +101,12 @@ interface GameStore {
   /** One transient fixture selected for spoiler-free auto-live (cleared on advance). */
   starredFixtureIds: string[];
   newAchievements: Achievement[];
+  /** Transient, presentation-only handoff from the most recently closed transfer window. */
+  lastTransferWindowHandoff: TransferWindowHandoffSummary | null;
 
   dismissAchievement: () => void;
   dismissAchievements: (achievementIds: readonly string[]) => void;
+  dismissTransferWindowHandoff: () => void;
 
   newGame: (seed?: number, options?: {
     gameMode?: import('../types/game-mode').GameMode;
@@ -247,6 +254,7 @@ export const useGameStore = create<GameStore>()(
       narrativeMemory: [],
       starredFixtureIds: [],
       newAchievements: [],
+      lastTransferWindowHandoff: null,
 
       dismissAchievement: () => {
         set(s => ({ newAchievements: s.newAchievements.slice(1) }));
@@ -257,6 +265,7 @@ export const useGameStore = create<GameStore>()(
           newAchievements: s.newAchievements.filter(achievement => !dismissed.has(achievement.id)),
         }));
       },
+      dismissTransferWindowHandoff: () => set({ lastTransferWindowHandoff: null }),
 
       newGame: async (seed?: number, options?: {
         gameMode?: import('../types/game-mode').GameMode;
@@ -291,6 +300,7 @@ export const useGameStore = create<GameStore>()(
           narrativeMemory: [],
           starredFixtureIds: [],
           newAchievements: [],
+          lastTransferWindowHandoff: null,
         });
       },
 
@@ -954,9 +964,16 @@ export const useGameStore = create<GameStore>()(
       closeTransferWindow: (autoResolveRest: boolean) => {
         let { world } = get();
         if (!world?.transferWindow) return;
+        const beforeWorld = world;
         if (autoResolveRest) {
           world = autoResolveRemaining(world);
         }
+        const handoff = buildTransferWindowHandoffSummary(
+          beforeWorld,
+          world,
+          get().favoriteTeamIds,
+          autoResolveRest ? 'auto' : 'manual',
+        );
         // v23 — non-blocking architecture. The new season was already
         // initialised at season_end time, so closing the window is just
         // a UI commit: clear the staged decisions.
@@ -969,7 +986,11 @@ export const useGameStore = create<GameStore>()(
           transferWindow: null,
           playerStats: syncPlayerStatsTeamIds(world.playerStats, world.squads),
         };
-        set({ world: cleared, advanceTick: get().advanceTick + 1 });
+        set({
+          world: cleared,
+          lastTransferWindowHandoff: handoff,
+          advanceTick: get().advanceTick + 1,
+        });
       },
 
       resetGame: () => {
@@ -990,6 +1011,7 @@ export const useGameStore = create<GameStore>()(
           narrativeMemory: [],
           starredFixtureIds: [],
           newAchievements: [],
+          lastTransferWindowHandoff: null,
         });
         compressedStorage.removeItem(SAVE_STORAGE_KEY);
       },

@@ -69,4 +69,24 @@ describe('Welcome initialization recovery', () => {
     expect(start.disabled).toBe(false);
     expect(start.textContent).toContain('开始观察');
   });
+
+  it('starts the recommended lens as an adaptive recommendation instead of a manual lock', async () => {
+    const newGame = vi.fn(async () => undefined);
+    useGameStore.setState({ newGame });
+
+    await act(async () => {
+      root.render(<MemoryRouter><Welcome /></MemoryRouter>);
+    });
+    const start = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('开始观察'))!;
+
+    await act(async () => {
+      start.click();
+    });
+
+    expect(newGame).toHaveBeenCalledWith(20260709, expect.objectContaining({
+      favoriteTeamIds: ['datong'],
+      observationThemePreference: 'auto',
+    }));
+  });
 });

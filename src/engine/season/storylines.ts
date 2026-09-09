@@ -334,6 +334,28 @@ function probabilityLabel(probability: number): string {
   return probability <= 0 ? '低于1%' : `约${probability}%`;
 }
 
+function bestCupUpset(campaign: CupCampaignSummary): CompletedTeamMatch | undefined {
+  return [...campaign.upsetWins].sort((left, right) => (
+    analyzeDestinyDeviation(left.result).actualProbability
+      - analyzeDestinyDeviation(right.result).actualProbability
+    || left.windowIndex - right.windowIndex
+    || left.result.fixtureId.localeCompare(right.result.fixtureId)
+  ))[0];
+}
+
+function cupCampaignEvidence(campaign: CupCampaignSummary): string[] {
+  const bestUpset = bestCupUpset(campaign);
+  return [
+    `${campaign.competitionName} · ${campaign.upsetWins.length}场冷门胜利`,
+    `最深阶段 ${campaign.deepestRoundLabel}`,
+    bestUpset
+      ? `最意外一战赛前胜出概率${probabilityLabel(
+        analyzeDestinyDeviation(bestUpset.result).actualProbability,
+      )}`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+}
+
 function detectCupGiantKillerSignal(
   world: GameWorld,
   teamId: string,
@@ -355,12 +377,6 @@ function detectCupGiantKillerSignal(
       || left.competitionName.localeCompare(right.competitionName))[0];
   if (!campaign) return null;
 
-  const bestUpset = [...campaign.upsetWins].sort((left, right) => (
-    analyzeDestinyDeviation(left.result).actualProbability
-      - analyzeDestinyDeviation(right.result).actualProbability
-    || left.windowIndex - right.windowIndex
-    || left.result.fixtureId.localeCompare(right.result.fixtureId)
-  ))[0];
   const phase = campaign.champion
     ? '高潮'
     : campaign.deepestStage >= 3 || campaign.upsetWins.length >= 3
@@ -377,15 +393,7 @@ function detectCupGiantKillerSignal(
     phase,
     title: `${situation.team.name}成为杯赛巨人杀手`,
     body: `在${campaign.competitionName}已经赢下${campaign.upsetWins.length}场明确冷门，最深推进至${campaign.deepestRoundLabel}。`,
-    evidence: [
-      `${campaign.competitionName} · ${campaign.upsetWins.length}场冷门胜利`,
-      `最深阶段 ${campaign.deepestRoundLabel}`,
-      bestUpset
-        ? `最意外一战赛前胜出概率${probabilityLabel(
-          analyzeDestinyDeviation(bestUpset.result).actualProbability,
-        )}`
-        : null,
-    ].filter((item): item is string => Boolean(item)),
+    evidence: cupCampaignEvidence(campaign),
     nextWatch: campaign.champion
       ? '这段巨人杀手征程已经捧杯，等待写入赛季档案'
       : nextFixture
@@ -563,6 +571,7 @@ function concludeStoryline(
   const { rank, expected, standings, relegationLine } = situation;
   let outcome: StorylineOutcome;
   let conclusion: string;
+  let canonicalEvidence: string[] | undefined;
 
   if (storyline.type === 'unbeaten_run') {
     const longest = longestLeagueRun(completedTeamMatches(world, storyline.teamId));
@@ -579,6 +588,7 @@ function concludeStoryline(
     outcome = campaign && (
       campaign.champion || campaign.upsetWins.length >= 3 || campaign.deepestStage >= 3
     ) ? 'success' : 'failure';
+    canonicalEvidence = campaign ? cupCampaignEvidence(campaign) : storyline.evidence;
     conclusion = campaign
       ? campaign.champion
         ? `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门并最终夺冠，巨人杀手征程得到兑现。`
@@ -612,9 +622,11 @@ function concludeStoryline(
   return {
     ...storyline,
     phase: '落幕',
-    evidence: storyline.type === 'unbeaten_run' || storyline.type === 'cup_giant_killer'
-      ? storyline.evidence
-      : describeStoryline(world, storyline)?.evidence ?? storyline.evidence,
+    evidence: canonicalEvidence ?? (
+      storyline.type === 'unbeaten_run' || storyline.type === 'cup_giant_killer'
+        ? storyline.evidence
+        : describeStoryline(world, storyline)?.evidence ?? storyline.evidence
+    ),
     lastUpdatedWindow: world.seasonState.currentWindowIndex,
     lastUpdatedElapsedWindow: world.totalElapsedWindows ?? 0,
     endedWindow: world.seasonState.currentWindowIndex,

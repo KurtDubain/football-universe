@@ -349,9 +349,9 @@ function PreMatchView({
           <span className="text-slate-400">平局 {prediction.drawPct}%</span>
           <span className="text-red-400">客胜 {prediction.awayWinPct}%</span>
         </div>
-        {/* Predicted score */}
+        {/* Expected goals are continuous model values, not a literal scoreline. */}
         <div className="text-center mt-3">
-          <span className="text-sm text-slate-500">预测比分</span>
+          <span className="text-sm text-slate-500" data-testid="expected-goals-label">预期进球</span>
           <div className="text-3xl font-black text-slate-200 tracking-wider mt-0.5">
             {prediction.predictedHomeGoals} - {prediction.predictedAwayGoals}
           </div>

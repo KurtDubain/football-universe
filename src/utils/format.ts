@@ -1,5 +1,46 @@
-import type { WindowType } from '../types/season';
+import type { CalendarWindow, WindowType } from '../types/season';
+import type { StandingEntry } from '../types/league';
 import type { TeamTier } from '../types/team';
+
+export interface SeasonWindowDisplay {
+  completedWindows: number;
+  totalWindows: number;
+  currentWindowNumber: number | null;
+}
+
+export function getSeasonWindowDisplay(
+  calendar: readonly CalendarWindow[],
+  currentWindowIndex: number,
+): SeasonWindowDisplay {
+  const totalWindows = calendar.length;
+  const completedWindows = calendar.filter(window => window.completed).length;
+  const currentWindow = calendar[currentWindowIndex];
+  return {
+    completedWindows,
+    totalWindows,
+    currentWindowNumber: currentWindow
+      ? Math.min(Math.max(1, currentWindowIndex + 1), totalWindows)
+      : null,
+  };
+}
+
+export function getStandingRank(
+  standings: readonly StandingEntry[],
+  teamId: string,
+): number | null {
+  const index = standings.findIndex(entry => entry.teamId === teamId);
+  const row = index >= 0 ? standings[index] : null;
+  if (!row || row.played === 0) return null;
+  return index + 1;
+}
+
+export function getStandingPositionLabel(
+  standings: readonly StandingEntry[],
+  teamId: string,
+): string {
+  const rank = getStandingRank(standings, teamId);
+  return rank === null ? '排名未形成' : `#${rank}`;
+}
 
 export function getTeamName(id: string, teamBases: Record<string, { name: string }>): string {
   return teamBases[id]?.name ?? id;
@@ -11,6 +52,12 @@ export function getTeamShortName(id: string, teamBases: Record<string, { shortNa
 
 export function getCoachName(id: string, coachBases: Record<string, { name: string }>): string {
   return coachBases[id]?.name ?? id;
+}
+
+export function formatChineseList(items: readonly string[], conjunction = '和'): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]}${conjunction}${items[1]}`;
+  return `${items.slice(0, -1).join('、')}${conjunction}${items.at(-1)}`;
 }
 
 export function formatForm(form: ('W' | 'D' | 'L')[]): { label: string; color: string }[] {

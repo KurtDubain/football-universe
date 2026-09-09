@@ -22,6 +22,19 @@ interface FocusPriority {
   marquee: number;
 }
 
+const TABLE_STAKES_MIN_MATCHES = 4;
+
+function hasEstablishedTableSample(fixture: MatchFixture, world: GameWorld): boolean {
+  const home = world.league1Standings.find(entry => entry.teamId === fixture.homeTeamId);
+  const away = world.league1Standings.find(entry => entry.teamId === fixture.awayTeamId);
+  return Boolean(
+    home
+    && away
+    && home.played >= TABLE_STAKES_MIN_MATCHES
+    && away.played >= TABLE_STAKES_MIN_MATCHES,
+  );
+}
+
 function getFocusPriority(
   fixture: MatchFixture,
   world: GameWorld,
@@ -44,8 +57,11 @@ function getFocusPriority(
       && (fixture.homeTeamId === primaryFavoriteTeamId || fixture.awayTeamId === primaryFavoriteTeamId)),
     knockout,
     tableStakes: Number(
-      (top4Ids.has(fixture.homeTeamId) && top4Ids.has(fixture.awayTeamId))
-      || (bottom5Ids.has(fixture.homeTeamId) && bottom5Ids.has(fixture.awayTeamId)),
+      hasEstablishedTableSample(fixture, world)
+      && (
+        (top4Ids.has(fixture.homeTeamId) && top4Ids.has(fixture.awayTeamId))
+        || (bottom5Ids.has(fixture.homeTeamId) && bottom5Ids.has(fixture.awayTeamId))
+      ),
     ),
     derby: Number(isDerby(fixture.homeTeamId, fixture.awayTeamId, world.teamBases)),
     marquee,
@@ -95,16 +111,17 @@ export function computeFixtureImportance(
   const top4Ids = new Set(l1.slice(0, 4).map((s) => s.teamId));
   const top6Ids = new Set(l1.slice(0, 6).map((s) => s.teamId));
   const bottom5Ids = new Set(l1.slice(-5).map((s) => s.teamId));
+  const establishedTable = hasEstablishedTableSample(fixture, world);
 
-  if (top4Ids.has(fixture.homeTeamId) && top4Ids.has(fixture.awayTeamId)) {
+  if (establishedTable && top4Ids.has(fixture.homeTeamId) && top4Ids.has(fixture.awayTeamId)) {
     score += 5;
     reasons.push('争冠焦点');
-  } else if (top6Ids.has(fixture.homeTeamId) && top6Ids.has(fixture.awayTeamId)) {
+  } else if (establishedTable && top6Ids.has(fixture.homeTeamId) && top6Ids.has(fixture.awayTeamId)) {
     score += 3;
     reasons.push('上游对话');
   }
 
-  if (bottom5Ids.has(fixture.homeTeamId) && bottom5Ids.has(fixture.awayTeamId)) {
+  if (establishedTable && bottom5Ids.has(fixture.homeTeamId) && bottom5Ids.has(fixture.awayTeamId)) {
     score += 2;
     reasons.push('保级大战');
   }

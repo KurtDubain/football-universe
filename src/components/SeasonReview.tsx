@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
-import { getTeamName, getTeamShortName } from '../utils/format';
+import { formatChineseList, getTeamName, getTeamShortName } from '../utils/format';
 import {
   getPlayerRowPerformance,
   getSeasonOverallRows,
@@ -148,10 +148,10 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
       sentences.push(`${champ}不仅称霸联赛，更横扫杯赛赛场，成就令人艳羡的多冠伟业。`);
     }
     if (honor.promoted.length > 0) {
-      sentences.push(`${honor.promoted.map(p => getTeamName(p.teamId, tb)).join('和')}凭借出色表现成功升级，新的征程就此开启。`);
+      sentences.push(`${formatChineseList(honor.promoted.map(p => getTeamName(p.teamId, tb)))}凭借出色表现成功升级，新的征程就此开启。`);
     }
     if (honor.relegated.length > 0) {
-      sentences.push(`而${honor.relegated.map(r => getTeamName(r.teamId, tb)).join('和')}则未能抵挡降级的命运，挥别了这个级别的舞台。`);
+      sentences.push(`而${formatChineseList(honor.relegated.map(r => getTeamName(r.teamId, tb)))}则未能抵挡降级的命运，挥别了这个级别的舞台。`);
     }
     return sentences.slice(0, 4).join('');
   })();

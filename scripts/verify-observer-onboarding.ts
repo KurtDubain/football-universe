@@ -11,6 +11,7 @@ type AuditState = {
   initialized: boolean;
   favoriteTeamId: string | null;
   favoriteTeamIds: string[];
+  observationThemePreference: string;
   world: { seed: number; gameMode?: string } | null;
   setFavoriteTeams: (teamIds: string[]) => void;
   resetGame: () => void;
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
           mode: state?.world?.gameMode,
           primary: state?.favoriteTeamId,
           favorites: state?.favoriteTeamIds ?? [],
+          preference: state?.observationThemePreference,
         };
       });
       if (recommended.seed !== RECOMMENDED_EXPERIENCE_SEED || recommended.mode !== 'free') {
@@ -72,6 +74,9 @@ async function main(): Promise<void> {
       }
       if (!recommended.primary || recommended.favorites[0] !== recommended.primary) {
         throw new Error(`${viewport.name}: recommended primary focus mismatch`);
+      }
+      if (recommended.preference !== 'auto') {
+        throw new Error(`${viewport.name}: recommended lens was incorrectly persisted as a manual lock`);
       }
       await page.getByText('主要观察', { exact: true }).first().waitFor();
       const focusMatches = page.getByTestId('focus-matches');

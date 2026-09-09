@@ -104,6 +104,21 @@ async function startServer(name: string, args: string[], readyUrl: string): Prom
   }
 }
 
+function viteServerArgs(url: string, preview: boolean): string[] {
+  const parsed = new URL(url);
+  const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  return [
+    'exec',
+    'vite',
+    ...(preview ? ['preview'] : []),
+    '--host',
+    parsed.hostname,
+    '--port',
+    port,
+    '--strictPort',
+  ];
+}
+
 function signalServer(server: ManagedServer, signal: NodeJS.Signals): void {
   try {
     if (process.platform === 'win32') server.child.kill(signal);
@@ -189,13 +204,13 @@ async function main(): Promise<void> {
   try {
     servers.push(await startServer(
       'production preview',
-      ['exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', '4173', '--strictPort'],
+      viteServerArgs(previewUrl, true),
       previewUrl,
     ));
     if (checks.some(check => check.server === 'fixture')) {
       servers.push(await startServer(
         'animation fixture server',
-        ['exec', 'vite', '--host', '127.0.0.1', '--port', '4174', '--strictPort'],
+        viteServerArgs(fixtureUrl, false),
         `${fixtureUrl}/scripts/fixtures/animation-preview.html`,
       ));
     }

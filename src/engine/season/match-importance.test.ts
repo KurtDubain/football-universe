@@ -44,6 +44,7 @@ describe('observer fixture importance', () => {
     const world = initializeGameWorld(20260718);
     const template = getCurrentWindow(world)!.fixtures[0];
     const rankedIds = world.league1Standings.map(entry => entry.teamId);
+    world.league1Standings.forEach(entry => { entry.played = 4; });
     const otherIds = Object.keys(world.teamBases).filter(id => !rankedIds.slice(0, 4).includes(id));
     const primaryTeamId = otherIds[0];
     const fixtures: MatchFixture[] = [
@@ -131,6 +132,26 @@ describe('observer fixture importance', () => {
 
     expect(forward).toEqual(['fixture-a', 'fixture-b']);
     expect(reversed).toEqual(forward);
+  });
+
+  it('does not call a three-match table sample a title or relegation showdown', () => {
+    const world = initializeGameWorld(20260709);
+    const [first, second] = world.league1Standings;
+    const fixture = {
+      ...getCurrentWindow(world)!.fixtures[0],
+      homeTeamId: first.teamId,
+      awayTeamId: second.teamId,
+    };
+    first.played = 3;
+    second.played = 3;
+
+    const early = computeFixtureImportance(fixture, world, []);
+    expect(early.reasons).not.toContain('争冠焦点');
+    expect(early.reasons).not.toContain('保级大战');
+
+    first.played = 4;
+    second.played = 4;
+    expect(computeFixtureImportance(fixture, world, []).reasons).toContain('争冠焦点');
   });
 
   it('does not misclassify semi-finals or quarter-finals as finals', () => {

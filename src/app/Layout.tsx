@@ -1,7 +1,7 @@
 import { type ReactNode, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
+import { getSeasonWindowDisplay, getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
 import TournamentMusicDirector from '../components/TournamentMusicDirector';
@@ -342,8 +342,11 @@ export default function Layout({ children }: LayoutProps) {
   };
   const isWorldCupYear = world?.seasonState.isWorldCupYear ?? false;
   const seasonNumber = world?.seasonState.seasonNumber ?? 1;
-  const calendarLen = world?.seasonState.calendar.length ?? 0;
-  const completedWindows = world?.seasonState.calendar.filter(w => w.completed).length ?? 0;
+  const windowDisplay = world
+    ? getSeasonWindowDisplay(world.seasonState.calendar, world.seasonState.currentWindowIndex)
+    : { completedWindows: 0, totalWindows: 0, currentWindowNumber: null };
+  const calendarLen = windowDisplay.totalWindows;
+  const completedWindows = windowDisplay.completedWindows;
 
   const navContent = (
     <>
@@ -360,7 +363,14 @@ export default function Layout({ children }: LayoutProps) {
             style={{ width: `${calendarLen > 0 ? (completedWindows / calendarLen) * 100 : 0}%` }}
           />
         </div>
-        <span className="mt-1 block text-[11px] text-[var(--text-disabled)]">{completedWindows}/{calendarLen} 窗口</span>
+        <span
+          data-testid="season-nav-window-progress"
+          className="mt-1 block text-[11px] text-[var(--text-disabled)]"
+        >
+          {windowDisplay.currentWindowNumber
+            ? `待赛 ${windowDisplay.currentWindowNumber}/${calendarLen} · 已完成 ${completedWindows}`
+            : `已完成 ${completedWindows}/${calendarLen} 窗口`}
+        </span>
       </div>
 
       {/* Favorite teams (up to 3) */}

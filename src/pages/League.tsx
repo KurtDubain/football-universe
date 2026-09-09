@@ -13,6 +13,7 @@ import {
   getTeamShortName,
   formatForm,
   getLeagueName,
+  getStandingRank,
 } from '../utils/format';
 import { leagueConfigs } from '../config/competitions';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
@@ -285,9 +286,10 @@ export default function League() {
                 <tbody>
                   {standings.map((entry, i) => {
                     const pos = i + 1;
-                    const zone = getRowZone(pos);
+                    const visibleRank = getStandingRank(standings, entry.teamId);
+                    const zone = visibleRank === null ? 'mid' : getRowZone(pos);
                     const teamBase = world.teamBases[entry.teamId];
-                    const boundary = isZoneBoundary(pos);
+                    const boundary = visibleRank !== null && isZoneBoundary(pos);
 
                     return (
                       <tr
@@ -302,10 +304,10 @@ export default function League() {
                             : ''
                         } ${getRowBgClass(zone)}`}
                       >
-                        <td className="text-center px-1.5 sm:px-2 py-2">
+                        <td data-testid="league-standing-rank" className="text-center px-1.5 sm:px-2 py-2">
                           <div className="flex items-center justify-center gap-0.5">
                             <span className={`inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-md text-[11px] sm:text-xs font-bold ${getPosBadgeClass(zone)}`}>
-                              {pos}
+                              {visibleRank ?? '—'}
                             </span>
                             {entry.previousPosition != null && entry.played > 0 && (() => {
                               const diff = entry.previousPosition - pos;
