@@ -1,4 +1,5 @@
 import type { SeasonRecord } from '../../types/team';
+import { getLeagueName } from '../../utils/format';
 import { getSeasonPlayerStatRows } from '../players/player-stat-selectors';
 import type { GameWorld } from '../season/season-manager';
 import { expectedStoryPosition } from '../season/storylines';
@@ -100,7 +101,7 @@ function promotionResult(
       ? 'caution'
       : 'neutral';
   const summary = record.promoted
-    ? `球队以第${record.leaguePosition}名结束第${trajectory.leagueLevel}级联赛，并获得升级资格。`
+    ? `球队以第${record.leaguePosition}名结束${getLeagueName(trajectory.leagueLevel)}，并获得升级资格。`
     : record.relegated
       ? `球队最终排名第${record.leaguePosition}，赛季以降级告终。`
       : wasTopFlight
@@ -113,7 +114,7 @@ function promotionResult(
     title: `${teamName}的升降级答案`,
     summary,
     evidence: [
-      `第${trajectory.leagueLevel}级联赛`,
+      getLeagueName(trajectory.leagueLevel),
       `最终第${record.leaguePosition}名`,
       `${record.leaguePoints}分`,
     ],

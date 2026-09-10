@@ -3,6 +3,8 @@ import type { StandingEntry } from '../types/league';
 import type { CalendarWindow } from '../types/season';
 import {
   formatChineseList,
+  formatLeagueTransition,
+  getLeagueName,
   getSeasonWindowDisplay,
   getStandingPositionLabel,
   getStandingRank,
@@ -66,5 +68,13 @@ describe('season display semantics', () => {
     standings[1] = { ...standings[1], played: 1, points: 1 };
     expect(getStandingPositionLabel(standings, 'target')).toBe('#2');
     expect(getStandingRank(standings, 'target')).toBe(2);
+  });
+});
+
+describe('league level presentation', () => {
+  it('uses player-facing names for leagues and movement', () => {
+    expect([1, 2, 3].map(getLeagueName)).toEqual(['顶级联赛', '甲级联赛', '乙级联赛']);
+    expect(formatLeagueTransition(2, 1)).toBe('甲级→顶级');
+    expect(formatLeagueTransition(3, 2)).toBe('乙级→甲级');
   });
 });

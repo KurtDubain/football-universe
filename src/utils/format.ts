@@ -131,6 +131,19 @@ export function getLeagueName(level: number): string {
   }
 }
 
+export function getLeagueTierLabel(level: number): string {
+  switch (level) {
+    case 1: return '顶级';
+    case 2: return '甲级';
+    case 3: return '乙级';
+    default: return `${level}级`;
+  }
+}
+
+export function formatLeagueTransition(from: number, to: number): string {
+  return `${getLeagueTierLabel(from)}→${getLeagueTierLabel(to)}`;
+}
+
 export function getTrophyLabel(type: string): string {
   switch (type) {
     case 'league1': return '顶级联赛冠军';

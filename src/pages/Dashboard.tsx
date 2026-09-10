@@ -52,9 +52,11 @@ import {
   isInspectableKeyNode,
   type KeyNodeReason,
 } from '../engine/observation/key-node';
+import WorldResponseLoadingState from '../components/WorldResponseLoadingState';
 const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
-const WorldResponseSummary = lazy(() => import('../components/WorldResponseSummary'));
+const loadWorldResponseSummary = () => import('../components/WorldResponseSummary');
+const WorldResponseSummary = lazy(loadWorldResponseSummary);
 
 /**
  * Compact money formatter for chip display.
@@ -117,6 +119,10 @@ function DashboardContent({ world }: { world: GameWorld }) {
   const [liveFeatured, setLiveFeatured] = useState(false);
   const starredFixtureIds = useGameStore((s) => s.starredFixtureIds);
   const clearStarredFixtures = useGameStore((s) => s.clearStarredFixtures);
+
+  useEffect(() => {
+    if (liveResult) void loadWorldResponseSummary();
+  }, [liveResult]);
 
   // Auto-switch to results tab + trigger live/celebration after each advance
   // (advanceTick bumps in store on every successful advance — robust across
@@ -1230,7 +1236,7 @@ export function ResultsTab({
       {reachedKeyNode && nextAction}
 
       {lastWorldResponse ? (
-        <Suspense fallback={<div className="h-32 border-y border-slate-700/60" aria-hidden />}>
+        <Suspense fallback={<WorldResponseLoadingState />}>
           <WorldResponseSummary
             response={lastWorldResponse}
             world={world}

@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
-import { cnRoundLabel, formatChineseList, getTeamName, getTeamShortName } from '../utils/format';
+import {
+  cnRoundLabel,
+  formatChineseList,
+  formatLeagueTransition,
+  getLeagueName,
+  getTeamName,
+  getTeamShortName,
+} from '../utils/format';
 import {
   getPlayerRowPerformance,
   getSeasonOverallRows,
@@ -544,7 +551,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                 <div key={p.teamId} className="text-xs text-slate-300 flex items-center gap-1.5 py-0.5">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[p.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${p.teamId}`} className="hover:text-blue-400">{getTeamName(p.teamId, tb)}</Link>
-                  <span className="text-slate-500">{p.from}级→{p.to}级</span>
+                  <span className="text-slate-500">{formatLeagueTransition(p.from, p.to)}</span>
                 </div>
               ))}
             </div>
@@ -556,7 +563,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                 <div key={r.teamId} className="text-xs text-slate-300 flex items-center gap-1.5 py-0.5">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${r.teamId}`} className="hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
-                  <span className="text-slate-500">{r.from}级→{r.to}级</span>
+                  <span className="text-slate-500">{formatLeagueTransition(r.from, r.to)}</span>
                 </div>
               ))}
             </div>
@@ -805,7 +812,7 @@ function PrimaryTeamTrajectory({
             )}
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            {trajectory.leagueLevel === 1 ? '顶级联赛' : trajectory.leagueLevel === 2 ? '甲级联赛' : '乙级联赛'}
+            {getLeagueName(trajectory.leagueLevel)}
             {' · '}
             {record.leagueWon}胜 {record.leagueDrawn}平 {record.leagueLost}负
             {' · '}

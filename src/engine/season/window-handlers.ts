@@ -16,6 +16,7 @@ import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsI
 import { applyVenuePolicy } from '../competitions/venue-policy';
 import { GameWorld, NewsItem } from './season-manager';
 import { worldCupConfig } from '../../config/competitions';
+import { getLeagueName } from '../../utils/format';
 
 // ── Public interface ────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ export function handleRelegationPlayoff(
       windowIndex,
       type: 'promotion',
       title: `${world.teamBases[p.teamId].name} 附加赛升级成功!`,
-      description: `${world.teamBases[p.teamId].name} 在升降级附加赛中获胜，从${p.from}级联赛升入${p.to}级联赛。`,
+      description: `${world.teamBases[p.teamId].name} 在升降级附加赛中获胜，从${getLeagueName(p.from)}升入${getLeagueName(p.to)}。`,
     });
   }
   for (const r of finalProRel.relegated) {
@@ -376,7 +377,7 @@ export function handleRelegationPlayoff(
       windowIndex,
       type: 'relegation',
       title: `${world.teamBases[r.teamId].name} 附加赛降级`,
-      description: `${world.teamBases[r.teamId].name} 在升降级附加赛中失利，从${r.from}级联赛降入${r.to}级联赛。`,
+      description: `${world.teamBases[r.teamId].name} 在升降级附加赛中失利，从${getLeagueName(r.from)}降入${getLeagueName(r.to)}。`,
     });
   }
 

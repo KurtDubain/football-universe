@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
-Last reviewed: 2026-09-09
-Current release: v4.61.3
+Last reviewed: 2026-09-10
+Current release: v4.61.4
 Status: the pre-submission experience loop and audiovisual delivery polish are closed; later balance batches remain deliberately deferred.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -16,8 +16,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 1,049 unit and component tests across 150 test files.
-- 66,360 production lines across 244 production files.
+- 1,055 unit and component tests across 151 test files.
+- 66,480 production lines across 245 production files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.

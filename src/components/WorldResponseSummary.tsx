@@ -147,7 +147,7 @@ function ResultCausality({ item }: { item: NarrativeItem }) {
           index="02"
           label="场上转折"
           facts={item.turningPoints}
-          fallback="比赛没有留下可单独标出的转折，比分与场面数据构成主要记录。"
+          fallback="本场未出现红牌、反超或绝平等需要单独强调的重大转折。"
         />
         <CausalityStep
           index="03"

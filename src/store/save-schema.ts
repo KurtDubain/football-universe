@@ -130,6 +130,27 @@ function requireFiniteNumber(parent: JsonRecord, key: string, context: string): 
   return value;
 }
 
+function normalizeLegacyTeamPresentation(world: JsonRecord): void {
+  const teamBases = world.teamBases;
+  if (!isRecord(teamBases)) return;
+
+  const tsmc = teamBases.tsmc_fc;
+  if (isRecord(tsmc) && tsmc.shortName === 'Env') {
+    tsmc.shortName = '台积';
+  }
+
+  const playerStatsHistory = world.playerStatsHistory;
+  if (!isRecord(playerStatsHistory)) return;
+  for (const entries of Object.values(playerStatsHistory)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (isRecord(entry) && entry.teamId === 'tsmc_fc' && entry.teamShortName === 'Env') {
+        entry.teamShortName = '台积';
+      }
+    }
+  }
+}
+
 const REQUIRED_WORLD_RECORDS = [
   'teamBases',
   'teamStates',
@@ -870,6 +891,7 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     throw new Error('非洲际杯赛季包含空洲际杯窗口');
   }
 
+  normalizeLegacyTeamPresentation(world);
   return world as unknown as GameWorld;
 }
 

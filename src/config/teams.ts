@@ -199,7 +199,7 @@ export const defaultTeams: TeamBase[] = [
     region: '东洲+本州',
   },
   {
-    id: 'tsmc_fc', name: '台积电', shortName: 'Env', color: '#1565C0',
+    id: 'tsmc_fc', name: '台积电', shortName: '台积', color: '#1565C0',
     tier: 'underdog', overall: 40, attack: 38, midfield: 40, defense: 42,
     stability: 42, depth: 35, reputation: 34, initialLeagueLevel: 3, expectation: 1,
     region: '南洲+台湾',

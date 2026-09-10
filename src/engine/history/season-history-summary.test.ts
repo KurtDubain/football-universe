@@ -240,7 +240,10 @@ describe('season history summary', () => {
       }],
     }), 1)!;
     const deviation = summary.events.find(event => event.type === 'deviation');
-    expect(deviation).toMatchObject({ replayStatus: 'summary_only' });
+    expect(deviation).toMatchObject({
+      replayStatus: 'summary_only',
+      title: '本季最大命运偏差',
+    });
     expect(deviation?.detail).toContain('详细回放已按存储上限清理');
     expect(deviation?.links.some(link => link.kind === 'match')).toBe(false);
   });
@@ -323,9 +326,9 @@ describe('season history summary', () => {
       .events.find(event => event.type === 'movement')!;
 
     expect(movement.linkGroups?.map(group => group.label)).toEqual([
-      '升级 · 2级 → 1级',
-      '升级 · 3级 → 2级',
-      '降级 · 1级 → 2级',
+      '升级 · 甲级→顶级',
+      '升级 · 乙级→甲级',
+      '降级 · 顶级→甲级',
     ]);
     expect(movement.links).toHaveLength(3);
   });

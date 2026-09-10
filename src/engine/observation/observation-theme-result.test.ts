@@ -75,6 +75,7 @@ describe('completed observation theme results', () => {
     const result = describeObservationThemeResult(world, archived, record(overrides));
 
     expect(result).toMatchObject({ verdict, tone });
+    expect(`${result?.summary}${result?.evidence.join('')}`).not.toMatch(/第[123]级联赛/);
   });
 
   it('reads player contribution from the existing season stat source', () => {

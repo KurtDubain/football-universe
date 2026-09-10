@@ -46,9 +46,97 @@ describe('match destiny deviation', () => {
     expect(resolveMatchOutcome(shootout)).toBe('away');
     expect(analyzeDestinyDeviation(shootout)).toMatchObject({ actualProbability: 25, tier: 'minor', isUpset: false });
   });
+
+  it('describes low-probability draws as surprises while reserving upsets for underdog wins', () => {
+    const draw = analyzeDestinyDeviation(result({
+      homeGoals: 1,
+      awayGoals: 1,
+      prediction: {
+        homeWinPct: 48,
+        drawPct: 24,
+        awayWinPct: 28,
+        homeExpectedGoals: 1.4,
+        awayExpectedGoals: 1.1,
+      },
+    }));
+    const underdogWin = analyzeDestinyDeviation(result({
+      homeGoals: 0,
+      awayGoals: 1,
+      prediction: {
+        homeWinPct: 55,
+        drawPct: 25,
+        awayWinPct: 20,
+        homeExpectedGoals: 1.6,
+        awayExpectedGoals: 0.8,
+      },
+    }));
+    const majorDraw = analyzeDestinyDeviation(result({
+      homeGoals: 2,
+      awayGoals: 2,
+      prediction: {
+        homeWinPct: 66,
+        drawPct: 14,
+        awayWinPct: 20,
+        homeExpectedGoals: 1.9,
+        awayExpectedGoals: 0.8,
+      },
+    }));
+    const majorUnderdogWin = analyzeDestinyDeviation(result({
+      homeGoals: 0,
+      awayGoals: 1,
+      prediction: {
+        homeWinPct: 66,
+        drawPct: 24,
+        awayWinPct: 10,
+        homeExpectedGoals: 1.9,
+        awayExpectedGoals: 0.6,
+      },
+    }));
+
+    expect(draw).toMatchObject({ tier: 'upset', label: '明显意外', isUpset: false });
+    expect(`${draw.label}${draw.summary}`).not.toContain('爆冷');
+    expect(underdogWin).toMatchObject({ tier: 'upset', label: '明显爆冷', isUpset: true });
+    expect(underdogWin.summary).toContain('明显爆冷');
+    expect(majorDraw).toMatchObject({ tier: 'major_upset', label: '重大意外', isUpset: false });
+    expect(`${majorDraw.label}${majorDraw.summary}`).not.toContain('爆冷');
+    expect(majorUnderdogWin).toMatchObject({ tier: 'major_upset', label: '重大爆冷', isUpset: true });
+  });
 });
 
 describe('match turning points', () => {
+  it('records an ordinary equalizer from the authoritative scoring timeline', () => {
+    const points = extractMatchTurningPoints(result({
+      homeGoals: 1,
+      awayGoals: 1,
+      events: [
+        event({ type: 'goal', teamId: 'home', minute: 57, playerName: '甲' }),
+        event({ type: 'goal', teamId: 'away', minute: 63, playerName: '乙' }),
+      ],
+    }));
+
+    expect(points).toEqual([expect.objectContaining({
+      type: 'equalizer', minute: 63, teamId: 'away', title: "63' 扳平",
+    })]);
+  });
+
+  it('keeps the most important turnaround and equalizer in a 2-2 draw without duplicates', () => {
+    const points = extractMatchTurningPoints(result({
+      homeGoals: 2,
+      awayGoals: 2,
+      events: [
+        event({ type: 'goal', teamId: 'home', minute: 14 }),
+        event({ type: 'goal', teamId: 'away', minute: 31 }),
+        event({ type: 'goal', teamId: 'away', minute: 54 }),
+        event({ type: 'goal', teamId: 'home', minute: 76 }),
+      ],
+    }));
+
+    expect(points.map(point => point.type)).toEqual(['turnaround', 'equalizer']);
+    expect(points).toHaveLength(2);
+    expect(points[0]).toMatchObject({ minute: 54, teamId: 'away' });
+    expect(points[1]).toMatchObject({ minute: 76, teamId: 'home' });
+  });
+
   it('extracts a real late winner and comeback without using generated match stats', () => {
     const points = extractMatchTurningPoints(result({
       homeGoals: 1,
@@ -81,6 +169,11 @@ describe('match turning points', () => {
     }));
     expect(shootoutPoints).toHaveLength(1);
     expect(shootoutPoints[0].type).toBe('shootout');
+
+    const extraTimePoints = extractMatchTurningPoints(result({
+      homeGoals: 1, awayGoals: 1, extraTime: true, etHomeGoals: 1, etAwayGoals: 0,
+    }));
+    expect(extraTimePoints).toEqual([expect.objectContaining({ type: 'extra_time' })]);
   });
 
   it('keeps the final late lead change and describes own goals without crediting the offender', () => {

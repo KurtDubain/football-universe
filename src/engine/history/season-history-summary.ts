@@ -1,4 +1,5 @@
 import type { Trophy } from '../../types/team';
+import { formatLeagueTransition, getLeagueName } from '../../utils/format';
 import type { GameWorld } from '../season/season-manager';
 import type { Storyline, StorylineType } from '../season/storylines';
 
@@ -140,7 +141,7 @@ function movementLinkGroups(
 ): NonNullable<SeasonHistoryEvent['linkGroups']> {
   const groups = new Map<string, SeasonHistoryLink[]>();
   for (const entry of entries) {
-    const label = `${direction} · ${entry.from}级 → ${entry.to}级`;
+    const label = `${direction} · ${formatLeagueTransition(entry.from, entry.to)}`;
     groups.set(label, [...(groups.get(label) ?? []), teamLink(world, entry.teamId)]);
   }
   return [...groups.entries()]
@@ -224,11 +225,10 @@ function buildSeasonEvents(
   if (deviation) {
     const replayAvailable = (world.memorableMatches ?? [])
       .some(entry => entry.result.fixtureId === deviation.fixtureId);
-    const isUpset = deviation.tier === 'upset' || deviation.tier === 'major_upset';
     events.push({
       id: `S${seasonNumber}-deviation`,
       type: 'deviation',
-      title: isUpset ? '本季最大爆冷' : '本季最大命运偏差',
+      title: '本季最大命运偏差',
       detail: [
         `${teamName(world, deviation.homeTeamId)} ${deviation.homeGoals}-${deviation.awayGoals} ${teamName(world, deviation.awayTeamId)}`,
         `${deviation.competitionName} · ${deviation.roundLabel}`,
@@ -355,7 +355,7 @@ function declineLabels(
       id: `S${seasonNumber}-decline-${teamId}`,
       type: 'decline',
       title: `${teamName(world, teamId)}连续${length}季滑落`,
-      detail: `S${first.seasonNumber}的${first.leagueLevel}级第${first.leaguePosition}，降至S${last.seasonNumber}的${last.leagueLevel}级第${last.leaguePosition}。`,
+      detail: `S${first.seasonNumber}的${getLeagueName(first.leagueLevel)}第${first.leaguePosition}，降至S${last.seasonNumber}的${getLeagueName(last.leagueLevel)}第${last.leaguePosition}。`,
       teamId,
     });
   }

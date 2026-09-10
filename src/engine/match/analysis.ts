@@ -16,6 +16,8 @@ export interface DestinyDeviation {
 
 export type MatchTurningPointType =
   | 'red_card'
+  | 'equalizer'
+  | 'turnaround'
   | 'comeback'
   | 'late_equalizer'
   | 'late_winner'
@@ -71,21 +73,30 @@ export function analyzeDestinyDeviation(result: MatchResult): DestinyDeviation {
       : actualProbability >= 15
         ? 'upset'
         : 'major_upset';
-  const label = {
-    normal: '正常轨道',
-    minor: '轻微意外',
-    upset: '明显爆冷',
-    major_upset: '重大爆冷',
-  }[tier];
-  const summary = {
-    normal: '实际结果落在赛前分布中较常见的区间。',
-    minor: '实际结果并非主流预期，但仍属于经常会出现的偏离。',
-    upset: '实际结果落在赛前分布的低概率一侧，构成明确冷门。',
-    major_upset: '实际结果远离赛前主流预期，是这段历史中的重大偏离。',
-  }[tier];
   const winnerWasUnderdog = outcome === 'home'
     ? result.prediction!.homeWinPct < result.prediction!.awayWinPct
     : outcome === 'away' && result.prediction!.awayWinPct < result.prediction!.homeWinPct;
+  const isUpset = outcome !== 'draw'
+    && winnerWasUnderdog
+    && (tier === 'upset' || tier === 'major_upset');
+  const label = tier === 'normal'
+    ? '正常轨道'
+    : tier === 'minor'
+      ? '轻微意外'
+      : isUpset
+        ? tier === 'major_upset' ? '重大爆冷' : '明显爆冷'
+        : tier === 'major_upset' ? '重大意外' : '明显意外';
+  const summary = tier === 'normal'
+    ? '实际结果落在赛前分布中较常见的区间。'
+    : tier === 'minor'
+      ? '实际结果并非主流预期，但仍属于经常会出现的偏离。'
+      : isUpset
+        ? tier === 'major_upset'
+          ? '弱势一方赢下极低概率结果，构成本场重大爆冷。'
+          : '弱势一方赢下低概率结果，构成本场明显爆冷。'
+        : tier === 'major_upset'
+          ? '实际结果远离赛前主流预期，是这段历史中的重大偏离。'
+          : '实际结果落在赛前分布的低概率一侧，构成明显意外。';
 
   return {
     outcome,
@@ -94,7 +105,7 @@ export function analyzeDestinyDeviation(result: MatchResult): DestinyDeviation {
     actualProbability,
     label,
     summary,
-    isUpset: outcome !== 'draw' && winnerWasUnderdog && (tier === 'upset' || tier === 'major_upset'),
+    isUpset,
   };
 }
 
@@ -126,22 +137,48 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
     .sort((a, b) => a.minute - b.minute);
   let home = 0;
   let away = 0;
-  let winnerTrailed = false;
+  let homeTrailed = false;
+  let awayTrailed = false;
 
   for (const event of scoringEvents) {
-    if (winnerId) {
-      const trailingBefore = winnerId === result.homeTeamId ? home < away : away < home;
-      winnerTrailed ||= trailingBefore;
-    }
     const scorerId = scoringTeamId(event, result);
+    if (!scorerId) continue;
+    homeTrailed ||= home < away;
+    awayTrailed ||= away < home;
+    const scorerTrailed = scorerId === result.homeTeamId ? home < away : away < home;
+    const scorerHadTrailed = scorerId === result.homeTeamId ? homeTrailed : awayTrailed;
     if (scorerId === result.homeTeamId) home++;
     if (scorerId === result.awayTeamId) away++;
     const isLate = event.minute >= (event.minute > 90 ? 115 : 88);
-    if (!isLate || !scorerId) continue;
+    const scoresLevel = home === away;
+    const scorerLeads = scorerId === result.homeTeamId ? home > away : away > home;
+
+    if (scorerTrailed && scoresLevel) {
+      const detail = event.type === 'own_goal'
+        ? `${event.playerName ?? teamLabel(event.teamId, result)}的乌龙球${isLate ? '在比赛末段' : ''}扳平了比分。`
+        : `${event.playerName ?? teamLabel(scorerId, result)}${isLate ? '在比赛末段' : ''}扳平比分。`;
+      candidates.push({
+        type: isLate ? 'late_equalizer' : 'equalizer',
+        minute: event.minute,
+        teamId: scorerId,
+        rank: isLate ? 88 : 72,
+        title: `${event.minute}' ${isLate ? '绝平' : '扳平'}`,
+        detail,
+      });
+    }
+
+    if (scorerHadTrailed && scorerLeads) {
+      candidates.push({
+        type: 'turnaround', minute: event.minute, teamId: scorerId, rank: 84,
+        title: `${event.minute}' 反超比分`,
+        detail: `${teamLabel(scorerId, result)}在曾经落后的情况下取得领先。`,
+      });
+    }
+
+    if (!isLate) continue;
 
     if (winnerId === scorerId) {
-      const tookLead = winnerId === result.homeTeamId ? home > away : away > home;
-      if (tookLead) {
+      if (scorerLeads) {
         const detail = event.type === 'own_goal'
           ? `${event.playerName ?? teamLabel(event.teamId, result)}的乌龙球在比赛末段改变了领先方。`
           : `${event.playerName ?? teamLabel(scorerId, result)}在比赛末段打入决定性进球。`;
@@ -151,18 +188,14 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
           detail,
         });
       }
-    } else if (outcome === 'draw' && home === away) {
-      const detail = event.type === 'own_goal'
-        ? `${event.playerName ?? teamLabel(event.teamId, result)}的乌龙球在比赛末段扳平了比分。`
-        : `${event.playerName ?? teamLabel(scorerId, result)}在比赛末段扳平比分。`;
-      candidates.push({
-        type: 'late_equalizer', minute: event.minute, teamId: scorerId, rank: 88,
-        title: `${event.minute}' 绝平`,
-        detail,
-      });
     }
   }
 
+  const winnerTrailed = winnerId === result.homeTeamId
+    ? homeTrailed
+    : winnerId === result.awayTeamId
+      ? awayTrailed
+      : false;
   if (winnerId && winnerTrailed) {
     candidates.push({
       type: 'comeback', teamId: winnerId, rank: 86,
@@ -190,7 +223,12 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
     });
   }
 
+  const hasLateEqualizer = candidates.some(candidate => candidate.type === 'late_equalizer');
+  const hasComeback = candidates.some(candidate => candidate.type === 'comeback');
+
   return candidates
+    .filter(candidate => !(hasLateEqualizer && candidate.type === 'equalizer'))
+    .filter(candidate => !(hasComeback && candidate.type === 'turnaround'))
     .sort((a, b) => b.rank - a.rank || (b.minute ?? -1) - (a.minute ?? -1))
     .filter((candidate, index, all) => all.findIndex(item => item.type === candidate.type) === index)
     .slice(0, 2)

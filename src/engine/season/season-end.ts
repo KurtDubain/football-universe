@@ -37,6 +37,7 @@ import {
   WORLD_CUP_TIERS,
 } from '../economy/finance';
 import { worldCupConfig } from '../../config/competitions';
+import { getLeagueName } from '../../utils/format';
 
 /**
  * Walk knockout rounds from latest to earliest, return the round in which
@@ -783,7 +784,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       id: createNewsId(seasonNumber, windowIndex, `promo-${p.teamId}`),
       seasonNumber, windowIndex, type: 'promotion',
       title: `${world.teamBases[p.teamId]?.name} 升级成功!`,
-      description: `${world.teamBases[p.teamId]?.name} 从${p.from}级联赛升入${p.to}级联赛。`,
+      description: `${world.teamBases[p.teamId]?.name} 从${getLeagueName(p.from)}升入${getLeagueName(p.to)}。`,
     });
   }
 
@@ -793,7 +794,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       id: createNewsId(seasonNumber, windowIndex, `releg-${r.teamId}`),
       seasonNumber, windowIndex, type: 'relegation',
       title: `${world.teamBases[r.teamId]?.name} 不幸降级`,
-      description: `${world.teamBases[r.teamId]?.name} 从${r.from}级联赛降入${r.to}级联赛。`,
+      description: `${world.teamBases[r.teamId]?.name} 从${getLeagueName(r.from)}降入${getLeagueName(r.to)}。`,
     });
   }
 

@@ -13,6 +13,7 @@ import {
   getLatestSaveLoadPerformance,
   getLatestSaveRecoveryDiagnostic,
   getSaveRecoveryMessage,
+  parseCurrentSave,
   SAVE_DIAGNOSTIC_KEY,
   SAVE_SCHEMA_VERSION,
   SAVE_STORAGE_KEY,
@@ -75,6 +76,23 @@ beforeEach(() => {
 });
 
 describe('current schema hydration boundary', () => {
+  it('normalizes the TSMC abbreviation in fresh and legacy saves without a schema migration', () => {
+    const fresh = makeSave();
+    expect(fresh.state.world.teamBases.tsmc_fc.shortName).toBe('台积');
+
+    fresh.state.world.teamBases.tsmc_fc.shortName = 'Env';
+    const playerId = Object.keys(fresh.state.world.playerStatsHistory)[0];
+    fresh.state.world.playerStatsHistory[playerId] = [{
+      teamId: 'tsmc_fc',
+      teamShortName: 'Env',
+    } as never];
+    const loaded = parseCurrentSave(JSON.stringify(fresh));
+
+    expect(loaded.state.world.teamBases.tsmc_fc.shortName).toBe('台积');
+    expect(loaded.state.world.playerStatsHistory[playerId][0].teamShortName).toBe('台积');
+    expect(loaded.version).toBe(SAVE_SCHEMA_VERSION);
+  });
+
   it('reads, decompresses, parses, and validates a persisted envelope only once', () => {
     compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(makeSave(12)));
     __flushCompressedStorageForTests();

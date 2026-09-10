@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getTeamShortName, getCoachName } from '../utils/format';
+import { formatLeagueTransition, getTeamName, getTeamShortName, getCoachName } from '../utils/format';
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
 import { SegmentedControl } from '../components/ui';
@@ -472,7 +472,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
                 <div key={p.teamId} className="flex items-center gap-1.5 text-xs text-slate-300 py-0.5">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[p.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${p.teamId}`} className="hover:text-blue-400">{getTeamName(p.teamId, tb)}</Link>
-                  <span className="text-slate-500 text-[10px]">{p.from}→{p.to}级</span>
+                  <span className="text-slate-500 text-[10px]">{formatLeagueTransition(p.from, p.to)}</span>
                 </div>
               ))}
             </div>
@@ -484,7 +484,7 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
                 <div key={r.teamId} className="flex items-center gap-1.5 text-xs text-slate-300 py-0.5">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
                   <Link to={`/team/${r.teamId}`} className="hover:text-blue-400">{getTeamName(r.teamId, tb)}</Link>
-                  <span className="text-slate-500 text-[10px]">{r.from}→{r.to}级</span>
+                  <span className="text-slate-500 text-[10px]">{formatLeagueTransition(r.from, r.to)}</span>
                 </div>
               ))}
             </div>
