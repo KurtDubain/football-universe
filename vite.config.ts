@@ -43,7 +43,7 @@ export default defineConfig({
       manifest: {
         name: '足球联赛宇宙 Football Universe',
         short_name: '足球宇宙',
-        description: '纯前端足球宇宙模拟器 — 32 球队, 3 级联赛, 4 项杯赛, 无限赛季',
+        description: '观察者视角足球宇宙模拟器：默认32支球队、三级联赛、六项杯赛与跨赛季历史',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',

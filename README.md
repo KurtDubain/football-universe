@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">足球联赛宇宙 ⚽</h1>
-<h3 align="center">Football League Universe Simulator</h3>
+<h3 align="center">Football Universe Simulator</h3>
 
 <p align="center">
   <strong>你不操控比赛 — 你观看整个足球宇宙自动演化</strong><br/>
@@ -28,17 +28,18 @@
 
 ## English Summary
 
-A **pure-frontend, observer-style football simulator**. Unlike Football Manager or ZenGM where you control teams, here you just watch — 32 teams across 3 leagues and four cup systems (six named competitions) simulate themselves. Press "Advance" and witness:
+A **pure-frontend, observer-style football simulator** with 32 default clubs, three league tiers and six cup competitions: League Cup, Super Cup, Mainland Cup, Southern Cup, Eastern Cup and World Champions Cup. Cups follow different seasonal schedules. Press "Advance" and witness:
 
 - 🏆 Dynasties rise and crumble across infinite seasons
 - 💥 Underdog cup runs and shocking upsets
 - 👔 Coaches get fired under pressure, then resurrect at new clubs
 - 📰 A deterministic Narrative Director connects causes, turning points, and long-term consequences
 - 📈 Team OVR drifts naturally with mean reversion
-- 🎲 Deterministic seeded RNG — share your "universe" with one number
+- 🎲 Seeded simulation — reproduce results with the same version, seed, settings and simulation-affecting choices
 
 **4 game modes**: Free / Epic Dynasty / Underdog Rise / Sandbox (custom teams).
-**30+ achievements**, story-driven season narratives, head-to-head match history, full multi-season chronicle, PWA-installable for offline play.
+Separately, choose one of **3 guided observer lenses** or a neutral observer view; these are not additional game modes.
+**30+ achievements**, season narratives and a multi-season chronicle with bounded detailed history. PWA installation and core offline play are available after the first online load; secondary pages must be visited online before offline reuse.
 
 → **[Try Live Demo](https://football-universe-ebon.vercel.app/)** ← (opens in browser, no signup)
 
@@ -46,7 +47,7 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 
 ## 这是什么？
 
-按下「推进」键 — 联赛轮次翻出比分，杯赛冷门上演，教练被解雇，弱队奇迹升级……长期游玩自然生成"历史"和"故事"。**没有操控，只有命运。**
+按下「推进」键 — 联赛轮次翻出比分，杯赛冷门上演，教练被解雇，弱队奇迹升级……长期游玩自然生成"历史"和"故事"。关注球队、做出观察判断，再看比赛如何揭晓。
 
 市面上的足球经理游戏都要你买卖球员、排阵型、做决策。**这个项目反其道而行**：你做一个上帝视角的观察者，看着王朝崛起、豪门沉沦、黑马逆袭、名帅下课。
 
@@ -54,9 +55,14 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 
 ## Screenshots | 截图
 
+以下截图来自 **v4.61.4**、推荐种子 **20260709**、自由模式的挑战者视角，均为真实推进生成。历史荣誉展示 S1，编年史展示三季记录。桌面为 1440×900，手机为 390×844。先运行 `pnpm build:audit`，构建完成后运行 `pnpm preview --host 127.0.0.1 --port 4173`，另一个终端运行 `pnpm screenshots` 即可重新生成截图与分享图；自定义端口可设置 `SCREENSHOT_URL`。
+
 <p align="center">
   <img src="docs/screenshots/01-welcome.jpg" width="48%" alt="Welcome / 欢迎页" />
-  <img src="docs/screenshots/03-dashboard-midseason.jpg" width="48%" alt="Dashboard mid-season / 比赛日 + 成就解锁" />
+  <img src="docs/screenshots/02-dashboard-initial.jpg" width="48%" alt="Initial observation / 初始观察台" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/03-dashboard-midseason.jpg" width="80%" alt="World response / 中期观察与世界回应" />
 </p>
 <p align="center">
   <img src="docs/screenshots/04-league.jpg" width="48%" alt="League standings / 联赛积分榜（含冠军概率）" />
@@ -82,6 +88,8 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 三级联赛（16+8+8），双循环赛制，升降级 + 中立场单回合附加赛。冠军/降级实时概率、积分走势折线图、收官之战标签。
 
 ### 🏆 杯赛体系
+共有六项具名杯赛：联赛杯、超级杯、大陆杯、南洲杯、东洲杯和环球冠军杯，按下表的不同周期举办，并非每季全部举行。
+
 | 赛事 | 赛制 | 频率 |
 |------|------|------|
 | **联赛杯** | 32队中立场单回合淘汰 | 每赛季 |
@@ -97,8 +105,10 @@ A **pure-frontend, observer-style football simulator**. Unlike Football Manager 
 - **草根逆袭** — 实力均衡，弱队多冷门
 - **沙盒模式** — 配合自定义球队编辑器
 
+开局观察视角另分为豪门守成、挑战者、草根长征三个引导路线，以及不绑定球队的纯观察。视角决定关注起点，不等同于调整模拟参数的游戏模式。
+
 ### ⚽ 深度模拟引擎
-泊松分布进球采样 + 多因素加权：OVR · 实际首发 · 教练能力 · 自动阵型与策略 · 士气 · 疲劳 · 主场 · 动量 · 德比。弱队通过有代价的低位防守或快速反击应战，不获得隐藏固定补正。世界杯东道主拥有独立赛会氛围，不与普通主场优势混用。**Seeded PRNG** 同种子 100% 可复现。
+泊松分布进球采样 + 多因素加权：OVR · 实际首发 · 教练能力 · 自动阵型与策略 · 士气 · 疲劳 · 主场 · 动量 · 德比。弱队通过有代价的低位防守或快速反击应战，不获得隐藏固定补正。世界杯东道主拥有独立赛会氛围，不与普通主场优势混用。**Seeded PRNG**：相同版本、种子、初始配置和影响模拟的操作序列可复现结果；只分享种子不保证不同版本或干预后的世界一致。
 
 ### 📺 Canvas 2D 比赛直播
 22 名真实比赛阵容球员实时传球跑动 · 四种真实阵型与五种比赛策略 · 焦点球员克制标记 · 高 DPI 固定帧率画布 · 扑救/封堵/射偏定向演出 · 加时与点球阶段 · 可选声音 · 文字解说
@@ -189,7 +199,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.61.4**
+Current release: **v4.61.5**
 
 66k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
 
@@ -235,7 +245,7 @@ src/
 - [x] 编年史与赛季叙事
 - [x] 30+ 成就系统
 - [x] 玩法模式（王朝/草根逆袭/沙盒）
-- [ ] 完整英文 i18n（UI 已部分支持，引擎层待译）
+- 完整英文 i18n 尚未完成，仅在明确发行需求下评估，不属于冻结阶段待办。
 - [x] 球员名字系统（稳定 UUID + 姓名 + 号码）
 - [x] 转会系统
 - [x] 球员成长 & 退役

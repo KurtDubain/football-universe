@@ -1,8 +1,8 @@
 # Football Universe Current Status
 
 Last reviewed: 2026-09-10
-Current release: v4.61.4
-Status: the pre-submission experience loop and audiovisual delivery polish are closed; later balance batches remain deliberately deferred.
+Current release: v4.61.5 (public-presentation patch; gameplay baseline v4.61.4)
+Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
 
@@ -17,7 +17,7 @@ This file is the single current roadmap. Older checklists preserve implementatio
 ## Current Health
 
 - 1,055 unit and component tests across 151 test files.
-- 66,480 production lines across 245 production files.
+- 66,490 production lines across 245 production files.
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.
@@ -39,13 +39,14 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 1. Conduct three unassisted first-five-minute playtests and record repeated points of confusion rather than individual visual preferences.
 2. Complete one fifteen-minute observer-route walkthrough on an iPhone Safari and one mid-range Android Chrome device.
-3. Promote only repeated human-test findings into this roadmap; do not reopen archived feature lists by default.
+3. Accept only reproducible, repeated human/real-device findings or P0 failures during the freeze. Do not reopen archived feature lists.
+4. Prepare a demonstrated fifteen-minute route and submission materials after blind playtests and real-device checks.
 
-## Candidate Follow-Ups
+## Deferred, Not Active During Freeze
 
 - Add authoritative in-match injury events only if they can share the existing participation, substitution, injury, commentary, and post-match consequence chain.
 - Complete English engine copy only when an actual distribution target requires it.
-- Refresh submission screenshots or an original-name preset only for a concrete event with known delivery and rights requirements.
+- Consider an original-name preset only for a concrete event with known delivery and rights requirements. Current documentation screenshots already reflect v4.61.4.
 
 ## Explicitly Not Planned
 

@@ -7,8 +7,12 @@ const baseUrl = (process.env.SCREENSHOT_URL ?? 'http://127.0.0.1:4173').replace(
 const outputDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots');
 
 type ScreenshotAuditState = {
+  world: { seed: number; gameMode?: string; seasonNumber: number } | null;
+  favoriteTeamId: string | null;
   advanceWindow: () => Promise<boolean>;
   advanceUntil: (type: 'cup' | 'season_end') => Promise<boolean>;
+  skipCurrentSeason: () => Promise<boolean>;
+  closeTransferWindow: (autoResolveRest: boolean) => void;
 };
 
 type ScreenshotAuditWindow = Window & {
@@ -32,6 +36,12 @@ async function openRoute(page: Page, route: string): Promise<void> {
 }
 
 async function capture(page: Page, fileName: string): Promise<void> {
+  await page.mouse.move(0, 0);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(Array.from(document.images, image => image.decode().catch(() => undefined)));
+  });
+  await page.waitForTimeout(350);
   await page.screenshot({
     path: path.join(outputDirectory, fileName),
     type: 'jpeg',
@@ -54,12 +64,30 @@ async function main(): Promise<void> {
   page.on('pageerror', error => errors.push(error.message));
 
   try {
+    // Rasterize the maintained vector at its declared social-card dimensions.
+    await page.setViewportSize({ width: 1200, height: 630 });
+    await page.goto(`${baseUrl}/og-image.svg`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => document.fonts.ready);
+    const unsafeText = await page.locator('svg text').evaluateAll(nodes => nodes.some(node => {
+      const box = node.getBoundingClientRect();
+      return box.left < 40 || box.right > 1160 || box.top < 40 || box.bottom > 590;
+    }));
+    if (unsafeText) throw new Error('Social-card text exceeds the 40px safe area');
+    await page.screenshot({ path: path.resolve(outputDirectory, '../../public/og-image.png') });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await openRoute(page, '/');
     await page.getByRole('heading', { name: '开始观察' }).waitFor();
     await capture(page, '01-welcome.jpg');
 
     await page.getByRole('button', { name: '开始观察' }).click();
     await page.getByTestId('dashboard').waitFor();
+    const opening = await page.evaluate(() => {
+      const state = (window as ScreenshotAuditWindow).__gameStore?.getState();
+      return { seed: state?.world?.seed, mode: state?.world?.gameMode, team: state?.favoriteTeamId };
+    });
+    if (opening.seed !== 20260709 || opening.mode !== 'free' || opening.team !== 'datong') {
+      throw new Error(`Documentation opening changed: ${JSON.stringify(opening)}`);
+    }
     await capture(page, '02-dashboard-initial.jpg');
 
     await page.evaluate(async () => {
@@ -103,14 +131,26 @@ async function main(): Promise<void> {
       ['/history', '08-history.jpg'],
       ['/chronicle', '09-chronicle.jpg'],
     ] as const) {
+      if (route === '/chronicle') {
+        await page.evaluate(async () => {
+          const store = (window as ScreenshotAuditWindow).__gameStore!;
+          for (let season = 2; season <= 3; season += 1) {
+            store.getState().closeTransferWindow(true);
+            if (!await store.getState().skipCurrentSeason()) throw new Error('Could not advance chronicle season');
+          }
+        });
+      }
       await openRoute(page, route);
+      if (route === '/history') {
+        await page.getByTestId('season-history-toggle').first().click();
+      }
       await capture(page, fileName);
     }
 
     if (errors.length > 0) {
       throw new Error(`Screenshot run emitted runtime errors: ${errors.join(' | ')}`);
     }
-    console.log(`Updated 10 documentation screenshots from ${baseUrl}`);
+    console.log(`Updated social card and 10 documentation screenshots from ${baseUrl}`);
   } finally {
     await browser.close();
   }

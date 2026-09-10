@@ -45,14 +45,14 @@
 
   <!-- Tagline -->
   <text x="600" y="475" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="22" fill="#cbd5e1">
-    32 球队 · 3 级联赛 · 4 项杯赛 · 无限赛季
+    32 支球队 · 三级联赛 · 六项杯赛 · 跨赛季历史
   </text>
   <text x="600" y="510" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="20" fill="#64748b" font-style="italic">
-    No controls. No tactics. Just fate.
+    关注球队，见证整个足球世界演化
   </text>
 
   <!-- URL/Footer -->
-  <text x="600" y="585" text-anchor="middle" font-family="monospace" font-size="20" fill="#475569">
+  <text x="600" y="570" text-anchor="middle" font-family="monospace" font-size="20" fill="#94a3b8">
     football-universe-ebon.vercel.app
   </text>
 </svg>
