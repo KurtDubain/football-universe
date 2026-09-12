@@ -61,11 +61,53 @@ jobs:
       - name: Build and check production budgets
         run: |
           pnpm build
-          pnpm budgets:check
+          BUNDLE_REPORT=/tmp/personal-budget.json pnpm budgets:check
           BUILD_TARGET=personal pnpm editions:check
           CONTEST_SITE_URL=https://contest.invalid pnpm build:contest
-          BUILD_TARGET=contest pnpm budgets:check
-          pnpm editions:check
+          BUILD_TARGET=contest BUNDLE_REPORT=/tmp/contest-budget.json pnpm budgets:check
+          BUILD_TARGET=contest pnpm editions:check
+          pnpm build:audit
+          BUILD_TARGET=audit BUNDLE_REPORT=/tmp/audit-budget.json pnpm budgets:check
+          BUILD_TARGET=audit pnpm editions:check
+
+      - name: Install Chromium for edition verification
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify production editions and PWA on Linux
+        env:
+          CONTEST_SITE_URL: https://contest.invalid
+        run: |
+          pnpm preview:personal --host 127.0.0.1 --port 4186 --strictPort > /tmp/personal-preview.log 2>&1 &
+          personal_pid=$!
+          pnpm preview:contest --host 127.0.0.1 --port 4185 --strictPort > /tmp/contest-preview.log 2>&1 &
+          contest_pid=$!
+          pnpm preview:audit --host 127.0.0.1 --port 4173 --strictPort > /tmp/audit-preview.log 2>&1 &
+          audit_pid=$!
+          trap 'kill "$personal_pid" "$contest_pid" "$audit_pid" 2>/dev/null || true' EXIT
+          for port in 4186 4185 4173; do
+            ready=false
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent "http://127.0.0.1:$port/version.json" > /dev/null; then ready=true; break; fi
+              sleep 1
+            done
+            test "$ready" = true || exit 1
+          done
+          pnpm verify:editions
+          pnpm verify:pwa-update
+
+      - name: Preserve Linux edition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-edition-verification
+          path: |
+            output/playwright/editions
+            dist/*/version.json
+            dist/*/build-manifest.json
+            dist/*/sw.js
+            /tmp/*-preview.log
+            /tmp/*-budget.json
+          if-no-files-found: ignore
 
   browser-audit:
     runs-on: ubuntu-latest

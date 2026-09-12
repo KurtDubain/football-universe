@@ -8,6 +8,15 @@ import { resolveBuildTarget } from '../../scripts/build-target';
 afterEach(() => { vi.doUnmock('./preset'); vi.doUnmock('./coach-names'); vi.resetModules(); });
 
 describe('edition boundary', () => {
+  it('uses edition-specific sandbox instructions without changing mode mechanics', async () => {
+    const personalModes = await import('../types/game-mode');
+    expect(personalModes.getGameModeConfig('sandbox').description).toContain('球队编辑器');
+    vi.resetModules(); vi.doMock('./preset', () => contest);
+    const contestModes = await import('../types/game-mode');
+    expect(contestModes.getGameModeConfig('sandbox').description).toBe('使用内置参赛球队，不提供球队编辑或导入');
+    expect(contestModes.getGameModeConfig('sandbox').applyTeamOverrides).toBeUndefined();
+  });
+
   it('locks output, identity, required URL and production audit policy', () => {
     expect(resolveBuildTarget('personal', {}).outDir).toBe('dist/personal');
     expect(resolveBuildTarget('audit', {}).audit).toBe(true);

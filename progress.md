@@ -1,5 +1,20 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-12 v4.61.7 Git Release Authorization
+
+- User authorized committing and pushing the bounded deployment fixes. Bumped package/app version, both edition changelogs and current release documentation to v4.61.7. No manual deployment or Vercel setting change is authorized or performed; Git push can trigger configured CI/deployment integrations.
+- Linux verification and author naming review remain pending. Earlier uncommitted notes describe the implementation phase, not a continuing prohibition after this authorization.
+- Release-version recheck passed: changelog/docs, typecheck, lint, seven focused tests, and fresh personal/contest/audit builds with edition and unchanged-budget gates. Full 1,063 tests and browser coverage remain recorded in the implementation section below.
+
+## 2026-09-12 Bounded Deployment Follow-up (Uncommitted)
+
+- Baseline f2a7a34 / v4.61.6, clean worktree. No repository AGENTS.md present. No gameplay, numbers, stable IDs, RNG, schema, assets, Vercel settings, commits or pushes changed.
+- Replaced OS-dependent Workbox page glob with a case-sensitive URL policy; excluded all OG image extensions; added Teams/teams regression and a budget gate requiring every initial static JS dependency in precache. Node engines now 22.x (validation 22.22.2 / pnpm 10.34.5).
+- Kept personal sandbox wording, selected contest-specific built-in-team instructions through its preset. Corrected documentation about visible legacy IDs; public slug mapping is a proposal only. OG review wording remains pending author approval.
+- macOS builds/artifact/budget checks passed for personal, contest and audit, with 86/84/86 precache entries. Typecheck, lint, docs/script checks and 154 files / 1,063 tests passed. Budgets are unchanged.
+- Final production browser rerun passed both editions at 1280x720 and 390x844: sandbox copy, judgment/live/report, S1 archive, transfer/S2, export, refresh and offline recovery; no console errors/warnings or horizontal overflow. Existing PWA update verification passed. Standard Web Game client captured the contest welcome page; its external runner emits a Node module-type warning, not an application console error. Sandbox, welcome, offline and update screenshots were opened for visual inspection. Reports: output/playwright/editions/report.json and output/playwright/deployment-client; PWA screenshot: /tmp/football-pwa-update-mobile.png. Simulated viewports are not physical-device evidence.
+- Linux is still a release blocker: no local Linux/container runtime available. CI now explicitly checks all three targets (previous contest step accidentally defaulted to personal), runs both production editions in Chromium plus PWA updates, and retains evidence. No CI run is claimed without executing the uncommitted changes on Linux.
+
 ## 2026-09-12 v4.61.6 Release Authorization
 
 - User subsequently authorized committing and pushing the edition-isolation work. Bumped both edition changelogs, package/app version and current documentation to v4.61.6. No Vercel project or deployment settings changed; the personal project's output directory must be configured as dist/personal before its next deployment can serve the new layout.

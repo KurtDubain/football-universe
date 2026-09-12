@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { basename, extname, join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { PRODUCTION_PERFORMANCE_BUDGETS } from '../src/config/performance-budgets';
+import { missingInitialPrecacheFiles } from '../src/config/pwa-precache-policy';
 
 const target = process.env.BUILD_TARGET ?? 'personal';
 if (!['personal', 'contest', 'audit'].includes(target)) throw new Error('Invalid BUILD_TARGET');
@@ -121,6 +122,10 @@ const checks = [
 const violations = checks
   .filter(([, actual, budget]) => actual > budget)
   .map(([label, actual, budget]) => `${label}: ${actual} > ${budget}`);
+const uncachedInitialFiles = missingInitialPrecacheFiles(initialChunks.map(chunk => chunk.file), precacheUrls);
+if (uncachedInitialFiles.length > 0) {
+  violations.push(`PWA precache omits initial static JS dependencies: ${uncachedInitialFiles.join(', ')}`);
+}
 if (missingPrecacheFiles.length > 0) {
   violations.push(`PWA precache references missing files: ${missingPrecacheFiles.join(', ')}`);
 }

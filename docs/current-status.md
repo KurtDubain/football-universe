@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
 Last reviewed: 2026-09-12
-Current release: v4.61.6 (edition-isolation release; gameplay baseline v4.61.4)
+Current release: v4.61.7 (cross-platform precache fix; gameplay baseline v4.61.4)
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.

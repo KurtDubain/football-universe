@@ -1,4 +1,5 @@
 import type { TeamBase } from './team';
+import { preset } from '../edition/preset';
 
 export type GameMode = 'free' | 'epic' | 'underdog' | 'sandbox';
 
@@ -58,7 +59,7 @@ export const GAME_MODES: GameModeConfig[] = [
   {
     id: 'sandbox',
     label: '沙盒模式',
-    description: '使用自定义球队配置（需在球队编辑器中修改）',
+    description: preset.sandboxDescription,
     emoji: '🛠️',
   },
 ];

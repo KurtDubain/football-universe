@@ -38,6 +38,15 @@ try {
     };
     await page.goto(url + '/?audit=1', { waitUntil: 'networkidle' });
     await check('welcome');
+    await page.getByRole('tab', { name: '自选宇宙', exact: true }).click();
+    await page.getByRole('button', { name: '规则与种子' }).click();
+    const sandbox = await page.getByRole('button', { name: /沙盒模式/ }).innerText();
+    assert(sandbox.includes(edition === 'contest'
+      ? '使用内置参赛球队，不提供球队编辑或导入'
+      : '使用自定义球队配置（需在球队编辑器中修改）'), 'sandbox edition instructions');
+    await check('sandbox-instructions');
+    await page.getByRole('button', { name: '规则与种子' }).click();
+    await page.getByRole('tab', { name: '推荐体验', exact: true }).click();
     await page.getByTestId('start-observation').click();
     await page.getByTestId('dashboard').waitFor();
     await check('opening');

@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   if (serviceWorkerSource.includes('version.json')) {
     throw new Error('version.json must bypass the Service Worker precache');
   }
-  if (serviceWorkerSource.includes('og-image.png')) {
+  if (/og-image\.(?:png|svg)/.test(serviceWorkerSource)) {
     throw new Error('The social preview image must not delay the PWA precache install');
   }
 

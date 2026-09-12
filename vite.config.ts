@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import { resolveBuildTarget } from './scripts/build-target'
 import { editionPlugin } from './scripts/edition-plugin'
+import { shouldPrecacheUrl } from './src/config/pwa-precache-policy'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -74,15 +75,18 @@ export default defineConfig(({ mode }) => {
         clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2}'],
         globIgnores: [
-          'og-image.png',
+          'og-image.*',
           'favicon.svg',
           'icon-192.png',
           'icon-512.png',
-          'assets/{AdvancedSearch,Calendar,Chronicle,CoachDetail,Coaches,Compare,Cup,History,League,Legends,Market,MemorableMatches,PlayerDetail,Players,Settings,TeamDetail,TeamEditor,Teams,Transfers}-*.js',
           'assets/match-opener-domestic-cup-v1-*.webp',
           'assets/match-opener-continental-v1-*.webp',
           'assets/match-opener-world-v1-*.webp',
         ],
+        manifestTransforms: [async manifest => ({
+          manifest: manifest.filter(entry => shouldPrecacheUrl(entry.url)),
+          warnings: [],
+        })],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
