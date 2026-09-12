@@ -1,3 +1,5 @@
+import { ALLOW_CUSTOM_CONTENT } from '../edition/policy';
+import { preset } from '../edition/preset';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
@@ -267,7 +269,7 @@ export default function Welcome() {
                 <Icon name={starting ? 'refresh' : 'play'} size={17} />
                 {starting ? '正在构建宇宙...' : '开始观察'}
               </button>
-              {startPath === 'custom' && (
+              {ALLOW_CUSTOM_CONTENT && startPath === 'custom' && (
                 <a href="/team-editor" className="flex min-h-11 items-center justify-center gap-2 text-xs text-slate-500 transition-colors hover:text-slate-300">
                   <Icon name="building" size={14} />
                   自定义球队
@@ -279,7 +281,7 @@ export default function Welcome() {
 
         <footer className="welcome-footer flex flex-wrap items-center justify-between gap-2 py-3 text-[11px] text-slate-400">
           <span>纯前端 · 离线可玩 · 同种子同宇宙</span>
-          <a href="https://github.com/KurtDubain/football-universe" target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-slate-500 sm:min-h-0">GitHub</a>
+          {preset.repositoryUrl ? <a href={preset.repositoryUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-slate-500 sm:min-h-0">GitHub</a> : <a href="/LICENSE.txt">开源许可</a>}
         </footer>
       </main>
     </div>

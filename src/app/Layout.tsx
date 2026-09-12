@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../edition/policy';
 import { type ReactNode, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
@@ -59,8 +60,8 @@ interface LayoutProps {
 }
 
 const routeScrollPositions = new Map<string, number>();
-const ROUTE_SCROLL_STORAGE_PREFIX = 'football-route-scroll:';
-const HISTORY_SCROLL_STATE_KEY = 'footballRouteScroll';
+const ROUTE_SCROLL_STORAGE_PREFIX = editionStorageKey('football-route-scroll:');
+const HISTORY_SCROLL_STATE_KEY = editionStorageKey('footballRouteScroll');
 const MAX_ROUTE_SCROLL_MEMORY_ENTRIES = 160;
 
 function setRouteScrollMemory(key: string, scrollTop: number): void {

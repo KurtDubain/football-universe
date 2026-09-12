@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../edition/policy';
 import {
   useCallback,
   useEffect,
@@ -22,7 +23,7 @@ import {
 
 const KEYBOARD_STEP = 12;
 const DRAG_THRESHOLD = 6;
-const POSITION_STORAGE_KEY = 'floating-advance-position-v2';
+const POSITION_STORAGE_KEY = editionStorageKey('floating-advance-position-v2');
 
 function isMobileDocked(): boolean {
   return window.matchMedia?.('(max-width: 639px)').matches ?? window.innerWidth < 640;

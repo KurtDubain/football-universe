@@ -1,3 +1,5 @@
+import { preset } from '../edition/preset';
+import { EDITION, PRESET_ID } from '../edition/policy';
 import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
 import type { GameWorld } from '../engine/season/season-manager';
 import { parseCustomTeams } from '../engine/validation/custom-teams';
@@ -62,6 +64,8 @@ const FAVORITE_PLAYER_LIMIT = 8;
 const NARRATIVE_MEMORY_LIMIT = 32;
 
 export interface CurrentSaveEnvelope {
+  edition?: string;
+  presetId?: string;
   version: typeof SAVE_SCHEMA_VERSION;
   state: JsonRecord & {
     initialized: true;
@@ -134,9 +138,9 @@ function normalizeLegacyTeamPresentation(world: JsonRecord): void {
   const teamBases = world.teamBases;
   if (!isRecord(teamBases)) return;
 
-  const tsmc = teamBases.tsmc_fc;
-  if (isRecord(tsmc) && tsmc.shortName === 'Env') {
-    tsmc.shortName = '台积';
+  for (const rule of preset.legacyShortNames) {
+    const team = teamBases[rule.teamId];
+    if (isRecord(team) && team.shortName === rule.from) team.shortName = rule.to;
   }
 
   const playerStatsHistory = world.playerStatsHistory;
@@ -144,8 +148,10 @@ function normalizeLegacyTeamPresentation(world: JsonRecord): void {
   for (const entries of Object.values(playerStatsHistory)) {
     if (!Array.isArray(entries)) continue;
     for (const entry of entries) {
-      if (isRecord(entry) && entry.teamId === 'tsmc_fc' && entry.teamShortName === 'Env') {
-        entry.teamShortName = '台积';
+      for (const rule of preset.legacyShortNames) {
+        if (isRecord(entry) && entry.teamId === rule.teamId && entry.teamShortName === rule.from) {
+          entry.teamShortName = rule.to;
+        }
       }
     }
   }
@@ -905,6 +911,12 @@ function parseCurrentSaveJSON(text: string): unknown {
 
 function validateCurrentSaveValue(parsed: unknown): CurrentSaveEnvelope {
   if (!isRecord(parsed)) throw new Error('存档顶层结构无效');
+  if (EDITION === 'contest' && (parsed.edition !== EDITION || parsed.presetId !== PRESET_ID)) {
+    throw new Error('存档版别或预设不匹配');
+  }
+  if (EDITION === 'personal' && parsed.edition !== undefined && (parsed.edition !== EDITION || parsed.presetId !== PRESET_ID)) {
+    throw new Error('存档版别或预设不匹配');
+  }
   if (parsed.version !== SAVE_SCHEMA_VERSION) {
     throw new Error(`仅支持当前版本存档（需要 v${SAVE_SCHEMA_VERSION}）`);
   }
@@ -1098,7 +1110,7 @@ export function createCurrentSavePersistStorage<T>(): PersistStorage<T> {
     setItem: (name, value) => {
       if (hasSamePersistedState(lastValue, value)) return;
       lastValue = value;
-      queueCompressedJSONValue(name, value);
+      queueCompressedJSONValue(name, EDITION === 'personal' ? value : { ...value, edition: EDITION, presetId: PRESET_ID });
     },
     removeItem: (name) => {
       lastValue = null;

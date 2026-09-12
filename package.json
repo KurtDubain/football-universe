@@ -1,7 +1,7 @@
 {
   "name": "football-universe",
   "private": true,
-  "version": "4.61.5",
+  "version": "4.61.6",
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -10,8 +10,13 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:audit": "VITE_ENABLE_AUDIT=true pnpm build",
+    "build": "pnpm build:personal",
+    "build:personal": "tsx scripts/build-edition.ts personal",
+    "build:contest": "tsx scripts/build-edition.ts contest",
+    "build:audit": "tsx scripts/build-edition.ts audit",
+    "editions:check": "tsx scripts/check-edition-artifacts.ts",
+    "editions:share": "tsx scripts/render-contest-share.ts",
+    "verify:editions": "tsx scripts/verify-editions.ts",
     "audio:check": "tsx scripts/check-audio-assets.ts",
     "budgets:check": "tsx scripts/check-bundle-size.ts",
     "bundle:check": "pnpm budgets:check",
@@ -19,7 +24,10 @@
     "docs:check": "tsx scripts/check-current-docs.ts",
     "music:generate": "tsx scripts/generate-tournament-music.ts",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "pnpm preview:personal",
+    "preview:personal": "vite preview --mode personal",
+    "preview:contest": "vite preview --mode contest",
+    "preview:audit": "vite preview --mode audit",
     "screenshots": "tsx scripts/screenshot.ts",
     "scripts:check": "tsx scripts/check-portable-scripts.ts",
     "test": "vitest run",
@@ -72,8 +80,8 @@
     "verify:observation-route": "tsx scripts/verify-observation-theme-route.ts",
     "verify:observation-archive": "tsx scripts/verify-observation-theme-archive.ts",
     "verify:dashboard-focus": "tsx scripts/verify-dashboard-observation-focus.ts",
-    "verify:smoke": "pnpm build:audit && pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts smoke",
-    "verify:full": "pnpm build:audit && pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts full"
+    "verify:smoke": "pnpm build:audit && BUILD_TARGET=audit pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts smoke",
+    "verify:full": "pnpm build:audit && BUILD_TARGET=audit pnpm budgets:check && tsx scripts/run-browser-audit-suite.ts full"
   },
   "dependencies": {
     "i18next": "^26.1.0",

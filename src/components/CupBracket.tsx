@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../edition/policy';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { isDerby, getDerbyName } from '../config/derbies';
 import type { CupFixture, CupRound } from '../types/cup';
@@ -12,7 +13,7 @@ import {
   type MergedTie,
 } from './cup-bracket-model';
 
-const VIEW_STORAGE_KEY = 'football-universe:cup-bracket-view-v1';
+const VIEW_STORAGE_KEY = editionStorageKey('football-universe:cup-bracket-view-v1');
 const BRACKET_CARD_WIDTH = 172;
 const BRACKET_CARD_HEIGHT = 82;
 const BRACKET_COLUMN_STEP = 224;

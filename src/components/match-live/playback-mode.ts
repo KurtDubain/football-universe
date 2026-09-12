@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../../edition/policy';
 import type { MatchEvent } from '../../types/match';
 
 export type PlaybackMode = 'highlights' | 'live' | 'immersive';
@@ -13,7 +14,7 @@ export const PLAYBACK_MODE_OPTIONS: ReadonlyArray<{
   { value: 'immersive', label: '沉浸', description: '完整播放，节奏更舒缓' },
 ];
 
-const PLAYBACK_MODE_STORAGE_KEY = 'football-universe:match-playback-mode';
+const PLAYBACK_MODE_STORAGE_KEY = editionStorageKey('football-universe:match-playback-mode');
 
 export function isPlaybackMode(value: unknown): value is PlaybackMode {
   return value === 'highlights' || value === 'live' || value === 'immersive';

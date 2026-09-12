@@ -3,7 +3,9 @@ import { basename, extname, join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { PRODUCTION_PERFORMANCE_BUDGETS } from '../src/config/performance-budgets';
 
-const distPath = 'dist';
+const target = process.env.BUILD_TARGET ?? 'personal';
+if (!['personal', 'contest', 'audit'].includes(target)) throw new Error('Invalid BUILD_TARGET');
+const distPath = 'dist/' + target;
 const manifestPath = join(distPath, '.vite', 'manifest.json');
 const reportPath = process.env.BUNDLE_REPORT;
 const imageExtensions = new Set(['.avif', '.jpeg', '.jpg', '.png', '.svg', '.webp']);

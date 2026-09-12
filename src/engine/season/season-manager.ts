@@ -1,3 +1,4 @@
+import { requireCustomContent } from '../../edition/policy';
 import { SeasonState } from '../../types/season';
 import { TeamBase, TeamState, Trophy, SeasonRecord } from '../../types/team';
 import { CoachBase, CoachState, CareerEntry } from '../../types/coach';
@@ -444,6 +445,7 @@ function snapshotPlayerStatsHistory(
  * Initialize a fresh game world from a seed.
  */
 export function initializeGameWorld(seed: number, options?: { gameMode?: GameMode; customTeams?: TeamBase[] }): GameWorld {
+  if (options?.customTeams) requireCustomContent();
   // 1. Team bases — apply custom teams or game mode overrides
   const baseTeams = options?.customTeams ? parseCustomTeams(options.customTeams) : defaultTeams;
   const modeConfig = options?.gameMode ? getGameModeConfig(options.gameMode) : null;

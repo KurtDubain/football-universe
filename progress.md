@@ -1,5 +1,20 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-12 v4.61.6 Release Authorization
+
+- User subsequently authorized committing and pushing the edition-isolation work. Bumped both edition changelogs, package/app version and current documentation to v4.61.6. No Vercel project or deployment settings changed; the personal project's output directory must be configured as dist/personal before its next deployment can serve the new layout.
+
+## 2026-09-12 Personal / Contest Build Isolation
+
+- Requested scope: local code, tests and documentation only. Baseline 93896c1 / v4.61.5, initially clean. No Vercel configuration, deployment, Git commit or push performed. Historical checklists were not reactivated.
+- Added locked personal/contest/audit build targets in distinct output directories, resolver-level preset and coach-name selection, formal-build audit rejection, version/preset identity, contest public-asset allowlist and dependency/artifact scanning.
+- Preserved all stable team/coach IDs, numeric configurations and regional partitions. Original personal identities/pools remain isolated; proposed contest world is Three Shores (三岸纪), pending author review. Common surname tokens are linguistic ingredients, not licensed real-player identities.
+- Personal schema 25, storage keys, custom teams, manual import and historical Env-to-台积 normalization remain supported. Contest disables editor routing/module, customTeams initialization and manual save import; autosave, export and refresh recovery retain edition/preset identity in a separate namespace. No conversion of personal historical data.
+- Initial validation: complete 153-file / 1,060-test suite passed; three seeds across five seasons per edition matched numeric world/fixture/result/RNG hashes at every window. Exhaustive name-pair checks preserve all 7,889 name-collision relationships. Both production editions passed desktop/mobile observer-to-S2 flows including live viewing, archive, transfer handoff, export, refresh and offline reload with no browser console errors/warnings.
+- Production-graph inspection caught a hidden personal GitHub URL and removed it from the contest dependency path. Shared numeric data and seeded coach names are separated to avoid increasing the opening bundle unnecessarily; frozen budgets are not relaxed.
+- Final commands, pending author approvals, domain/branch recommendations and material-refresh checklist: docs/build-editions.md and docs/contest-content-review.md. Local screenshots and JSON report: output/playwright/editions. These are simulated browser viewports, not physical-device tests.
+- Final local checks passed all three build/artifact/budget targets: initial JS gzip personal 159,078 B, contest 158,684 B, audit 159,333 B; PWA entries 86/83/86. TypeScript, ESLint, 1,060 full tests, 35 final focused tests, docs and portable-script gates passed. Real production UI checks also retain/ignore pre-existing personal save/template fixtures in contest and reject mismatched remote edition metadata. Generic PWA update regression passed on the isolated audit build. Physical-device and real Vercel rollout validation remain outside this local task.
+
 ## 2026-09-09 v4.61.2 Contest Experience Closure
 
 - Reproduced the requested seed `20260709` challenger route through first judgment, ordinary reveal, key-node arrival, five-window advance, complete S1 skip, S1 archive, automatic transfer handoff, and the unplayed S2 opener. The baseline visibly showed the zero-match `#15/#2` contradiction, a permanently locked dark-horse theme after Datong's relegation, repeated `和` list punctuation, `Final` conclusion versus `SF` evidence for the same cup story, and no transfer-auto result feedback.

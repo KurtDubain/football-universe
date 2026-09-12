@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const newRoot = resolve(process.env.PWA_NEW_DIST ?? 'dist');
+const newRoot = resolve(process.env.PWA_NEW_DIST ?? 'dist/audit');
 
 const MIME_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -74,8 +74,9 @@ async function prepareOldBuild(): Promise<{ root: string; cleanup: () => Promise
       env: { ...process.env, GITHUB_SHA: `pwa-old-${revision.replace(/[^a-z0-9_-]/gi, '-')}` },
       stdio: 'pipe',
     });
+    const packageJson = JSON.parse(await readFile(join(sourceRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     return {
-      root: join(sourceRoot, 'dist'),
+      root: join(sourceRoot, packageJson.scripts['build:personal'] ? 'dist/personal' : 'dist'),
       cleanup: () => rm(temporaryRoot, { recursive: true, force: true }),
     };
   } catch (error) {

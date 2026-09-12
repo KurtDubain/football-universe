@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../edition/policy';
 import { useSyncExternalStore } from 'react';
 
 export type SoundProfile = 'quiet' | 'balanced' | 'stadium';
@@ -12,7 +13,7 @@ export interface FeedbackPreferences {
   hapticsEnabled: boolean;
 }
 
-export const FEEDBACK_PREFERENCES_KEY = 'football-feedback-preferences-v1';
+export const FEEDBACK_PREFERENCES_KEY = editionStorageKey('football-feedback-preferences-v1');
 export const DEFAULT_FEEDBACK_PREFERENCES: FeedbackPreferences = {
   soundEnabled: true,
   soundProfile: 'balanced',

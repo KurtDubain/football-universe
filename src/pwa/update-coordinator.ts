@@ -1,9 +1,10 @@
+import { EDITION, PRESET_ID, editionStorageKey } from '../edition/policy';
 export interface RemoteAppVersion {
   version: string;
   buildId: string | null;
 }
 
-const APP_UPDATE_RELOAD_MARKER = 'football-app-update-reload';
+const APP_UPDATE_RELOAD_MARKER = editionStorageKey('football-app-update-reload');
 
 interface ReloadMarkerStorage {
   getItem: (key: string) => string | null;
@@ -46,6 +47,10 @@ export interface ReloadSafetySnapshot {
 
 export function parseRemoteAppVersion(value: unknown): RemoteAppVersion | null {
   if (!value || typeof value !== 'object') return null;
+  const edition = Reflect.get(value, 'edition');
+  const presetId = Reflect.get(value, 'presetId');
+  if (EDITION === 'contest' && (edition !== EDITION || presetId !== PRESET_ID)) return null;
+  if (edition !== undefined && (edition !== EDITION || presetId !== PRESET_ID)) return null;
   const version = Reflect.get(value, 'version');
   if (typeof version !== 'string') return null;
 

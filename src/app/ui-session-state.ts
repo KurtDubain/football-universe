@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { editionStorageKey } from '../edition/policy';
 
 function readSessionValue<T>(key: string, fallback: T): T {
   if (typeof sessionStorage === 'undefined') return fallback;
   try {
-    const stored = sessionStorage.getItem(key);
+    const stored = sessionStorage.getItem(editionStorageKey(key));
     return stored === null ? fallback : JSON.parse(stored) as T;
   } catch {
     return fallback;
@@ -15,7 +16,7 @@ export function useUiSessionState<T>(key: string, fallback: T): [T, (value: T) =
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(key, JSON.stringify(value));
+      sessionStorage.setItem(editionStorageKey(key), JSON.stringify(value));
     } catch {
       // Session continuity is optional when storage is unavailable.
     }

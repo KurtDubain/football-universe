@@ -1,3 +1,4 @@
+import { editionStorageKey } from '../edition/policy';
 import { useSyncExternalStore } from 'react';
 
 export interface AdvancePreferences {
@@ -5,7 +6,7 @@ export interface AdvancePreferences {
   stayOnCurrentView: boolean;
 }
 
-export const ADVANCE_PREFERENCES_KEY = 'football-advance-preferences-v1';
+export const ADVANCE_PREFERENCES_KEY = editionStorageKey('football-advance-preferences-v1');
 export const DEFAULT_ADVANCE_PREFERENCES: AdvancePreferences = {
   stayOnCurrentView: false,
 };

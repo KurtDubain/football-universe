@@ -1,28 +1,8 @@
+import { namePools } from '../../edition/preset';
+const { COACH_FIRST_NAMES, COACH_SURNAMES } = namePools;
 import { CoachBase, CoachStyle } from '../../types/coach';
 import { SeededRNG } from '../match/rng';
 import { derivePreferredFormation } from './tactics';
-
-/**
- * First-name pool for fresh coaches. Western coach names transliterated
- * into Chinese, sourced from real-world Italian / Spanish / Portuguese /
- * Dutch / German / English football managers. The intent is to keep new
- * coaches stylistically separable from the seeded S1 names (which use
- * mostly the same alphabet) — the combinations will be distinct.
- */
-const COACH_FIRST_NAMES = [
-  '卡洛', '路易斯', '安东尼奥', '何塞', '米歇尔', '罗杰',
-  '尤尔根', '塞尔吉奥', '罗伯托', '安杰', '迭戈', '吉安',
-  '弗朗茨', '沃尔特', '爱德华', '约翰', '迈克尔', '大卫',
-  '彼得', '保罗', '汉斯', '克劳斯', '海因里希',
-] as const;
-
-/** Surname pool. Same flavor as the first-name pool. */
-const COACH_SURNAMES = [
-  '罗梅罗', '里维拉', '布兰科', '德拉克鲁兹', '桑切斯',
-  '戈麦斯', '莫雷诺', '范德伯格', '科尔曼', '巴雷特',
-  '布拉德利', '卡彭特', '卡明斯', '海耶斯', '梅尔泽',
-  '沃格尔', '韦伯', '巴克', '弗洛雷斯', '卡佩罗',
-] as const;
 
 /**
  * Format the canonical id for a coach who originated from the candidate

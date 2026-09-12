@@ -1,3 +1,4 @@
+import { requireCustomContent } from '../edition/policy';
 import { compressedStorage, replaceCompressedStorageItem } from './compressed-storage';
 import { parseCurrentSave } from './save-schema';
 
@@ -8,6 +9,7 @@ export function exportCurrentSave(storageKey: string): string {
 }
 
 export function importCurrentSave(storageKey: string, text: string): void {
+  requireCustomContent();
   const save = parseCurrentSave(text);
   replaceCompressedStorageItem(storageKey, JSON.stringify(save));
 }

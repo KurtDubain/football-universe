@@ -1,7 +1,7 @@
 # Football Universe Current Status
 
-Last reviewed: 2026-09-10
-Current release: v4.61.5 (public-presentation patch; gameplay baseline v4.61.4)
+Last reviewed: 2026-09-12
+Current release: v4.61.6 (edition-isolation release; gameplay baseline v4.61.4)
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -12,12 +12,12 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - Match results, standings, player statistics, transfers, injuries, awards, and history come from one authoritative deterministic simulation.
 - Narrative, animation, audio, and imagery explain or present simulation facts; they never rewrite outcomes.
 - The project remains a pure-frontend, offline-capable PWA with current-schema saves and bounded long-term history.
-- Real club names remain the personal default. A separate original preset is considered only for a submission that requires it.
+- Real club names remain the personal default. An independent contest build uses the proposed Three Shores preset; author review and independent local acceptance are pending. See [build isolation](build-editions.md) and [content review](contest-content-review.md). Git publication was subsequently authorized for v4.61.6; no deployment or Vercel configuration change is included.
 
 ## Current Health
 
 - 1,055 unit and component tests across 151 test files.
-- 66,490 production lines across 245 production files.
+- 65,830 production TypeScript lines across 254 production files (identity data is now held in edition-specific JSON).
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.

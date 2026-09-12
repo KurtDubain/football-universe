@@ -110,7 +110,7 @@ function viteServerArgs(url: string, preview: boolean): string[] {
   return [
     'exec',
     'vite',
-    ...(preview ? ['preview'] : []),
+    ...(preview ? ['preview', '--mode', 'audit'] : []),
     '--host',
     parsed.hostname,
     '--port',

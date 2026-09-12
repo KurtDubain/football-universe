@@ -1,0 +1,164 @@
+{
+  "teams": {
+    "gz_hengda": {
+      "name": "广州恒大",
+      "shortName": "恒大",
+      "region": "南洲+广东"
+    },
+    "shimazu": {
+      "name": "岛津众城",
+      "shortName": "岛津",
+      "region": "东洲+九州"
+    },
+    "xibei_wolf": {
+      "name": "西北狼",
+      "shortName": "狼",
+      "region": "大陆+陕西"
+    },
+    "fj_hakka": {
+      "name": "福建客家",
+      "shortName": "客家",
+      "region": "南洲+福建"
+    },
+    "honshu_maru": {
+      "name": "本州丸",
+      "shortName": "本州",
+      "region": "东洲+本州"
+    },
+    "bj_guoan": {
+      "name": "北京国安",
+      "shortName": "国安",
+      "region": "大陆+北京"
+    },
+    "sd_taishan": {
+      "name": "山东泰山",
+      "shortName": "泰山",
+      "region": "大陆+山东"
+    },
+    "zhili_victory": {
+      "name": "直隶胜利",
+      "shortName": "直隶",
+      "region": "大陆+河北"
+    },
+    "chumen_world": {
+      "name": "楚门世界",
+      "shortName": "楚门",
+      "region": "大陆+天津"
+    },
+    "jeonbuk": {
+      "name": "全北现代",
+      "shortName": "全北",
+      "region": "大陆+南朝鲜"
+    },
+    "liaoning": {
+      "name": "辽宁队",
+      "shortName": "辽宁",
+      "region": "大陆+吉林"
+    },
+    "osaka_ippei": {
+      "name": "大阪一平",
+      "shortName": "大阪",
+      "region": "东洲+本州"
+    },
+    "hn_happy": {
+      "name": "河南幸福",
+      "shortName": "河南",
+      "region": "大陆+河南"
+    },
+    "gz_yongkang": {
+      "name": "广州永康",
+      "shortName": "广州",
+      "region": "南洲+广东"
+    },
+    "datong": {
+      "name": "大同队",
+      "shortName": "大同",
+      "region": "大陆+山西"
+    },
+    "jiaozhou": {
+      "name": "胶州港湾",
+      "shortName": "胶州",
+      "region": "大陆+山东"
+    },
+    "sy_street": {
+      "name": "沈阳大街",
+      "shortName": "沈阳",
+      "region": "大陆+吉林"
+    },
+    "cs_dragon": {
+      "name": "常山龙",
+      "shortName": "常山",
+      "region": "大陆+河北"
+    },
+    "red_sun": {
+      "name": "红太阳",
+      "shortName": "朝鲜",
+      "region": "大陆+北朝鲜"
+    },
+    "sanya": {
+      "name": "三亚海口",
+      "shortName": "三亚",
+      "region": "南洲+海南"
+    },
+    "taipei_fc": {
+      "name": "小台北",
+      "shortName": "台北",
+      "region": "南洲+台湾"
+    },
+    "shikoku": {
+      "name": "四国火枪",
+      "shortName": "四国",
+      "region": "东洲+四国"
+    },
+    "omi_eagle": {
+      "name": "近江鹰",
+      "shortName": "近江",
+      "region": "东洲+本州"
+    },
+    "xian_bingma": {
+      "name": "西安兵马",
+      "shortName": "西安",
+      "region": "大陆+陕西"
+    },
+    "hokkaido": {
+      "name": "北海道",
+      "shortName": "北海",
+      "region": "东洲+北海道"
+    },
+    "yongfu": {
+      "name": "永福临门",
+      "shortName": "永福",
+      "region": "南洲+福建"
+    },
+    "ty_taiping": {
+      "name": "太原太平",
+      "shortName": "太原",
+      "region": "大陆+山西"
+    },
+    "taipei_dome": {
+      "name": "大巨蛋",
+      "shortName": "巨蛋",
+      "region": "南洲+台湾"
+    },
+    "mori_sailor": {
+      "name": "毛利水手",
+      "shortName": "水手",
+      "region": "东洲+本州"
+    },
+    "bj_oppo": {
+      "name": "北京欧珀",
+      "shortName": "欧珀",
+      "region": "大陆+北京"
+    },
+    "nissan_fc": {
+      "name": "东风日产",
+      "shortName": "日产",
+      "region": "东洲+本州"
+    },
+    "tsmc_fc": {
+      "name": "台积电",
+      "shortName": "台积",
+      "region": "南洲+台湾"
+    }
+  }
+}

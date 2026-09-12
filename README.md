@@ -5,6 +5,8 @@
 <h1 align="center">足球联赛宇宙 ⚽</h1>
 <h3 align="center">Football Universe Simulator</h3>
 
+个人版与参赛版使用独立构建和存档命名空间，命令、资源边界与本地验收说明见 [双版本构建](docs/build-editions.md)。参赛名称尚待作者审阅，未部署。
+
 <p align="center">
   <strong>你不操控比赛 — 你观看整个足球宇宙自动演化</strong><br/>
   <em>You don't play the matches — you watch an entire football universe unfold on its own.</em>
@@ -55,7 +57,7 @@ Separately, choose one of **3 guided observer lenses** or a neutral observer vie
 
 ## Screenshots | 截图
 
-以下截图来自 **v4.61.4**、推荐种子 **20260709**、自由模式的挑战者视角，均为真实推进生成。历史荣誉展示 S1，编年史展示三季记录。桌面为 1440×900，手机为 390×844。先运行 `pnpm build:audit`，构建完成后运行 `pnpm preview --host 127.0.0.1 --port 4173`，另一个终端运行 `pnpm screenshots` 即可重新生成截图与分享图；自定义端口可设置 `SCREENSHOT_URL`。
+以下截图来自 **v4.61.4**、推荐种子 **20260709**、自由模式的挑战者视角，均为真实推进生成。历史荣誉展示 S1，编年史展示三季记录。桌面为 1440×900，手机为 390×844。先运行 `pnpm build:audit`，构建完成后运行 `pnpm preview:audit --host 127.0.0.1 --port 4173`，另一个终端运行 `pnpm screenshots` 即可重新生成截图与分享图；自定义端口可设置 `SCREENSHOT_URL`。
 
 <p align="center">
   <img src="docs/screenshots/01-welcome.jpg" width="48%" alt="Welcome / 欢迎页" />
@@ -147,7 +149,7 @@ git clone https://github.com/KurtDubain/football-universe.git
 cd football-universe
 pnpm install
 pnpm dev      # http://localhost:5173
-pnpm build    # 生产构建
+pnpm build    # 个人版生产构建 → dist/personal
 ```
 
 > 最低需要 Node.js 22.12，仓库通过 `.nvmrc`/`.node-version` 固定使用 22.22.2，并通过 `packageManager` 固定 pnpm 10.34.5。
@@ -162,7 +164,7 @@ pnpm test:watch   # 监听模式（开发用）
 pnpm test:ui      # Vitest UI（浏览器面板）
 pnpm lint         # ESLint
 pnpm typecheck    # TypeScript strict + 未使用代码检查
-pnpm build        # TypeScript + 生产/PWA 构建
+pnpm build        # TypeScript + 个人版生产/PWA 构建 → dist/personal
 pnpm budgets:check # 入口 JS、CSS、图片与 PWA 预缓存硬预算
 pnpm audit --prod # 生产依赖审计
 pnpm audit:current # 生产预览的长期数据与浏览器审计
@@ -199,9 +201,9 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.61.5**
+Current release: **v4.61.6**
 
-66k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
+65k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
 
 当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 

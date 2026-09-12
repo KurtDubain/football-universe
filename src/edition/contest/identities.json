@@ -1,0 +1,164 @@
+{
+  "teams": {
+    "gz_hengda": {
+      "name": "绯湾王冠",
+      "shortName": "王冠",
+      "region": "南洲+绯湾"
+    },
+    "shimazu": {
+      "name": "岚岛联城",
+      "shortName": "联城",
+      "region": "东洲+岚岛"
+    },
+    "xibei_wolf": {
+      "name": "砾原铁卫",
+      "shortName": "铁卫",
+      "region": "大陆+砾原"
+    },
+    "fj_hakka": {
+      "name": "榕岸航星",
+      "shortName": "航星",
+      "region": "南洲+榕岸"
+    },
+    "honshu_maru": {
+      "name": "曜陆赤帆",
+      "shortName": "赤帆",
+      "region": "东洲+曜陆"
+    },
+    "bj_guoan": {
+      "name": "澄京绿庭",
+      "shortName": "绿庭",
+      "region": "大陆+澄京"
+    },
+    "sd_taishan": {
+      "name": "岱岭守望",
+      "shortName": "守望",
+      "region": "大陆+岱岭"
+    },
+    "zhili_victory": {
+      "name": "原北竞锋",
+      "shortName": "竞锋",
+      "region": "大陆+原北"
+    },
+    "chumen_world": {
+      "name": "津岬灯塔",
+      "shortName": "灯塔",
+      "region": "大陆+津岬"
+    },
+    "jeonbuk": {
+      "name": "晴川工坊",
+      "shortName": "工坊",
+      "region": "大陆+晴川"
+    },
+    "liaoning": {
+      "name": "霜河远征",
+      "shortName": "远征",
+      "region": "大陆+霜河"
+    },
+    "osaka_ippei": {
+      "name": "曜陆白石",
+      "shortName": "白石",
+      "region": "东洲+曜陆"
+    },
+    "hn_happy": {
+      "name": "禾中麦浪",
+      "shortName": "麦浪",
+      "region": "大陆+禾中"
+    },
+    "gz_yongkang": {
+      "name": "绯湾长青",
+      "shortName": "长青",
+      "region": "南洲+绯湾"
+    },
+    "datong": {
+      "name": "云垣星火",
+      "shortName": "星火",
+      "region": "大陆+云垣"
+    },
+    "jiaozhou": {
+      "name": "岱岭海门",
+      "shortName": "海门",
+      "region": "大陆+岱岭"
+    },
+    "sy_street": {
+      "name": "霜河街巷",
+      "shortName": "街巷",
+      "region": "大陆+霜河"
+    },
+    "cs_dragon": {
+      "name": "原北青岚",
+      "shortName": "青岚",
+      "region": "大陆+原北"
+    },
+    "red_sun": {
+      "name": "暮川炬光",
+      "shortName": "炬光",
+      "region": "大陆+暮川"
+    },
+    "sanya": {
+      "name": "珊海潮汐",
+      "shortName": "潮汐",
+      "region": "南洲+珊海"
+    },
+    "taipei_fc": {
+      "name": "琉湾新桥",
+      "shortName": "新桥",
+      "region": "南洲+琉湾"
+    },
+    "shikoku": {
+      "name": "青屿燧石",
+      "shortName": "燧石",
+      "region": "东洲+青屿"
+    },
+    "omi_eagle": {
+      "name": "曜陆山隼",
+      "shortName": "山隼",
+      "region": "东洲+曜陆"
+    },
+    "xian_bingma": {
+      "name": "砾原古垒",
+      "shortName": "古垒",
+      "region": "大陆+砾原"
+    },
+    "hokkaido": {
+      "name": "雪汀晨光",
+      "shortName": "晨光",
+      "region": "东洲+雪汀"
+    },
+    "yongfu": {
+      "name": "榕岸归航",
+      "shortName": "归航",
+      "region": "南洲+榕岸"
+    },
+    "ty_taiping": {
+      "name": "云垣静湖",
+      "shortName": "静湖",
+      "region": "大陆+云垣"
+    },
+    "taipei_dome": {
+      "name": "琉湾圆庭",
+      "shortName": "圆庭",
+      "region": "南洲+琉湾"
+    },
+    "mori_sailor": {
+      "name": "曜陆风帆",
+      "shortName": "风帆",
+      "region": "东洲+曜陆"
+    },
+    "bj_oppo": {
+      "name": "澄京紫苑",
+      "shortName": "紫苑",
+      "region": "大陆+澄京"
+    },
+    "nissan_fc": {
+      "name": "曜陆银轨",
+      "shortName": "银轨",
+      "region": "东洲+曜陆"
+    },
+    "tsmc_fc": {
+      "name": "琉湾微光",
+      "shortName": "微光",
+      "region": "南洲+琉湾"
+    }
+  }
+}

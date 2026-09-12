@@ -1,10 +1,11 @@
+import { editionStorageKey } from './edition/policy';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import zh from './locales/zh.json';
 import en from './locales/en.json';
 
 const STORED_LANG = (() => {
-  try { return localStorage.getItem('language') || undefined; } catch { return undefined; }
+  try { return localStorage.getItem(editionStorageKey('language')) || undefined; } catch { return undefined; }
 })();
 
 const browserLang = typeof navigator !== 'undefined'
@@ -26,7 +27,7 @@ i18n
 export function setLanguage(lang: 'zh' | 'en') {
   i18n.changeLanguage(lang);
   try {
-    localStorage.setItem('language', lang);
+    localStorage.setItem(editionStorageKey('language'), lang);
   } catch {
     // The selected language remains active in memory when storage is unavailable.
   }

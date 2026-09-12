@@ -1,6 +1,7 @@
+import { editionStorageKey } from '../edition/policy';
 export const ROUTE_LOAD_TIMEOUT_MS = 8_000;
 export const ROUTE_LOAD_MAX_RETRIES = 1;
-export const ROUTE_ERROR_STORAGE_KEY = 'football-universe-last-route-error';
+export const ROUTE_ERROR_STORAGE_KEY = editionStorageKey('football-universe-last-route-error');
 
 export type RouteFailureCode = 'offline' | 'timeout' | 'chunk' | 'network' | 'unknown';
 

@@ -62,6 +62,10 @@ jobs:
         run: |
           pnpm build
           pnpm budgets:check
+          BUILD_TARGET=personal pnpm editions:check
+          CONTEST_SITE_URL=https://contest.invalid pnpm build:contest
+          BUILD_TARGET=contest pnpm budgets:check
+          pnpm editions:check
 
   browser-audit:
     runs-on: ubuntu-latest

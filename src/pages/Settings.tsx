@@ -1,3 +1,4 @@
+import { ALLOW_CUSTOM_CONTENT, EDITION_LABEL, PRESET_ID } from '../edition/policy';
 import { lazy, Suspense, useState, useMemo, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/game-store';
@@ -37,7 +38,8 @@ const DevDataHealthPanel = import.meta.env.DEV
 
 function shortBuildId(buildId: string | null): string | null {
   if (!buildId) return null;
-  return buildId.length > 12 ? buildId.slice(0, 7) : buildId;
+  const revision = buildId.split(':').at(-1) ?? buildId;
+  return revision.length > 12 ? revision.slice(0, 7) : revision;
 }
 
 function updateStatusCopy(state: AppUpdateState): string {
@@ -512,7 +514,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
             <span className="block text-[10px] text-slate-500 mt-0.5">下载当前存档为 JSON 文件</span>
           </button>
 
-          <label className="block w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors cursor-pointer text-left">
+          {ALLOW_CUSTOM_CONTENT ? <label className="block w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors cursor-pointer text-left">
             导入存档
             <span className="block text-[10px] text-slate-500 mt-0.5">从 JSON 文件恢复存档</span>
             <input
@@ -535,7 +537,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
                 reader.readAsText(file);
               }}
             />
-          </label>
+          </label> : <p className="text-xs text-slate-400">参赛版暂不支持手动导入；自动保存、刷新恢复和备份导出仍可使用。</p>}
 
           <button
             onClick={() => {
@@ -592,7 +594,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
       {/* Credits */}
       <div className="text-center text-xs text-slate-600 py-4">
         <p>足球联赛宇宙 · 电子斗蛐蛐模拟器</p>
-        <p className="mt-1">v{APP_VERSION} · by KurtDubain</p>
+        <p className="mt-1">v{APP_VERSION} · {EDITION_LABEL} · {PRESET_ID} · by KurtDubain</p>
       </div>
     </PageShell>
   );
