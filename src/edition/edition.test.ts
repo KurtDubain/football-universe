@@ -4,6 +4,7 @@ import * as contest from './contest';
 import personalCoaches from './personal/coaches.json';
 import contestCoaches from './contest/coaches.json';
 import { resolveBuildTarget } from '../../scripts/build-target';
+import { editionPlugin } from '../../scripts/edition-plugin';
 
 afterEach(() => { vi.doUnmock('./preset'); vi.doUnmock('./coach-names'); vi.resetModules(); });
 
@@ -27,6 +28,36 @@ describe('edition boundary', () => {
     expect(() => resolveBuildTarget('contest', { APP_EDITION: 'personal' })).toThrow();
     expect(() => resolveBuildTarget('personal', { APP_PRESET_ID: 'three-shores-v1' })).toThrow();
     expect(() => resolveBuildTarget('contest', { CONTEST_SITE_URL: 'https://football-universe-ebon.vercel.app' })).toThrow();
+  });
+
+  it('keeps the existing personal default and supports independent custom HTTPS origins', () => {
+    expect(resolveBuildTarget('personal', {}).siteUrl).toBe('https://football-universe-ebon.vercel.app');
+    const env = { PERSONAL_SITE_URL: 'https://football.dyp02.vip/', CONTEST_SITE_URL: 'https://cup.dyp02.vip/' };
+    expect(resolveBuildTarget('personal', env).siteUrl).toBe('https://football.dyp02.vip');
+    expect(resolveBuildTarget('contest', env).siteUrl).toBe('https://cup.dyp02.vip');
+    expect(() => resolveBuildTarget('contest', { CONTEST_SITE_URL: 'https://football-universe-ebon.vercel.app:8443' })).toThrow('independent');
+    for (const mode of ['personal', 'contest']) {
+      expect(() => resolveBuildTarget(mode, { ...env, CONTEST_SITE_URL: 'https://football.dyp02.vip:443/' })).toThrow('independent');
+    }
+    for (const value of ['', 'http://football.dyp02.vip', 'https://user:pass@football.dyp02.vip', 'https://football.dyp02.vip/game', 'https://football.dyp02.vip/?edition=personal', 'https://football.dyp02.vip/#game']) {
+      expect(() => resolveBuildTarget('personal', { PERSONAL_SITE_URL: value })).toThrow();
+      expect(() => resolveBuildTarget('contest', { CONTEST_SITE_URL: value })).toThrow();
+    }
+  });
+
+  it('uses the selected origin for both HTML metadata targets without altering edition wording', () => {
+    const html = '<meta property="og:image" content="https://football-universe-ebon.vercel.app/og-image.png"><link rel="canonical" href="https://football-universe-ebon.vercel.app/"><title>电子斗蛐蛐</title>';
+    const env = { PERSONAL_SITE_URL: 'https://football.dyp02.vip', CONTEST_SITE_URL: 'https://cup.dyp02.vip' };
+    for (const mode of ['personal', 'contest']) {
+      const config = resolveBuildTarget(mode, env);
+      const transform = editionPlugin(config).transformIndexHtml;
+      if (typeof transform !== 'function') throw new Error('HTML metadata transform is missing');
+      const transformed = Reflect.apply(transform, {}, [html, { path: '/', filename: 'index.html' }]);
+      expect(transformed).toContain(config.siteUrl + '/og-image.png');
+      expect(transformed).toContain(config.siteUrl + '/');
+      expect(transformed).not.toContain('football-universe-ebon.vercel.app');
+      expect(transformed).toContain(mode === 'contest' ? '三岸纪' : '电子斗蛐蛐');
+    }
   });
 
   it('keeps IDs, continent membership and every regional derby partition', () => {

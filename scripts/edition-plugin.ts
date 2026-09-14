@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 import type { resolveBuildTarget } from './build-target';
+import { DEFAULT_PERSONAL_SITE_URL } from './build-target';
 
 export function editionPlugin(config: ReturnType<typeof resolveBuildTarget>): Plugin {
   return {
@@ -17,8 +18,9 @@ export function editionPlugin(config: ReturnType<typeof resolveBuildTarget>): Pl
       }
     },
     transformIndexHtml(html) {
-      if (config.edition !== 'contest') return html;
-      return html.replaceAll('https://football-universe-ebon.vercel.app', config.siteUrl)
+      const siteHtml = html.replaceAll(DEFAULT_PERSONAL_SITE_URL, config.siteUrl);
+      if (config.edition !== 'contest') return siteHtml;
+      return siteHtml
         .replaceAll('电子斗蛐蛐', '三岸纪')
         .replace(/<meta name="keywords"[^>]*>/, '')
         .replace(/,\s*"url": "https:\/\/github.com\/KurtDubain"/, '');
@@ -29,7 +31,14 @@ export function editionPlugin(config: ReturnType<typeof resolveBuildTarget>): Pl
         throw new Error('Personal-only module entered contest dependency graph');
       }
       this.emitFile({ type: 'asset', fileName: 'build-manifest.json', source: JSON.stringify({ ...config, modules }, null, 2) });
-      if (config.edition !== 'contest') return;
+      if (config.edition !== 'contest') {
+        if (config.siteUrl !== DEFAULT_PERSONAL_SITE_URL) {
+          for (const file of ['robots.txt', 'sitemap.xml']) {
+            this.emitFile({ type: 'asset', fileName: file, source: readFileSync(resolve('public', file), 'utf8').replaceAll(DEFAULT_PERSONAL_SITE_URL, config.siteUrl) });
+          }
+        }
+        return;
+      }
       for (const file of ['favicon.svg', 'icon-192.png', 'icon-512.png', 'icons.svg']) {
         this.emitFile({ type: 'asset', fileName: file, source: readFileSync(resolve('public', file)) });
       }

@@ -1,16 +1,16 @@
 # 双版本构建与独立验收
 
-当前发布：v4.61.7。用户已授权本次提交与推送；Linux CI 实测和作者内容确认仍待完成。以下 v4.61.6 数字保留为修复阶段验证记录，不代表云端已经验收。
+当前发布：v4.61.7。2026-09-12 用户明确选择并授权“双 Vercel 项目、同仓库同 main、不同构建命令与输出目录、自动更新各自 Production 域名”。现已部署：个人站 https://kurt-football.vercel.app ，参赛站 https://kurt-football-cup.vercel.app 。不要求固定参赛分支或冻结更新。Linux CI build job 已通过，但独立 browser-audit 仍失败；作者内容确认仍待完成。以下较早版本数字为历史验证记录，最新云端交接见 output/vercel-deployment-handoff-2026-09-12.md。
 
-状态：实现完成，待独立 review 与作者内容确认。用户随后授权 Git 发布，发布版本为 v4.61.6；未部署、未修改 Vercel。下方本地完整验收记录来自升级版本号前的 v4.61.5 实现。
+历史实施状态：当时实现完成，待独立 review 与作者内容确认；用户随后授权 Git 发布 v4.61.6，当时尚未部署或修改 Vercel。下方早期本地完整验收记录来自升级版本号前的 v4.61.5 实现；当前发布状态以上段为准。
 
 ## 跨平台部署修复验收（2026-09-12）
 
 - 基线 f2a7a34 / v4.61.6。Workbox 页面排除改为大小写敏感的 URL transform，保留 `teams-*.js` 共享模块、仅排除 `Teams-*.js` 页面；OG 两种格式均不预缓存。预算门禁新增初始静态 JS 依赖完整性断言，不增加原预算。
 - Node engines 限定 22.x，验收固定 22.22.2 / pnpm 10.34.5。Node 大版本不是该大小写问题的根因。
 - 本地 macOS 三套构建、版别检查与预算通过。personal：86 项 / 2,096,330 B，contest：84 项 / 1,914,774 B，audit：86 项 / 2,097,274 B。初始 JS gzip 分别为 159,155 / 158,725 / 159,403 B。构建 ID 使用本地版本号；云端提交 SHA 会产生少量字节差异，必须重新检查。
-- **Linux 验收仍待执行，是发布阻断项。** 当前机器没有 Docker/Podman/Lima，也没有本任务授权的 Linux 执行环境；不能用 macOS 结果代替。Ubuntu CI 已补齐三套显式 target 的产物/预算检查、两版正式浏览器离线流程和 PWA 更新验证，并上传清单、预算、截图。配置完成不等于 CI 已通过；本轮不提交、不推送，尚无该差异的云端运行证据。
-- 参赛本地构建使用作者提供的 `https://kurt-football-cup.vercel.app`，不表示该站已经部署。现有两项目和 Output Directory 均未修改。后续授权后先 Preview 验收，再决定 Production；参赛项目使用固定验收分支，不跟随个人日常更新。
+- Linux 状态后续更新：GitHub CI #134（run 34676771238，提交 4271635）的 build job 已通过三版构建/检查/预算及 Linux 正式版/PWA 验证；browser-audit 的完整 smoke 失败，具体 Linux 子脚本日志需登录获取。本地同 SHA 原样 smoke 首个失败是 audit:advance-performance，不能直接当作已证实的 Linux 根因。
+- 参赛域名 `https://kurt-football-cup.vercel.app` 已在 2026-09-12 正式部署。按用户最新选择，两个项目都跟随 main，使用各自构建命令、输出目录和项目变量；保留版别与预算门禁，不另设冻结分支策略。
 - 参赛命名确认、OG 待审阅标识与公开 slug 方案见 `contest-content-review.md`；原 ID 不变，不承诺产物不存在现实指代。
 
 ## 产品边界
@@ -74,7 +74,7 @@ pnpm scripts:check
 
 scripts/contest-forbidden-content.json 是可审阅禁止清单，覆盖预设球队/教练全名、个人站/仓库 URL、模板与审计全局。扫描实际 HTML/JS/JSON/SVG/XML/CSS/TXT/manifest，并禁止 source map；不检查二进制图像文字，不等于绝对合规。需结合截图与素材人工审阅。
 
-## Vercel 配置对照（仅建议，尚未执行）
+## Vercel 配置对照（2026-09-12 已执行）
 
 | 配置 | 现有个人项目 | 新参赛项目 |
 | --- | --- | --- |
@@ -82,12 +82,12 @@ scripts/contest-forbidden-content.json 是可审阅禁止清单，覆盖预设�
 | Output Directory | dist/personal | dist/contest |
 | Install Command | pnpm install --frozen-lockfile | 同左 |
 | Node | 22（本地验收 22.22.2） | 同左 |
-| Production 变量 | 不需要版别变量；不要设审计开关 | CONTEST_SITE_URL=作者最终确认的独立 HTTPS 域名 |
-| Preview 变量 | 同 Production 策略 | 同样必须明确 CONTEST_SITE_URL，可用正式 canonical，绝不沿用个人域名 |
+| Production 变量 | 无项目变量；显式个人构建命令锁定版别 | APP_EDITION=contest、APP_PRESET_ID=three-shores-v1、VITE_ENABLE_AUDIT=false、CONTEST_SITE_URL=https://kurt-football-cup.vercel.app |
+| Preview 变量 | 同 Production 策略 | 上述四变量同时配置到 Preview |
 | 审计开关 | 禁止 true | 禁止 true |
-| 发布来源 | 个人日常分支 | 验收后固定参赛发布分支与 commit |
+| 发布来源 | main，自动 Production 发布 | main，自动 Production 发布 |
 
-不要把两个项目都无约束跟随同一日常分支：参赛验收后固定发布版本，后续个人 push 不应自动覆盖参赛站。项目创建、部署分支、Preview 域名、域名绑定和发布授权由作者后续执行。
+两项目均使用 Automatic Ignored Build Step，并开启 Production 域名自动分配。表内为核心构建命令；实际 Vercel 命令还串联对应 `BUILD_TARGET=personal/contest pnpm editions:check` 和 `BUILD_TARGET=personal/contest pnpm budgets:check`。任一步失败均不得发布新产物。现有命令不等待或运行整套 GitHub browser smoke，因此不要把 Vercel Ready 等同于完整 CI 通过。此前创建的 codex/contest-release 分支保留但不再作为发布源，无需维护或合并它。
 
 ## 本地验证结果（2026-09-12）
 
@@ -99,7 +99,15 @@ scripts/contest-forbidden-content.json 是可审阅禁止清单，覆盖预设�
 - 标准 web-game Playwright client 执行并查看截图；还实际查看了移动直播、球队、设置版别、桌面开场/教练/赛季档案、专属 OG 和共享图片联系表。未新增音乐资源。
 - 缺域名、冲突 APP_EDITION、正式构建开启审计、额外 --mode 参数均以非零状态退出。vercel.json 无差异。
 
-## 尚待确认
+## 腾讯云双站（2026-09-14 已上线）
+
+个人版使用 `https://football.dyp02.vip`，参赛版使用 `https://cup.dyp02.vip`。两版仍取同一份源码，分别构建，独立域名、目录、资源与存储，不支持同源子目录混装。原 Vercel 设置及其 main 自动部署保留；腾讯云当前为手动发布，不随 Git push 自动更新。
+
+新增可选 `PERSONAL_SITE_URL`，默认个人 Vercel 地址不变。腾讯云构建为两版都指定 `PERSONAL_SITE_URL=https://football.dyp02.vip` 和 `CONTEST_SITE_URL=https://cup.dyp02.vip`；正式审计关闭、对应版别命令与产物/预算门禁不变。两地址必须是独立 HTTPS origin，不接受路径、认证、query 或 hash；两版 HTML metadata 与个人 robots/sitemap 均采用配置地址。
+
+上线包以 main/4271635 加尚未提交的域名补丁构建，buildId 显式包含 `local-92e86c85a80b`；本轮没有 commit/push。目录、证书、发布、回滚与真实验收边界见 [腾讯云部署与维护](tencent-cloud-deployment.md)。
+
+## 内容与材料待确认
 
 见 [原创名称与素材审阅](contest-content-review.md)。命名是提案，不宣称已获授权或没有法律风险。不得发布前删掉“待确认”记录来代替审阅。
 
