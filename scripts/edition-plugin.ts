@@ -21,7 +21,6 @@ export function editionPlugin(config: ReturnType<typeof resolveBuildTarget>): Pl
       const siteHtml = html.replaceAll(DEFAULT_PERSONAL_SITE_URL, config.siteUrl);
       if (config.edition !== 'contest') return siteHtml;
       return siteHtml
-        .replaceAll('电子斗蛐蛐', '三岸纪')
         .replace(/<meta name="keywords"[^>]*>/, '')
         .replace(/,\s*"url": "https:\/\/github.com\/KurtDubain"/, '');
     },

@@ -11,6 +11,12 @@ export interface ReleaseNote {
  */
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '4.61.9',
+    date: '2026-09-14',
+    title: '下一季见：足球编年史',
+    items: ['统一游戏品牌、欢迎页、分享图、图标与赛季档案图片。', '从一场球开始，跟一支球队过赛季。原有存档、玩法和双版本身份保持不变。'],
+  },
+  {
     version: '4.61.8',
     date: '2026-09-14',
     title: '站点备案信息展示',

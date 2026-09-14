@@ -1,7 +1,7 @@
-# Football Universe Current Status
+# 下一季见：足球编年史 Current Status
 
-Last reviewed: 2026-09-12
-Current release: v4.61.8 (optional ICP filing display; gameplay baseline v4.61.4)
+Last reviewed: 2026-09-14
+Current release: v4.61.9 (brand update; gameplay baseline v4.61.4; Tencent deployment remains a separate manual release)
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -16,8 +16,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Current Health
 
-- 1,055 unit and component tests across 151 test files.
-- 65,830 production TypeScript lines across 254 production files (identity data is now held in edition-specific JSON).
+- 1,069 unit and component tests across 156 test files (local brand-update validation).
+- More than 65,000 production TypeScript lines across 256 production files (identity data is held in edition-specific JSON).
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.

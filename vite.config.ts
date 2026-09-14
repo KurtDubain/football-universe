@@ -3,6 +3,7 @@ import { defineConfig, loadEnv } from 'vite'
 import { resolveBuildTarget } from './scripts/build-target'
 import { editionPlugin } from './scripts/edition-plugin'
 import { shouldPrecacheUrl } from './src/config/pwa-precache-policy'
+import * as BRAND from './src/config/brand'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -35,6 +36,7 @@ export default defineConfig(({ mode }) => {
   return {
   publicDir: target.edition === 'contest' ? false : 'public',
   define: {
+    __APP_BRAND__: JSON.stringify(BRAND),
     __ICP_FILING_ENABLED__: JSON.stringify(target.enableIcpFiling),
     __APP_BUILD_ID__: JSON.stringify(deploymentId),
     'import.meta.env.VITE_ENABLE_AUDIT': JSON.stringify(String(target.audit)),
@@ -53,10 +55,10 @@ export default defineConfig(({ mode }) => {
       registerType: 'autoUpdate',
       injectRegister: false,
       manifest: {
-        name: '足球联赛宇宙 Football Universe',
+        name: BRAND.fullName,
         id: '/' + target.edition + '/' + target.presetId,
-        short_name: '足球宇宙',
-        description: '观察者视角足球宇宙模拟器：默认32支球队、三级联赛、六项杯赛与跨赛季历史',
+        short_name: BRAND.shortName,
+        description: BRAND.tagline,
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',

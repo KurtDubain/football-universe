@@ -1,7 +1,7 @@
 import { CSSProperties, ReactElement } from 'react';
 
 /**
- * v4.7 — Custom SVG icon set for 足球联赛宇宙.
+ * v4.7 — Custom SVG icon set for 下一季见：足球编年史.
  *
  * Why hand-rolled instead of an icon library:
  *   - Bundle weight: ~40 inline icons we actually use, no tree-shake gymnastics

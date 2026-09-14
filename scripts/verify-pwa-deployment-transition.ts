@@ -138,12 +138,13 @@ async function runTransition(oldRoot: string): Promise<void> {
 
       const savedBeforeUpdate = await page.evaluate(() => localStorage.getItem('football-universe-save'));
       await page.getByRole('button', { name: '打开导航菜单' }).click();
-      await page.getByRole('dialog', { name: '足球联赛宇宙' }).waitFor();
+      const navigationDialog = page.locator('[role="dialog"][aria-labelledby="mobile-navigation-title"]');
+      await navigationDialog.waitFor();
 
       activeRoot = newRoot;
       await page.evaluate(() => window.dispatchEvent(new Event('online')));
       await page.waitForTimeout(2_000);
-      const heldDuringDialog = await page.getByRole('dialog', { name: '足球联赛宇宙' }).isVisible()
+      const heldDuringDialog = await navigationDialog.isVisible()
         && await page.evaluate(() => sessionStorage.getItem('pwa-audit-document-count') === '1');
 
       await page.keyboard.press('Escape');

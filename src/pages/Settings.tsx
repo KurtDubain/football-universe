@@ -593,7 +593,7 @@ function SettingsContent({ world }: { world: GameWorld }) {
 
       {/* Credits */}
       <div className="text-center text-xs text-slate-600 py-4">
-        <p>足球联赛宇宙 · 电子斗蛐蛐模拟器</p>
+        <p>{__APP_BRAND__.fullName}</p>
         <p className="mt-1">v{APP_VERSION} · {EDITION_LABEL} · {PRESET_ID} · by KurtDubain</p>
       </div>
     </PageShell>

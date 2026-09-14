@@ -33,10 +33,10 @@
     "language": "语言"
   },
   "welcome": {
-    "title": "足球联赛宇宙",
-    "subtitle": "Football Universe — 电子斗蛐蛐模拟器",
-    "tagline_zh": "你不操控比赛 — 你看整个足球世界自动演化。",
-    "tagline_en": "No controls. No tactics. Just fate.",
+    "title": "下一季见：足球编年史",
+    "subtitle": "从一场球开始，跟一支球队过赛季。",
+    "tagline_zh": "从一场球开始，跟一支球队过赛季。",
+    "tagline_en": "Start with a match. Follow a club through the seasons.",
     "start_button": "开始新游戏",
     "starting": "正在构建宇宙...",
     "custom_teams": "自定义球队",

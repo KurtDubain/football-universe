@@ -38,7 +38,7 @@ describe('AppErrorBoundary', () => {
       </AppErrorBoundary>,
     ));
 
-    expect(container.textContent).toContain('足球宇宙暂时无法继续');
+    expect(container.textContent).toContain('下一季见暂时无法继续');
     expect(container.textContent).toContain('route chunk failed');
 
     const buttons = [...container.querySelectorAll('button')];

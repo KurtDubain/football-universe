@@ -43,7 +43,7 @@ describe('Welcome initialization recovery', () => {
     });
 
     expect(container.querySelector('[data-art-direction]')?.getAttribute('data-art-direction')).toBe('football-annual');
-    expect(container.querySelector('h1')?.textContent).toBe('足球联赛宇宙');
+    expect(container.querySelector('h1')?.textContent).toBe('下一季见');
     expect(container.querySelector('[data-testid="welcome-universe-art"]')?.getAttribute('src')).toContain('welcome-annual-v2');
   });
 

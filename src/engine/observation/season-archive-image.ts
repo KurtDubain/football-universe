@@ -119,7 +119,7 @@ export async function downloadSeasonArchiveImage(
 
   context.fillStyle = '#34d399';
   context.font = `600 28px ${FONT}`;
-  context.fillText(`FOOTBALL UNIVERSE · S${input.seasonNumber}`, PADDING, 144);
+  context.fillText(`${__APP_BRAND__.fullName} · S${input.seasonNumber}`, PADDING, 144);
   context.fillStyle = '#f8fafc';
   context.font = `800 64px ${FONT}`;
   let y = drawWrappedText(context, input.teamName, PADDING, 238, WIDTH - PADDING * 2, 78, 2);

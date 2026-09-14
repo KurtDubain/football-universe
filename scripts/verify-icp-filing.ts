@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const enabled = process.env.EXPECT_ICP !== 'false';
-const output = `output/playwright/icp-${enabled ? 'enabled' : 'disabled'}`;
+const output = process.env.VERIFY_OUTPUT_DIR ?? `output/playwright/icp-${enabled ? 'enabled' : 'disabled'}`;
 mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const report: unknown[] = [];

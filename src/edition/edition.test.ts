@@ -57,7 +57,7 @@ describe('edition boundary', () => {
   });
 
   it('uses the selected origin for both HTML metadata targets without altering edition wording', () => {
-    const html = '<meta property="og:image" content="https://football-universe-ebon.vercel.app/og-image.png"><link rel="canonical" href="https://football-universe-ebon.vercel.app/"><title>电子斗蛐蛐</title>';
+    const html = '<meta property="og:image" content="https://football-universe-ebon.vercel.app/og-image.png"><link rel="canonical" href="https://football-universe-ebon.vercel.app/"><title>下一季见：足球编年史</title>';
     const env = { PERSONAL_SITE_URL: 'https://football.dyp02.vip', CONTEST_SITE_URL: 'https://cup.dyp02.vip' };
     for (const mode of ['personal', 'contest']) {
       const config = resolveBuildTarget(mode, env);
@@ -67,7 +67,7 @@ describe('edition boundary', () => {
       expect(transformed).toContain(config.siteUrl + '/og-image.png');
       expect(transformed).toContain(config.siteUrl + '/');
       expect(transformed).not.toContain('football-universe-ebon.vercel.app');
-      expect(transformed).toContain(mode === 'contest' ? '三岸纪' : '电子斗蛐蛐');
+      expect(transformed).toContain('<title>下一季见：足球编年史</title>');
     }
   });
 

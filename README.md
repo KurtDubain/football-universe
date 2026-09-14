@@ -1,9 +1,11 @@
 <p align="center">
-  <img src="public/favicon.svg" width="80" alt="Football Universe"/>
+  <img src="public/favicon.svg" width="80" alt="下一季见：足球编年史"/>
 </p>
 
-<h1 align="center">足球联赛宇宙 ⚽</h1>
-<h3 align="center">Football Universe Simulator</h3>
+<h1 align="center">下一季见：足球编年史</h1>
+<h3 align="center">从一场球开始，跟一支球队过赛季。</h3>
+
+品牌更名的本地验收与技术身份保留范围见 [品牌说明](docs/brand-rename.md)。下方旧版本截图作为历史演示保留，不代表新品牌最终参赛素材。
 
 个人版与参赛版使用独立构建和存档命名空间，命令、资源边界与本地验收说明见 [双版本构建](docs/build-editions.md)。参赛名称尚待作者审阅，未部署。
 
@@ -201,7 +203,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.61.8**
+Current release: **v4.61.9** (brand update; Tencent deployment is a separate manual release)
 
 65k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
 

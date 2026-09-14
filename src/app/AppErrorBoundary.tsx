@@ -63,7 +63,7 @@ export default class AppErrorBoundary extends Component<AppErrorBoundaryProps, A
           className="w-full max-w-lg rounded-lg border border-red-900/70 bg-[var(--surface-panel)] p-5 shadow-xl sm:p-6"
         >
           <p className="text-xs font-semibold text-red-400">运行恢复</p>
-          <h1 id="app-error-title" className="mt-2 text-xl font-bold">足球宇宙暂时无法继续</h1>
+          <h1 id="app-error-title" className="mt-2 text-xl font-bold">下一季见暂时无法继续</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
             页面资源或存档状态出现异常。你可以重新加载、返回主页，或在问题持续时清除当前存档。
           </p>

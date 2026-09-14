@@ -262,7 +262,7 @@ async function verifyNavigation(page: Page, ids: { teamId: string; playerId: str
   await page.goto(`${baseUrl}/team/${ids.teamId}?audit=1`, { waitUntil: 'networkidle' });
   const menuButton = page.getByRole('button', { name: '打开导航菜单' });
   await menuButton.click();
-  const drawer = page.getByRole('dialog', { name: '足球联赛宇宙' });
+  const drawer = page.getByRole('dialog', { name: '下一季见' });
   const drawerTargets = await drawer.locator('a,button').evaluateAll(elements => elements.map((element) => {
     const rect = element.getBoundingClientRect();
     return { width: rect.width, height: rect.height };
@@ -344,7 +344,7 @@ async function verifyWelcome(browser: Awaited<ReturnType<typeof chromium.launch>
   const page = await context.newPage();
   try {
     await page.goto(`${baseUrl}/?fresh=1`, { waitUntil: 'networkidle' });
-    const welcomeVisible = await page.getByRole('heading', { name: '足球联赛宇宙' }).isVisible();
+    const welcomeVisible = await page.getByRole('heading', { name: '下一季见', exact: true }).isVisible();
     const controlsSized = await page.locator('button,a').evaluateAll(elements => elements
       .filter(element => {
         const rect = element.getBoundingClientRect();
@@ -367,7 +367,7 @@ async function verifyErrorBoundary(browser: Awaited<ReturnType<typeof chromium.l
   const page = await context.newPage();
   try {
     await page.goto(`${baseUrl}/?auditError=1`, { waitUntil: 'networkidle' });
-    const recoveryVisible = await page.getByRole('heading', { name: '足球宇宙暂时无法继续' }).isVisible();
+    const recoveryVisible = await page.getByRole('heading', { name: '下一季见暂时无法继续' }).isVisible();
     const controlsSized = await page.locator('button,summary').evaluateAll(elements => elements
       .filter(element => {
         const rect = element.getBoundingClientRect();

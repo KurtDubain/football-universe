@@ -33,10 +33,10 @@
     "language": "Language"
   },
   "welcome": {
-    "title": "Football Universe",
+    "title": "下一季见：足球编年史",
     "subtitle": "An observer-style football league simulator",
-    "tagline_zh": "你不操控比赛 — 你看整个足球世界自动演化。",
-    "tagline_en": "No controls. No tactics. Just fate.",
+    "tagline_zh": "从一场球开始，跟一支球队过赛季。",
+    "tagline_en": "Start with a match. Follow a club through the seasons.",
     "start_button": "Start New Game",
     "starting": "Building universe...",
     "custom_teams": "Custom Teams",

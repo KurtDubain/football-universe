@@ -4,14 +4,15 @@ import assert from 'node:assert/strict';
 import LZString from 'lz-string';
 import forbidden from './contest-forbidden-content.json';
 
-const output = 'output/playwright/editions';
+const output = process.env.VERIFY_OUTPUT_DIR ?? 'output/playwright/editions';
+const verifyBrand = process.env.VERIFY_BRAND === 'true';
 mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const report: unknown[] = [];
 let personalRaw: string | null = null;
 let personalTemplate = '';
 try {
-  for (const edition of ['personal', 'contest']) for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+  for (const edition of ['personal', 'contest']) for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }, ...(verifyBrand ? [{ width: 320, height: 568 }] : [])]) {
     const url = edition === 'contest' ? process.env.CONTEST_PREVIEW_URL ?? 'http://127.0.0.1:4185' : process.env.PERSONAL_PREVIEW_URL ?? 'http://127.0.0.1:4186';
     const context = await browser.newContext({ viewport });
     if (edition === 'contest') {
@@ -38,6 +39,10 @@ try {
     };
     await page.goto(url + '/?audit=1', { waitUntil: 'networkidle' });
     await check('welcome');
+    if (verifyBrand) {
+      assert.equal(await page.title(), '下一季见：足球编年史');
+      assert.equal(await page.locator('h1').innerText(), '下一季见');
+    }
     await page.getByRole('tab', { name: '自选宇宙', exact: true }).click();
     await page.getByRole('button', { name: '规则与种子' }).click();
     const sandbox = await page.getByRole('button', { name: /沙盒模式/ }).innerText();
@@ -50,6 +55,12 @@ try {
     await page.getByTestId('start-observation').click();
     await page.getByTestId('dashboard').waitFor();
     await check('opening');
+    if (verifyBrand && viewport.width < 640) {
+      await page.getByRole('button', { name: '打开导航菜单' }).click();
+      await page.getByRole('dialog', { name: '下一季见', exact: true }).waitFor();
+      await check('drawer');
+      await page.getByRole('button', { name: '关闭导航菜单' }).click();
+    }
     await page.getByRole('button', { name: /做出本轮观察判断/ }).click();
     await page.getByTestId('observation-panel').getByRole('tab', { name: '总进球' }).click();
     await page.getByTestId('observation-panel').getByRole('button', { name: '3+ 球' }).click();
@@ -72,6 +83,11 @@ try {
     await page.getByRole('tab', { name: 'S1档案', exact: true }).waitFor({ timeout: 90000 });
     await page.getByRole('tab', { name: 'S1档案', exact: true }).click();
     await check('archive');
+    if (verifyBrand) {
+      const download = page.waitForEvent('download');
+      await page.getByRole('button', { name: '保存档案图', exact: true }).click();
+      await (await download).saveAs(`${output}/${prefix}-archive-export.png`);
+    }
     await page.getByTestId('season-handoff-transfer').click();
     await page.getByRole('button', { name: '全自动剩余', exact: true }).click();
     await page.getByTestId('dashboard').waitFor();

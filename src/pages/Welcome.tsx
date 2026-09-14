@@ -94,7 +94,7 @@ export default function Welcome() {
           <div className="flex min-w-0 items-center gap-3">
             <Logo size={44} />
             <div className="min-w-0">
-              <p className="welcome-masthead-label">FOOTBALL UNIVERSE</p>
+              <p className="welcome-masthead-label">{__APP_BRAND__.shortName}</p>
               <p className="welcome-masthead-subtitle">赛季观察档案</p>
             </div>
           </div>
@@ -111,14 +111,14 @@ export default function Welcome() {
               上帝视角 · 长期演化
             </div>
             <div>
-              <h1 className="welcome-title max-w-xl text-3xl font-black leading-none text-[#f3efe2] sm:text-5xl" title="足球联赛宇宙">
-                足球联赛宇宙
+              <h1 className="welcome-title max-w-xl text-3xl font-black leading-none text-[#f3efe2] sm:text-5xl" title={__APP_BRAND__.fullName}>
+                {__APP_BRAND__.shortName}
               </h1>
               <h2 className="welcome-tagline mt-3 max-w-xl text-xl font-bold leading-tight text-slate-100 sm:text-2xl">
-                不执教一支球队，见证整个足球世界。
+                {__APP_BRAND__.subtitle}
               </h2>
               <p className="welcome-intro mt-3 max-w-lg text-sm leading-relaxed text-slate-300">
-                选择一条关注线索，做出赛前判断，然后让球队、球员与王朝在同一种子下自然演化。
+                {__APP_BRAND__.tagline}
               </p>
             </div>
             <div className="welcome-fact-rail hidden grid-cols-3 gap-3 pt-4 text-xs lg:grid">

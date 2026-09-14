@@ -579,7 +579,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-2">
             <Logo size={30} />
             <div>
-              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-none">足球联赛宇宙</h1>
+              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-none">{__APP_BRAND__.shortName}</h1>
               <p className="ui-eyebrow mt-1 text-[9px] text-[var(--competition-gold)]">SEASON ARCHIVE</p>
             </div>
           </div>
@@ -596,7 +596,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="p-3 border-b border-slate-700/60 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Logo size={28} />
-            <span id="mobile-navigation-title" className="text-sm font-bold text-slate-100">足球联赛宇宙</span>
+            <span id="mobile-navigation-title" className="text-sm font-bold text-slate-100">{__APP_BRAND__.shortName}</span>
           </div>
           <button
             onClick={() => setMobileNavOpen(false)}
