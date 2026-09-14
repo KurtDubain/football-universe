@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import Logo from '../components/Logo';
 import { Icon, type IconName } from '../components/Icon';
-import { SegmentedControl } from '../components/ui';
+import { IcpFiling, SegmentedControl } from '../components/ui';
 import { APP_VERSION } from '../version';
 import { defaultTeams } from '../config/teams';
 import { GAME_MODES, type GameMode } from '../types/game-mode';
@@ -283,6 +283,7 @@ export default function Welcome() {
           <span>纯前端 · 离线可玩 · 同种子同宇宙</span>
           {preset.repositoryUrl ? <a href={preset.repositoryUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-slate-500 sm:min-h-0">GitHub</a> : <a href="/LICENSE.txt">开源许可</a>}
         </footer>
+        <IcpFiling />
       </main>
     </div>
   );

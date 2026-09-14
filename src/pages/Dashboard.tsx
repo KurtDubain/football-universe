@@ -38,7 +38,7 @@ import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
 import { describeDashboardAction } from '../engine/observation/dashboard-action';
 import { describeTransferWindowHandoff } from '../engine/transfers/transfer-window-summary';
-import { SegmentedControl } from '../components/ui';
+import { IcpFiling, SegmentedControl } from '../components/ui';
 import { WorldMomentFeature } from '../components/WorldMomentFeature';
 import { worldMomentKindForNews } from '../components/world-moment';
 import { playUiFeedback } from '../feedback/game-feedback';
@@ -514,6 +514,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
             />
           </>
         )}
+        <IcpFiling />
       </div>
 
       {/* ═══════ Live Match View ═══════ */}

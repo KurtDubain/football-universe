@@ -108,6 +108,17 @@ interface SegmentedControlProps<T extends string> {
   scrollable?: boolean;
 }
 
+export function IcpFiling() {
+  if (typeof __ICP_FILING_ENABLED__ === 'undefined' || !__ICP_FILING_ENABLED__) return null;
+  return (
+    <div data-testid="icp-filing" data-floating-advance-obstacle className="shrink-0 px-3 py-3 text-center text-[12px] font-normal text-slate-500">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center whitespace-nowrap">
+        冀ICP备2023028175号-1
+      </a>
+    </div>
+  );
+}
+
 export function SegmentedControl<T extends string>({
   value,
   options,

@@ -1,5 +1,20 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-14 v4.61.8 Git Release Authorization
+
+- User authorized committing and pushing the optional ICP display and existing local origin/deployment work. Updated package/app version, both changelogs and current release docs to v4.61.8. Earlier local-only notes describe implementation-time boundaries.
+- No manual deployment or infrastructure changes. Existing Vercel main integrations may rebuild automatically with ICP still disabled; Tencent sites require a separately authorized rebuild with ENABLE_ICP_FILING=true and their configured origins.
+
+## 2026-09-14 Optional ICP Filing Display (Local Only)
+
+- Baseline e535b49 / v4.61.7, clean worktree. Added only the author-confirmed filing link 冀ICP备2023028175号-1 to https://beian.miit.gov.cn/. Shared IcpFiling in the existing ui module renders on Welcome and at the end of Dashboard's inner tab scroll container, independently of the short-screen welcome-footer rule. No fixed/sticky placement, icon, badge, animation, or compliance claim.
+- ENABLE_ICP_FILING defaults off; true requires the corresponding personal football.dyp02.vip or contest cup.dyp02.vip HTTPS origin. Wrong origins and invalid flag values fail. Existing Vercel configuration remains unchanged. Build manifest records the flag; no runtime edition switch or save field added.
+- Visual QA caught that placement after Layout's children squeezed the nested Dashboard scroll area; moved into the actual tab content. A separate component chunk also exceeded 86 precache entries, so the component lives in the already-shared ui module without loosening budgets.
+- Focused 10 tests, typecheck, lint, docs and script checks passed. Enabled builds/edition scans/budgets passed: personal 86 precache entries / 2,096,668 B / 159,370 B initial JS gzip; contest 84 / 1,915,112 B / 158,940 B. No new images, audio or dependencies.
+- Enabled production browser verification passed both editions at 320x568, 390x844, 1280x720 across welcome and refreshed saved home (12 states). Checked exact link, computed font, hit testing, inner scroll placement, page/container overflow and zero application console errors/warnings. Opened all footer screenshots for visual inspection; standard Web Game client also ran (external Node runner emits its existing module-type warning). This is desktop Chromium viewport simulation, not real-device or server deployment acceptance.
+- Reports/screenshots: output/playwright/icp-enabled and icp-disabled. Rebuild parameters and repeatable browser command: docs/tencent-cloud-deployment.md. No commit/push/deployment, blog/DNS/Nginx/certificate changes, game rules, RNG, schema or edition content changes.
+- Final default-off rebuilds also passed both edition/budget gates and all 12 browser states with no ICP DOM elements. Current dist/personal and dist/contest are those default-off verification builds, not Tencent upload packages; rebuild with the documented flag/origins after deployment authorization. Local preview servers stopped.
+
 ## 2026-09-14 Tencent Static Deployment
 
 - User authorized deploying both editions to the existing Tencent server after read-only assessment. Added football/cup A records to the existing dyp02.vip zone without changing www; HTTPS sites are https://football.dyp02.vip and https://cup.dyp02.vip. No purchases, blog database/container changes, new Node services, occupied-port reuse, Git commit/push, or Vercel configuration changes.

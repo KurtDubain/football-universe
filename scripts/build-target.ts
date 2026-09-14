@@ -28,5 +28,11 @@ export function resolveBuildTarget(mode: string, env: Record<string, string | un
     if (!contestSiteUrl) throw new Error('CONTEST_SITE_URL is required');
     siteUrl = contestSiteUrl;
   }
-  return { target: target as BuildTarget, edition, presetId, audit, siteUrl, outDir: 'dist/' + target };
+  if (env.ENABLE_ICP_FILING !== undefined && !['true', 'false'].includes(env.ENABLE_ICP_FILING)) {
+    throw new Error('ENABLE_ICP_FILING must be true or false');
+  }
+  const enableIcpFiling = env.ENABLE_ICP_FILING === 'true';
+  const filingOrigin = edition === 'contest' ? 'https://cup.dyp02.vip' : 'https://football.dyp02.vip';
+  if (enableIcpFiling && siteUrl !== filingOrigin) throw new Error('ICP filing is only configured for the corresponding dyp02.vip site');
+  return { target: target as BuildTarget, edition, presetId, audit, siteUrl, enableIcpFiling, outDir: 'dist/' + target };
 }

@@ -50,6 +50,27 @@ contest.tar.gz   e1132b8bf0152fbd420ca550ad3298e2b826f80383e157a37fa5323046502dc
 
 ## 以后怎么更新
 
+### ICP 备案展示（本地实现，待部署确认）
+
+仅在腾讯云两版构建时增加 `ENABLE_ICP_FILING=true`。默认未设置或 `false` 不显示任何备案元素，Vercel 不需要新增变量。开启时校验版别对应的 HTTPS origin，个人必须为 `https://football.dyp02.vip`，参赛必须为 `https://cup.dyp02.vip`；其它地址报错，不能用此开关切换版别。
+
+```sh
+export PERSONAL_SITE_URL=https://football.dyp02.vip
+export CONTEST_SITE_URL=https://cup.dyp02.vip
+export ENABLE_ICP_FILING=true
+export VITE_ENABLE_AUDIT=false
+APP_EDITION=personal APP_PRESET_ID=personal-v1 pnpm build:personal
+BUILD_TARGET=personal pnpm editions:check
+BUILD_TARGET=personal pnpm budgets:check
+APP_EDITION=contest APP_PRESET_ID=three-shores-v1 pnpm build:contest
+BUILD_TARGET=contest pnpm editions:check
+BUILD_TARGET=contest pnpm budgets:check
+```
+
+共用组件只显示 `冀ICP备2023028175号-1`，链接至 `https://beian.miit.gov.cn/`，位于欢迎页与存档首页的正常滚动内容底部。构建清单 `enableIcpFiling` 可核对是否开启。未改存档和模拟逻辑；备案状态由作者核实，不附加认证或合规承诺。
+
+本地启动两版生产预览（4186/4185）后，运行 `pnpm exec tsx scripts/verify-icp-filing.ts`；默认关闭包用 `EXPECT_ICP=false pnpm exec tsx scripts/verify-icp-filing.ts`。检查两版三个视口的链接、样式、恢复存档、遮挡和横向溢出，并保存截图到 `output/playwright/icp-enabled` 或 `icp-disabled`。此项仅完成本地实现不代表线上已展示，重建上传需另行确认。
+
 先由作者确认并提交本次域名补丁；不要直接从未包含补丁的旧 main 重建，也不要把脏工作区冒充某个提交。以下供下次更新使用，本次没有执行任何 Git 发布。
 
 在本机项目目录，用 Node 22、pnpm 10，串行构建两版；失败就停止：

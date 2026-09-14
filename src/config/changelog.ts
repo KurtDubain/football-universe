@@ -11,6 +11,12 @@ export interface ReleaseNote {
  */
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '4.61.8',
+    date: '2026-09-14',
+    title: '站点备案信息展示',
+    items: ['对应站点可在欢迎页与首页底部显示备案链接，随页面滚动，不遮挡主要操作。', '默认构建保持原样；比赛规则、存档和版别隔离不变。'],
+  },
+  {
     version: '4.61.7',
     date: '2026-09-12',
     title: '离线缓存与构建一致性修复',

@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
   return {
   publicDir: target.edition === 'contest' ? false : 'public',
   define: {
+    __ICP_FILING_ENABLED__: JSON.stringify(target.enableIcpFiling),
     __APP_BUILD_ID__: JSON.stringify(deploymentId),
     'import.meta.env.VITE_ENABLE_AUDIT': JSON.stringify(String(target.audit)),
   },

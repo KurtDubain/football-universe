@@ -9,6 +9,17 @@ import { editionPlugin } from '../../scripts/edition-plugin';
 afterEach(() => { vi.doUnmock('./preset'); vi.doUnmock('./coach-names'); vi.resetModules(); });
 
 describe('edition boundary', () => {
+  it('defaults ICP off and only enables it for the corresponding Tencent site', () => {
+    expect(resolveBuildTarget('personal', {}).enableIcpFiling).toBe(false);
+    const env = { PERSONAL_SITE_URL: 'https://football.dyp02.vip', CONTEST_SITE_URL: 'https://cup.dyp02.vip' };
+    for (const target of ['personal', 'contest']) {
+      expect(resolveBuildTarget(target, env).enableIcpFiling).toBe(false);
+      expect(resolveBuildTarget(target, { ...env, ENABLE_ICP_FILING: 'true' }).enableIcpFiling).toBe(true);
+      expect(() => resolveBuildTarget(target, { ...env, ENABLE_ICP_FILING: 'yes' })).toThrow();
+    }
+    expect(() => resolveBuildTarget('personal', { ENABLE_ICP_FILING: 'true' })).toThrow('ICP');
+    expect(() => resolveBuildTarget('contest', { CONTEST_SITE_URL: 'https://kurt-football-cup.vercel.app', ENABLE_ICP_FILING: 'true' })).toThrow('ICP');
+  });
   it('uses edition-specific sandbox instructions without changing mode mechanics', async () => {
     const personalModes = await import('../types/game-mode');
     expect(personalModes.getGameModeConfig('sandbox').description).toContain('球队编辑器');

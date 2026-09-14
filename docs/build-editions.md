@@ -1,5 +1,7 @@
 # 双版本构建与独立验收
 
+当前源码发布版本：v4.61.8，增加默认关闭的 ICP 备案展示。以下部署状态为此前验收记录，不代表本次已部署；腾讯云启用参数见 [部署文档](tencent-cloud-deployment.md)。
+
 当前发布：v4.61.7。2026-09-12 用户明确选择并授权“双 Vercel 项目、同仓库同 main、不同构建命令与输出目录、自动更新各自 Production 域名”。现已部署：个人站 https://kurt-football.vercel.app ，参赛站 https://kurt-football-cup.vercel.app 。不要求固定参赛分支或冻结更新。Linux CI build job 已通过，但独立 browser-audit 仍失败；作者内容确认仍待完成。以下较早版本数字为历史验证记录，最新云端交接见 output/vercel-deployment-handoff-2026-09-12.md。
 
 历史实施状态：当时实现完成，待独立 review 与作者内容确认；用户随后授权 Git 发布 v4.61.6，当时尚未部署或修改 Vercel。下方早期本地完整验收记录来自升级版本号前的 v4.61.5 实现；当前发布状态以上段为准。
