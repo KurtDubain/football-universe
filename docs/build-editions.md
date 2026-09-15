@@ -1,10 +1,10 @@
 # 双版本构建与独立验收
 
-品牌更名版本：v4.61.9《下一季见：足球编年史》，已获 Git 提交与推送授权，腾讯云部署另行进行。见 [品牌验收](brand-rename.md)。下方 v4.61.8 及更早记录描述当时的发布状态。
+当前本地候选：v4.61.10，冠军荣誉归档及公开文案收尾，未提交、推送或部署。腾讯云已确认发布 v4.61.9 / f0b2d63：个人版 https://football.dyp02.vip/ ，参赛版 https://cup.dyp02.vip/ 。见 [品牌验收](brand-rename.md) 与 [部署记录](tencent-cloud-deployment.md)。下方 v4.61.8 及更早记录描述当时的发布状态，不代表当前仍未部署。
 
-当前源码发布版本：v4.61.8，增加默认关闭的 ICP 备案展示。以下部署状态为此前验收记录，不代表本次已部署；腾讯云启用参数见 [部署文档](tencent-cloud-deployment.md)。
+历史源码发布版本：v4.61.8，增加默认关闭的 ICP 备案展示；腾讯云启用参数见 [部署文档](tencent-cloud-deployment.md)。
 
-当前发布：v4.61.7。2026-09-12 用户明确选择并授权“双 Vercel 项目、同仓库同 main、不同构建命令与输出目录、自动更新各自 Production 域名”。现已部署：个人站 https://kurt-football.vercel.app ，参赛站 https://kurt-football-cup.vercel.app 。不要求固定参赛分支或冻结更新。Linux CI build job 已通过，但独立 browser-audit 仍失败；作者内容确认仍待完成。以下较早版本数字为历史验证记录，最新云端交接见 output/vercel-deployment-handoff-2026-09-12.md。
+2026-09-12 历史发布：v4.61.7。当时用户明确选择并授权“双 Vercel 项目、同仓库同 main、不同构建命令与输出目录、自动更新各自 Production 域名”。当时已部署：个人站 https://kurt-football.vercel.app ，参赛站 https://kurt-football-cup.vercel.app 。不要求固定参赛分支或冻结更新。Linux CI build job 已通过，但独立 browser-audit 仍失败；作者内容确认仍待完成。该阶段云端交接见 output/vercel-deployment-handoff-2026-09-12.md。
 
 历史实施状态：当时实现完成，待独立 review 与作者内容确认；用户随后授权 Git 发布 v4.61.6，当时尚未部署或修改 Vercel。下方早期本地完整验收记录来自升级版本号前的 v4.61.5 实现；当前发布状态以上段为准。
 
@@ -15,7 +15,7 @@
 - 本地 macOS 三套构建、版别检查与预算通过。personal：86 项 / 2,096,330 B，contest：84 项 / 1,914,774 B，audit：86 项 / 2,097,274 B。初始 JS gzip 分别为 159,155 / 158,725 / 159,403 B。构建 ID 使用本地版本号；云端提交 SHA 会产生少量字节差异，必须重新检查。
 - Linux 状态后续更新：GitHub CI #134（run 34676771238，提交 4271635）的 build job 已通过三版构建/检查/预算及 Linux 正式版/PWA 验证；browser-audit 的完整 smoke 失败，具体 Linux 子脚本日志需登录获取。本地同 SHA 原样 smoke 首个失败是 audit:advance-performance，不能直接当作已证实的 Linux 根因。
 - 参赛域名 `https://kurt-football-cup.vercel.app` 已在 2026-09-12 正式部署。按用户最新选择，两个项目都跟随 main，使用各自构建命令、输出目录和项目变量；保留版别与预算门禁，不另设冻结分支策略。
-- 参赛命名确认、OG 待审阅标识与公开 slug 方案见 `contest-content-review.md`；原 ID 不变，不承诺产物不存在现实指代。
+- 参赛命名人工确认与公开 slug 方案见 `contest-content-review.md`；公开 OG 使用中性版别标签，内部审阅待办保留。原 ID 不变，不承诺产物不存在现实指代。
 
 ## 产品边界
 

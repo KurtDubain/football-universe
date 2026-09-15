@@ -42,18 +42,17 @@ export function generateTeamTrophies(
   leagueCupWinnerId: string,
   superCupWinnerId: string,
   worldCupWinnerId: string | undefined,
-  teamLeagueLevel: 1 | 2 | 3,
 ): Trophy[] {
   const trophies: Trophy[] = [];
 
-  // League championship (only the league the team participates in)
-  if (teamLeagueLevel === 1 && teamId === league1ChampionId) {
+  // Winners belong to the completed season; current levels may already reflect promotion.
+  if (teamId === league1ChampionId) {
     trophies.push({ type: 'league1', seasonNumber });
   }
-  if (teamLeagueLevel === 2 && teamId === league2ChampionId) {
+  if (teamId === league2ChampionId) {
     trophies.push({ type: 'league2', seasonNumber });
   }
-  if (teamLeagueLevel === 3 && teamId === league3ChampionId) {
+  if (teamId === league3ChampionId) {
     trophies.push({ type: 'league3', seasonNumber });
   }
 

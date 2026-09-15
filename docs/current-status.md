@@ -1,7 +1,7 @@
 # 下一季见：足球编年史 Current Status
 
-Last reviewed: 2026-09-14
-Current release: v4.61.9 (brand update; gameplay baseline v4.61.4; Tencent deployment remains a separate manual release)
+Last reviewed: 2026-09-15
+Current release: v4.61.10, deployed to Tencent on 2026-09-15 11:24 Asia/Shanghai at https://football.dyp02.vip/ and https://cup.dyp02.vip/. Build source: main/f0b2d63 plus the explicitly captured local snapshot 80c7a776 (not a clean-commit build). No Git commit/push this turn; see [deployment provenance and acceptance](tencent-cloud-deployment.md).
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -12,12 +12,12 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - Match results, standings, player statistics, transfers, injuries, awards, and history come from one authoritative deterministic simulation.
 - Narrative, animation, audio, and imagery explain or present simulation facts; they never rewrite outcomes.
 - The project remains a pure-frontend, offline-capable PWA with current-schema saves and bounded long-term history.
-- Real club names remain the personal default. An independent contest build uses the proposed Three Shores preset; author review and independent local acceptance are pending. See [build isolation](build-editions.md) and [content review](contest-content-review.md). Git publication was subsequently authorized for v4.61.6; no deployment or Vercel configuration change is included.
+- Real club names remain the personal default. The deployed contest build uses the Three Shores preset; local and Tencent edition isolation are verified, while human content review remains pending. See [build isolation](build-editions.md) and [content review](contest-content-review.md). The author separately authorized Tencent deployment of the v4.61.10 local snapshot, not Git publication; Vercel was untouched.
 
 ## Current Health
 
-- 1,069 unit and component tests across 156 test files (local brand-update validation).
-- More than 65,000 production TypeScript lines across 256 production files (identity data is held in edition-specific JSON).
+- 1,084 unit and component tests across 157 test files passed for the v4.61.10 release snapshot. An independent five-season baseline comparison matched all 100 numerical/state checks; both live editions passed three-viewport UI flows, static/TLS checks and old-save honor persistence through normal advancement and reload.
+- More than 65,000 production TypeScript lines across 257 production files (identity data is held in edition-specific JSON).
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.

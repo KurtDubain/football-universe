@@ -11,6 +11,12 @@ export interface ReleaseNote {
  */
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '4.61.10',
+    date: '2026-09-15',
+    title: '冠军荣誉归档修复',
+    items: ['修复甲级、乙级冠军升级后的奖杯漏记，统一冠军教练与退休履历荣誉。', '读取旧档时依据可信历史补齐缺失的联赛荣誉；证据不足的教练不猜测归属。分享图使用中性标签。'],
+  },
+  {
     version: '4.61.9',
     date: '2026-09-14',
     title: '下一季见：足球编年史',

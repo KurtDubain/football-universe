@@ -2,6 +2,7 @@ import { preset } from '../edition/preset';
 import { EDITION, PRESET_ID } from '../edition/policy';
 import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
 import type { GameWorld } from '../engine/season/season-manager';
+import { repairLeagueHonors } from '../engine/honors/repair-league-honors';
 import { parseCustomTeams } from '../engine/validation/custom-teams';
 import { isNeutralVenueFixture } from '../engine/competitions/venue-policy';
 import {
@@ -898,7 +899,7 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
   }
 
   normalizeLegacyTeamPresentation(world);
-  return world as unknown as GameWorld;
+  return repairLeagueHonors(world as unknown as GameWorld);
 }
 
 function parseCurrentSaveJSON(text: string): unknown {

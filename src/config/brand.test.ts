@@ -18,4 +18,8 @@ it('keeps the formal brand consistent across static metadata and locales', () =>
     expect(svg).not.toMatch(/足球联赛宇宙|Football Universe/);
   }
   expect(readFileSync('src/edition/contest/og-image.svg', 'utf8')).toContain('三岸纪');
+  expect(readFileSync('src/edition/contest/og-image.svg', 'utf8')).toContain('三岸纪 · 参赛世界');
+  expect(readFileSync('src/edition/contest/og-image.svg', 'utf8')).not.toContain('待审阅');
+  expect(readFileSync('public/og-image.svg', 'utf8')).toContain('赛季观察档案');
+  expect(readFileSync('public/og-image.svg', 'utf8')).not.toContain('vercel.app');
 });

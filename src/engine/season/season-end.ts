@@ -181,7 +181,6 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   const teamTrophies = { ...world.teamTrophies };
   const coachTrophies = { ...world.coachTrophies };
   for (const teamId of getAllTeamIds(teamStates)) {
-    const teamState = teamStates[teamId];
     const trophies = generateTeamTrophies(
       teamId,
       seasonNumber,
@@ -191,7 +190,6 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       leagueCupWinner,
       superCupWinner,
       worldCupWinner,
-      teamState.leagueLevel,
     );
     // Continental cup trophies (Phase C) — attributed alongside league /
     // domestic trophies. Each cup type has its own Trophy['type'] so the
@@ -502,7 +500,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // coachStates / coachBases / coachCareers / coachCandidatePool /
   // nextCoachIdCounter / coachRetirementHistory.
   const coachRetResult = processCoachRetirements(
-    { ...world, coachCandidatePool, nextCoachIdCounter },
+    { ...world, coachCareers, coachTrophies, coachCandidatePool, nextCoachIdCounter },
     rng,
   );
   if (coachRetResult.retirements.length > 0) {
@@ -966,9 +964,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       superCupResult,
       worldCupResult,
       continentalCupResult,
-      // Coach is derived from LOCAL coachStates so any earlier season-end
-      // logic that swapped the coach for this team is reflected here.
-      coachId: getTeamCoachId(coachStates, teamId) ?? '',
+      // Archive the title-awarding coach, before season-end retirements/replacements.
+      coachId: getTeamCoachId(world.coachStates, teamId) ?? '',
       teamOverall: world.teamBases[teamId]?.overall ?? 0,
       promoted: teamState.leagueLevel < foundLevel,
       relegated: teamState.leagueLevel > foundLevel,

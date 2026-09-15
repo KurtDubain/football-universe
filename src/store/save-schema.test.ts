@@ -76,6 +76,27 @@ beforeEach(() => {
 });
 
 describe('current schema hydration boundary', () => {
+  it('repairs retained league titles on load without changing results or duplicating awards', () => {
+    const save = makeSave();
+    const world = save.state.world;
+    const teamId = Object.keys(world.teamBases)[0];
+    const coachId = Object.keys(world.coachStates).find(id => world.coachStates[id].currentTeamId === teamId)!;
+    world.teamSeasonRecords[teamId] = [{ seasonNumber: 1, leagueLevel: 2, leaguePosition: 1,
+      leaguePlayed: 14, leagueWon: 10, leagueDrawn: 2, leagueLost: 2, leagueGF: 30,
+      leagueGA: 10, leaguePoints: 32, coachId, promoted: true, relegated: false }];
+    const fixed = parseCurrentSave(JSON.stringify(save));
+    const trophy = { type: 'league2', seasonNumber: 1 };
+    expect(fixed.state.world.teamTrophies[teamId]).toContainEqual(trophy);
+    expect(fixed.state.world.coachTrophies[coachId]).toContainEqual(trophy);
+    expect(fixed.state.world.coachCareers[coachId][0].trophies).toContainEqual(trophy);
+    for (const key of Object.keys(world) as (keyof typeof world)[]) {
+      if (!['teamTrophies', 'coachTrophies', 'coachCareers', 'coachRetirementHistory'].includes(key)) {
+        expect(fixed.state.world[key], key).toEqual(world[key]);
+      }
+    }
+    expect(parseCurrentSave(JSON.stringify(fixed))).toEqual(fixed);
+    expect(fixed.version).toBe(save.version);
+  });
   it('normalizes the TSMC abbreviation in fresh and legacy saves without a schema migration', () => {
     const fresh = makeSave();
     expect(fresh.state.world.teamBases.tsmc_fc.shortName).toBe('台积');

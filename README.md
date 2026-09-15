@@ -7,7 +7,7 @@
 
 品牌更名的本地验收与技术身份保留范围见 [品牌说明](docs/brand-rename.md)。下方旧版本截图作为历史演示保留，不代表新品牌最终参赛素材。
 
-个人版与参赛版使用独立构建和存档命名空间，命令、资源边界与本地验收说明见 [双版本构建](docs/build-editions.md)。参赛名称尚待作者审阅，未部署。
+个人版与参赛版已分别部署，使用独立构建和存档命名空间，命令与资源边界见 [双版本构建](docs/build-editions.md)。三岸纪预设的人工内容审阅待办保留在内部清单，不代表授权或合规保证。
 
 <p align="center">
   <strong>你不操控比赛 — 你观看整个足球宇宙自动演化</strong><br/>
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://football-universe-ebon.vercel.app/"><img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Demo-Play%20Now-22c55e?style=for-the-badge&logo=vercel" alt="Live Demo"/></a>
+  <a href="https://cup.dyp02.vip/"><img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Demo-Play%20Now-22c55e?style=for-the-badge" alt="参赛版在线试玩"/></a>
   <a href="https://github.com/KurtDubain/football-universe"><img src="https://img.shields.io/badge/⭐%20Star%20on-GitHub-181717?style=for-the-badge&logo=github" alt="GitHub"/></a>
 </p>
 
@@ -45,7 +45,7 @@ A **pure-frontend, observer-style football simulator** with 32 default clubs, th
 Separately, choose one of **3 guided observer lenses** or a neutral observer view; these are not additional game modes.
 **30+ achievements**, season narratives and a multi-season chronicle with bounded detailed history. PWA installation and core offline play are available after the first online load; secondary pages must be visited online before offline reuse.
 
-→ **[Try Live Demo](https://football-universe-ebon.vercel.app/)** ← (opens in browser, no signup)
+→ **[参赛版 · 三岸纪](https://cup.dyp02.vip/)** · **[个人版](https://football.dyp02.vip/)** ← (opens in browser, no signup)
 
 ---
 
@@ -142,7 +142,7 @@ Separately, choose one of **3 guided observer lenses** or a neutral observer vie
 
 ## Quick Start | 快速开始
 
-**在线体验：** **[football-universe-ebon.vercel.app](https://football-universe-ebon.vercel.app/)**
+**在线体验：** **[参赛版 · 三岸纪](https://cup.dyp02.vip/)** · **[个人版](https://football.dyp02.vip/)**。两个站点存档独立，不互相共享。
 
 本地运行：
 
@@ -203,7 +203,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.61.9** (brand update; Tencent deployment is a separate manual release)
+Current release: **v4.61.10** (local verification candidate; not deployed). Confirmed Tencent release: **v4.61.9**.
 
 65k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
 
@@ -308,7 +308,7 @@ pnpm build      # 检查构建是否通过
 ---
 
 <p align="center">
-  <a href="https://football-universe-ebon.vercel.app/">🎮 Play Now</a> ·
+  <a href="https://cup.dyp02.vip/">🎮 参赛版</a> · <a href="https://football.dyp02.vip/">个人版</a> ·
   <a href="https://github.com/KurtDubain/football-universe">⭐ Star on GitHub</a> ·
   <a href="https://github.com/KurtDubain">by KurtDubain</a>
 </p>
