@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
@@ -27,6 +27,7 @@ import {
 } from '../engine/players/star-presence';
 import NarrativeThread from '../components/NarrativeThread';
 import { buildPlayerNarrativeThread } from '../engine/observation/narrative-threads';
+import { playerCareerAwards } from '../engine/players/player-honors';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
@@ -63,6 +64,15 @@ export default function PlayerDetail() {
   // bookmarks before v8 will return "未找到" — that's expected.
   const { id: uuid } = useParams<{ id: string }>();
   const world = useGameStore((s) => s.world);
+  const location = useLocation();
+  const loaded = Boolean(world);
+  useEffect(() => {
+    if (!loaded || !location.hash) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' }));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loaded, location.hash, location.key]);
 
   if (!world || !uuid) return <div className="text-slate-400">正在加载...</div>;
   return <PlayerDetailContent world={world} uuid={uuid} />;
@@ -113,6 +123,8 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
     const recentForms = buildRecentPlayerForm(results, playerMap);
     const observations = selectStarObservations(activePlayers, {
       playerStats: world.playerStats,
+      seasonNumber: world.seasonState.seasonNumber,
+      playerAwardsHistory: world.playerAwardsHistory,
       playerStatSegments: world.playerStatSegments,
       seasonStartLevels: world.seasonStartLevels,
     }, recentForms);
@@ -290,7 +302,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
       </div>
 
       <NarrativeThread thread={narrativeThread} />
-
+      <div id="season-performance" className="scroll-mt-4" />
       {appearances === 0 ? (
         <Panel padded={false}>
           <EmptyState
@@ -490,12 +502,12 @@ const AWARD_META: Record<string, { label: string; icon: IconName; accent: string
 /** Career awards collected by this player (uuid). */
 function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
   if (!world) return null;
-  const awards = (world.playerAwardsHistory ?? []).filter(a => a.playerId === playerUuid);
+  const awards = playerCareerAwards(world, playerUuid);
   if (awards.length === 0) return null;
   // Newest first
   const sorted = [...awards].sort((a, b) => b.season - a.season);
   return (
-    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
+    <div id="player-awards" className="scroll-mt-4 bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
         <Icon name="medal" size={14} accent="#fbbf24" /> 个人荣誉 ({awards.length})
       </h3>
@@ -503,7 +515,7 @@ function AwardsSection({ world, playerUuid }: { world: ReturnType<typeof useGame
         {sorted.map((a, i) => {
           const meta = AWARD_META[a.type] ?? { label: a.type, icon: 'medal' as IconName, accent: '#fbbf24', color: 'bg-slate-700/60 text-slate-300 border-slate-600/40' };
           return (
-            <div key={i} className="flex items-center gap-2 text-xs">
+            <div key={`${a.season}:${a.type}`} id={i === sorted.findIndex(item => item.season === a.season) ? `awards-S${a.season}` : undefined} className="scroll-mt-4 flex items-center gap-2 text-xs">
               <span className="text-slate-500 w-10 shrink-0">S{a.season}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.color} font-semibold inline-flex items-center gap-1`}>
                 <Icon name={meta.icon} size={11} accent={meta.accent} /> {meta.label}
@@ -601,7 +613,7 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
       ) / scoredMinutes
     : null;
   return (
-    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
+    <div id="career-seasons" className="scroll-mt-4 bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
@@ -708,7 +720,7 @@ function TransferHistorySection({ world, playerUuid }: { world: ReturnType<typeo
   // Oldest first (career progression)
   const sorted = [...transfers].sort((a, b) => a.season - b.season || a.windowIndex - b.windowIndex);
   return (
-    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
+    <div id="player-transfers" className="scroll-mt-4 bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 inline-flex items-center gap-1">
         <Icon name="refresh" size={13} /> 转会履历 ({transfers.length})
       </h3>
@@ -918,15 +930,27 @@ function RetiredPlayerView({
 
       <NarrativeThread thread={narrativeThread} />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div id="retirement-record" className="scroll-mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatBox label="生涯出场" value={careerTotals?.appearances ?? stats?.appearances ?? 0} />
         <StatBox label="生涯首发" value={careerTotals?.starts ?? stats?.starts ?? 0} />
         <StatBox label="生涯替补" value={careerTotals?.substituteAppearances ?? stats?.substituteAppearances ?? 0} />
         <StatBox label="生涯分钟" value={careerTotals?.minutesPlayed ?? stats?.minutesPlayed ?? 0} />
         <StatBox label="生涯进球" value={careerGoals} color="text-amber-400" />
         <StatBox label="生涯助攻" value={careerTotals?.assists ?? stats?.assists ?? 0} color="text-blue-300" />
-        <StatBox label="冠军" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
+        <StatBox label="原队荣誉快照" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
       </div>
+      {retired.careerSummary && (
+        <section className="border-y border-slate-700/60 py-3 text-xs text-slate-400">
+          <h3 className="mb-2 font-semibold text-slate-200">已记录效力经历</h3>
+          {retired.careerSummary.teams.map(item => (
+            <p key={item.teamId} className="py-1">
+              <Link to={`/team/${item.teamId}`} className="text-blue-300">{item.teamName}</Link>
+              {' · '}{item.seasons.map(season => `S${season}`).join('、')}
+            </p>
+          ))}
+          <p className="mt-2 text-[11px]">保留摘要与获奖依据；未列出的早期记录可能已归档，不代表没有经历。详细回放不在此保留。</p>
+        </section>
+      )}
 
       {/* Awards + transfer history for retired players too */}
       <AwardsSection world={world} playerUuid={retired.uuid} />
@@ -934,7 +958,7 @@ function RetiredPlayerView({
       <TransferHistorySection world={world} playerUuid={retired.uuid} />
 
       <p className="text-[11px] text-slate-500 text-center">
-        本页面为退役球员的精简档案。完整档案与生涯轨迹请查看
+        本页面保留可查证的退役摘要。其他退役人物可查看
         <Link to="/legends" className="text-blue-400 hover:text-blue-300 mx-1">传奇名人堂</Link>。
       </p>
     </div>

@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
 import { buildCareerArc, type CareerArcPoint } from '../engine/players/career-arc';
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
+import { playerCareerAwards } from '../engine/players/player-honors';
 import TrophyBreakdown from '../components/TrophyBreakdown';
 import type { PlayerPosition, PlayerRetirement } from '../types/player';
 import type { CoachCandidate, CoachRetirement } from '../types/coach';
@@ -38,6 +39,7 @@ export default function Legends() {
   const [sortBy, setSortBy] = useUiSessionState<SortKey>('ui.legends.sort', 'recent');
   const [tab, setTab] = useUiSessionState<LegendTab>('ui.legends.tab', 'players');
   const [coachSortBy, setCoachSortBy] = useUiSessionState<CoachSortKey>('ui.legends.coach-sort', 'recent');
+  const [visiblePlayers, setVisiblePlayers] = useState(60);
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
 
@@ -161,10 +163,15 @@ export default function Legends() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {sorted.map((r) => (
+              {sorted.slice(0, visiblePlayers).map((r) => (
                 <RetireeCard key={`${r.uuid}-${r.seasonRetired}`} retiree={r} world={world} />
               ))}
             </div>
+          )}
+          {sorted.length > visiblePlayers && (
+            <button type="button" onClick={() => setVisiblePlayers(count => count + 60)} className="mt-3 min-h-11 w-full text-sm text-blue-300">
+              查看更多退役人物（还有 {sorted.length - visiblePlayers} 人）
+            </button>
           )}
         </section>
       )}
@@ -245,6 +252,8 @@ function RetireeCard({
 }) {
   const team = world?.teamBases[retiree.teamId];
   const career = world ? computePlayerCareerTotals(world, retiree.uuid) : null;
+  const awards = world ? playerCareerAwards(world, retiree.uuid) : [];
+  const goldenBalls = awards.filter(award => award.type === 'mvp').length;
   const positionCareer = retiree.position === 'GK'
     ? { firstLabel: '生涯普通扑救', firstValue: career?.routineSaves ?? 0, secondLabel: '生涯关键扑救', secondValue: career?.saves ?? 0 }
     : retiree.position === 'DF'
@@ -270,7 +279,7 @@ function RetireeCard({
               {POS_LABEL[retiree.position]}
             </span>
             <h4 className="text-sm font-semibold text-slate-100 truncate" title={retiree.name}>
-              {retiree.name}
+              <Link to={`/player/${retiree.uuid}`} className="inline-flex min-h-11 items-center hover:text-blue-300">{retiree.name}</Link>
             </h4>
           </div>
           {/* Last team */}
@@ -294,6 +303,11 @@ function RetireeCard({
         </div>
       </div>
 
+      {awards.length > 0 && (
+        <Link to={`/player/${retiree.uuid}#player-awards`} className="mt-1 flex min-h-11 items-center text-xs text-amber-300">
+          档案记载 {goldenBalls > 0 ? `${goldenBalls}届金球` : `${awards.length}项个人荣誉`} · 查看依据
+        </Link>
+      )}
       {/* Stats row */}
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <StatPill label="退役" value={`S${retiree.seasonRetired}`} />
@@ -305,7 +319,7 @@ function RetireeCard({
         <StatPill label={positionCareer.firstLabel} value={String(positionCareer.firstValue)} accent="text-amber-400" />
         <StatPill label={positionCareer.secondLabel} value={String(positionCareer.secondValue)} />
         <StatPill
-          label="冠军"
+          label="原队荣誉快照"
           value={String(retiree.careerTrophies?.length ?? 0)}
           accent={(retiree.careerTrophies?.length ?? 0) > 0 ? 'text-emerald-300' : ''}
         />
@@ -321,7 +335,7 @@ function RetireeCard({
       {/* Career trajectory chart */}
       <div className="mt-3 pt-3 border-t border-slate-700/50">
         <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-          <span>生涯轨迹</span>
+          <span title="按巅峰能力与年龄推演，不是逐年实测记录">年龄曲线示意（非履历）</span>
           <span>18岁 → {retiree.age}岁</span>
         </div>
         <CareerArcChart arc={arc} retirementAge={retiree.age} />

@@ -118,6 +118,8 @@ export default function Players() {
     if (!world) return { worldFocus: [], risingStars: [] };
     return selectStarObservations(activePlayers, {
       playerStats: world.playerStats,
+      seasonNumber: world.seasonState.seasonNumber,
+      playerAwardsHistory: world.playerAwardsHistory,
       playerStatSegments: world.playerStatSegments,
       seasonStartLevels: world.seasonStartLevels,
     }, recentForms);
@@ -174,21 +176,16 @@ export default function Players() {
       : (player.suspendedUntilWindow ?? 0) > world.totalElapsedWindows
         ? '停赛中'
         : null;
-    const reasonLabel = entry.reason === 'defensive_anchor' ? '防线核心'
-      : entry.reason === 'creator' ? '创造核心'
-        : entry.reason === 'finisher' ? '终结核心'
-          : entry.reason === 'form' ? '状态焦点'
-            : '能力焦点';
     return (
       <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1.4fr)_minmax(7rem,0.7fr)_auto]">
-        <Link to={`/player/${player.uuid}`} className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]">
+        <Link to={entry.factTarget} className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]">
           <span className="flex min-w-0 items-center gap-2">
             <span className={`text-xs font-semibold ${positionColor[player.position]}`}>{player.position}</span>
             <span className="truncate text-sm font-semibold text-slate-100">{player.name}</span>
             <span className="shrink-0 text-xs font-bold text-amber-300">{player.rating}</span>
           </span>
-          <span className="mt-0.5 block truncate text-xs text-slate-500">
-            {team?.shortName ?? player.teamId} · {player.age}岁 · {reasonLabel}{unavailableLabel ? ` · ${unavailableLabel}` : ''}
+          <span className="mt-0.5 block text-xs text-slate-400">
+            {team?.shortName ?? player.teamId} · {entry.fact}{unavailableLabel ? ` · ${unavailableLabel}` : ''}
           </span>
           <span className="mt-0.5 block truncate text-[11px] text-slate-500 sm:hidden">
             {unavailableLabel ? `${unavailableLabel} · ` : ''}
@@ -485,6 +482,8 @@ export default function Players() {
                       recentForm: recentForms.get(player.uuid) ?? null,
                       reason: player.position === 'GK' || player.position === 'DF' ? 'defensive_anchor' as const : 'ability' as const,
                       priority: 0,
+                      fact: `${player.age}岁 · 基础能力 ${player.rating}`,
+                      factTarget: `/player/${player.uuid}#season-performance`,
                     };
                   })();
                 return renderStarEntry(entry);

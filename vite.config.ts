@@ -45,6 +45,15 @@ export default defineConfig(({ mode }) => {
     manifest: true,
     outDir: target.outDir,
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        // Keep player observation/read models together without pulling them into startup.
+        codeSplitting: { includeDependenciesRecursively: false, groups: [{
+          name: 'player-observation',
+          test: /[\\/]engine[\\/]players[\\/](?:star-presence|player-honors|career-totals|player-stat-selectors|player-performance|player-boosts|tags)\.ts$/,
+        }] },
+      },
+    },
   },
   plugins: [
     editionPlugin(target),

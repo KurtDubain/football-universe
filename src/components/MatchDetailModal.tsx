@@ -121,6 +121,8 @@ export default function MatchDetailModal({
             globalWindowIdx={world.totalElapsedWindows}
             playerStats={world.playerStats}
             playerStatSegments={world.playerStatSegments}
+            playerAwardsHistory={world.playerAwardsHistory}
+            seasonNumber={world.seasonState.seasonNumber}
             seasonStartLevels={world.seasonStartLevels}
           />
         )}
@@ -148,6 +150,8 @@ function PreMatchView({
   playerStats,
   playerStatSegments,
   seasonStartLevels,
+  playerAwardsHistory,
+  seasonNumber,
 }: {
   fixture: MatchFixture;
   homeTeam: TeamBase;
@@ -162,6 +166,8 @@ function PreMatchView({
   playerStats: GameWorld['playerStats'];
   playerStatSegments: GameWorld['playerStatSegments'];
   seasonStartLevels: GameWorld['seasonStartLevels'];
+  playerAwardsHistory: GameWorld['playerAwardsHistory'];
+  seasonNumber: number;
 }) {
   const prediction: MatchPrediction | null = useMemo(() => {
     if (!homeState || !awayState) return null;
@@ -173,10 +179,13 @@ function PreMatchView({
       playerStats,
       playerStatSegments,
       seasonStartLevels,
+      playerAwardsHistory,
+      seasonNumber,
     });
   }, [
     fixture, homeTeam, awayTeam, homeState, awayState, homeCoach, awayCoach,
     homeSquad, awaySquad, globalWindowIdx, playerStats, playerStatSegments, seasonStartLevels,
+    playerAwardsHistory, seasonNumber,
   ]);
 
   if (!prediction || !homeState || !awayState) return null;

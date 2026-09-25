@@ -279,4 +279,11 @@ export interface PlayerRetirement {
   seasonRetired: number;
   careerGoals: number;
   careerTrophies?: import('./team').Trophy[];
+  /** Compact facts retained for award winners / observed people, not match replays. */
+  careerSummary?: {
+    followed?: boolean;
+    awards: import('./award').PlayerAward[];
+    totals: import('../engine/players/career-totals').PlayerCareerTotals;
+    teams: { teamId: string; teamName: string; seasons: number[] }[];
+  };
 }

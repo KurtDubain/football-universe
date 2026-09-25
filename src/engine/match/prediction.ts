@@ -7,6 +7,7 @@ import { calculateMatchModel, computeMatchdayModelReport, forecastFromModel } fr
 import { deriveMatchTacticsPair } from '../coaches/tactics';
 import { selectMatchday } from '../players/injuries';
 import { buildMatchFeaturedLineups } from '../players/star-presence';
+import type { PlayerHonorContext } from '../players/player-honors';
 
 export interface MatchPrediction {
   homeTeamId: string;
@@ -26,7 +27,7 @@ export interface MatchPrediction {
   featuredPlayers: FeaturedPlayerSnapshot[];
 }
 
-export interface MatchPredictionOptions {
+export interface MatchPredictionOptions extends PlayerHonorContext {
   fixture?: Pick<MatchFixture, 'homeTeamId' | 'awayTeamId' | 'competitionType' | 'isNeutralVenue' | 'tournamentHostTeamId'>
     & Partial<Pick<MatchFixture, 'id' | 'roundLabel' | 'leg'>>;
   homeSquad?: Player[];
@@ -105,6 +106,8 @@ export function predictMatch(
     homeFormation: tactics.home.formation,
     awayFormation: tactics.away.formation,
     playerStats: options.playerStats ?? {},
+    seasonNumber: options.seasonNumber,
+    playerAwardsHistory: options.playerAwardsHistory,
     playerStatSegments: options.playerStatSegments,
     seasonStartLevels: options.seasonStartLevels,
   });

@@ -154,7 +154,7 @@ export interface MatchStats {
   redCards: [number, number];
 }
 
-export type FeaturedPlayerReason = 'ability' | 'form' | 'defensive_anchor' | 'creator' | 'finisher';
+export type FeaturedPlayerReason = 'ability' | 'form' | 'defensive_anchor' | 'creator' | 'finisher' | 'previous_award';
 
 /** Frozen pre-match identity; selection itself never grants another buff. */
 export interface FeaturedPlayerSnapshot {

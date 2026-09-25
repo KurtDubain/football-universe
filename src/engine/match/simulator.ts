@@ -29,10 +29,11 @@ import { simulatePenaltyShootout } from './penalty-shootout';
 import { deriveMatchTacticsPair } from '../coaches/tactics';
 import { selectMatchMotm } from '../players/match-player-impact';
 import { buildMatchFeaturedLineups } from '../players/star-presence';
+import type { PlayerHonorContext } from '../players/player-honors';
 
 // ── Public interfaces ──────────────────────────────────────────────
 
-export interface SimulationContext {
+export interface SimulationContext extends PlayerHonorContext {
   homeTeam: TeamBase;
   awayTeam: TeamBase;
   homeState: TeamState;
@@ -351,6 +352,8 @@ export function simulateMatch(
     homeFormation: tactics.home.formation,
     awayFormation: tactics.away.formation,
     playerStats: ctx.playerStats ?? {},
+    seasonNumber: ctx.seasonNumber,
+    playerAwardsHistory: ctx.playerAwardsHistory,
     playerStatSegments: ctx.playerStatSegments,
     seasonStartLevels: ctx.seasonStartLevels,
   });

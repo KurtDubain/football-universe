@@ -38,7 +38,7 @@ import { getCurrentKeyNodeGuard, planNextKeyNode } from '../engine/observation/k
 import {
   type ObservationThemePreference,
 } from '../engine/observation/observation-theme';
-import { FAVORITE_PLAYER_LIMIT } from '../engine/players/star-presence';
+import { FAVORITE_PLAYER_LIMIT } from '../config/player-observation';
 import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
 import {
   buildTransferWindowHandoffSummary,
@@ -320,6 +320,7 @@ export const useGameStore = create<GameStore>()(
             world,
             favoriteTeamIds,
             get().observationThemePreference,
+            get().favoritePlayerIds,
           );
           const updatedWorld = boundWorldStorageMetadata(result.world);
           const worldResponse = buildAdvanceWorldResponse(
@@ -379,6 +380,7 @@ export const useGameStore = create<GameStore>()(
               world,
               favoriteTeamIds,
               observationThemePreference,
+              get().favoritePlayerIds,
             );
             world = result.world;
             allResults = result.results; // keep only last window's results
@@ -455,6 +457,7 @@ export const useGameStore = create<GameStore>()(
               world,
               favoriteTeamIds,
               observationThemePreference,
+              get().favoritePlayerIds,
             );
             world = result.world;
             lastResults = result.results;
@@ -530,6 +533,7 @@ export const useGameStore = create<GameStore>()(
               world,
               favoriteTeamIds,
               observationThemePreference,
+              get().favoritePlayerIds,
             );
             world = result.world;
             if (result.results.length > 0) lastResults = result.results;
@@ -629,6 +633,7 @@ export const useGameStore = create<GameStore>()(
               world,
               favoriteTeamIds,
               observationThemePreference,
+              get().favoritePlayerIds,
             );
             world = result.world;
             lastResults = result.results;

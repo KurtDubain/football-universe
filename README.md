@@ -129,6 +129,8 @@ Separately, choose one of **3 guided observer lenses** or a neutral observer vie
 ### 📊 长期历史 + 编年史
 赛季回顾（含叙事文案）· 历史奖杯榜 · 趣味纪录 · **30+ 成就**（首次类/纪录类/数据类/王朝类/黑马类）· 编年史多赛季回顾 · 跨赛季交手记录。为控制浏览器存档体积，完整交手、球员赛季数据和球队赛季记录分别保留最近 3、25、40 个赛季，奖杯与核心荣誉继续长期累计。
 
+本地人物追溯改进（尚未发布）：上季金球、金靴、最佳后卫和最佳门将延续一季焦点候选资格，但不固定置顶。球员档案按已保留事实概括累计荣誉，最多展示四个关键节点，奖项可直接定位。退役记录保留最近300人，另为个人奖项得主和关注人物保留身份、已知效力经历、统计与荣誉摘要；摘要不等于完整比赛回放，已清理的旧记录不会伪造恢复。
+
 ### 🎲 互动元素
 赛季预测（冠军/降级）· 每轮观察判断（胜平负/进球区间/爆冷）· 上帝之手（每赛季 1 次球队 buff/debuff）· 手动解雇关注球队教练。预测与判断不消耗资源，也不改变模拟结果。
 
@@ -205,7 +207,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 
 Current release: **v4.61.10** (local verification candidate; not deployed). Confirmed Tencent release: **v4.61.9**.
 
-65k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
+66k+ production TypeScript lines · 220+ production source files · 150+ test files · 45+ browser/simulation audit commands
 
 当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 

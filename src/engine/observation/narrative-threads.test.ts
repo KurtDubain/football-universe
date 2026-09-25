@@ -173,13 +173,12 @@ describe('narrative detail threads', () => {
     const active = buildPlayerNarrativeThread(world, player.uuid)!;
     expect(active.entries.map(entry => entry.id)).toEqual(expect.arrayContaining([
       expect.stringContaining('current-performance:'),
-      expect.stringContaining('injury:'),
       expect.stringContaining('transfer:'),
       expect.stringContaining('award:'),
-      expect.stringContaining('best-season:'),
+      expect.stringContaining('injury:'),
     ]));
-    expect(active.entries.find(entry => entry.id.startsWith('award:'))?.detail).toContain('金靴');
-    expect(active.entries.length).toBe(MAX_NARRATIVE_THREAD_ENTRIES);
+    expect(active.entries.find(entry => entry.id.startsWith('award:'))?.title).toContain('金靴');
+    expect(active.entries.length).toBe(4);
 
     world.squads[teamId] = world.squads[teamId].filter(item => item.uuid !== player.uuid);
     world.retirementHistory.push({
@@ -197,7 +196,7 @@ describe('narrative detail threads', () => {
     expect(retired.summary).toContain('退役档案');
     expect(retired.entries).toContainEqual(expect.objectContaining({
       id: expect.stringContaining('retirement:'),
-      to: '/legends',
+      to: `/player/${player.uuid}#retirement-record`,
       summaryOnly: true,
     }));
   });

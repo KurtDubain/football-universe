@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Player, PlayerSeasonStats } from '../../types/player';
-import { selectMatchFeaturedPlayers, selectStarObservations } from './star-presence';
+import { buildMatchFeaturedLineups, selectMatchFeaturedPlayers, selectStarObservations } from './star-presence';
+import { selectMatchday } from './injuries';
+import { initializeGameWorld } from '../season/season-manager';
+import { buildSimulationContext } from '../season/helpers';
+import { simulateMatch } from '../match/simulator';
+import { SeededRNG } from '../match/rng';
 
 function player(id: string, teamId: string, rating: number, age = 26, peakRating = rating): Player {
   return {
@@ -40,6 +45,66 @@ function stats(item: Player, minutes = 1800): PlayerSeasonStats {
 }
 
 describe('star presence', () => {
+  it('never restores an unavailable award winner to a matchday lineup', () => {
+    const winner = { ...player('injured-winner', 'A', 83), injuredUntilWindow: 20 };
+    const squad = [winner, ...Array.from({ length: 14 }, (_, i) => player(`healthy-${i}`, 'A', 72))];
+    const lineups = buildMatchFeaturedLineups({ homeSquad: squad, homeSelection: selectMatchday(squad, 0),
+      homeFormation: '4-4-2', awayFormation: '4-4-2', playerStats: {}, seasonNumber: 2,
+      playerAwardsHistory: [{ season: 1, type: 'mvp', playerId: winner.uuid, playerName: winner.name,
+        playerNumber: 9, teamId: 'A', teamName: 'A', statValue: 83, statLabel: '综合83' }] });
+    expect(lineups.homeStarters.some(item => item.uuid === winner.uuid)).toBe(false);
+    expect(lineups.featuredPlayers.some(item => item.playerId === winner.uuid)).toBe(false);
+  });
+  it('changes only focus metadata, not lineups, match outcomes, events or RNG consumption', () => {
+    const world = initializeGameWorld(20260709);
+    const fixture = world.seasonState.calendar.flatMap(window => window.fixtures)[0];
+    const players = [...world.squads[fixture.homeTeamId], ...world.squads[fixture.awayTeamId]];
+    for (const seed of [1, 7, 20260709]) {
+      const oldRng = new SeededRNG(seed);
+      const newRng = new SeededRNG(seed);
+      const baseline = buildSimulationContext(fixture, world, oldRng);
+      const candidate = { ...buildSimulationContext(fixture, world, newRng), seasonNumber: 2,
+        playerAwardsHistory: players.map(player => ({ season: 1, type: 'mvp' as const, playerId: player.uuid,
+          playerName: player.name, playerNumber: player.number, teamId: player.teamId, teamName: player.teamId,
+          statValue: 83, statLabel: '综合83' })) };
+      const before = simulateMatch(baseline, fixture);
+      const after = simulateMatch(candidate, fixture);
+      delete before.matchResult.featuredPlayers;
+      delete after.matchResult.featuredPlayers;
+      expect(after).toEqual(before);
+      expect(newRng.getState()).toBe(oldRng.getState());
+    }
+  });
+  it('keeps last-season winners eligible without locking their ranking or bypassing the lineup', () => {
+    const winner = player('winner', 'A', 83);
+    const star = player('current-star', 'A', 95);
+    const context = { playerStats: {}, seasonNumber: 2, playerAwardsHistory: [{
+      playerId: winner.uuid, playerName: winner.name, playerNumber: 9, teamId: 'A', teamName: 'A',
+      season: 1, type: 'mvp' as const, statValue: 83, statLabel: '综合83',
+    }] };
+    const focus = selectStarObservations([winner, star], context).worldFocus;
+    expect(focus.map(entry => entry.player.uuid)).toEqual([star.uuid, winner.uuid]);
+    expect(focus[1].fact).toBe('上季金球得主');
+    expect(focus[1].factTarget).toBe('/player/winner#awards-S1');
+    expect(selectStarObservations([winner], { ...context, seasonNumber: 3 }).worldFocus).toEqual([]);
+    const selected = selectMatchFeaturedPlayers({ ...context, homeStarters: [winner], awayStarters: [], marginalImpacts: [] });
+    expect(selected[0]).toMatchObject({ playerId: winner.uuid, reason: 'previous_award' });
+    expect(selectMatchFeaturedPlayers({ ...context, homeStarters: [], awayStarters: [], marginalImpacts: [] })).toEqual([]);
+  });
+
+  it('extends all four major honors and does not invent recognition for a talented youngster', () => {
+    const prospect = player('prospect', 'A', 91, 20);
+    const observation = selectStarObservations([prospect], { playerStats: {} }).worldFocus[0];
+    expect(observation.fact).toContain('基础能力 91');
+    expect(observation.fact).not.toMatch(/统治|顶级|得主/);
+    for (const type of ['mvp', 'golden_boot', 'best_defender', 'best_goalkeeper'] as const) {
+      const context = { playerStats: {}, seasonNumber: 2, playerAwardsHistory: [{
+        season: 1, type, playerId: 'low', playerName: '低能力得主', playerNumber: 3,
+        teamId: 'A', teamName: 'A', statValue: 33, statLabel: '33球',
+      }] };
+      expect(selectStarObservations([player('low', 'A', 73)], context).worldFocus).toHaveLength(1);
+    }
+  });
   it('returns every qualifying world-focus player without a fixed display cap', () => {
     const players = Array.from({ length: 14 }, (_, index) => player(`star-${index}`, 'A', 90 - index * 0.1));
     const playerStats = Object.fromEntries(players.map(item => [item.uuid, stats(item)]));

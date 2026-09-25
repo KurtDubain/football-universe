@@ -163,8 +163,8 @@ export interface GameWorld {
    */
   nextPlayerUuidCounter: number;
   /**
-   * Append-only history of retirements. Capped at the last 300 entries by
-   * the season-end pipeline (see `engine/players/retirement.ts`). Introduced
+   * Recent 300 retirements plus compact archives of individual award winners
+   * and observed players (see `engine/players/retirement-archive.ts`). Introduced
    * in v11; the v10 → v11 migration backfills it as `[]` on legacy saves.
    */
   retirementHistory: PlayerRetirement[];
@@ -1010,7 +1010,7 @@ function generateSeasonBuffs(
  * teams have their incoming poach offers + outbound targets staged into
  * `world.transferWindow` for user decision rather than auto-resolved.
  */
-export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamIds?: string[] }): {
+export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamIds?: string[]; favoritePlayerIds?: string[] }): {
   world: GameWorld;
   results: MatchResult[];
   news: NewsItem[];
@@ -1081,7 +1081,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
       ...world,
       seasonState: { ...world.seasonState },
       rngState: rng.getState(),
-    }, { favoriteTeamIds: options?.favoriteTeamIds ?? [] });
+    }, { favoriteTeamIds: options?.favoriteTeamIds ?? [], favoritePlayerIds: options?.favoritePlayerIds });
 
     const currentCal = [...updatedWorld.seasonState.calendar];
     if (windowIndex < currentCal.length) {

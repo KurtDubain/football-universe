@@ -37,7 +37,7 @@ export default function NarrativeThread({ thread }: { thread: NarrativeThreadDat
         <Icon name="clipboard" size={15} className="text-emerald-300" />
         <div className="min-w-0">
           <h3 className="text-xs font-bold text-slate-200">{thread.title}</h3>
-          <p className="truncate text-[10px] text-slate-600" title={thread.summary}>{thread.summary}</p>
+          <p className="text-xs leading-5 text-slate-400">{thread.summary}</p>
         </div>
       </div>
       <div className="border-t border-slate-700/45 px-3">

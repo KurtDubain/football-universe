@@ -41,6 +41,8 @@ export function buildSimulationContext(
     awaySquad: world.squads[fixture.awayTeamId],
     globalWindowIdx: currentWindowIdx,
     playerStats: world.playerStats,
+    seasonNumber: world.seasonState.seasonNumber,
+    playerAwardsHistory: world.playerAwardsHistory,
     playerStatSegments: world.playerStatSegments,
     seasonStartLevels: world.seasonStartLevels,
   };

@@ -6,8 +6,9 @@ import { computeMatchPlayerImpacts } from './match-player-impact';
 import { computePlayerMarginalImpacts, type PlayerMarginalImpact } from './player-marginal-impact';
 import type { MatchdaySelection } from './injuries';
 import { selectStartingEleven } from '../match/participation';
+import { previousSeasonHonor, describePreviousHonor, type PlayerHonorContext } from './player-honors';
 
-export const FAVORITE_PLAYER_LIMIT = 8;
+export { FAVORITE_PLAYER_LIMIT } from '../../config/player-observation';
 export const LIVE_FEATURED_PLAYER_LIMIT = 5;
 export const RISING_STAR_MAX_AGE = 22;
 
@@ -17,6 +18,7 @@ export const FEATURED_PLAYER_REASON_LABELS: Record<FeaturedPlayerReason, string>
   defensive_anchor: '防线支柱',
   creator: '组织核心',
   finisher: '进攻终结点',
+  previous_award: '上季个人荣誉',
 };
 
 export const PLAYER_IMPACT_UNIT_LABELS: Record<FeaturedPlayerSnapshot['impactUnit'], string> = {
@@ -38,6 +40,8 @@ export interface StarObservationEntry {
   confidence: number;
   recentForm: RecentPlayerForm | null;
   reason: FeaturedPlayerReason;
+  fact: string;
+  factTarget: string;
   /** Internal ordering only. UI must not render this as a public star score. */
   priority: number;
 }
@@ -47,7 +51,7 @@ export interface StarObservationResult {
   risingStars: StarObservationEntry[];
 }
 
-interface PerformanceContext {
+interface PerformanceContext extends PlayerHonorContext {
   playerStats: Record<string, PlayerSeasonStats>;
   playerStatSegments?: Record<string, PlayerTeamSeasonStats>;
   seasonStartLevels?: Record<string, 1 | 2 | 3>;
@@ -147,6 +151,7 @@ export function selectStarObservations(
 ): StarObservationResult {
   const segmentsByPlayer = buildSegmentsByPlayer(context.playerStatSegments);
   const entries = players.map(player => {
+    const honor = previousSeasonHonor(context, player.uuid);
     const performance = performanceFor(player, context, segmentsByPlayer);
     const recentForm = recentForms.get(player.uuid);
     const performanceScore = performance.eligible ? performance.seasonScore : 50;
@@ -159,6 +164,10 @@ export function selectStarObservations(
       confidence: performance.confidence,
       recentForm: recentForm ?? null,
       reason: reasonFor(player, context.playerStats[player.uuid]),
+      fact: honor ? describePreviousHonor(honor)
+        : performance.eligible ? `本季 ${performance.seasonScore.toFixed(1)} 分 · ${performance.metrics.minutes}分钟`
+          : `${player.age}岁 · 基础能力 ${player.rating} · 本季待观察`,
+      factTarget: `/player/${player.uuid}#${honor ? `awards-S${honor.season}` : 'season-performance'}`,
       priority,
     } satisfies StarObservationEntry;
   });
@@ -170,7 +179,7 @@ export function selectStarObservations(
 
   return {
     worldFocus: entries
-      .filter(entry => qualifiesForWorldFocus(
+      .filter(entry => previousSeasonHonor(context, entry.player.uuid) || qualifiesForWorldFocus(
         entry.player.rating,
         entry.seasonScore ?? 50,
         entry.confidence,
@@ -223,7 +232,8 @@ export function selectMatchFeaturedPlayers(input: MatchFeaturedInput): FeaturedP
       value: 0,
     };
     const seasonScore = performance.eligible ? performance.seasonScore : 50;
-    const qualifies = player.rating >= 90
+    const honor = previousSeasonHonor(input, player.uuid);
+    const qualifies = Boolean(honor) || player.rating >= 90
       || (player.rating >= 85 && performance.confidence >= 0.55 && seasonScore >= 86)
       || (player.rating >= 85 && marginal.value >= 2.6);
     const priority = player.rating * 0.58
@@ -245,7 +255,7 @@ export function selectMatchFeaturedPlayers(input: MatchFeaturedInput): FeaturedP
       ...(performance.eligible ? { seasonScoreAtKickoff: performance.seasonScore } : {}),
       marginalUnitImpact: marginal.value,
       impactUnit: marginal.unit,
-      reason: reasonFor(player, input.playerStats[player.uuid]),
+      reason: previousSeasonHonor(input, player.uuid) ? 'previous_award' : reasonFor(player, input.playerStats[player.uuid]),
     }));
 }
 
@@ -286,6 +296,8 @@ export function buildMatchFeaturedLineups(input: MatchFeaturedLineupsInput): Mat
       playerStats: input.playerStats,
       playerStatSegments: input.playerStatSegments,
       seasonStartLevels: input.seasonStartLevels,
+      seasonNumber: input.seasonNumber,
+      playerAwardsHistory: input.playerAwardsHistory,
     }),
   };
 }

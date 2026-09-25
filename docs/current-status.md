@@ -37,6 +37,8 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Active Work
 
+Local, unreleased work authorized on 2026-09-23: player exposure and compact career traceability. Last-season major individual honors extend candidacy for one season without ranking bonuses; player threads show cumulative honors and at most four evidenced nodes. The existing retirement history retains compact facts for award winners / followed people in addition to the recent 300-person FIFO. Save schema and edition identities remain unchanged; no user save was opened or rewritten. This does not reactivate older feature checklists or change the deployed release listed above.
+
 1. Conduct three unassisted first-five-minute playtests and record repeated points of confusion rather than individual visual preferences.
 2. Complete one fifteen-minute observer-route walkthrough on an iPhone Safari and one mid-range Android Chrome device.
 3. Accept only reproducible, repeated human/real-device findings or P0 failures during the freeze. Do not reopen archived feature lists.

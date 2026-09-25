@@ -1,4 +1,5 @@
 import { preset } from '../edition/preset';
+import { FAVORITE_PLAYER_LIMIT } from '../config/player-observation';
 import { EDITION, PRESET_ID } from '../edition/policy';
 import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
 import type { GameWorld } from '../engine/season/season-manager';
@@ -59,9 +60,8 @@ const TACTICS_REASONS = new Set([
 ]);
 const TACTICS_EXECUTION = new Set(['developing', 'coherent', 'elite']);
 const PLAYER_POSITIONS = new Set(['GK', 'DF', 'MF', 'FW']);
-const FEATURED_PLAYER_REASONS = new Set(['ability', 'form', 'defensive_anchor', 'creator', 'finisher']);
+const FEATURED_PLAYER_REASONS = new Set(['ability', 'form', 'defensive_anchor', 'creator', 'finisher', 'previous_award']);
 const PLAYER_IMPACT_UNITS = new Set(['attack', 'midfield', 'defense']);
-const FAVORITE_PLAYER_LIMIT = 8;
 const NARRATIVE_MEMORY_LIMIT = 32;
 
 export interface CurrentSaveEnvelope {
@@ -719,6 +719,32 @@ function validateObserverSeasonTrajectories(
 function validateCurrentWorld(world: JsonRecord): GameWorld {
   for (const key of REQUIRED_WORLD_RECORDS) requireRecord(world, key);
   for (const key of REQUIRED_WORLD_ARRAYS) requireArray(world, key);
+  for (const retired of requireArray(world, 'retirementHistory')) {
+    if (!isRecord(retired) || retired.careerSummary === undefined) continue;
+    const summary = requireRecord(retired, 'careerSummary');
+    if (summary.followed !== undefined) requireBoolean(summary, 'followed', '退役摘要');
+    const totals = requireRecord(summary, 'totals');
+    for (const [key, value] of Object.entries(totals)) {
+      if (key === 'currentSeasonIncluded') requireBoolean(totals, key, '退役摘要');
+      else if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new Error('退役生涯汇总无效');
+    }
+    for (const award of requireArray(summary, 'awards')) {
+      if (!isRecord(award) || award.playerId !== retired.uuid
+        || !['mvp', 'golden_boot', 'best_defender', 'best_goalkeeper', 'young_player'].includes(String(award.type))) {
+        throw new Error('退役个人荣誉无效');
+      }
+      for (const key of ['playerId', 'playerName', 'teamId', 'teamName', 'statLabel']) requireString(award, key, '退役荣誉');
+      const season = requireFiniteNumber(award, 'season', '退役荣誉');
+      if (!Number.isInteger(season) || season < 1 || season > Number(retired.seasonRetired)) throw new Error('退役荣誉赛季无效');
+    }
+    for (const team of requireArray(summary, 'teams')) {
+      if (!isRecord(team)) throw new Error('退役效力记录无效');
+      requireString(team, 'teamId', '退役经历');
+      requireString(team, 'teamName', '退役经历');
+      if (requireArray(team, 'seasons').some(season => typeof season !== 'number' || !Number.isInteger(season)
+        || season < 1 || season > Number(retired.seasonRetired))) throw new Error('退役效力赛季无效');
+    }
+  }
   const leagueCup = requireRecord(world, 'leagueCup');
   const superCup = requireRecord(world, 'superCup');
   const continentalCups = requireRecord(world, 'continentalCups');

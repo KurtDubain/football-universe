@@ -4,6 +4,7 @@ import { buildSeasonHistoryLabels } from '../history/season-history-summary';
 import type { GameWorld } from '../season/season-manager';
 import { describeStoryline } from '../season/storylines';
 import { getCoachTurnaroundSample } from './narrative-world-scan';
+import { playerCareerAwards, PLAYER_AWARD_LABELS } from '../players/player-honors';
 
 export type NarrativeThreadTone = 'stage' | 'rise' | 'fall' | 'transfer' | 'neutral';
 
@@ -33,14 +34,6 @@ const STORY_LABELS = {
   promoted_survival: '升班马求生',
   unbeaten_run: '联赛不败征程',
   cup_giant_killer: '杯赛巨人杀手',
-} as const;
-
-const AWARD_LABELS = {
-  mvp: '赛季金球',
-  golden_boot: '金靴',
-  best_defender: '最佳后卫',
-  best_goalkeeper: '最佳门将',
-  young_player: '最佳新星',
 } as const;
 
 const TROPHY_LABELS = {
@@ -180,6 +173,12 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
   const season = world.seasonState.seasonNumber;
   const name = player?.name ?? retired!.name;
   const entries: NarrativeThreadEntry[] = [];
+  const awards = playerCareerAwards(world, playerId);
+  const awardsSummary = Object.entries(PLAYER_AWARD_LABELS).flatMap(([type, label]) => {
+    const count = awards.filter(award => award.type === type).length;
+    return count ? [`${count}届${label}`] : [];
+  }).join(' · ');
+  const playerPath = `/player/${playerId}`;
 
   if (player) {
     const segments = Object.values(world.playerStatSegments ?? {}).filter(segment => segment.playerId === playerId);
@@ -194,6 +193,7 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
         title: `本季表现 ${performance.seasonScore.toFixed(1)}`,
         detail: `${performance.metrics.appearances}场 · ${performance.metrics.minutes}分钟 · 出勤${performance.availabilityScore.toFixed(0)} · 可信度${Math.round(performance.confidence * 100)}%。`,
         tone: performance.seasonScore >= 75 ? 'rise' : performance.seasonScore < 55 ? 'fall' : 'neutral',
+        to: `${playerPath}#season-performance`,
       });
     }
     const injury = [...(player.injuryHistory ?? [])].sort((a, b) => b.startWindow - a.startWindow)[0];
@@ -211,7 +211,7 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
     }
   }
 
-  const bestSeason = [...(world.playerStatsHistory[playerId] ?? [])]
+  const bestSeason = [...(world.playerStatsHistory?.[playerId] ?? [])]
     .filter(row => row.seasonScore !== undefined)
     .sort((a, b) => (b.seasonScore ?? 0) - (a.seasonScore ?? 0) || b.season - a.season)[0];
   if (bestSeason) {
@@ -219,25 +219,32 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
       id: `best-season:${playerId}:${bestSeason.season}`,
       season: bestSeason.season,
       order: bestSeason.season * 10_000 + 9_995,
-      title: `最佳赛季 · ${bestSeason.seasonScore!.toFixed(1)}`,
+      title: `存档最高评分 · ${bestSeason.seasonScore!.toFixed(1)}`,
       detail: `${bestSeason.teamName ?? bestSeason.teamId} · ${bestSeason.appearances}场 · ${bestSeason.goals}球 · ${bestSeason.assists}助攻。`,
       tone: 'stage',
       summaryOnly: true,
+      to: `${playerPath}#career-seasons`,
     });
   }
-  for (const award of (world.playerAwardsHistory ?? [])
-    .filter(item => item.playerId === playerId)
-    .sort((a, b) => b.season - a.season)
-    .slice(0, 2)) {
+  if (awards.length > 0) {
+    const firstSeason = awards[0].season;
+    const latestSeason = awards.at(-1)!.season;
     entries.push({
-      id: `award:${playerId}:${award.season}:${award.type}`,
-      season: award.season,
-      order: award.season * 10_000 + 9_999,
-      title: `个人荣誉 · ${award.statLabel}`,
-      detail: `${award.teamName}时期获得${AWARD_LABELS[award.type]}。`,
+      id: `award:${playerId}:career`,
+      season: latestSeason,
+      order: latestSeason * 10_000 + 9_999,
+      title: `个人荣誉 · ${awardsSummary}`,
+      detail: `依据已保留的S${firstSeason}${firstSeason !== latestSeason ? `至S${latestSeason}` : ''}获奖记录；可查看各届球队与评选数据。`,
       tone: 'stage',
-      to: '/history',
+      to: `${playerPath}#player-awards`,
       summaryOnly: true,
+    });
+    if (firstSeason !== latestSeason) entries.push({
+      id: `first-award:${playerId}:${firstSeason}`, season: firstSeason, order: firstSeason * 10_000,
+      title: '最早获奖记录',
+      detail: awards.filter(award => award.season === firstSeason)
+        .map(award => `${award.teamName} · ${PLAYER_AWARD_LABELS[award.type]} · ${award.statLabel}`).join('；'),
+      tone: 'rise', to: `${playerPath}#awards-S${firstSeason}`, summaryOnly: true,
     });
   }
   for (const transfer of (world.transferHistory ?? [])
@@ -251,7 +258,7 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
       title: `转至${transfer.toTeamName}`,
       detail: `${transfer.fromTeamName} → ${transfer.toTeamName}${transfer.fee ? ` · €${transfer.fee}M` : ''} · ${transfer.reason}。`,
       tone: 'transfer',
-      to: `/team/${transfer.toTeamId}`,
+      to: `${playerPath}#player-transfers`,
       summaryOnly: true,
     });
   }
@@ -263,17 +270,25 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
       title: `S${retired.seasonRetired} 退役`,
       detail: `${retired.age}岁结束生涯 · ${retired.careerGoals}粒生涯进球 · 最后效力${retired.teamName}。`,
       tone: 'neutral',
-      to: '/legends',
+      to: `${playerPath}#retirement-record`,
       summaryOnly: true,
     });
   }
 
-  const selected = selectEntries(entries);
+  const selected: NarrativeThreadEntry[] = [];
+  const add = (entry: NarrativeThreadEntry | undefined) => {
+    if (entry && selected.length < 4 && !selected.includes(entry)) selected.push(entry);
+  };
+  add(entries.find(entry => entry.id.startsWith('award:')));
+  add(entries.find(entry => entry.id.startsWith('first-award:')));
+  add(entries.find(entry => entry.id.startsWith('transfer:')));
+  add(entries.find(entry => entry.id.startsWith(retired ? 'retirement:' : 'current-performance:')));
+  for (const entry of [...entries].sort((a, b) => b.order - a.order)) add(entry);
   if (selected.length === 0) return null;
   return {
     id: `player-thread:${playerId}`,
     title: '球员档案线',
-    summary: player ? `${name}的当前表现与生涯关键节点。` : `${name}的退役档案与可追溯生涯节点。`,
+    summary: `${name} · ${retired ? '退役档案 · ' : ''}${awardsSummary ? `档案记载${awardsSummary}` : player ? `${player.age}岁${player.position} · 基础能力${player.rating}，赛场表现另计` : '保留已知生涯事实'}`,
     entries: selected,
   };
 }

@@ -24,6 +24,21 @@ afterEach(() => {
 });
 
 describe('MatchDetailModal prediction semantics', () => {
+  it('presents a starting 83-rated previous winner as a pre-match focus', () => {
+    const world = initializeGameWorld(20260709);
+    const fixture = world.seasonState.calendar[0].fixtures[0];
+    for (const player of [...world.squads[fixture.homeTeamId], ...world.squads[fixture.awayTeamId]]) player.rating = 72;
+    const keeper = world.squads[fixture.homeTeamId].find(player => player.position === 'GK')!;
+    keeper.rating = 83;
+    world.seasonState.seasonNumber = 2;
+    world.playerAwardsHistory = [{ season: 1, type: 'best_goalkeeper', playerId: keeper.uuid,
+      playerName: keeper.name, playerNumber: keeper.number, teamId: keeper.teamId,
+      teamName: world.teamBases[keeper.teamId].name, statValue: 83, statLabel: '综合83' }];
+    act(() => root.render(<MemoryRouter><MatchDetailModal isOpen onClose={() => undefined} fixture={fixture} world={world} /></MemoryRouter>));
+    expect(document.body.textContent).toContain('上季个人荣誉');
+    expect(document.querySelector(`a[href="/player/${keeper.uuid}"]`)).not.toBeNull();
+  });
+
   it('labels decimal model output as expected goals rather than a predicted score', () => {
     const world = initializeGameWorld(20260709);
     const fixture = world.seasonState.calendar[0].fixtures[0];

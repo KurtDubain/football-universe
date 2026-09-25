@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { executeCurrentWindow, initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
 import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
+import { retainPlayerArchives } from '../engine/players/retirement-archive';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import {
   __resetSaveRecoveryForTests,
@@ -73,6 +74,38 @@ beforeEach(() => {
   __flushCompressedStorageForTests();
   localStorage.clear();
   __resetSaveRecoveryForTests();
+});
+
+it('round-trips optional compact retirement facts without changing the schema or requiring them in old saves', () => {
+  const save = makeSave();
+  const player = Object.values(save.state.world.squads).flat()[0];
+  const world = save.state.world;
+  world.retirementHistory = [{ uuid: player.uuid, name: player.name, teamId: player.teamId,
+    teamName: world.teamBases[player.teamId].name, position: player.position,
+    peakRating: player.peakRating, age: 36, seasonRetired: 2, careerGoals: 0 }];
+  world.squads[player.teamId] = world.squads[player.teamId].filter(item => item.uuid !== player.uuid);
+  const legacy = parseCurrentSave(JSON.stringify(save));
+  expect(legacy.state.world.retirementHistory[0].careerSummary).toBeUndefined();
+  world.retirementHistory = retainPlayerArchives(world, [player.uuid]);
+  const restored = parseCurrentSave(JSON.stringify(save));
+  expect(restored.version).toBe(SAVE_SCHEMA_VERSION);
+  expect(restored.state.world.retirementHistory).toEqual(world.retirementHistory);
+  expect(restored.state.world.rngState).toBe(world.rngState);
+  expect(restored.state.world.seasonState).toEqual(world.seasonState);
+  world.retirementHistory[0].careerSummary!.totals.minutesPlayed = -1;
+  expect(() => parseCurrentSave(JSON.stringify(save))).toThrow('退役生涯汇总无效');
+});
+
+it('loads last-season-honor match snapshots with the existing save version', () => {
+  const save = makeSave();
+  save.state.world.playerAwardsHistory = Object.values(save.state.world.squads).flat().map(player => ({
+    season: 2, type: 'mvp', playerId: player.uuid, playerName: player.name, playerNumber: player.number,
+    teamId: player.teamId, teamName: player.teamId, statValue: 83, statLabel: '综合83',
+  }));
+  save.state.world = executeCurrentWindow(save.state.world).world;
+  expect(save.state.world.seasonState.calendar.flatMap(window => window.results ?? [])
+    .some(result => result.featuredPlayers?.some(player => player.reason === 'previous_award'))).toBe(true);
+  expect(parseCurrentSave(JSON.stringify(save)).state.world).toEqual(save.state.world);
 });
 
 describe('current schema hydration boundary', () => {

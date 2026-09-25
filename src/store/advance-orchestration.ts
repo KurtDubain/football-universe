@@ -89,6 +89,7 @@ export function executeWindowWithObservationSettlement(
   world: GameWorld,
   favoriteTeamIds: string[],
   observationThemePreference: ObservationThemePreference,
+  favoritePlayerIds: string[] = [],
 ) {
   const currentWindow = getCurrentWindow(world);
   if (!currentWindow) throw new Error('当前没有可推进的比赛窗口');
@@ -101,7 +102,7 @@ export function executeWindowWithObservationSettlement(
   const seasonTrajectory = currentWindow.type === 'season_end' && primaryTeamId
     ? buildObserverSeasonTrajectory(world, primaryTeamId, observationTheme)
     : null;
-  const result = executeCurrentWindow(world, { favoriteTeamIds });
+  const result = executeCurrentWindow(world, { favoriteTeamIds, favoritePlayerIds });
   const settlement = settleObservationJudgment(
     result.world.observationRecord,
     result.world.pendingObservationJudgment,

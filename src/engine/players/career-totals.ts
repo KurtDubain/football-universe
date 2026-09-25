@@ -77,7 +77,7 @@ function addCurrentSeason(total: PlayerCareerTotals, stat: PlayerSeasonStats): v
  * live season row when it has not been snapshotted yet.
  */
 export function computePlayerCareerTotals(
-  world: Pick<GameWorld, 'playerStats' | 'playerStatsHistory' | 'seasonState'>,
+  world: Pick<GameWorld, 'playerStats' | 'playerStatsHistory' | 'seasonState'> & Partial<Pick<GameWorld, 'retirementHistory'>>,
   playerUuid: string,
   options: { includeCurrentSeason?: boolean } = {},
 ): PlayerCareerTotals {
@@ -117,5 +117,13 @@ export function computePlayerCareerTotals(
     addCurrentSeason(total, current);
   }
 
+  const retired = world.retirementHistory?.find(player => player.uuid === playerUuid);
+  const snapshot = retired?.careerSummary?.totals;
+  if (snapshot) {
+    for (const key of Object.keys(total) as (keyof PlayerCareerTotals)[]) {
+      if (key !== 'currentSeasonIncluded') total[key] = Math.max(total[key], snapshot[key] ?? 0);
+    }
+  }
+  total.goals = Math.max(total.goals, retired?.careerGoals ?? 0);
   return total;
 }

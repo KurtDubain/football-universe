@@ -1,4 +1,5 @@
 import { SeasonState } from '../../types/season';
+import { retainPlayerArchives } from '../players/retirement-archive';
 import { SeasonRecord } from '../../types/team';
 import { CoachBase } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
@@ -66,7 +67,7 @@ function findTeamEliminationRound(rounds: CupRound[], teamId: string): string | 
  * Never write `world.X = ...`; write to the local with the same name and put
  * it on the patch object.
  */
-export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: string[] }): GameWorld {
+export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: string[]; favoritePlayerIds?: string[] }): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
 
@@ -431,9 +432,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   if (retirementResult.retirements.length > 0) {
     squads = retirementResult.squads;
     nextPlayerUuidCounter = retirementResult.nextPlayerUuidCounter;
-    // FIFO with cap — keep the last RETIREMENT_HISTORY_CAP entries.
+    // Apply the recent FIFO and important-person retention together after all retirements.
     const merged = [...retirementHistory, ...retirementResult.retirements];
-    retirementHistory = merged.length > 300 ? merged.slice(-300) : merged;
+    retirementHistory = merged;
     coachCandidatePool = retirementResult.coachCandidatePool;
 
     // Generate news for major retirements (peakRating >= 80). Don't spam —
@@ -644,7 +645,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
         careerGoals: fa.careerGoals,
       }));
       const merged = [...retirementHistory, ...newRetirements];
-      retirementHistory = merged.length > 300 ? merged.slice(-300) : merged;
+      retirementHistory = merged;
       // News for elite released players who weren't picked up
       for (const fa of transferResult.freeAgentRetirees) {
         if (fa.peakRating >= 80) {
@@ -1338,7 +1339,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     playerStatSegments,
     playerAwardsHistory,
     transferHistory,
-    retirementHistory,
+    retirementHistory: retainPlayerArchives({ ...world, retirementHistory, playerAwardsHistory }, options?.favoritePlayerIds),
     freeAgentPool,
     /** v18 — rumors are transient; cleared at season-end. */
     transferRumors: [],
