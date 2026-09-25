@@ -1,7 +1,7 @@
 # 下一季见：足球编年史 Current Status
 
-Last reviewed: 2026-09-15
-Current release: v4.61.10, deployed to Tencent on 2026-09-15 11:24 Asia/Shanghai at https://football.dyp02.vip/ and https://cup.dyp02.vip/. Build source: main/f0b2d63 plus the explicitly captured local snapshot 80c7a776 (not a clean-commit build). No Git commit/push this turn; see [deployment provenance and acceptance](tencent-cloud-deployment.md).
+Last reviewed: 2026-09-25
+Current release: v4.61.11 (source release), prepared for the authorized Git push; deployment has not been verified. Last recorded Tencent release: v4.61.10, deployed on 2026-09-15 11:24 Asia/Shanghai at https://football.dyp02.vip/ and https://cup.dyp02.vip/. That build used main/f0b2d63 plus the explicitly captured local snapshot 80c7a776 (not a clean-commit build); see [deployment provenance and acceptance](tencent-cloud-deployment.md).
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.

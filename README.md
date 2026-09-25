@@ -205,7 +205,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.61.10** (local verification candidate; not deployed). Confirmed Tencent release: **v4.61.9**.
+Current release: **v4.61.11** (source release verified locally; deployment not verified). Last recorded Tencent release: **v4.61.10**.
 
 66k+ production TypeScript lines · 220+ production source files · 160+ test files · 45+ browser/simulation audit commands
 

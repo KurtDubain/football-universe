@@ -1,5 +1,9 @@
 Original prompt: 那你处理一下吧，按照B；速度慢一点也没问题，如果你对性能有担忧的话
 
+## 2026-09-25 Authorized Git Release
+
+- User authorized pushing the three local implementation commits. Prepared v4.61.11 with package/app/changelog and current documentation aligned; previous validation results and full-suite limitations remain recorded below. Git publication is not evidence of a successful Tencent or Vercel deployment; no server/platform settings are changed here.
+
 ## 2026-09-25 Personal Archive Closure (Local Only)
 
 - User requested four bounded fixes on clean main/4b6c10b: stable retired career-score semantics, actual consecutive-title counts, deterministic third-season-fact priority, and retired-follow identity. No simulation/probability/award/transfer changes, Git publication or user-save access.
