@@ -64,7 +64,9 @@ export function buildLiveCommentary(context: CommentaryContext): string {
   }
   if (event.type === 'goal' || event.type === 'own_goal') {
     const detail = scoringContext(context, teamName);
-    return `${event.description}。${detail}`;
+    // Old saves can carry speculative labels written before the full timeline existed.
+    const description = event.description.replace(/\s*\[(?:扳平比分！|反超比分！|绝杀！|锁定胜局|帽子戏法！)\]/g, '');
+    return `${description}。${detail}`;
   }
   if (event.type === 'corner') {
     return event.setPiece?.resolution === 'retained'

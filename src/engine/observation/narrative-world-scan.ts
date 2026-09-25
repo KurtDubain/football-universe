@@ -1,4 +1,5 @@
 import type { StandingEntry } from '../../types/league';
+import { followedPlayerFact, playerCareerAwards, PLAYER_AWARD_LABELS } from '../players/player-honors';
 import type { MatchResult } from '../../types/match';
 import type { Player, PlayerPosition, PlayerTeamSeasonStats } from '../../types/player';
 import type { CalendarWindow } from '../../types/season';
@@ -431,7 +432,8 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
   }).filter(entry => entry.injury
     && entry.injury.durationMatches >= 6
     && (entry.player.injuredUntilWindow ?? 0) > elapsed)
-    .sort((a, b) => b.injury!.durationMatches - a.injury!.durationMatches
+    .sort((a, b) => Number(followed.has(b.player.uuid)) - Number(followed.has(a.player.uuid))
+      || b.injury!.durationMatches - a.injury!.durationMatches
       || a.player.uuid.localeCompare(b.player.uuid))
     .slice(0, 2);
   for (const { player, injury } of injuries) {
@@ -460,6 +462,23 @@ function playerCandidates(options: WorldNarrativeScanOptions): NarrativeCandidat
     });
   }
 
+  if (world.seasonState.currentWindowIndex < 3) {
+    for (const playerId of followed) {
+      const awards = playerCareerAwards(world, playerId).filter(award => award.season === season - 1);
+      const retired = world.retirementHistory.find(row => row.uuid === playerId && row.seasonRetired === season - 1);
+      if (!awards.length && !retired) continue;
+      const name = retired?.name ?? playerById.get(playerId)?.name ?? awards[0]?.playerName;
+      const title = retired ? `${name}在S${retired.seasonRetired}退役` : `${name}的上季个人荣誉`;
+      const summary = awards.length ? `S${season - 1} · ${awards.map(award => `${PLAYER_AWARD_LABELS[award.type]}：${award.statLabel}`).join('；')}。`
+        : `${retired!.age}岁退役，最后效力${retired!.teamName}。`;
+      candidates.push({ id: `followed-milestone:${season - 1}:${playerId}`, arcKey: `player:${playerId}:milestone:${season - 1}`,
+        eventKey: `S${season - 1}:milestone:${playerId}`, source: 'player_story', subjectType: 'player', subjectIds: [playerId],
+        seasonNumber: season - 1, title, summary, destinations: [{ key: playerId, label: '查看人物依据',
+          to: `/player/${playerId}#${retired ? 'retirement-record' : `awards-S${season - 1}`}` }],
+        fingerprint: createNarrativeFingerprint([title, summary]), changedAt: elapsed - world.seasonState.currentWindowIndex,
+        visualLevel: 'chapter', visualKind: 'legacy', weights: { importance: 90, relevance: 95, continuity: 80, historical: 65 } });
+    }
+  }
   const retained: NarrativeCandidate[] = [];
   let retainedLeaders = 0;
   const rankedCandidates = [...candidates].sort((left, right) => (
@@ -1065,19 +1084,25 @@ export function buildSeasonNarrativeOverview(
   const segments = segmentsByPlayer(world);
   const watchedPlayers = favoritePlayerIds.flatMap(playerId => {
     const player = playerById.get(playerId);
-    if (!player) return [];
+    if (!player) {
+      const retired = world.retirementHistory.find(row => row.uuid === playerId);
+      return retired ? [{ playerId, title: retired.name,
+        detail: `S${retired.seasonRetired}退役 · 档案保留${playerCareerAwards(world, playerId).length}项个人荣誉。` }] : [];
+    }
     const performance = performanceFor(world, player, segments);
     const activeInjury = (player.injuredUntilWindow ?? 0) > (world.totalElapsedWindows ?? 0);
     const latestTransfer = [...(world.transferHistory ?? [])]
       .filter(record => record.playerId === playerId)
       .sort((a, b) => b.season - a.season || b.windowIndex - a.windowIndex)[0];
     const recentTransfer = latestTransfer && latestTransfer.season >= world.seasonState.seasonNumber - 1;
-    if (!activeInjury && performance.metrics.minutes < 360 && !recentTransfer) return [];
+    const identity = followedPlayerFact(world, playerId);
+    if (!activeInjury && performance.metrics.minutes < 360 && !recentTransfer && !identity) return [];
     const detail = activeInjury
       ? `当前伤停至全局窗口${player.injuredUntilWindow}，本季因伤缺席${performance.metrics.injuryAbsenceMatches}场。`
       : recentTransfer
         ? `近期从${latestTransfer.fromTeamName}转至${latestTransfer.toTeamName}，本季${performance.metrics.minutes}分钟。`
-        : `赛季评分${performance.seasonScore.toFixed(1)} · ${playerPerformanceDetail(player, performance, world)}。`;
+        : performance.metrics.minutes === 0 && identity ? identity.fact
+          : `赛季评分${performance.seasonScore.toFixed(1)} · ${playerPerformanceDetail(player, performance, world)}。`;
     return [{ playerId, title: player.name, detail }];
   }).slice(0, 4);
 

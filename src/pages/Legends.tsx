@@ -319,15 +319,16 @@ function RetireeCard({
         <StatPill label={positionCareer.firstLabel} value={String(positionCareer.firstValue)} accent="text-amber-400" />
         <StatPill label={positionCareer.secondLabel} value={String(positionCareer.secondValue)} />
         <StatPill
-          label="原队荣誉快照"
-          value={String(retiree.careerTrophies?.length ?? 0)}
-          accent={(retiree.careerTrophies?.length ?? 0) > 0 ? 'text-emerald-300' : ''}
+          label="个人奖项记录"
+          value={String(awards.length)}
+          accent={awards.length > 0 ? 'text-emerald-300' : ''}
         />
       </div>
 
       {/* Trophy breakdown — only if non-empty */}
       {retiree.careerTrophies && retiree.careerTrophies.length > 0 && (
         <div className="mt-2">
+          <p className="text-xs text-slate-500">旧档原队荣誉快照（非个人冠军）</p>
           <TrophyBreakdown trophies={retiree.careerTrophies} size="xs" />
         </div>
       )}

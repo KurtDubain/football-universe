@@ -2,6 +2,11 @@ import type { CalendarWindow, WindowType } from '../types/season';
 import type { StandingEntry } from '../types/league';
 import type { TeamTier } from '../types/team';
 
+/** A closed story describes its recorded window, not the reader's current standings. */
+export function archivedStoryConclusion(text: string | undefined): string {
+  return (text ?? '').replace(/当前排名/g, '故事结束时排名');
+}
+
 export interface SeasonWindowDisplay {
   completedWindows: number;
   totalWindows: number;

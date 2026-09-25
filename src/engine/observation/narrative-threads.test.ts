@@ -170,6 +170,8 @@ describe('narrative detail threads', () => {
       reason: '核心补强',
     }];
 
+    world.playerAwardsHistory.push({ ...world.playerAwardsHistory[0], season: 1 });
+
     const active = buildPlayerNarrativeThread(world, player.uuid)!;
     expect(active.entries.map(entry => entry.id)).toEqual(expect.arrayContaining([
       expect.stringContaining('current-performance:'),

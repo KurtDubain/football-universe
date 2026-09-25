@@ -1,4 +1,5 @@
 import type { MatchEvent, MatchResult } from '../../types/match';
+import { goalFacts } from './goal-facts';
 
 export type MatchOutcome = 'home' | 'draw' | 'away';
 export type DestinyDeviationTier = 'normal' | 'minor' | 'upset' | 'major_upset';
@@ -113,10 +114,10 @@ export function isUpsetResult(result: MatchResult): boolean {
   return analyzeDestinyDeviation(result).isUpset;
 }
 
-function scoringTeamId(event: MatchEvent, result: MatchResult): string | null {
+function scoringTeamId(event: MatchEvent): string | null {
   if (event.type === 'goal') return event.teamId;
   if (event.type !== 'own_goal') return null;
-  return event.teamId === result.homeTeamId ? result.awayTeamId : result.homeTeamId;
+  return event.teamId;
 }
 
 function teamLabel(teamId: string, result: MatchResult): string {
@@ -126,7 +127,9 @@ function teamLabel(teamId: string, result: MatchResult): string {
 export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoint[] {
   if (result.detailsArchived) return [];
   const candidates: Array<MatchTurningPoint & { rank: number }> = [];
-  const outcome = resolveMatchOutcome(result);
+  const homeTotal = result.homeGoals + (result.etHomeGoals ?? 0);
+  const awayTotal = result.awayGoals + (result.etAwayGoals ?? 0);
+  const outcome = homeTotal > awayTotal ? 'home' : awayTotal > homeTotal ? 'away' : 'draw';
   const winnerId = outcome === 'home'
     ? result.homeTeamId
     : outcome === 'away'
@@ -140,8 +143,9 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
   let homeTrailed = false;
   let awayTrailed = false;
 
+  const facts = goalFacts(result);
   for (const event of scoringEvents) {
-    const scorerId = scoringTeamId(event, result);
+    const scorerId = scoringTeamId(event);
     if (!scorerId) continue;
     homeTrailed ||= home < away;
     awayTrailed ||= away < home;
@@ -149,7 +153,8 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
     const scorerHadTrailed = scorerId === result.homeTeamId ? homeTrailed : awayTrailed;
     if (scorerId === result.homeTeamId) home++;
     if (scorerId === result.awayTeamId) away++;
-    const isLate = event.minute >= (event.minute > 90 ? 115 : 88);
+    const goal = facts.find(row => row.event === event);
+    const isLate = Boolean(goal?.lateEqualizer);
     const scoresLevel = home === away;
     const scorerLeads = scorerId === result.homeTeamId ? home > away : away > home;
 
@@ -167,7 +172,7 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
       });
     }
 
-    if (scorerHadTrailed && scorerLeads) {
+    if (scorerHadTrailed && goal?.turnaround) {
       candidates.push({
         type: 'turnaround', minute: event.minute, teamId: scorerId, rank: 84,
         title: `${event.minute}' 反超比分`,
@@ -175,7 +180,7 @@ export function extractMatchTurningPoints(result: MatchResult): MatchTurningPoin
       });
     }
 
-    if (!isLate) continue;
+    if (!goal?.lateWinner) continue;
 
     if (winnerId === scorerId) {
       if (scorerLeads) {

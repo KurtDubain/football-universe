@@ -45,6 +45,21 @@ function stats(item: Player, minutes = 1800): PlayerSeasonStats {
 }
 
 describe('star presence', () => {
+  it('reserves default seats for distinct previous winners without removing current stars or extending protection', () => {
+    const winner = player('low-winner', 'A', 73);
+    const keeper = { ...player('low-keeper', 'B', 72), position: 'GK' as const };
+    const stars = Array.from({ length: 18 }, (_, i) => player(`star-${i}`, 'C', 95));
+    const honor = { season: 1, type: 'mvp' as const, playerId: winner.uuid, playerName: winner.name,
+      playerNumber: 9, teamId: 'A', teamName: 'A', statValue: 83, statLabel: '综合83' };
+    const context = { seasonNumber: 2, playerStats: {}, playerAwardsHistory: [honor,
+      { ...honor, type: 'golden_boot' as const }, { ...honor, type: 'best_goalkeeper' as const, playerId: keeper.uuid }] };
+    const list = selectStarObservations([...stars, winner, keeper], context).worldFocus;
+    expect(list.slice(0, 10).map(row => row.player.uuid)).toContain(winner.uuid);
+    expect(list.slice(0, 10).map(row => row.player.uuid)).toContain(keeper.uuid);
+    expect(new Set(list.map(row => row.player.uuid)).size).toBe(list.length);
+    expect(list.slice(0, 10).filter(row => row.player.rating === 95)).toHaveLength(8);
+    expect(selectStarObservations([...stars, winner, keeper], { ...context, seasonNumber: 3 }).worldFocus).toHaveLength(18);
+  });
   it('never restores an unavailable award winner to a matchday lineup', () => {
     const winner = { ...player('injured-winner', 'A', 83), injuredUntilWindow: 20 };
     const squad = [winner, ...Array.from({ length: 14 }, (_, i) => player(`healthy-${i}`, 'A', 72))];

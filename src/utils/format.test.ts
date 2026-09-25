@@ -3,12 +3,19 @@ import type { StandingEntry } from '../types/league';
 import type { CalendarWindow } from '../types/season';
 import {
   formatChineseList,
+  archivedStoryConclusion,
   formatLeagueTransition,
   getLeagueName,
   getSeasonWindowDisplay,
   getStandingPositionLabel,
   getStandingRank,
 } from './format';
+
+it('keeps archived window ranks distinct from current standings without rewriting facts', () => {
+  expect(archivedStoryConclusion('当前排名第12，故事结束。')).toBe('故事结束时排名第12，故事结束。');
+  expect(archivedStoryConclusion('最终排名第1')).toBe('最终排名第1');
+  expect(archivedStoryConclusion(undefined)).toBe('');
+});
 
 function windowAt(index: number, completed: boolean): CalendarWindow {
   return {

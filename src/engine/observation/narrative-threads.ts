@@ -206,6 +206,7 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
         title: active ? `当前伤停 · ${injury.reason}` : `伤病档案 · ${injury.reason}`,
         detail: `${injury.type} · 缺席${injury.durationMatches}个比赛窗口${active ? ` · 至全局窗口${player.injuredUntilWindow}` : ''}。`,
         tone: active ? 'fall' : 'neutral',
+        to: `${playerPath}#injury-history`,
         summaryOnly: !active,
       });
     }
@@ -280,9 +281,11 @@ export function buildPlayerNarrativeThread(world: GameWorld, playerId: string): 
     if (entry && selected.length < 4 && !selected.includes(entry)) selected.push(entry);
   };
   add(entries.find(entry => entry.id.startsWith('award:')));
-  add(entries.find(entry => entry.id.startsWith('first-award:')));
+  add(entries.find(entry => entry.id.startsWith('injury:') && entry.tone === 'fall'));
+  add(entries.find(entry => entry.id.startsWith('retirement:')));
   add(entries.find(entry => entry.id.startsWith('transfer:')));
   add(entries.find(entry => entry.id.startsWith(retired ? 'retirement:' : 'current-performance:')));
+  add(entries.find(entry => entry.id.startsWith('first-award:')));
   for (const entry of [...entries].sort((a, b) => b.order - a.order)) add(entry);
   if (selected.length === 0) return null;
   return {

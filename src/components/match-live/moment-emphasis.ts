@@ -1,4 +1,5 @@
 import type { CompetitionType, MatchEvent, MatchResult } from '../../types/match';
+import { factForGoal } from '../../engine/match/goal-facts';
 
 export type LiveMomentKind =
   | 'goal'
@@ -74,16 +75,9 @@ export function describeLiveEventMoment(
   const beforeOpponent = scoringHome ? beforeAway : beforeHome;
   const afterScoring = scoringHome ? afterHome : afterAway;
   const afterOpponent = scoringHome ? afterAway : afterHome;
-  const resultEventIndex = result.events.indexOf(event);
-  const laterEvents = resultEventIndex >= 0
-    ? result.events.slice(resultEventIndex + 1)
-    : result.events.filter(candidate => candidate.minute > event.minute);
-  const laterScoreEvent = laterEvents.some(candidate => (
-    candidate.type === 'goal' || candidate.type === 'own_goal'
-  ));
-  const finalWinner = winningTeamId(result);
+  const goal = factForGoal(result, event);
 
-  if (event.minute >= 85 && !laterScoreEvent && finalWinner === event.teamId && beforeScoring === beforeOpponent) {
+  if (goal?.lateWinner) {
     return { kind: 'late_winner', label: '绝杀', detail: `${event.minute}' 改写比赛`, playerName: event.playerName };
   }
   if (afterScoring === afterOpponent) {
@@ -93,7 +87,7 @@ export function describeLiveEventMoment(
     const [home, away] = scoresForEvents(priorEvents.slice(0, index + 1), result.homeTeamId);
     return scoringHome ? home < away : away < home;
   });
-  if (afterScoring > afterOpponent && scoringTeamHadTrailed) {
+  if (beforeScoring === beforeOpponent && afterScoring > afterOpponent && scoringTeamHadTrailed) {
     return { kind: 'turnaround', label: '反超', detail: `${afterHome} - ${afterAway}`, playerName: event.playerName };
   }
   return { kind: 'goal', label: '进球', detail: `${afterHome} - ${afterAway}`, playerName: event.playerName };

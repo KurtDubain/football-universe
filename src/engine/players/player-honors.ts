@@ -1,5 +1,26 @@
 import type { PlayerAward, PlayerAwardType } from '../../types/award';
 import type { PlayerRetirement } from '../../types/player';
+import type { GameWorld } from '../season/season-manager';
+
+/** Only a display fallback: as soon as minutes exist, current-season facts take over. */
+export function followedPlayerFact(world: GameWorld, playerId: string): { fact: string; factTarget: string } | null {
+  const path = `/player/${playerId}`;
+  const stats = world.playerStats[playerId];
+  if ((stats?.minutesPlayed ?? 0) > 0) return {
+    fact: `本季 ${stats.appearances}场 · ${stats.goals}球 · ${stats.assists}助攻`, factTarget: `${path}#season-performance`,
+  };
+  const awards = playerCareerAwards(world, playerId);
+  const major = ['mvp', 'golden_boot', 'best_defender', 'best_goalkeeper'] as const;
+  for (const type of major) {
+    const wins = awards.filter(award => award.type === type);
+    if (wins.length) return { fact: `档案记载${wins.length}届${PLAYER_AWARD_LABELS[type]} · 最近S${wins.at(-1)!.season}`,
+      factTarget: `${path}#player-awards` };
+  }
+  const previous = world.playerStatsHistory?.[playerId]?.filter(row => row.season === world.seasonState.seasonNumber - 1);
+  if (previous?.length) return { fact: `上季 ${previous.reduce((sum, row) => sum + row.goals, 0)}球 · ${previous.reduce((sum, row) => sum + row.assists, 0)}助攻`,
+    factTarget: `${path}#career-seasons` };
+  return null;
+}
 
 export const PLAYER_AWARD_LABELS: Record<PlayerAwardType, string> = {
   mvp: '金球', golden_boot: '金靴', best_defender: '最佳后卫',

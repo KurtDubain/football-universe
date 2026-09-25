@@ -264,9 +264,8 @@ export interface PlayerSeasonStatsHistoryEntry {
  *
  * `careerGoals` is a snapshot at retirement time, derived from finished
  * season history plus the current season that is about to be snapshotted.
- * `careerTrophies` is an optional snapshot of trophies the player's last
- * team won in seasons where they were on the squad — computed best-effort
- * by the retirement engine.
+ * `careerTrophies` is a legacy snapshot of the last club's honors, not
+ * verified personal trophies. New retirements do not duplicate that history.
  */
 export interface PlayerRetirement {
   uuid: string;

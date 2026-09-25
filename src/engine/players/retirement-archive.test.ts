@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { initializeGameWorld } from '../season/season-manager';
 import { enforceStorageLimits } from '../season/storage-limits';
 import { retainPlayerArchives } from './retirement-archive';
-import { playerCareerAwards } from './player-honors';
+import { playerCareerAwards, followedPlayerFact } from './player-honors';
 import { buildPlayerNarrativeThread } from '../observation/narrative-threads';
 import { computePlayerCareerTotals } from './career-totals';
 
@@ -21,6 +21,24 @@ function fixture() {
 }
 
 describe('minimal retirement archives', () => {
+  it('uses cumulative identity before the first appearance, then switches to current facts', () => {
+    const { world, player } = fixture();
+    expect(followedPlayerFact(world, player.uuid)?.fact).toContain('3届金球');
+    world.playerStats[player.uuid].minutesPlayed = 90;
+    world.playerStats[player.uuid].appearances = 1;
+    expect(followedPlayerFact(world, player.uuid)?.fact).toContain('本季 1场');
+    expect(followedPlayerFact(world, 'missing')).toBeNull();
+  });
+  it('removes only duplicate club trophy snapshots and keeps unmatched legacy facts', () => {
+    const { world, player } = fixture();
+    world.teamTrophies[player.teamId] = [{ type: 'league1', seasonNumber: 1 }];
+    world.retirementHistory[0].careerTrophies = [{ type: 'league1', seasonNumber: 1 }, { type: 'league_cup', seasonNumber: 2 }];
+    const records = retainPlayerArchives(world);
+    expect(records[0].careerTrophies).toEqual([{ type: 'league_cup', seasonNumber: 2 }]);
+    expect(world.retirementHistory[0].careerTrophies).toHaveLength(2);
+    expect(retainPlayerArchives({ ...world, retirementHistory: records })).toEqual(records);
+    expect(playerCareerAwards({ ...world, retirementHistory: records }, player.uuid)).toHaveLength(3);
+  });
   it('summarizes three Ballon dOr wins and merges same-season honors with specific evidence anchors', () => {
     const { world, player } = fixture();
     world.playerAwardsHistory.push({ ...world.playerAwardsHistory[0], type: 'best_defender' });

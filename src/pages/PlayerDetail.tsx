@@ -792,7 +792,7 @@ function InjurySection({
   if (history.length === 0 && !isInjured && !isSuspended) return null;
   const sorted = [...history].sort((a, b) => b.startWindow - a.startWindow);
   return (
-    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
+    <div id="injury-history" className="scroll-mt-4 bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1"><Icon name="bandage" size={13} accent="#fca5a5" /> 伤病记录</h3>
         <div className="flex gap-1.5">
@@ -878,7 +878,7 @@ function RetiredPlayerView({
   const team = world?.teamBases[retired.teamId];
   const careerTotals = world ? computePlayerCareerTotals(world, retired.uuid) : null;
   const careerGoals = Math.max(retired.careerGoals ?? 0, careerTotals?.goals ?? stats?.goals ?? 0);
-  const trophyCount = retired.careerTrophies?.length ?? 0;
+  const awardCount = world ? playerCareerAwards(world, retired.uuid).length : 0;
   const narrativeThread = world ? buildPlayerNarrativeThread(world, retired.uuid) : null;
   return (
     <div className="max-w-2xl space-y-5">
@@ -937,7 +937,7 @@ function RetiredPlayerView({
         <StatBox label="生涯分钟" value={careerTotals?.minutesPlayed ?? stats?.minutesPlayed ?? 0} />
         <StatBox label="生涯进球" value={careerGoals} color="text-amber-400" />
         <StatBox label="生涯助攻" value={careerTotals?.assists ?? stats?.assists ?? 0} color="text-blue-300" />
-        <StatBox label="原队荣誉快照" value={trophyCount} color={trophyCount > 0 ? 'text-emerald-300' : undefined} />
+        <StatBox label="个人奖项记录" value={awardCount} color={awardCount > 0 ? 'text-emerald-300' : undefined} />
       </div>
       {retired.careerSummary && (
         <section className="border-y border-slate-700/60 py-3 text-xs text-slate-400">

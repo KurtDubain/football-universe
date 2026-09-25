@@ -12,8 +12,13 @@ export function retainPlayerArchives(world: GameWorld, followedIds: string[] = [
   return world.retirementHistory.flatMap(player => {
     const important = followed.has(player.uuid) || awarded.has(player.uuid) || player.careerSummary;
     if (!important) return recentIds.has(player.uuid) ? [player] : [];
+    // Drop only redundant club snapshots; unmatched old facts remain readable.
+    const { careerTrophies, ...identity } = player;
+    const uniqueLegacyTrophies = careerTrophies?.filter(trophy => !(world.teamTrophies[player.teamId] ?? [])
+      .some(known => known.type === trophy.type && known.seasonNumber === trophy.seasonNumber));
+    const compact = { ...identity, ...(uniqueLegacyTrophies?.length ? { careerTrophies: uniqueLegacyTrophies } : {}) };
     const existing = player.careerSummary;
-    if (existing) return [{ ...player, careerSummary: {
+    if (existing) return [{ ...compact, careerSummary: {
       ...existing,
       followed: existing.followed || followed.has(player.uuid),
       awards: playerCareerAwards(world, player.uuid),
@@ -33,7 +38,7 @@ export function retainPlayerArchives(world: GameWorld, followedIds: string[] = [
       addTeam(transfer.toTeamId, transfer.toTeamName, transfer.season);
     }
     addTeam(player.teamId, player.teamName, player.seasonRetired);
-    return [{ ...player, careerSummary: {
+    return [{ ...compact, careerSummary: {
       followed: followed.has(player.uuid),
       awards: playerCareerAwards(world, player.uuid),
       totals: computePlayerCareerTotals(world, player.uuid),

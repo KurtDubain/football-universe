@@ -183,7 +183,7 @@ describe('match turning points', () => {
       events: [
         event({ type: 'goal', teamId: 'home', minute: 89, playerName: '甲' }),
         event({ type: 'goal', teamId: 'away', minute: 90, playerName: '乙' }),
-        event({ type: 'own_goal', teamId: 'away', minute: 90, playerName: '丙' }),
+        event({ type: 'own_goal', teamId: 'home', minute: 90, playerName: '丙' }),
       ],
     }));
     expect(points[0]).toMatchObject({ type: 'late_winner', minute: 90, teamId: 'home' });

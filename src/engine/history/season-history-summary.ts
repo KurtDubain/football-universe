@@ -1,5 +1,5 @@
 import type { Trophy } from '../../types/team';
-import { formatLeagueTransition, getLeagueName } from '../../utils/format';
+import { archivedStoryConclusion, formatLeagueTransition, getLeagueName } from '../../utils/format';
 import type { GameWorld } from '../season/season-manager';
 import type { Storyline, StorylineType } from '../season/storylines';
 
@@ -256,7 +256,7 @@ function buildSeasonEvents(
       type: 'story',
       title: `${names.join('、')}：${STORY_LABELS[storyline.type]}落幕`,
       detail: stories.map(story => (
-        `${teamName(world, story.teamId)}：${story.conclusion ?? story.evidence.join(' · ')}`
+        `${teamName(world, story.teamId)}：${archivedStoryConclusion(story.conclusion ?? story.evidence.join(' · '))}`
       )).join('；'),
       links: uniqueLinks(stories.map(story => teamLink(world, story.teamId))),
     });

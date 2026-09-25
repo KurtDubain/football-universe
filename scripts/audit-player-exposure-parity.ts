@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type * as Engine from '../src/engine/season/season-manager';
 
-// Run against the baseline archive and this checkout. Only focus display metadata is excluded.
+// Compare numerical/identity/event facts, excluding only display metadata and prose.
 const engine = await import(pathToFileURL(resolve(process.env.PARITY_ENGINE_ROOT ?? '.', 'src/engine/season/season-manager.ts')).href) as typeof Engine;
 let world = engine.initializeGameWorld(20260709);
 const report = [];
@@ -17,6 +17,6 @@ for (let season = 1; season <= 5; season++) {
     'matchHistory', 'transferHistory', 'leagueCup', 'superCup', 'worldCup', 'continentalCups',
     'nextPlayerUuidCounter', 'nextCoachIdCounter', 'playerAwardsHistory'] as const;
   report.push({ season, hashes: Object.fromEntries(fields.map(key => [key, createHash('sha256')
-    .update(JSON.stringify(world[key], (field, value) => field === 'featuredPlayers' ? undefined : value)).digest('hex')])) });
+    .update(JSON.stringify(world[key], (field, value) => field === 'featuredPlayers' || field === 'description' ? undefined : value)).digest('hex')])) });
 }
 console.log(JSON.stringify(report, null, 2));

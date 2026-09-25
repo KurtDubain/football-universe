@@ -458,9 +458,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
     for (const r of retirementResult.retirements) {
       if (r.peakRating < 80) continue;
-      const yearsSnap = Math.max(1, r.age - 18); // rough career length estimate
       const posCN = positionLabel[r.position];
-      const trophyCount = r.careerTrophies?.length ?? 0;
+      const awardCount = playerAwardsHistory.filter(award => award.playerId === r.uuid).length;
       const pre = preRetirePlayerLookup.get(r.uuid);
       const lastInj = pre?.injuryHistory?.[pre.injuryHistory.length - 1];
       const forcedByInjury = !!lastInj
@@ -477,9 +476,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
         continue;
       }
 
-      const baseDesc = `${r.teamName} ${posCN} ${r.name}（${r.age} 岁）结束 ${yearsSnap} 年职业生涯，留下 ${r.careerGoals} 球的纪录`;
-      const description = trophyCount > 0
-        ? `${baseDesc}，并捧起 ${trophyCount} 座冠军奖杯。`
+      const baseDesc = `${r.teamName} ${posCN} ${r.name}（${r.age} 岁）宣布退役，留下 ${r.careerGoals} 球的纪录`;
+      const description = awardCount > 0
+        ? `${baseDesc}，档案保留 ${awardCount} 项个人奖项。`
         : `${baseDesc}。`;
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `retire-${r.uuid}`),

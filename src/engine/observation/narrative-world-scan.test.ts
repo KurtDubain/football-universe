@@ -10,6 +10,23 @@ import {
   WORLD_NARRATIVE_CAPS,
 } from './narrative-world-scan';
 
+it('reuses bounded narrative slots for followed honors and retirements at the new-season handoff', () => {
+  const world = initializeGameWorld(20260709);
+  const player = Object.values(world.squads).flat()[0];
+  world.seasonState.seasonNumber = 2;
+  world.playerAwardsHistory = [{ season: 1, type: 'mvp', playerId: player.uuid, playerName: player.name,
+    playerNumber: player.number, teamId: player.teamId, teamName: world.teamBases[player.teamId].name, statValue: 80, statLabel: '综合80' }];
+  const options = { world, currentWindow: world.seasonState.calendar[0], favoriteTeamIds: [], favoritePlayerIds: [player.uuid] };
+  expect(buildWorldNarrativeCandidates(options).some(row => row.id.startsWith('followed-milestone:'))).toBe(true);
+  expect(buildSeasonNarrativeOverview(world, null, [player.uuid]).watchedPlayers[0].detail).toContain('1届金球');
+  world.seasonState.currentWindowIndex = 3;
+  expect(buildWorldNarrativeCandidates(options).some(row => row.id.startsWith('followed-milestone:'))).toBe(false);
+  world.squads[player.teamId] = world.squads[player.teamId].filter(row => row.uuid !== player.uuid);
+  world.retirementHistory.push({ uuid: player.uuid, name: player.name, teamId: player.teamId,
+    teamName: world.teamBases[player.teamId].name, age: 36, seasonRetired: 1, peakRating: 83, position: player.position, careerGoals: 0 });
+  expect(buildSeasonNarrativeOverview(world, null, [player.uuid]).watchedPlayers[0].detail).toContain('S1退役');
+});
+
 function playerAt(world: GameWorld, position: PlayerPosition, offset = 0): Player {
   return Object.values(world.squads).flat().filter(player => player.position === position)[offset];
 }

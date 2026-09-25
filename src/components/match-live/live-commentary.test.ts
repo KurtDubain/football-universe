@@ -18,6 +18,12 @@ const base = {
 };
 
 describe('live commentary', () => {
+  it('does not repeat speculative dramatic suffixes from older saved events', () => {
+    const event: MatchEvent = { minute: 89, type: 'goal', teamId: 'home', description: '低射破门 [绝杀！]' };
+    const text = buildLiveCommentary({ ...base, event, homeScore: 3 });
+    expect(text).not.toContain('绝杀');
+    expect(text).toContain('优势扩大');
+  });
   it('uses the real event description and score context', () => {
     const event: MatchEvent = { minute: 82, type: 'goal', teamId: 'home', description: '九号低射破门' };
     expect(buildLiveCommentary({ ...base, event })).toBe('九号低射破门。主队在比赛末段取得关键领先。');

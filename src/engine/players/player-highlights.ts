@@ -1,4 +1,5 @@
 import type { MatchResult, MatchEvent } from '../../types/match';
+import { goalFacts } from '../match/goal-facts';
 
 /**
  * A noteworthy per-player moment from a single matchday's results. Pure-data
@@ -112,7 +113,7 @@ function aggregateByPlayer(events: MatchEvent[]): Map<string, PlayerMatchAggrega
  *
  * Detection rules (in priority order):
  *   - 帽子戏法 (10): same player scored 3+ goals in one match
- *   - 绝杀     (8):  player scored at minute >= 85 in a 1-goal-margin match
+ *   - 绝杀     (8): a late tie-breaking goal whose lead survives to full time
  *                    (winner's side only)
  *   - 多助攻王 (6):  player provided 3+ assists in one match
  *   - 门神     (5):  GK with 4+ saves in a match where their team didn't lose
@@ -129,11 +130,12 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
 
   for (const result of lastResults) {
     const aggregates = aggregateByPlayer(result.events);
-    const margin = Math.abs(result.homeGoals - result.awayGoals);
+    const homeTotal = result.homeGoals + (result.etHomeGoals ?? 0);
+    const awayTotal = result.awayGoals + (result.etAwayGoals ?? 0);
     const winnerTeamId =
-      result.homeGoals > result.awayGoals
+      homeTotal > awayTotal
         ? result.homeTeamId
-        : result.awayGoals > result.homeGoals
+        : awayTotal > homeTotal
           ? result.awayTeamId
           : null;
 
@@ -163,13 +165,12 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
       });
     }
 
-    // 2) Late-drama winner (绝杀) — 1-goal-margin match, scored at minute >= 85
-    //    by a player on the winning side. We pick the latest scorer to avoid
-    //    crediting someone who scored at 12'.
-    if (winnerTeamId && margin === 1) {
+    // 2) Credit the goal that took a lasting late lead, not an insurance goal or own goal.
+    const decisiveGoal = goalFacts(result).find(row => row.lateWinner && row.event.type === 'goal')?.event;
+    if (decisiveGoal) {
       let lateHero: PlayerMatchAggregate | null = null;
       for (const a of aggregates.values()) {
-        if (a.teamId !== winnerTeamId) continue;
+        if (a.playerId !== decisiveGoal.playerId) continue;
         if (a.goals < 1) continue;
         if (a.latestGoalMinute < 85) continue;
         if (claimed.has(a.playerId)) continue;
@@ -187,7 +188,7 @@ export function detectPlayerHighlights(lastResults: MatchResult[]): PlayerHighli
           label: '绝杀',
           emoji: '⚡',
           color: 'text-red-300',
-          detail: `${lateHero.latestGoalMinute}′ 绝杀进球`,
+          detail: `${decisiveGoal.minute}′ 绝杀进球`,
           priority: 8,
           eventCount: lateHero.totalEvents,
           fixtureId: result.fixtureId,

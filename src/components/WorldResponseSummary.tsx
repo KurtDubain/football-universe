@@ -223,17 +223,17 @@ export default function WorldResponseSummary({
   const displayedStructuredMoment = structuredMoment?.arcKey === seasonBoundaryLead?.arcKey
     ? undefined
     : structuredMoment;
-  const narrativeChanges = narrativeItems
+  const narrativeChanges = (response.seasonChanged ? response.narrative?.more ?? [] : narrativeItems)
     .filter(item => item.source !== 'match_result')
     .filter(item => item.arcKey !== structuredMoment?.arcKey)
     .filter(item => item.arcKey !== seasonBoundaryLead?.arcKey)
     .filter(item => item.editorialState === 'new' || item.editorialState === 'changed')
     .filter((item, index, all) => all.findIndex(entry => entry.arcKey === item.arcKey) === index)
-    .slice(0, 4);
+    .slice(0, response.seasonChanged ? 2 : 4);
   const secondaryChanges = changes
     .filter(news => !narrativeChanges.some(item => item.title === news.title))
     .filter(news => news.title !== structuredMoment?.title)
-    .slice(0, Math.max(0, 4 - narrativeChanges.length));
+    .slice(0, response.seasonChanged ? 0 : Math.max(0, 4 - narrativeChanges.length));
   const hiddenMatches = Math.max(0, response.completedMatches - response.featuredResults.length);
   const hiddenNews = Math.max(0, response.totalNews - changes.length);
 
@@ -295,20 +295,21 @@ export default function WorldResponseSummary({
         </div>
       )}
 
-      {seasonBoundaryLead && (
+      {(seasonBoundaryLead ? [seasonBoundaryLead, ...(response.narrative?.signals ?? [])].slice(0, 3) : []).map((seasonFact, index) => (
         <article
-          data-testid="season-boundary-editorial-lead"
+          key={seasonFact.id}
+          data-testid={index === 0 ? 'season-boundary-editorial-lead' : 'season-boundary-editorial-fact'}
           className="mt-3 border-l-2 border-emerald-500 bg-emerald-950/20 px-3 py-3"
         >
           <div className="flex items-start gap-2.5">
             <Icon name="eye" size={17} className="mt-0.5 shrink-0 text-emerald-300" />
             <div className="min-w-0 flex-1">
               <p className="ui-eyebrow text-[10px] text-emerald-400">SEASON VERDICT</p>
-              <h3 className="mt-0.5 text-sm font-bold text-slate-100">{seasonBoundaryLead.title}</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-400">{seasonBoundaryLead.summary}</p>
-              {(seasonBoundaryLead.destinations?.length ?? 0) > 0 && (
+              <h3 className="mt-0.5 text-sm font-bold text-slate-100">{seasonFact.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-400">{seasonFact.summary}</p>
+              {(seasonFact.destinations?.length ?? 0) > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                  {seasonBoundaryLead.destinations?.map(destination => destination.to && (
+                  {seasonFact.destinations?.map(destination => destination.to && (
                     <Link
                       key={destination.key}
                       to={destination.to}
@@ -322,7 +323,7 @@ export default function WorldResponseSummary({
             </div>
           </div>
         </article>
-      )}
+      ))}
 
       {displayedStructuredMoment ? (
         <div className="mt-3">
@@ -379,7 +380,7 @@ export default function WorldResponseSummary({
         <details className="mt-2 border-t border-slate-700/45" data-testid="world-response-changes">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[11px] font-semibold text-slate-400">
             <Icon name="burst" size={14} className="text-emerald-300" />
-            <span className="shrink-0">本轮之后，世界发生了什么</span>
+            <span className="shrink-0">{response.seasonChanged ? '本季其他变化' : '本轮之后，世界发生了什么'}</span>
             <span className="min-w-0 flex-1 truncate text-right font-normal text-slate-500">
               {narrativeChanges[0]?.title ?? secondaryChanges[0]?.title}
             </span>

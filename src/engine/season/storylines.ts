@@ -603,7 +603,7 @@ function concludeStoryline(
       : 'failure';
     conclusion = outcome === 'success'
       ? `最终排名第${rank}，比赛季前位置预期高${Math.max(0, expected - rank)}位，黑马赛季得到兑现。`
-      : `${finalSeason ? '最终' : '当前'}排名第${rank}，已不再满足黑马追踪条件。`;
+      : `${finalSeason ? '最终' : '该观察窗口'}排名第${rank}，已不再满足黑马追踪条件。`;
   } else if (storyline.type === 'giant_crisis') {
     outcome = finalSeason
       ? (rank <= expected + 1 ? 'success' : 'failure')
@@ -611,7 +611,7 @@ function concludeStoryline(
     conclusion = outcome === 'success'
       ? finalSeason
         ? `最终排名第${rank}，与赛季前位置预期的偏差缩小到${Math.max(0, rank - expected)}位。`
-        : `当前排名第${rank}，连续两个观察窗口未再达到危机标准。`
+        : `该观察窗口排名第${rank}，连续两个观察窗口未再达到危机标准。`
       : `最终排名第${rank}，仍低于赛季前约第${expected}的预期。`;
   } else {
     outcome = rank <= relegationLine ? 'success' : 'failure';

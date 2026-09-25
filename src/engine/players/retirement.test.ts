@@ -180,10 +180,13 @@ describe('processRetirements — hard age cap', () => {
       makePlayer('p-2', 't1', { age: 25, peakRating: 70, position: 'MF', number: 10 }),
     ];
     const world = buildWorld({ team, squad });
+    world.teamTrophies = { t1: Array.from({ length: 50 }, (_, i) => ({ type: 'league1', seasonNumber: i + 1 })) };
     const rng = new SeededRNG(42);
     const result = processRetirements(world, rng);
     expect(result.retirements).toHaveLength(1);
     expect(result.retirements[0].uuid).toBe('p-1');
+    expect(result.retirements[0].careerTrophies).toBeUndefined();
+    expect(world.teamTrophies.t1).toHaveLength(50);
     // Squad still has 2 players — replacement was generated.
     expect(result.squads['t1']).toHaveLength(2);
   });

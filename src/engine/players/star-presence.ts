@@ -177,14 +177,16 @@ export function selectStarObservations(
     || right.player.rating - left.player.rating
     || left.player.uuid.localeCompare(right.player.uuid);
 
+  const ranked = entries.filter(entry => previousSeasonHonor(context, entry.player.uuid)
+    || qualifiesForWorldFocus(entry.player.rating, entry.seasonScore ?? 50, entry.confidence)).sort(order);
+  // Keep six open seats and at most four distinct last-season award winners in the first ten.
+  const protectedEntries = ranked.filter(entry => previousSeasonHonor(context, entry.player.uuid)).slice(0, 4);
+  const visible = [...ranked.filter(entry => !protectedEntries.includes(entry)).slice(0, 10 - protectedEntries.length),
+    ...protectedEntries].sort(order);
+  const worldFocus = [...visible, ...ranked.filter(entry => !visible.includes(entry))];
+
   return {
-    worldFocus: entries
-      .filter(entry => previousSeasonHonor(context, entry.player.uuid) || qualifiesForWorldFocus(
-        entry.player.rating,
-        entry.seasonScore ?? 50,
-        entry.confidence,
-      ))
-      .sort(order),
+    worldFocus,
     risingStars: entries
       .filter(entry => qualifiesAsRisingStar(
         entry.player,

@@ -4,6 +4,7 @@ import type { GameWorld } from '../engine/season/season-manager';
 import type { SeasonRecord, TeamBase } from '../types/team';
 import {
   cnRoundLabel,
+  archivedStoryConclusion,
   formatChineseList,
   formatLeagueTransition,
   getLeagueName,
@@ -267,7 +268,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                           {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-400">{storyline.conclusion}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">{archivedStoryConclusion(storyline.conclusion)}</p>
                       <p className="mt-0.5 truncate text-[11px] text-slate-600" title={`S${storyline.seasonNumber} W${storyline.startedWindow + 1} 出现 · ${storyline.evidence.join(' · ')}`}>
                         S{storyline.seasonNumber} W{storyline.startedWindow + 1} 出现 · {storyline.evidence.join(' · ')}
                       </p>

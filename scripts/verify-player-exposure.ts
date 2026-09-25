@@ -8,7 +8,7 @@ import { SAVE_SCHEMA_VERSION } from '../src/store/save-constants';
 
 // All fixtures are newly generated QA worlds in isolated contexts, never user browser data.
 const url = process.env.VERIFY_URL ?? 'http://127.0.0.1:4193';
-const output = 'output/playwright/player-exposure';
+const output = process.env.VERIFY_OUTPUT ?? 'output/playwright/player-exposure';
 mkdirSync(output, { recursive: true });
 let world = initializeGameWorld(20260709);
 function finishSeason() {
@@ -51,6 +51,19 @@ async function capture(page: Page, name: string) {
   assert.deepEqual(await page.evaluate(() => ['__gameStore', '__appUpdateAudit'].filter(key => key in window)), []);
   await page.screenshot({ path: `${output}/${name}.png`, animations: 'disabled' });
 }
+async function savedWorld(page: Page): Promise<GameWorld> {
+  const raw = await page.evaluate(() => localStorage.getItem('football-universe-save'));
+  assert(raw);
+  return JSON.parse(raw.trimStart().startsWith('{') ? raw : LZ.decompressFromUTF16(raw)).state.world;
+}
+async function waitForWorld(page: Page, condition: (world: GameWorld) => boolean) {
+  for (let i = 0; i < 300; i++) {
+    const state = await savedWorld(page);
+    if (condition(state)) return state;
+    await page.waitForTimeout(300);
+  }
+  throw new Error('Ordinary UI advance did not persist its result');
+}
 try {
   for (const width of [390, 1280]) {
     for (const scenario of ['opening', 'retired']) {
@@ -65,8 +78,7 @@ try {
       if (scenario === 'opening') {
         await page.goto(url + '/players', { waitUntil: 'networkidle' });
         await page.getByRole('heading', { name: '球星观察', exact: true }).scrollIntoViewIfNeeded();
-        const more = page.getByRole('button', { name: /^查看全部 \d+ 人$/ });
-        if (await more.count()) await more.click();
+        // The previous winner must already be in the default ten, without expanding the list.
         const fact = page.locator(`a[href="/player/${player.uuid}#awards-S1"]`);
         await fact.scrollIntoViewIfNeeded();
         assert((await fact.innerText()).includes('上季金球得主'));
@@ -77,6 +89,38 @@ try {
         const box = await page.locator('#awards-S1').boundingBox();
         assert(box && box.y >= 0 && box.y < (width === 390 ? 844 : 720), 'award anchor must be in view');
         await capture(page, `award-anchor-${width}`);
+        await page.goto(url + '/players', { waitUntil: 'networkidle' });
+        await page.getByRole('tab', { name: '我的关注', exact: true }).click();
+        const identity = page.locator(`a[href="/player/${player.uuid}#player-awards"]`);
+        await identity.waitFor();
+        assert((await identity.innerText()).includes('届金球'));
+        await capture(page, `following-${width}`);
+        await page.goto(url + '/', { waitUntil: 'networkidle' });
+        await page.getByRole('tab', { name: '比赛日', exact: true }).click();
+        await page.getByTestId('dashboard-advance').click();
+        await waitForWorld(page, world => world.seasonState.currentWindowIndex > 0);
+        await page.getByRole('tab', { name: '比赛日', exact: true }).click();
+        await page.getByRole('button', { name: '打开快进菜单' }).click();
+        const beforeBatch = (await savedWorld(page)).seasonState.currentWindowIndex;
+        await page.getByRole('button', { name: '推进 5 轮', exact: true }).click();
+        await waitForWorld(page, world => world.seasonState.currentWindowIndex === beforeBatch + 5);
+        await capture(page, `batch-${width}`);
+        await page.getByRole('button', { name: '打开快进菜单' }).click();
+        await page.getByTestId('skip-current-season').click();
+        await page.getByTestId('confirm-skip-current-season').click();
+        const next = await waitForWorld(page, world => world.seasonState.seasonNumber === 3);
+        assert.equal(next.seasonState.currentWindowIndex, 0);
+        await page.screenshot({ path: `${output}/before-season-report-${width}.png` });
+        writeFileSync(`${output}/before-season-report-${width}.txt`, await page.locator('body').innerText());
+        await page.getByRole('tab', { name: /战报|回顾/ }).click();
+        await page.getByTestId('season-boundary-editorial-lead').waitFor();
+        assert((await page.getByTestId('season-boundary-editorial-lead').innerText()).includes('冠军'));
+        assert.equal(await page.getByTestId('season-boundary-editorial-fact').count(), 2);
+        await page.getByTestId('season-boundary-editorial-lead').scrollIntoViewIfNeeded();
+        await capture(page, `season-summary-${width}`);
+        await page.getByTestId('season-boundary-editorial-fact').first().getByRole('link').click();
+        await page.locator('#awards-S2').waitFor();
+        await capture(page, `season-award-evidence-${width}`);
       } else {
         await page.goto(`${url}/player/${defender.uuid}`, { waitUntil: 'networkidle' });
         const thread = page.getByTestId('entity-narrative-thread');

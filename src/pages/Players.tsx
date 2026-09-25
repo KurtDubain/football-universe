@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { followedPlayerFact } from '../engine/players/player-honors';
 import { Link, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { useUiSessionState } from '../app/ui-session-state';
@@ -486,7 +487,7 @@ export default function Players() {
                       factTarget: `/player/${player.uuid}#season-performance`,
                     };
                   })();
-                return renderStarEntry(entry);
+                return renderStarEntry({ ...entry, ...followedPlayerFact(world, player.uuid) });
               })}
               {followedRetired.map(player => (
                 <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0">

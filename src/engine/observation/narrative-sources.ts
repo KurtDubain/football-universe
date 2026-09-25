@@ -1,4 +1,6 @@
 import type { StandingEntry } from '../../types/league';
+import { archivedStoryConclusion } from '../../utils/format';
+import { buildSeasonEditorial } from './season-editorial';
 import type { MatchFixture, MatchResult } from '../../types/match';
 import type { CalendarWindow } from '../../types/season';
 import type { PlayerHighlight } from '../players/player-highlights';
@@ -195,7 +197,7 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       seasonPhase: '落幕',
       storylineType: story.type,
       title: `${labels[story.type]} · ${story.outcome === 'success' ? '成章' : '定格'}`,
-      summary: story.conclusion!,
+      summary: archivedStoryConclusion(story.conclusion),
       evidence: story.evidence.map((detail, index) => (
         fact('storyline', `story:${story.id}:resolved-evidence:${index}`, '历程证据', detail)
       )),
@@ -203,7 +205,7 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
         'storyline',
         `story:${story.id}:conclusion`,
         '故事结局',
-        story.conclusion!,
+        archivedStoryConclusion(story.conclusion),
       )],
       nextWatch: story.outcome === 'success'
         ? '这段故事已进入赛季档案，下一阶段由真实赛程继续书写'
@@ -1061,10 +1063,20 @@ export function buildResultNarrativeDigest(options: ResultNarrativeOptions): Nar
       seasonBoundary,
     ),
   ];
-  return directNarrative(candidates, [...transitionMemory.values()], {
+  const digest = directNarrative(candidates, [...transitionMemory.values()], {
     elapsedWindow: options.endWorld.totalElapsedWindows ?? 0,
     favoriteTeamIds: options.favoriteTeamIds,
     favoritePlayerIds: options.favoritePlayerIds,
     seasonBoundary,
   });
+  if (!seasonBoundary) return digest;
+  const editorial = buildSeasonEditorial(options.endWorld, options.endWorld.seasonState.seasonNumber - 1,
+    options.favoriteTeamIds, options.favoritePlayerIds);
+  if (!editorial.length) return digest;
+  const subjects = new Set(editorial.flatMap(item => item.subjectIds));
+  const remaining = [digest.feature, ...digest.signals, ...digest.more]
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .filter(item => !item.subjectIds.some(id => subjects.has(id)));
+  return { ...digest, feature: editorial[0], signals: editorial.slice(1), worldMoment: undefined,
+    more: remaining.slice(0, 4) };
 }

@@ -380,7 +380,6 @@ export function processRetirements(
       const p = cand.player;
       // Build PlayerRetirement record
       const careerGoals = careerGoalsLookup.get(p.uuid) ?? 0;
-      const teamTrophies = world.teamTrophies?.[teamId] ?? [];
       const retirement: PlayerRetirement = {
         uuid: p.uuid,
         name: p.name,
@@ -391,9 +390,6 @@ export function processRetirements(
         age: p.age ?? 0,
         seasonRetired: seasonNumber,
         careerGoals,
-        // Snapshot a copy so future mutations on world.teamTrophies don't
-        // leak into history.
-        careerTrophies: teamTrophies.length > 0 ? [...teamTrophies] : undefined,
       };
       retirements.push(retirement);
 

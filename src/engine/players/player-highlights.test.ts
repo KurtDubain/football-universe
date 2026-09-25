@@ -89,7 +89,7 @@ describe('detectPlayerHighlights', () => {
     expect(highlights[0].teamId).toBe('A');
   });
 
-  it('does NOT mark 绝杀 when winning side margin > 1', () => {
+  it('credits the actual late lead change, not the subsequent insurance goal', () => {
     const result = mkResult({
       homeGoals: 3,
       awayGoals: 1,
@@ -100,7 +100,7 @@ describe('detectPlayerHighlights', () => {
         mkEvent({ type: 'goal', teamId: 'B', playerId: 'b-1', minute: 70 }),
       ],
     });
-    expect(detectPlayerHighlights([result])).toEqual([]);
+    expect(detectPlayerHighlights([result])).toEqual([expect.objectContaining({ playerId: 'a-2', label: '绝杀' })]);
   });
 
   it('does NOT mark 绝杀 for the losing side late goal', () => {
