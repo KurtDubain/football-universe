@@ -4,6 +4,7 @@ import { chromium, type Page } from 'playwright';
 import LZ from 'lz-string';
 import { initializeGameWorld, executeCurrentWindow, type GameWorld } from '../src/engine/season/season-manager';
 import { retainPlayerArchives } from '../src/engine/players/retirement-archive';
+import { preserveRetiredCareerScores, playerCareerScore } from '../src/engine/players/career-score';
 import { SAVE_SCHEMA_VERSION } from '../src/store/save-constants';
 
 // All fixtures are newly generated QA worlds in isolated contexts, never user browser data.
@@ -34,6 +35,9 @@ retiredWorld.retirementHistory.push({ uuid: defender.uuid, name: defender.name, 
   teamName: retiredWorld.teamBases[defender.teamId].name, position: defender.position, age: 36,
   peakRating: 88, seasonRetired: 4, careerGoals: 0 });
 retiredWorld.retirementHistory = retainPlayerArchives(retiredWorld, [defender.uuid]);
+retiredWorld.retirementHistory = preserveRetiredCareerScores(retiredWorld);
+const frozenScore = playerCareerScore(retiredWorld, defender.uuid);
+assert.notEqual(frozenScore.value, null);
 retiredWorld.playerAwardsHistory = [];
 retiredWorld.playerStatsHistory = {};
 for (const retired of retiredWorld.retirementHistory) delete retiredWorld.playerStats[retired.uuid];
@@ -122,7 +126,16 @@ try {
         await page.locator('#awards-S2').waitFor();
         await capture(page, `season-award-evidence-${width}`);
       } else {
+        await page.goto(`${url}/players`, { waitUntil: 'networkidle' });
+        await page.getByRole('tab', { name: '我的关注', exact: true }).click();
+        const card = page.locator(`a[href="/player/${defender.uuid}"]`).filter({ hasText: defender.name });
+        await card.scrollIntoViewIfNeeded();
+        assert((await card.innerText()).includes('3届金球'));
+        await capture(page, `retired-following-${width}`);
         await page.goto(`${url}/player/${defender.uuid}`, { waitUntil: 'networkidle' });
+        await page.locator('#career-seasons').scrollIntoViewIfNeeded();
+        assert((await page.locator('#career-seasons').innerText()).includes(`${frozenScore.label} ${frozenScore.value!.toFixed(1)}`));
+        await capture(page, `retired-score-${width}`);
         const thread = page.getByTestId('entity-narrative-thread');
         await page.screenshot({ path: `${output}/retired-loaded-${width}.png` });
         writeFileSync(`${output}/retired-loaded-${width}.txt`, await page.locator('body').innerText());
@@ -137,6 +150,7 @@ try {
         assert.equal(await page.locator('#player-awards').getByText('综合83（测试记录）', { exact: true }).count(), 3);
         await capture(page, `retired-evidence-${width}`);
         await page.reload({ waitUntil: 'networkidle' });
+        assert((await page.locator('#career-seasons').innerText()).includes(`${frozenScore.label} ${frozenScore.value!.toFixed(1)}`));
         assert.equal(await page.locator('#player-awards').getByText('综合83（测试记录）', { exact: true }).count(), 3);
         await page.goto(url + '/legends', { waitUntil: 'networkidle' });
         const evidence = page.locator(`a[href="/player/${defender.uuid}#player-awards"]`);

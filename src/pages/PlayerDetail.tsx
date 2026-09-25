@@ -6,6 +6,7 @@ import { TAG_META } from '../engine/players/tags';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
+import { playerCareerScore } from '../engine/players/career-score';
 import {
   getCurrentPlayerStatRow,
   getCurrentPlayerClubStatRows,
@@ -598,31 +599,26 @@ function PositionPerformanceCard({
 function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof useGameStore.getState>['world']; playerUuid: string }) {
   if (!world) return null;
   const history = (world.playerStatsHistory ?? {})[playerUuid] ?? [];
-  if (history.length === 0) return null;
+  const careerScore = playerCareerScore(world, playerUuid);
+  if (history.length === 0 && careerScore.value === null) return null;
   const sorted = [...history].sort((a, b) => b.season - a.season);
   const scored = sorted.filter(entry => entry.seasonScore !== undefined);
   const recentThree = scored.slice(0, 3);
   const recentAverage = recentThree.length > 0
     ? recentThree.reduce((sum, entry) => sum + (entry.seasonScore ?? 0), 0) / recentThree.length
     : null;
-  const scoredMinutes = scored.reduce((sum, entry) => sum + (entry.minutesPlayed ?? entry.appearances * 90), 0);
-  const careerAverage = scoredMinutes > 0
-    ? scored.reduce(
-        (sum, entry) => sum + (entry.seasonScore ?? 0) * (entry.minutesPlayed ?? entry.appearances * 90),
-        0,
-      ) / scoredMinutes
-    : null;
   return (
     <div id="career-seasons" className="scroll-mt-4 bg-[var(--surface-panel)] rounded-lg border border-slate-700/60 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
-          <Icon name="trend-up" size={13} /> 生涯赛季数据 ({history.length})
+          <Icon name="trend-up" size={13} /> {history.length ? `生涯赛季数据 (${history.length})` : '生涯评分摘要'}
         </h3>
-        {recentAverage !== null && careerAverage !== null && (
-          <span className="text-[10px] text-slate-500">近三季 {recentAverage.toFixed(1)} · 生涯 {careerAverage.toFixed(1)}</span>
+        {careerScore.value !== null && (
+          <span className="text-[10px] text-slate-500" title="按已记录赛季的实际分钟加权；退役汇总不随明细清理变化。完整性无法确认时仅代表现存记录。">{recentAverage !== null ? `最近记录 ${recentAverage.toFixed(1)} · ` : ''}{careerScore.label} {careerScore.value.toFixed(1)}</span>
         )}
       </div>
-      <div className="overflow-x-auto">
+      {history.length === 0 && <p className="mb-2 text-xs text-slate-500">逐季明细已归档，保留已保存的评分汇总。</p>}
+      {history.length > 0 && <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-slate-500 border-b border-slate-700/40">
@@ -667,7 +663,7 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   );
 }

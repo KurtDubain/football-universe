@@ -20,8 +20,10 @@ export function buildSeasonEditorial(world: GameWorld, season: number, favorites
   const champion = honor.league1Champion;
   if (champion) {
     const previous = world.teamSeasonRecords[champion]?.find(row => row.seasonNumber === season - 1);
-    const priorHonor = world.honorHistory.find(row => row.seasonNumber === season - 1);
-    const change = priorHonor?.league1Champion === champion ? '连续两季夺得顶级联赛冠军'
+    let streak = 1;
+    while (world.honorHistory.find(row => row.seasonNumber === season - streak)?.league1Champion === champion) streak++;
+    const knownStart = season - streak === 0 || world.honorHistory.some(row => row.seasonNumber === season - streak);
+    const change = streak > 1 ? `${knownStart ? '' : '现存记录中'}连续${streak}季夺得顶级联赛冠军`
       : previous?.leagueLevel === 1 && previous.leaguePosition > 0 ? `从上季第${previous.leaguePosition}名到本季顶级联赛冠军`
         : '夺得本季顶级联赛冠军';
     const cups = [['联赛杯', honor.leagueCupWinner], ['超级杯', honor.superCupWinner], ['世界杯', honor.worldCupWinner]]
@@ -40,19 +42,33 @@ export function buildSeasonEditorial(world: GameWorld, season: number, favorites
       `S${season} · ${ownAwards.map(row => `${PLAYER_AWARD_LABELS[row.type]}：${row.statLabel}`).join('；')}。`,
       'player', [winner.playerId], [{ key: winner.playerId, label: '查看获奖依据', to: `/player/${winner.playerId}#awards-S${season}` }]);
   }
-  const movements = [...honor.promoted.map(row => ({ ...row, label: '升级' })), ...honor.relegated.map(row => ({ ...row, label: '降级' }))]
-    .filter(row => row.teamId !== champion)
-    .sort((a, b) => Number(favorites.includes(b.teamId)) - Number(favorites.includes(a.teamId)) || a.teamId.localeCompare(b.teamId));
-  const movement = movements[0];
-  const cup = [['世界杯', honor.worldCupWinner], ['联赛杯', honor.leagueCupWinner], ['超级杯', honor.superCupWinner]]
-    .find(([, id]) => id && id !== champion);
-  const worldCupBreakthrough = cup?.[0] === '世界杯' && !favorites.includes(movement?.teamId ?? '');
-  if (movement && !worldCupBreakthrough) {
-    const levels: Record<number, string> = { 1: '顶级', 2: '甲级', 3: '乙级' };
-    add('movement', `${name(movement.teamId)}：${movement.label}`, `S${season}赛季结局 · ${levels[movement.from]}→${levels[movement.to]}联赛。`,
-      'team', [movement.teamId], [destination(movement.teamId)]);
-  } else {
-    if (cup?.[1]) add('cup', `${name(cup[1])}赢得${cup[0]}`, `S${season}${cup[0]}冠军已归档。`, 'team', [cup[1]], [destination(cup[1])]);
+  const usedTeams = new Set(items.filter(item => item.subjectType === 'team').flatMap(item => item.subjectIds));
+  const candidates: { id: string; key: string; priority: number; title: string; summary: string }[] = [];
+  const levels: Record<number, string> = { 1: '顶级', 2: '甲级', 3: '乙级' };
+  for (const row of [...honor.promoted.map(row => ({ ...row, label: '升级' })), ...honor.relegated.map(row => ({ ...row, label: '降级' }))]) {
+    candidates.push({ id: row.teamId, key: 'movement', priority: favorites.includes(row.teamId) ? 0 : row.from === 1 || row.to === 1 ? 1 : 3,
+      title: `${name(row.teamId)}：${row.label}`, summary: `S${season}赛季结局 · ${levels[row.from]}→${levels[row.to]}联赛。` });
   }
+  // Only a recorded year-on-year improvement is called a breakthrough, not every cup title.
+  const rounds = ['小组赛', '32强', '16强', '八强', '四强', '亚军', '冠军'];
+  for (const [id, records] of Object.entries(world.teamSeasonRecords)) {
+    const current = records.find(row => row.seasonNumber === season);
+    const previous = records.find(row => row.seasonNumber === season - 1);
+    for (const [field, label] of [['cupResult', '联赛杯'], ['superCupResult', '超级杯'], ['worldCupResult', '世界杯'], ['continentalCupResult', '洲际杯']] as const) {
+      const now = rounds.indexOf(current?.[field] ?? '');
+      const before = rounds.indexOf(previous?.[field] ?? '');
+      if (now < 4 || before < 0 || now <= before) continue;
+      candidates.push({ id, key: `cup-progress:${field}`, priority: favorites.includes(id) ? 0 : 2,
+        title: `${name(id)}：${label}更进一步`, summary: `上季${previous![field]} → 本季${current![field]}。` });
+    }
+  }
+  for (const [label, id] of [['世界杯', honor.worldCupWinner], ['联赛杯', honor.leagueCupWinner], ['超级杯', honor.superCupWinner]]) {
+    if (id) candidates.push({ id, key: 'cup', priority: favorites.includes(id) ? 0 : 4,
+      title: `${name(id)}赢得${label}`, summary: `S${season}${label}冠军已归档。` });
+  }
+  const third = candidates.filter(row => !usedTeams.has(row.id))
+    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id)
+      || Number(b.key === 'movement') - Number(a.key === 'movement') || a.key.localeCompare(b.key))[0];
+  if (third) add(third.key, third.title, third.summary, 'team', [third.id], [destination(third.id)]);
   return items.slice(0, 3);
 }

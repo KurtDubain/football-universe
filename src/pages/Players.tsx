@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { followedPlayerFact } from '../engine/players/player-honors';
+import { followedPlayerFact, principalCareerHonor } from '../engine/players/player-honors';
 import { Link, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { useUiSessionState } from '../app/ui-session-state';
@@ -493,7 +493,7 @@ export default function Players() {
                 <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0">
                   <Link to={`/player/${player.uuid}`} className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-slate-300">{player.name}</span>
-                    <span className="text-xs text-slate-500">已退役 · S{player.seasonRetired} · 巅峰 {player.peakRating}</span>
+                    <span className="text-xs text-slate-500">已退役 · S{player.seasonRetired} · 巅峰 {player.peakRating}{principalCareerHonor(world, player.uuid) ? ` · ${principalCareerHonor(world, player.uuid)}` : ''}</span>
                   </Link>
                   <button type="button" data-ui-feedback="toggle_off" onClick={() => toggleFavoritePlayer(player.uuid)} aria-label={`取消关注 ${player.name}`} className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-amber-500/50 bg-amber-500/12 text-amber-300">
                     <Icon name="star" size={17} />

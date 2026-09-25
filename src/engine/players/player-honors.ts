@@ -27,6 +27,15 @@ export const PLAYER_AWARD_LABELS: Record<PlayerAwardType, string> = {
   best_goalkeeper: '最佳门将', young_player: '最佳新星',
 };
 
+export function principalCareerHonor(world: Parameters<typeof playerCareerAwards>[0], playerId: string): string | null {
+  const awards = playerCareerAwards(world, playerId);
+  for (const type of ['mvp', 'golden_boot', 'best_defender', 'best_goalkeeper', 'young_player'] as const) {
+    const count = awards.filter(award => award.type === type).length;
+    if (count) return `${count}届${PLAYER_AWARD_LABELS[type]}`;
+  }
+  return null;
+}
+
 export interface PlayerHonorContext {
   seasonNumber?: number;
   playerAwardsHistory?: PlayerAward[];

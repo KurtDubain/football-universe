@@ -277,6 +277,8 @@ export interface PlayerRetirement {
   age: number;
   seasonRetired: number;
   careerGoals: number;
+  /** Frozen minute-weighted recorded performance, independent of rolling detail retention. */
+  careerScore?: import('../engine/players/career-score').CareerScoreSummary;
   careerTrophies?: import('./team').Trophy[];
   /** Compact facts retained for award winners / observed people, not match replays. */
   careerSummary?: {

@@ -720,6 +720,13 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
   for (const key of REQUIRED_WORLD_RECORDS) requireRecord(world, key);
   for (const key of REQUIRED_WORLD_ARRAYS) requireArray(world, key);
   for (const retired of requireArray(world, 'retirementHistory')) {
+    if (isRecord(retired) && retired.careerScore !== undefined) {
+      const score = requireRecord(retired, 'careerScore');
+      const minutes = requireFiniteNumber(score, 'minutes', '生涯评分');
+      const total = requireFiniteNumber(score, 'weightedTotal', '生涯评分');
+      requireBoolean(score, 'complete', '生涯评分');
+      if (minutes <= 0 || total < 0 || total > minutes * 100) throw new Error('生涯评分汇总无效');
+    }
     if (!isRecord(retired) || retired.careerSummary === undefined) continue;
     const summary = requireRecord(retired, 'careerSummary');
     if (summary.followed !== undefined) requireBoolean(summary, 'followed', '退役摘要');

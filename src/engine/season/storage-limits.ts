@@ -18,6 +18,7 @@ import type { GameWorld, MatchHistoryEntry } from './season-manager';
 import type { TransferRecord } from '../../types/transfer';
 import type { PlayerAward } from '../../types/award';
 import type { SeasonRecord } from '../../types/team';
+import { preserveRetiredCareerScores } from '../players/career-score';
 import {
   MAX_ACTIVE_STORYLINES,
   MAX_STORYLINE_COOLDOWNS,
@@ -117,6 +118,7 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     teamSeasonRecords[teamId] = trimmed;
   }
 
+  const retirementHistory = preserveRetiredCareerScores(world);
   const historySeasons = Object.values(world.playerStatsHistory ?? {})
     .flatMap((entries) => entries.map((entry) => entry.season));
   const latestHistorySeason = historySeasons.length > 0 ? Math.max(...historySeasons) : 0;
@@ -162,6 +164,7 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     && awardsUnchanged
     && !teamRecordsChanged
     && !playerHistoryChanged
+    && retirementHistory === world.retirementHistory
     && storylinesUnchanged
     && trajectoriesUnchanged
     && editionsUnchanged
@@ -176,6 +179,7 @@ export function enforceStorageLimits(world: GameWorld): GameWorld {
     playerAwardsHistory,
     teamSeasonRecords,
     playerStatsHistory,
+    retirementHistory,
     activeStorylines,
     storylineHistory,
     storylineCooldowns,

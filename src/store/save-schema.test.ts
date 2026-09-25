@@ -86,12 +86,17 @@ it('round-trips optional compact retirement facts without changing the schema or
   world.squads[player.teamId] = world.squads[player.teamId].filter(item => item.uuid !== player.uuid);
   const legacy = parseCurrentSave(JSON.stringify(save));
   expect(legacy.state.world.retirementHistory[0].careerSummary).toBeUndefined();
+  expect(legacy.state.world.retirementHistory[0].careerScore).toBeUndefined();
+  world.retirementHistory[0].careerScore = { minutes: 1800, weightedTotal: 126000, complete: false };
   world.retirementHistory = retainPlayerArchives(world, [player.uuid]);
   const restored = parseCurrentSave(JSON.stringify(save));
   expect(restored.version).toBe(SAVE_SCHEMA_VERSION);
   expect(restored.state.world.retirementHistory).toEqual(world.retirementHistory);
   expect(restored.state.world.rngState).toBe(world.rngState);
   expect(restored.state.world.seasonState).toEqual(world.seasonState);
+  world.retirementHistory[0].careerScore!.weightedTotal = 180001;
+  expect(() => parseCurrentSave(JSON.stringify(save))).toThrow('生涯评分汇总无效');
+  world.retirementHistory[0].careerScore!.weightedTotal = 126000;
   world.retirementHistory[0].careerSummary!.totals.minutesPlayed = -1;
   expect(() => parseCurrentSave(JSON.stringify(save))).toThrow('退役生涯汇总无效');
 });
