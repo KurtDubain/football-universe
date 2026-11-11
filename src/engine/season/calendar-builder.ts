@@ -360,42 +360,95 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
 }
 
 /**
- * Append world cup windows to the calendar.
+ * Build the world cup windows: 3 group rounds plus R16 / QF / SF / final.
+ *
+ * Construction lives here so the in-season insertion path and the legacy
+ * append path cannot drift apart.
  */
-export function appendWorldCupWindows(
-  calendar: CalendarWindow[],
+function buildWorldCupWindows(
   seasonNumber: number,
   groupRoundFixtures: CupFixture[][],
+  startId: number,
 ): CalendarWindow[] {
-  let windowId = calendar.length;
-  const newWindows: CalendarWindow[] = [];
+  const windows: CalendarWindow[] = [];
+  let windowId = startId;
 
   // 3 neutral-venue single-round-robin group rounds
   for (let i = 0; i < groupRoundFixtures.length; i++) {
-    newWindows.push({
+    windows.push({
       id: windowId++,
       type: 'world_cup_group',
       label: `环球冠军杯 小组赛R${i + 1}`,
-      description: `第${seasonNumber}赛季后 环球冠军杯小组赛第${i + 1}轮 (8组×4队)`,
+      description: `第${seasonNumber}赛季 环球冠军杯小组赛第${i + 1}轮 (8组×4队)`,
       fixtures: cupFixturesToMatchFixtures(groupRoundFixtures[i], 'world_cup_group', '环球冠军杯'),
       completed: false,
       results: [],
     });
   }
 
-  // Knockout: R16, QF, SF, Final
+  // Knockout: R16, QF, SF, Final. Fixtures are drawn by the window handler
+  // once the preceding round is settled.
   const knockoutRounds = ['16强', 'QF', 'SF', '决赛'];
   for (const round of knockoutRounds) {
-    newWindows.push({
+    windows.push({
       id: windowId++,
       type: 'world_cup',
       label: `环球冠军杯 ${round}`,
-      description: `第${seasonNumber}赛季后 环球冠军杯${round}`,
+      description: `第${seasonNumber}赛季 环球冠军杯${round}`,
       fixtures: [],
       completed: false,
       results: [],
     });
   }
 
-  return [...calendar, ...newWindows];
+  return windows;
+}
+
+/**
+ * Insert the world cup windows into the season, immediately before the
+ * season-end window.
+ *
+ * The tournament becomes the season's closing act, so its winner exists by
+ * the time awards, honours, team archives and prize money are computed.
+ * Window ids are positional, so everything after the insertion point is
+ * renumbered to stay aligned with the array index.
+ */
+export function insertWorldCupWindows(
+  calendar: CalendarWindow[],
+  seasonNumber: number,
+  groupRoundFixtures: CupFixture[][],
+): CalendarWindow[] {
+  const seasonEndIdx = calendar.findIndex(w => w.type === 'season_end');
+  // A calendar without a season-end window is not one we know how to splice.
+  // Fall back to appending rather than silently dropping the tournament.
+  if (seasonEndIdx === -1) {
+    return appendWorldCupWindows(calendar, seasonNumber, groupRoundFixtures);
+  }
+
+  const worldCupWindows = buildWorldCupWindows(seasonNumber, groupRoundFixtures, seasonEndIdx);
+  const merged = [
+    ...calendar.slice(0, seasonEndIdx),
+    ...worldCupWindows,
+    ...calendar.slice(seasonEndIdx),
+  ];
+  return merged.map((w, i) => ({ ...w, id: i }));
+}
+
+/**
+ * Append world cup windows to the end of the calendar.
+ *
+ * Legacy timing: the tournament ran after the season had already been
+ * settled, which is why awards, honours and archives never saw it. Retained
+ * so save migration can still recognise and re-order windows in saves that
+ * are mid-tournament; new seasons use `insertWorldCupWindows`.
+ */
+export function appendWorldCupWindows(
+  calendar: CalendarWindow[],
+  seasonNumber: number,
+  groupRoundFixtures: CupFixture[][],
+): CalendarWindow[] {
+  return [
+    ...calendar,
+    ...buildWorldCupWindows(seasonNumber, groupRoundFixtures, calendar.length),
+  ];
 }
