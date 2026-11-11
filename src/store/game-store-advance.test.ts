@@ -96,7 +96,22 @@ describe('game store advance scheduling', () => {
   });
 
   it('queues only favorite-team achievements and keeps batch advancement consistent', async () => {
-    const favoriteTeamId = Object.keys(useGameStore.getState().world!.teamBases)[0];
+    // Learn which clubs actually achieve something on this seed before picking
+    // a favorite. Choosing one up front — the old code took teamBases[0] — makes
+    // the filtering assertions vacuous whenever that club goes trophyless,
+    // which is ordinary rather than exceptional.
+    await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
+    await completeAdvance(useGameStore.getState().advanceWindow());
+    const seasonAchievements = useGameStore.getState().world!.achievements;
+    expect(seasonAchievements.length).toBeGreaterThan(0);
+    const followed = seasonAchievements.find(achievement => achievement.teamId != null);
+    expect(followed).toBeDefined();
+    const favoriteTeamId = followed!.teamId!;
+
+    // Replay the same seed with that club followed. Achievements are granted
+    // only at season_end windows, so the batch run below spans exactly the same
+    // stretch of calendar as advanceUntil + advanceWindow.
+    await useGameStore.getState().newGame(20260716);
     useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
 
     await completeAdvance(useGameStore.getState().advanceUntil('season_end'));

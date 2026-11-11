@@ -195,13 +195,18 @@ function auditSeed(seed: number): SeedAudit {
     + narrativeSourceDiversity * 5
     + scoreWorldMomentCadence(worldMomentWindows);
   const closeFirstMatches = firstFocusMatches.filter(entry => entry.margin <= 1).length;
+  // The challenger clause mirrors observer-experience.test.ts exactly: the
+  // default lens must open on a match with at least two goals and a goal from
+  // the 75th minute on. Keeping the two in step matters — the seed this audit
+  // selects is the seed that test pins, so a criterion the audit ignores is a
+  // criterion the audit can fail to satisfy.
   const firstExperienceReady = firstFocusMatches.length === 3
     && firstFocusMatches.every(entry => entry.importanceScore >= 4)
     && meaningfulChoiceWindows >= 12
     && observationThemeWindows >= 15
     && narrativeSourceDiversity >= 3
     && closeFirstMatches === 3
-    && Boolean(challenger && challenger.goals > 0);
+    && Boolean(challenger && challenger.goals >= 2 && challenger.lateGoals >= 1);
   const firstExperienceScore = firstFocusMatches.reduce(
     (total, entry) => total + scoreObserverOpening({
       lens: entry.lens,

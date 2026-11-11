@@ -653,6 +653,9 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     superCupTeams = [...l1Top, ...l2Top, ...l3Top];
   }
 
+  // superCupTeams must stay ordered strongest-first — tier, then finishing
+  // position inside the tier — because initSuperCup slices that order into
+  // seeding pots. Reordering it here silently changes the draw.
   const superCup = initSuperCup(superCupTeams, seasonNumber, rng, superCupConfig.awayGoalRule);
 
   // ── Continental cups ──

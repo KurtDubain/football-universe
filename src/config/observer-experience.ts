@@ -1,14 +1,18 @@
 import type { TeamBase } from '../types/team';
 
+// Twenty consecutive seeds, audited by scripts/audit-observer-seeds.ts. The
+// window starts at 20260705 rather than 20260701 because the opening-drama
+// criteria need a challenger match with a goal from the 75th minute on, which
+// only about one seed in twelve produces; the earlier window held none.
 export const OBSERVER_SEED_CANDIDATES = Array.from(
   { length: 20 },
-  (_, index) => 20260701 + index,
+  (_, index) => 20260705 + index,
 );
 
 // Selected by scripts/audit-observer-seeds.ts from the candidates above. The
 // audit balances six-window observation depth, narrative variety, meaningful
 // choices, and restrained match drama across the three guided lenses.
-export const RECOMMENDED_EXPERIENCE_SEED = 20260709;
+export const RECOMMENDED_EXPERIENCE_SEED = 20260722;
 
 export type ObserverLens = 'giant' | 'challenger' | 'underdog' | 'neutral';
 

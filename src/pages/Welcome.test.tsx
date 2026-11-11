@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RECOMMENDED_EXPERIENCE_SEED } from '../config/observer-experience';
 import { useGameStore } from '../store/game-store';
 import Welcome from './Welcome';
 
@@ -84,7 +85,7 @@ describe('Welcome initialization recovery', () => {
       start.click();
     });
 
-    expect(newGame).toHaveBeenCalledWith(20260709, expect.objectContaining({
+    expect(newGame).toHaveBeenCalledWith(RECOMMENDED_EXPERIENCE_SEED, expect.objectContaining({
       favoriteTeamIds: ['datong'],
       observationThemePreference: 'auto',
     }));

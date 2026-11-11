@@ -164,6 +164,7 @@ function SuperCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cu
       <CupHeader type="super_cup" title="超级杯" description="16 队 · 小组赛与两回合淘汰赛" winnerId={cup.completed ? cup.winnerId : undefined} seasonNumber={seasonNumber} tb={tb} musicEnabled={musicEnabled} />
       <RulesCard lines={[
         '参赛: 16 支球队 — 顶级联赛前10 + 甲级前4 + 乙级前2',
+        '抽签: 按参赛排位分 4 档，每组各档取 1 队 — 每组至少 2 支顶级球队',
         '小组赛: 4组×4队，双循环6轮，小组前2名晋级八强',
         '淘汰赛: 八强/四强为主客场两回合制，决赛单场定胜负',
         cup.awayGoalRule ? '规则: 客场进球规则生效' : '规则: 客场进球规则未启用',

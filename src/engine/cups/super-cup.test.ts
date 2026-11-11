@@ -88,6 +88,73 @@ describe('initSuperCup', () => {
   });
 });
 
+describe('initSuperCup seeding pots', () => {
+  // The qualified field as season-manager builds it: ten top-flight sides by
+  // finishing position, then four second-tier, then two third-tier.
+  const QUALIFIED = [
+    'L1-1', 'L1-2', 'L1-3', 'L1-4', 'L1-5',
+    'L1-6', 'L1-7', 'L1-8', 'L1-9', 'L1-10',
+    'L2-1', 'L2-2', 'L2-3', 'L2-4',
+    'L3-1', 'L3-2',
+  ];
+  const POTS = [
+    ['L1-1', 'L1-2', 'L1-3', 'L1-4'],
+    ['L1-5', 'L1-6', 'L1-7', 'L1-8'],
+    ['L1-9', 'L1-10', 'L2-1', 'L2-2'],
+    ['L2-3', 'L2-4', 'L3-1', 'L3-2'],
+  ];
+  const isTopFlight = (teamId: string): boolean => teamId.startsWith('L1-');
+
+  it('puts exactly one team from each seeding pot in every group', () => {
+    const sc = initSuperCup(QUALIFIED, 1, new SeededRNG(7), false);
+    for (const group of sc.groups) {
+      expect(group.teamIds).toHaveLength(4);
+      for (const pot of POTS) {
+        expect(group.teamIds.filter((id) => pot.includes(id))).toHaveLength(1);
+      }
+    }
+  });
+
+  it('keeps every qualified team exactly once', () => {
+    // drawGroups drops teams silently when a pot is larger than the group
+    // count, so cover the field rather than trusting the group sizes.
+    const sc = initSuperCup(QUALIFIED, 1, new SeededRNG(7), false);
+    const drawn = sc.groups.flatMap((group) => group.teamIds);
+    expect(drawn).toHaveLength(16);
+    expect(new Set(drawn).size).toBe(16);
+    expect([...drawn].sort()).toEqual([...QUALIFIED].sort());
+  });
+
+  it('gives every group one side from the weakest pot', () => {
+    const sc = initSuperCup(QUALIFIED, 1, new SeededRNG(7), false);
+    for (const group of sc.groups) {
+      expect(group.teamIds.filter((id) => POTS[3].includes(id))).toHaveLength(1);
+    }
+  });
+
+  it('never deals four top-flight sides into one group, at any seed', () => {
+    // Regression guard for the unseeded branch, where a plain shuffle could
+    // stack a group with top-flight sides and leave another with one.
+    for (let seed = 0; seed < 60; seed++) {
+      const sc = initSuperCup(QUALIFIED, 1, new SeededRNG(seed), false);
+      for (const group of sc.groups) {
+        const topFlight = group.teamIds.filter(isTopFlight).length;
+        expect(topFlight).toBeGreaterThanOrEqual(2);
+        expect(topFlight).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+
+  it('still varies the draw between seeds', () => {
+    const layout = (seed: number): string =>
+      initSuperCup(QUALIFIED, 1, new SeededRNG(seed), false)
+        .groups.map((group) => [...group.teamIds].sort().join('+'))
+        .join('|');
+    const layouts = new Set(Array.from({ length: 20 }, (_, seed) => layout(seed)));
+    expect(layouts.size).toBeGreaterThan(1);
+  });
+});
+
 describe('completeSuperCupGroupStage', () => {
   it('creates QF (not R16) two-legged fixtures after group stage finishes', () => {
     const teams = Array.from({ length: 16 }, (_, i) => `t${i + 1}`);

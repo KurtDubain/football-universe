@@ -229,8 +229,36 @@ function recordKnockoutResult(fixture: CupFixture, result: MatchResult): void {
 // ---------------------------------------------------------------------------
 
 /**
+ * Split the qualified field into seeding pots.
+ *
+ * `qualifiedTeamIds` arrives already ordered by seeding strength: tier first
+ * (top flight, then second, then third), and within a tier by the finishing
+ * position that earned the place. Slicing that order into equal pots of
+ * `groupCount` teams gives every group exactly one team from each pot.
+ *
+ * The 10/4/2 quota does not divide into four even pots, so the lower two pots
+ * straddle tiers: pot 3 holds the last two top-flight qualifiers plus the top
+ * two second-tier sides, pot 4 the remaining second-tier sides plus both
+ * third-tier sides. That follows from the quota, not from a defect, and the
+ * rules card therefore describes the draw by seeding rank rather than by tier.
+ *
+ * The structure guarantees every group two top-flight sides and one side from
+ * the weakest pot, which is what the tiered qualification existed for. Before
+ * this, the whole field was shuffled and dealt round-robin, so one group could
+ * collect four top-flight sides while another held one.
+ */
+function buildSuperCupPots(qualifiedTeamIds: string[], groupCount: number): string[][] {
+  const potCount = qualifiedTeamIds.length / groupCount;
+  return Array.from({ length: potCount }, (_, potIndex) =>
+    qualifiedTeamIds.slice(potIndex * groupCount, (potIndex + 1) * groupCount),
+  );
+}
+
+/**
  * Initialize the super cup.
- * Draw 16 teams into 4 groups of 4.
+ * Draw 16 teams into 4 groups of 4, seeded so that each group takes one team
+ * from every pot. See buildSuperCupPots for the ordering contract: the caller
+ * must pass the field strongest-first.
  * Generate all group stage fixtures (6 rounds of matches per group).
  * The group standings use the same StandingEntry type as leagues.
  */
@@ -244,7 +272,13 @@ export function initSuperCup(
     throw new Error(`Super cup requires 16 teams, got ${qualifiedTeamIds.length}`);
   }
 
-  const groupTeams = drawGroups(qualifiedTeamIds, 4, rng);
+  const groupCount = 4;
+  const groupTeams = drawGroups(
+    qualifiedTeamIds,
+    groupCount,
+    rng,
+    buildSuperCupPots(qualifiedTeamIds, groupCount),
+  );
 
   const groups: SuperCupGroup[] = groupTeams.map((teamIds, i) => ({
     groupName: String.fromCharCode(65 + i),
