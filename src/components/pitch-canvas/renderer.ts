@@ -9,6 +9,7 @@ import { clamp, hexToRgbStr } from './math';
 import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
 import { createPitchGeometry } from './geometry';
+import { MAX_BROADCAST_ZOOM, broadcastCameraPan } from './camera';
 
 // Mutable {current: number} shape — matches React.MutableRefObject<number>
 // without importing React, so this module stays UI-framework neutral.
@@ -678,11 +679,8 @@ export function applyCameraShake(
   }
   ctx.save();
   ctx.clearRect(0, 0, W, H);
-  const zoom = clamp(camera.zoom, 1, 1.12);
-  const overscanX = Math.max(0, (zoom - 1) * W / 2 - 1);
-  const overscanY = Math.max(0, (zoom - 1) * H / 2 - 1);
-  const panX = clamp((W / 2 - camera.focusX) * 0.22, -overscanX, overscanX);
-  const panY = clamp((H / 2 - camera.focusY) * 0.18, -overscanY, overscanY);
+  const zoom = clamp(camera.zoom, 1, MAX_BROADCAST_ZOOM);
+  const { panX, panY } = broadcastCameraPan(camera.focusX, camera.focusY, zoom, W, H);
   ctx.translate(W / 2 + panX + offX, H / 2 + panY + offY);
   ctx.scale(zoom, zoom);
   ctx.translate(-W / 2, -H / 2);
