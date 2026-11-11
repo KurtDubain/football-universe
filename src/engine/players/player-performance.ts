@@ -5,7 +5,16 @@ import { PLAYER_STAT_COUNTER_FIELDS } from './player-stat-fields';
 export const PLAYER_CONFIDENCE_MINUTES = 900;
 /** Kept as a compatibility export; ranking no longer has a hard minute gate. */
 export const PLAYER_RANKING_MINUTES = 0;
-export const PLAYER_SCORE_VERSION = 1;
+/**
+ * Bumped whenever the cross-position calibration below changes, so archived
+ * seasons keep a readable marker of the scale they were scored on.
+ *
+ * v2: defender scale narrowed 1.85 -> 1.60. The old value made defenders the
+ * highest-variance position (P10 lowest, P90 level with everyone else) and
+ * handed 40% of Ballon d'Or wins to centre-backs. See
+ * docs/score-params-simulation-report.md for the 50-season comparison.
+ */
+export const PLAYER_SCORE_VERSION = 2;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -88,9 +97,14 @@ const ANCHORS = {
   },
 } as const;
 
+// scale amplifies how far a position's raw quality sits from its own median.
+// Defender scale was narrowed from 1.85 after a 50-season audit: the wider
+// value did not raise defender medians (already the lowest of the four) but
+// stretched their tails, which is what let relegation-battling centre-backs
+// outscore title-winning forwards.
 const POSITION_QUALITY_CALIBRATION: Record<PlayerPosition, { median: number; scale: number }> = {
   GK: { median: 52.7, scale: 0.83 },
-  DF: { median: 52.1, scale: 1.85 },
+  DF: { median: 52.1, scale: 1.60 },
   MF: { median: 48.5, scale: 1.42 },
   FW: { median: 50.9, scale: 1.14 },
 };

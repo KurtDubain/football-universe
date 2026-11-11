@@ -8,6 +8,7 @@ import {
 } from './season-manager';
 import { defaultTeams } from '../../config/teams';
 import { CUP_PRIZE } from '../economy/finance';
+import { PLAYER_SCORE_VERSION } from '../players/player-performance';
 import { playerTeamStatKey } from '../players/stats';
 import { validateWorldData } from '../validation/world-data';
 import type { StandingEntry } from '../../types/league';
@@ -223,7 +224,7 @@ describe('initializeGameWorld', () => {
     expect(history?.positionQuality).toBeGreaterThanOrEqual(0);
     expect(history?.availabilityScore).toBeGreaterThanOrEqual(0);
     expect(history?.scoreConfidence).toBeGreaterThan(0);
-    expect(history?.scoreVersion).toBe(1);
+    expect(history?.scoreVersion).toBe(PLAYER_SCORE_VERSION);
     expect(next.playerStats[player.uuid].goals).toBe(0);
   });
 

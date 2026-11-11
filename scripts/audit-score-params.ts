@@ -58,6 +58,14 @@ interface Params {
   weights: { quality: number; availability: number; league: number };
 }
 
+/**
+ * Baseline snapshot of the calibration as it stood BEFORE the 2026-11-11 change.
+ *
+ * It deliberately keeps DF at 1.85 even though the product now ships 1.60:
+ * 'current' is the control group this study is measured against, not a mirror
+ * of the live constants. The shipped values are the 'dfOnly_1_60' candidate.
+ * Do not "sync" this with player-performance.ts or the study loses its baseline.
+ */
 const CURRENT: Params = {
   scale: { GK: 0.83, DF: 1.85, MF: 1.42, FW: 1.14 },
   league: { 1: 100, 2: 95, 3: 90 },
