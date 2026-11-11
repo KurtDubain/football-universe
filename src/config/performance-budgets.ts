@@ -19,7 +19,15 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     singleAppAssetBytes: 160 * KiB,
   },
   pwaPrecache: {
-    entries: 86,
+    // 86 → 87 for v4.62.0. The Ballon d'Or module needs the canonical
+    // sortStandings, which made src/engine/standings a chunk shared by
+    // season-awards, season-manager and storage-limits instead of being
+    // inlined into one of them. Bytes stayed under the cap; only the entry
+    // count moved. Pushing the ranking out to season-end.ts would remove the
+    // edge, at the cost of widening computeSeasonAwards and
+    // buildBallonDorContextResolver and rewriting ~22 call sites across two
+    // verified award test files — not worth it for one precache entry.
+    entries: 87,
     bytes: 2_150_000,
   },
 } as const;
