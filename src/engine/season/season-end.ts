@@ -401,6 +401,10 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     {
       continentalCupWinners: [mainlandCupWinner, southernCupWinner, easternCupWinner]
         .filter((id): id is string => Boolean(id)),
+      // The domestic cups were previously omitted entirely, so a league-cup +
+      // super-cup double contributed nothing to any individual award.
+      domesticCupWinners: [leagueCupWinner, superCupWinner]
+        .filter((id): id is string => Boolean(id)),
     },
     // The tournament now closes the season, so this is the live edition and
     // its winner is eligible for the world cup multiplier.

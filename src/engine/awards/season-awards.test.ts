@@ -126,7 +126,8 @@ describe('computeSeasonAwards', () => {
     expect(types).toContain('golden_boot');
     expect(types).toContain('best_defender');
     expect(types).toContain('young_player');
-    expect(awards.length).toBeLessThanOrEqual(5);
+    // Seven award types exist; this fixture has no MF or GK, so fewer are issued.
+    expect(awards.length).toBeLessThanOrEqual(7);
   });
 
   it('Golden Boot is the player with the most goals', () => {
@@ -174,7 +175,7 @@ describe('computeSeasonAwards', () => {
     const awards = computeSeasonAwards(1, stats, squads, { teamA, teamB }, standings);
     const bd = awards.find((a) => a.type === 'best_defender');
     expect(bd?.teamId).toBe('teamB');
-    expect(bd?.statLabel).toContain('赛季综合评分');
+    expect(bd?.statLabel).toContain('位置表现');
   });
 
   it('Young Player uses true under-23 eligibility rather than team strength or a goal threshold', () => {
@@ -462,6 +463,193 @@ describe('computeSeasonAwards — Ballon d\'Or weighting', () => {
       1, stats, squads, { teamA, teamB }, standings, {}, { teamB: 2 },
     );
     expect(mvpOf(awards)?.playerId).toBe('teamA-9');
+  });
+});
+
+
+describe('computeSeasonAwards — redesigned award set', () => {
+  /**
+   * A 16-team table with explicit placements, matching the top flight in
+   * `config/competitions.ts`. Positions 1-4 are the top four and 13-16 the
+   * bottom four, so 5-12 is the only genuinely neutral band.
+   */
+  function tableWith(placements: Record<string, number>, size = 16): StandingEntry[] {
+    const slots = Array.from({ length: size }, (_, index) => `filler-${index}`);
+    for (const [teamId, position] of Object.entries(placements)) {
+      slots[position - 1] = teamId;
+    }
+    return slots.map((teamId, index) => ({
+      ...makeStanding(teamId, 30, 20 + index),
+      points: 80 - index * 3,
+    }));
+  }
+
+  function solidDefenderStat(teamId: string, over: Partial<PlayerSeasonStats> = {}): PlayerSeasonStats {
+    return {
+      ...makeStat(`${teamId}-4`, teamId, 0, 0, 30),
+      minutesPlayed: 2700,
+      interceptions: 60,
+      clearances: 80,
+      goalsConcededWhileOnPitch: 12,
+      cleanSheetMinutes: 900,
+      ...over,
+    };
+  }
+
+  it('produces all seven awards when every position is represented', () => {
+    const solo = makeTeam('solo', 85);
+    const squads = {
+      solo: [
+        makePlayer('solo', 9, 'FW', 88, 26),
+        makePlayer('solo', 10, 'MF', 86, 26),
+        makePlayer('solo', 4, 'DF', 85, 26),
+        makePlayer('solo', 1, 'GK', 84, 26),
+        makePlayer('solo', 11, 'FW', 80, 20),
+      ],
+    };
+    const stats: Record<string, PlayerSeasonStats> = {
+      'solo-9': makeStat('solo-9', 'solo', 24, 8),
+      'solo-10': { ...makeStat('solo-10', 'solo', 8, 14), keyPasses: 40, bigChances: 20 },
+      'solo-4': solidDefenderStat('solo'),
+      'solo-1': {
+        ...makeStat('solo-1', 'solo', 0, 0, 30),
+        minutesPlayed: 2700, routineSaves: 80, saves: 12,
+        shotsOnTargetFaced: 110, goalsConcededWhileOnPitch: 18, cleanSheetMinutes: 900,
+      },
+      'solo-11': makeStat('solo-11', 'solo', 12, 4),
+    };
+
+    const awards = computeSeasonAwards(
+      1, stats, squads, { solo }, [makeStanding('solo', 30, 20)],
+    );
+    const types = awards.map(award => award.type);
+
+    for (const type of [
+      'mvp', 'golden_boot', 'best_forward', 'best_midfielder',
+      'best_defender', 'best_goalkeeper', 'young_player',
+    ] as const) {
+      expect(types).toContain(type);
+    }
+    // One winner per award: no duplicates, no silent double-issue.
+    expect(new Set(types).size).toBe(types.length);
+    expect(awards).toHaveLength(7);
+  });
+
+  it('weights the Golden Boot by league tier and says so in the label', () => {
+    const top = makeTeam('top', 85);
+    const second = makeTeam('second', 70);
+    const squads = {
+      top: [makePlayer('top', 9, 'FW')],
+      second: [makePlayer('second', 9, 'FW')],
+    };
+    const standings = [makeStanding('top', 30, 20)];
+
+    // 24 x 0.90 = 21.6 beats 20 x 1.00.
+    const lowerTierWins = computeSeasonAwards(1, {
+      'top-9': makeStat('top-9', 'top', 20, 0),
+      'second-9': makeStat('second-9', 'second', 24, 0),
+    }, squads, { top, second }, standings, {}, { second: 2 });
+    const weighted = lowerTierWins.find(award => award.type === 'golden_boot');
+    expect(weighted?.playerId).toBe('second-9');
+    expect(weighted?.statLabel).toContain('甲级');
+    expect(weighted?.statLabel).toContain('0.90');
+    // The reported value is the weighted score, not the raw goal count.
+    expect(weighted?.statValue).toBeCloseTo(21.6, 6);
+
+    // 22 x 0.90 = 19.8 falls short of 20 x 1.00.
+    const topTierWins = computeSeasonAwards(1, {
+      'top-9': makeStat('top-9', 'top', 20, 0),
+      'second-9': makeStat('second-9', 'second', 22, 0),
+    }, squads, { top, second }, standings, {}, { second: 2 });
+    expect(topTierWins.find(award => award.type === 'golden_boot')?.playerId).toBe('top-9');
+  });
+
+  it('breaks a Golden Boot tie on assists, not on object-key order', () => {
+    const solo = makeTeam('solo', 85);
+    const squads = {
+      solo: [makePlayer('solo', 10, 'FW'), makePlayer('solo', 11, 'FW')],
+    };
+    // Key order and uuid order both favour solo-10; assists favour solo-11.
+    // The pre-redesign scan took the first row to reach the maximum, which
+    // disagreed with the season-review top-scorer card.
+    const stats = {
+      'solo-10': makeStat('solo-10', 'solo', 20, 3),
+      'solo-11': makeStat('solo-11', 'solo', 20, 11),
+    };
+    const awards = computeSeasonAwards(
+      1, stats, squads, { solo }, [makeStanding('solo', 30, 20)],
+    );
+    expect(awards.find(award => award.type === 'golden_boot')?.playerId).toBe('solo-11');
+  });
+
+  it('credits a domestic cup, which previously contributed nothing', () => {
+    const teamA = makeTeam('a', 80);
+    const teamB = makeTeam('b', 80);
+    const squads = {
+      a: [makePlayer('a', 9, 'FW')],
+      b: [makePlayer('b', 9, 'FW')],
+    };
+    const stats = {
+      'a-9': makeStat('a-9', 'a', 18, 6),
+      'b-9': makeStat('b-9', 'b', 18, 6),
+    };
+    // Both mid-table, so the team factor is neutral and only cups can separate them.
+    const standings = tableWith({ a: 8, b: 9 });
+    const mvpOf = (awards: PlayerAward[]) => awards.find(award => award.type === 'mvp');
+
+    const plain = computeSeasonAwards(1, stats, squads, { a: teamA, b: teamB }, standings);
+    // Identical seasons: the uuid tiebreak decides.
+    expect(mvpOf(plain)?.playerId).toBe('a-9');
+
+    const withLeagueCup = computeSeasonAwards(
+      1, stats, squads, { a: teamA, b: teamB }, standings, {}, {},
+      { domesticCupWinners: ['b'] },
+    );
+    expect(mvpOf(withLeagueCup)?.playerId).toBe('b-9');
+  });
+
+  it('gives a title-winning defender an edge without letting the team decide', () => {
+    const champ = makeTeam('champ', 85);
+    const mid = makeTeam('mid', 85);
+    const squads = {
+      champ: [makePlayer('champ', 4, 'DF', 85)],
+      mid: [makePlayer('mid', 4, 'DF', 85)],
+    };
+    const standings = tableWith({ champ: 1, mid: 8 });
+    const bestDefender = (stats: Record<string, PlayerSeasonStats>) => computeSeasonAwards(
+      1, stats, squads, { champ, mid }, standings,
+    ).find(award => award.type === 'best_defender')?.teamId;
+
+    // Identical output: the light champion factor breaks the tie.
+    expect(bestDefender({
+      'champ-4': solidDefenderStat('champ'),
+      'mid-4': solidDefenderStat('mid'),
+    })).toBe('champ');
+
+    // Clearly better individual defending still wins from mid-table.
+    expect(bestDefender({
+      'champ-4': solidDefenderStat('champ'),
+      'mid-4': solidDefenderStat('mid', {
+        interceptions: 120, clearances: 170, keyBlocks: 6, cleanSheetMinutes: 1200,
+      }),
+    })).toBe('mid');
+  });
+
+  it('restricts every position award to the top flight', () => {
+    const top = makeTeam('top', 85);
+    const lower = makeTeam('lower', 85);
+    const squads = {
+      top: [makePlayer('top', 4, 'DF', 85)],
+      lower: [makePlayer('lower', 4, 'DF', 85)],
+    };
+    // Only `top` appears in the standings, so `lower` is not a top-flight team.
+    const awards = computeSeasonAwards(1, {
+      'top-4': solidDefenderStat('top'),
+      'lower-4': solidDefenderStat('lower', { interceptions: 120, clearances: 170 }),
+    }, squads, { top, lower }, [makeStanding('top', 30, 20)], {}, { lower: 2 });
+
+    const defender = awards.find(award => award.type === 'best_defender');
+    expect(defender?.teamId).toBe('top');
   });
 });
 

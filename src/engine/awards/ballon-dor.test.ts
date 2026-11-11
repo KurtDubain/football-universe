@@ -17,6 +17,7 @@ function ctx(over: Partial<BallonDorContext> = {}): BallonDorContext {
     leagueSize: LEAGUE_SIZE,
     wonContinentalCup: false,
     wonWorldCup: false,
+    domesticCupCount: 0,
     leagueLevel: 1,
     minutesPlayed: 2700,
     ...over,
@@ -85,7 +86,7 @@ describe('ballonDorScore — league tier discount', () => {
     expect(top).toBeGreaterThan(tier2);
     expect(tier2).toBeGreaterThan(tier3);
     expect(tier2).toBeCloseTo(85 * 0.90, 6);
-    expect(tier3).toBeCloseTo(85 * 0.78, 6);
+    expect(tier3).toBeCloseTo(85 * 0.80, 6);
   });
 
   it('does not stack a relegation-zone penalty on a lower-tier team', () => {
@@ -100,6 +101,27 @@ describe('ballonDorScore — league tier discount', () => {
     }));
     const topFlightAverage = ballonDorScore(72, ctx({ leagueLevel: 1 }));
     expect(tier3Star).toBeGreaterThan(topFlightAverage);
+  });
+});
+
+describe('ballonDorScore — domestic cups', () => {
+  it('credits a domestic cup, which the pre-redesign award ignored entirely', () => {
+    const plain = ballonDorScore(80, ctx());
+    const leagueCup = ballonDorScore(80, ctx({ domesticCupCount: 1 }));
+    expect(leagueCup).toBeGreaterThan(plain);
+    expect(leagueCup).toBeCloseTo(80 * 1.05, 6);
+  });
+
+  it('caps a domestic double below a continental cup', () => {
+    const double = ballonDorScore(80, ctx({ domesticCupCount: 2 }));
+    const continental = ballonDorScore(80, ctx({ wonContinentalCup: true }));
+    // 1.05 x 1.05 = 1.1025 would outrank a continental cup, so it is capped.
+    expect(double).toBeCloseTo(80 * 1.08, 6);
+    expect(continental).toBeGreaterThan(double);
+  });
+
+  it('leaves a team with no domestic cup untouched', () => {
+    expect(ballonDorScore(80, ctx({ domesticCupCount: 0 }))).toBeCloseTo(80, 6);
   });
 });
 
@@ -200,6 +222,21 @@ describe('buildBallonDorContextResolver', () => {
   it('treats an omitted honours lookup as no cups won', () => {
     const resolve = buildBallonDorContextResolver([standing('a', 70)], {}, {});
     expect(resolve('a', 2700).wonContinentalCup).toBe(false);
+    expect(resolve('a', 2700).domesticCupCount).toBe(0);
+  });
+
+  it('counts domestic cup trophies, including a double', () => {
+    const standings = [standing('a', 70), standing('b', 40)];
+    const single = buildBallonDorContextResolver(
+      standings, { domesticCupWinners: ['a'] }, {},
+    );
+    expect(single('a', 2700).domesticCupCount).toBe(1);
+    expect(single('b', 2700).domesticCupCount).toBe(0);
+
+    const double = buildBallonDorContextResolver(
+      standings, { domesticCupWinners: ['a', 'a'] }, {},
+    );
+    expect(double('a', 2700).domesticCupCount).toBe(2);
   });
 
   it('falls back to level 1 when the season start level is unknown', () => {
