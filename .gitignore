@@ -19,6 +19,9 @@ playwright-report/
 test-results/
 output/
 
+# Git worktrees used for isolated development
+.worktrees/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
