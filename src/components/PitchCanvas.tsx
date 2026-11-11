@@ -36,10 +36,21 @@ import {
 } from './pitch-canvas/types';
 import {
   degradeRenderBudget,
+  restoreRenderBudget,
   selectRenderBudget,
   shouldDegradeRenderBudget,
+  shouldRestoreRenderBudget,
+  visualScaleForQuality,
+  type FramePressure,
   type RenderBudget,
+  type RenderEnvironment,
 } from './pitch-canvas/render-budget';
+import {
+  contactFrameFor,
+  releaseDelayFramesFor,
+  shouldEmitContactCue,
+  shouldEmitSetupCue,
+} from './pitch-canvas/cue-timing';
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
 import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
@@ -386,13 +397,24 @@ function PitchCanvas(props: Props) {
     const pitchLayerContext = pitchLayer.getContext('2d')!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    let renderBudget = selectRenderBudget({
+    const renderEnvironment: RenderEnvironment = {
       cssWidth: canvas.clientWidth || LOGICAL_PITCH_WIDTH,
       devicePixelRatio: window.devicePixelRatio || 1,
       reducedMotion,
       hardwareConcurrency: navigator.hardwareConcurrency,
       deviceMemory,
-    });
+    };
+    let renderBudget = selectRenderBudget(renderEnvironment);
+    // A device sitting on the boundary can degrade and restore repeatedly.
+    // After two cycles the downgrade is treated as real and stays put.
+    const MAX_DEGRADE_CYCLES = 2;
+    let degradeCycles = 0;
+    // Eased instead of snapped: a tier change used to resize every marker
+    // between two frames, which reads as a glitch rather than a quality change.
+    const VISUAL_SCALE_EASE = 0.06;
+    const initialVisualScale = visualScaleForQuality(renderBudget.quality);
+    let visualPlayerScale = initialVisualScale.player;
+    let visualBallScale = initialVisualScale.ball;
     let currentDpr = 1;
     const renderMetrics = createRenderMetricsTracker();
 
@@ -468,13 +490,31 @@ function PitchCanvas(props: Props) {
       }
     }
 
+    function presentationCueId(
+      scene: EventScene,
+      moment: MatchPresentationCue['moment'],
+      phaseOrdinal: number,
+    ): string {
+      return `${scene.key}:${moment}:${moment === 'contact' ? phaseOrdinal : 'scene'}`;
+    }
+
+    function hasEmittedPresentationCue(
+      scene: EventScene,
+      moment: MatchPresentationCue['moment'],
+      phaseOrdinal = phaseIdxRef.current,
+    ): boolean {
+      return emittedPresentationCueIdsRef.current.has(
+        presentationCueId(scene, moment, phaseOrdinal),
+      );
+    }
+
     function emitPresentationCue(
       scene: EventScene,
       moment: MatchPresentationCue['moment'],
       detail: Pick<MatchPresentationCue, 'action' | 'outcome'> = {},
       phaseOrdinal = phaseIdxRef.current,
     ): void {
-      const id = `${scene.key}:${moment}:${moment === 'contact' ? phaseOrdinal : 'scene'}`;
+      const id = presentationCueId(scene, moment, phaseOrdinal);
       if (emittedPresentationCueIdsRef.current.has(id)) return;
       emittedPresentationCueIdsRef.current.add(id);
       liveRef.current.onPresentationCue?.({
@@ -493,17 +533,33 @@ function PitchCanvas(props: Props) {
 
     function recordFrameInterval(interval: number): void {
       renderMetrics.recordFrameInterval(interval);
-      if (renderBudget.quality === 'reduced' || renderBudget.quality === 'degraded') return;
+      if (renderBudget.quality === 'reduced') return;
       const metrics = renderMetrics.snapshot();
-      if (!shouldDegradeRenderBudget({
+      const pressure: FramePressure = {
         renderedFrames: metrics.renderedFrames,
         consecutiveSlowFrames: metrics.consecutiveSlowFrames,
-        averageFrameIntervalMs: metrics.averageFrameIntervalMs,
-        averageRenderMs: metrics.averageRenderMs,
-      })) return;
+        consecutiveFastFrames: metrics.consecutiveFastFrames,
+        p95FrameIntervalMs: metrics.p95FrameIntervalMs,
+        p95RenderMs: metrics.p95RenderMs,
+      };
+      const debugActive = debugStateRef.current.rendering.active;
+      const debugPause = debugStateRef.current.rendering.pauseReason;
+
+      if (renderBudget.quality === 'degraded') {
+        if (degradeCycles >= MAX_DEGRADE_CYCLES) return;
+        if (!shouldRestoreRenderBudget(pressure)) return;
+        renderBudget = restoreRenderBudget(renderBudget, renderEnvironment);
+        updateRenderingDebug(debugActive, debugPause);
+        return;
+      }
+
+      if (!shouldDegradeRenderBudget(pressure)) return;
+      degradeCycles++;
       renderBudget = degradeRenderBudget(renderBudget);
       particlesRef.current = particlesRef.current.slice(-renderBudget.particleCap);
-      resizeCanvas();
+      // No resizeCanvas() here: the tier change keeps dprCap, so the backing
+      // store and every marker stay exactly where they were.
+      updateRenderingDebug(debugActive, debugPause);
     }
 
     function loadSequence(phases: PassPhase[], seed: number): void {
@@ -569,7 +625,10 @@ function PitchCanvas(props: Props) {
 
       if (scene.outcome === 'goal') {
         goalCelebFrame.current = GOAL_CELEB_MAX_FRAMES;
-        const allowGoalImpulse = renderBudget.quality === 'full' && !reducedMotion;
+        // 18 frames of draw offset is cheap. Gating it on 'full' meant every
+        // phone and every 4-core machine never got a goal impact at all, and a
+        // degraded match lost it permanently.
+        const allowGoalImpulse = !reducedMotion;
         cameraShakeRef.current = allowGoalImpulse ? CAMERA_SHAKE_MAX_FRAMES : 0;
         cameraShakeMax.current = allowGoalImpulse ? CAMERA_SHAKE_MAX_FRAMES : 1;
         flashWhiteRef.current = FLASH_MAX_FRAMES;
@@ -1025,21 +1084,29 @@ function PitchCanvas(props: Props) {
         : baseBallTarget;
       const finalTargetX = P + ballTarget.x * fw;
       const finalTargetY = P + ballTarget.y * fh;
-      const releaseDelayFrames = currentPhase.releaseDelayFrames ?? (currentPhase.kind === 'shot' ? 8 : 0);
+      const releaseDelayFrames = releaseDelayFramesFor(currentPhase);
       if (
         directedShotScene
-        && currentPhase.setPiece
-        && phaseIdxRef.current === 0
-        && phaseFrameRef.current <= 1
+        && shouldEmitSetupCue({
+          scene: directedShotScene,
+          isSetPiece: Boolean(currentPhase.setPiece),
+          phaseIndex: phaseIdxRef.current,
+          isHolding: phaseStateRef.current === 'holding',
+        })
       ) {
         emitPresentationCue(directedShotScene, 'setup');
       }
-      const contactFrame = Math.max(1, releaseDelayFrames);
+      const contactFrame = contactFrameFor(currentPhase);
       if (
         directedShotScene
-        && phaseStateRef.current !== 'holding'
-        && phaseFrameRef.current === contactFrame
-        && (currentPhase.kind === 'shot' || currentPhase.setPiece)
+        && shouldEmitContactCue({
+          scene: directedShotScene,
+          isHolding: phaseStateRef.current === 'holding',
+          phaseFrame: phaseFrameRef.current,
+          contactFrame,
+          isShotOrSetPiece: currentPhase.kind === 'shot' || Boolean(currentPhase.setPiece),
+          alreadyEmitted: hasEmittedPresentationCue(directedShotScene, 'contact'),
+        })
       ) {
         emitPresentationCue(
           directedShotScene,
@@ -1242,10 +1309,11 @@ function PitchCanvas(props: Props) {
         .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
       const visibleAway = activeAway
         .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
-      const playerVisualScale = renderBudget.quality === 'full' ? 1.04
-        : renderBudget.quality === 'reduced' ? 1.08
-          : 1.16;
-      const ballVisualScale = renderBudget.quality === 'full' ? 1.08 : 1.24;
+      const targetVisualScale = visualScaleForQuality(renderBudget.quality);
+      visualPlayerScale += (targetVisualScale.player - visualPlayerScale) * VISUAL_SCALE_EASE;
+      visualBallScale += (targetVisualScale.ball - visualBallScale) * VISUAL_SCALE_EASE;
+      const playerVisualScale = visualPlayerScale;
+      const ballVisualScale = visualBallScale;
       for (const player of visibleHome) {
         const hasBall = isAttHome && player.playerId === ballHolderId;
         const isEventPlayer = directedActors.attackerId === player.playerId || directedActors.defenderId === player.playerId;

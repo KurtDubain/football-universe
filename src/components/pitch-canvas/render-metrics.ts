@@ -1,5 +1,6 @@
 const DEFAULT_SAMPLE_LIMIT = 60;
 const SLOW_FRAME_MS = 33;
+const FAST_FRAME_MS = 20;
 
 export interface RenderMetricsSnapshot {
   renderedFrames: number;
@@ -11,6 +12,9 @@ export interface RenderMetricsSnapshot {
   maxFrameIntervalMs: number;
   consecutiveSlowFrames: number;
   maxConsecutiveSlowFrames: number;
+  /** Frames at or under FAST_FRAME_MS in a row; drives budget recovery. */
+  consecutiveFastFrames: number;
+  maxConsecutiveFastFrames: number;
 }
 
 export const EMPTY_RENDER_METRICS: RenderMetricsSnapshot = {
@@ -23,6 +27,8 @@ export const EMPTY_RENDER_METRICS: RenderMetricsSnapshot = {
   maxFrameIntervalMs: 0,
   consecutiveSlowFrames: 0,
   maxConsecutiveSlowFrames: 0,
+  consecutiveFastFrames: 0,
+  maxConsecutiveFastFrames: 0,
 };
 
 function average(values: readonly number[]): number {
@@ -49,6 +55,8 @@ export function createRenderMetricsTracker(sampleLimit = DEFAULT_SAMPLE_LIMIT) {
   let renderedFrames = 0;
   let consecutiveSlowFrames = 0;
   let maxConsecutiveSlowFrames = 0;
+  let consecutiveFastFrames = 0;
+  let maxConsecutiveFastFrames = 0;
   let maxFrameIntervalMs = 0;
 
   return {
@@ -61,6 +69,8 @@ export function createRenderMetricsTracker(sampleLimit = DEFAULT_SAMPLE_LIMIT) {
       maxFrameIntervalMs = Math.max(maxFrameIntervalMs, interval);
       consecutiveSlowFrames = interval > SLOW_FRAME_MS ? consecutiveSlowFrames + 1 : 0;
       maxConsecutiveSlowFrames = Math.max(maxConsecutiveSlowFrames, consecutiveSlowFrames);
+      consecutiveFastFrames = interval <= FAST_FRAME_MS ? consecutiveFastFrames + 1 : 0;
+      maxConsecutiveFastFrames = Math.max(maxConsecutiveFastFrames, consecutiveFastFrames);
     },
     snapshot(): RenderMetricsSnapshot {
       return {
@@ -73,6 +83,8 @@ export function createRenderMetricsTracker(sampleLimit = DEFAULT_SAMPLE_LIMIT) {
         maxFrameIntervalMs,
         consecutiveSlowFrames,
         maxConsecutiveSlowFrames,
+        consecutiveFastFrames,
+        maxConsecutiveFastFrames,
       };
     },
   };

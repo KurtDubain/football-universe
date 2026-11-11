@@ -29,4 +29,24 @@ describe('pitch render metrics', () => {
       maxConsecutiveSlowFrames: 2,
     });
   });
+
+  it('tracks fast-frame streaks that drive budget recovery', () => {
+    const tracker = createRenderMetricsTracker(4);
+    for (const interval of [16, 17, 16, 34, 16, 16, 16]) tracker.recordFrameInterval(interval);
+
+    expect(tracker.snapshot()).toMatchObject({
+      consecutiveFastFrames: 3,
+      maxConsecutiveFastFrames: 3,
+    });
+  });
+
+  it('breaks the fast streak on any frame slower than the fast threshold', () => {
+    const tracker = createRenderMetricsTracker(4);
+    for (const interval of [16, 16, 21, 16]) tracker.recordFrameInterval(interval);
+
+    expect(tracker.snapshot()).toMatchObject({
+      consecutiveFastFrames: 1,
+      maxConsecutiveFastFrames: 2,
+    });
+  });
 });
