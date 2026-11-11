@@ -48,7 +48,7 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
   const attackGoalX = outcome === 'delivery'
     ? (attackingHome ? 0.89 : 0.11)
     : outcome === 'miss'
-    ? (attackingHome ? 1.015 : -0.015)
+    ? (attackingHome ? 1.008 : -0.008)
     : (attackingHome ? 0.985 : 0.015);
   const targetY = outcome === 'delivery'
     ? event.setPiece?.delivery === 'near_post'
@@ -57,7 +57,9 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
         ? (event.setPiece.side === 'left' ? 0.62 : 0.38)
         : 0.46 + seededRand(seed + 4) * 0.08
     : outcome === 'miss'
-    ? (seededRand(seed + 1) > 0.5 ? 0.34 : 0.66)
+    // Clearly outside the post (the goal mouth spans 0.446-0.554) with enough
+    // seeded spread that repeated misses do not all trace the same line.
+    ? 0.5 + (seededRand(seed + 1) > 0.5 ? 1 : -1) * (0.13 + seededRand(seed + 5) * 0.05)
     : outcome === 'block'
       ? 0.46 + seededRand(seed + 2) * 0.08
       : outcome === 'save' && event.type === 'save'

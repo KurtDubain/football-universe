@@ -352,6 +352,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     shootoutBreak,
   ]);
 
+  // The feed's newest entry is the same sentence the "current commentary" line
+  // already shows. On a 390 px screen that duplicate cost a whole row for
+  // nothing, so the repeat is dropped from the log.
+  const visibleCommentaryEntries = useMemo(
+    () => (commentaryEntries[0]?.text === commentary ? commentaryEntries.slice(1) : commentaryEntries),
+    [commentary, commentaryEntries],
+  );
+
   return createPortal(
     <div
       role="dialog"
@@ -435,7 +443,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         >
 
         {/* Header bar */}
-        <div className="broadcast-ribbon bg-slate-800/80 px-4 py-2 flex items-center justify-between">
+        <div className="broadcast-ribbon bg-slate-800/80 px-4 py-1.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${finished ? 'bg-red-500' : 'bg-green-500 animate-breathe'}`} />
             <span className="truncate text-[11px] text-slate-400">{result.competitionName} · {cnRoundLabel(result.roundLabel)}</span>
@@ -472,7 +480,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             }} />
           )}
 
-          <div className="relative flex items-center justify-center gap-2 px-4 pb-8 pt-5">
+          <div className="relative flex items-center justify-center gap-2 px-3 pb-3 pt-1.5 sm:px-4 sm:pb-8 sm:pt-5">
             {/* Home */}
             <div className="flex-1 text-right">
               <div className="flex items-center gap-2 justify-end">
@@ -485,14 +493,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
             </div>
 
             {/* Score */}
-            <div className="flex items-center gap-3 px-4 min-w-[90px] justify-center">
-              <span aria-label="主队比分" className={`broadcast-score-type text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
+            <div className="flex items-center gap-2 px-2 min-w-[76px] justify-center sm:gap-3 sm:px-4 sm:min-w-[90px]">
+              <span aria-label="主队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-all duration-300 sm:text-5xl ${
                 playback.homeScore > playback.awayScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'home' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.homeScore}
               </span>
               <span className="text-2xl text-slate-700 font-light">-</span>
-              <span aria-label="客队比分" className={`broadcast-score-type text-4xl sm:text-5xl font-black tabular-nums transition-all duration-300 ${
+              <span aria-label="客队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-all duration-300 sm:text-5xl ${
                 playback.awayScore > playback.homeScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'away' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.awayScore}
@@ -525,7 +533,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {(result.homeTactics || result.awayTactics) && (
           <div
             data-testid="live-tactics-strip"
-            className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-y border-slate-800/70 bg-slate-950/55 px-3 py-2"
+            className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-y border-slate-800/70 bg-slate-950/55 px-3 py-1 sm:py-2"
           >
             <div
               className="min-w-0 text-right"
@@ -533,11 +541,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 ? `${TACTICS_REASON_LABELS[result.homeTactics.reason]} · ${result.homeTactics.tags.join(' · ')}`
                 : '旧比赛未保存战术快照'}
             >
-              <div className="truncate text-xs font-bold text-slate-200">
-                {result.homeTactics?.formation ?? '阵型未记录'}
-              </div>
-              <div className="truncate text-[9px] text-emerald-300/75">
-                {result.homeTactics ? APPROACH_LABELS[result.homeTactics.approach] : '历史比赛'}
+              <div className="flex items-baseline justify-end gap-1.5 sm:block">
+                <span className="truncate text-xs font-bold text-slate-200">
+                  {result.homeTactics?.formation ?? '阵型未记录'}
+                </span>
+                <span className="truncate text-[9px] text-emerald-300/75">
+                  {result.homeTactics ? APPROACH_LABELS[result.homeTactics.approach] : '历史比赛'}
+                </span>
               </div>
             </div>
             <div className="border-x border-slate-700/70 px-2 text-center text-[8px] font-semibold text-slate-500">
@@ -549,11 +559,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 ? `${TACTICS_REASON_LABELS[result.awayTactics.reason]} · ${result.awayTactics.tags.join(' · ')}`
                 : '旧比赛未保存战术快照'}
             >
-              <div className="truncate text-xs font-bold text-slate-200">
-                {result.awayTactics?.formation ?? '阵型未记录'}
-              </div>
-              <div className="truncate text-[9px] text-emerald-300/75">
-                {result.awayTactics ? APPROACH_LABELS[result.awayTactics.approach] : '历史比赛'}
+              <div className="flex items-baseline gap-1.5 sm:block">
+                <span className="truncate text-xs font-bold text-slate-200">
+                  {result.awayTactics?.formation ?? '阵型未记录'}
+                </span>
+                <span className="truncate text-[9px] text-emerald-300/75">
+                  {result.awayTactics ? APPROACH_LABELS[result.awayTactics.approach] : '历史比赛'}
+                </span>
               </div>
             </div>
           </div>
@@ -562,7 +574,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
         {featuredPlayers.length > 0 && (
           <div
             data-testid="live-featured-players"
-            className="flex min-w-0 items-center gap-3 overflow-x-auto border-b border-amber-400/10 bg-amber-300/[0.025] px-3 py-1.5 text-[9px] scrollbar-thin"
+            className="hidden min-w-0 items-center gap-3 overflow-x-auto border-b border-amber-400/10 bg-amber-300/[0.025] px-3 py-1.5 text-[9px] scrollbar-thin sm:flex"
           >
             <span className="shrink-0 font-bold text-amber-300">
               {featuredMatchup ?? '焦点球员'}
@@ -597,25 +609,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               />
             )}
 
-            <div className="relative px-3 py-2 lg:px-4 lg:py-3">
-              {(liveMoment || featuredEventPlayer) && !finished && (
-                <div
-                  data-testid="live-moment-emphasis"
-                  data-kind={liveMoment?.kind ?? 'featured'}
-                  className="pointer-events-none absolute left-1/2 top-4 z-10 flex max-w-[calc(100%-3rem)] -translate-x-1/2 items-center gap-2 rounded-sm border border-white/15 bg-slate-950/88 px-3 py-1.5 text-center shadow-lg motion-reduce:animate-none"
-                >
-                  <span className={`shrink-0 whitespace-nowrap text-[10px] font-black ${liveMoment?.kind === 'red_card' ? 'text-red-300' : 'text-amber-300'}`}>
-                    {liveMoment?.label ?? '焦点球员'}
-                  </span>
-                  {(liveMoment?.playerName || featuredEventPlayer) && (
-                    <span className="min-w-0 truncate text-[10px] font-semibold text-white">
-                      {liveMoment?.playerName ?? featuredEventPlayer?.playerName}
-                      {featuredEventPlayer ? ` · ${featuredEventPlayer.position}` : ''}
-                    </span>
-                  )}
-                  {liveMoment?.detail && <span className="hidden text-[9px] text-slate-400 sm:inline">{liveMoment.detail}</span>}
-                </div>
-              )}
+            <div className="relative px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-3">
               <PitchCanvas
                 minute={playback.minute}
                 maxMinute={maxMin}
@@ -647,8 +641,34 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               />
             </div>
 
+            {/* Moment emphasis lives below the pitch, not over it. Overlaying the
+                canvas put an opaque bar across the very area the camera exists to
+                show — at the top of a portrait pitch that is the away penalty
+                area. The strip keeps a fixed height so the canvas never resizes
+                when a moment appears or clears. */}
+            <div className="flex h-6 items-center justify-center px-3">
+              {(liveMoment || featuredEventPlayer) && !finished && (
+                <div
+                  data-testid="live-moment-emphasis"
+                  data-kind={liveMoment?.kind ?? 'featured'}
+                  className="pointer-events-none flex max-w-full items-center gap-2 rounded-sm border border-white/15 bg-slate-950/88 px-3 py-1 text-center shadow-lg motion-reduce:animate-none"
+                >
+                  <span className={`shrink-0 whitespace-nowrap text-[10px] font-black ${liveMoment?.kind === 'red_card' ? 'text-red-300' : 'text-amber-300'}`}>
+                    {liveMoment?.label ?? '焦点球员'}
+                  </span>
+                  {(liveMoment?.playerName || featuredEventPlayer) && (
+                    <span className="min-w-0 truncate text-[10px] font-semibold text-white">
+                      {liveMoment?.playerName ?? featuredEventPlayer?.playerName}
+                      {featuredEventPlayer ? ` · ${featuredEventPlayer.position}` : ''}
+                    </span>
+                  )}
+                  {liveMoment?.detail && <span className="hidden text-[9px] text-slate-400 sm:inline">{liveMoment.detail}</span>}
+                </div>
+              )}
+            </div>
+
             {!inShootout && (
-              <div className="px-4 pb-3 pt-1">
+              <div className="px-3 pb-1 pt-0.5 sm:px-4 sm:pb-3">
                 <div className="relative h-2 overflow-hidden rounded-full bg-slate-800">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300 motion-reduce:transition-none"
@@ -669,7 +689,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
           <LiveCommentaryFeed
             currentCommentary={commentary}
-            entries={commentaryEntries}
+            entries={visibleCommentaryEntries}
             homeTeamId={result.homeTeamId}
             homeColor={ht?.color}
             awayColor={at?.color}
@@ -712,10 +732,9 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           data-testid="live-controls"
           aria-hidden={showOpener || undefined}
           inert={showOpener || undefined}
-          className="grid shrink-0 grid-cols-1 gap-2 border-t border-slate-800/60 bg-slate-900 px-4 py-2.5 min-[480px]:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-800/60 bg-slate-900 px-3 py-2 sm:px-4 sm:py-2.5"
         >
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex min-w-0 gap-1">
+          <div className="flex min-w-0 items-center gap-1">
             <div
               role="group"
               aria-label="播放模式"
@@ -770,15 +789,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 name={feedbackPreferences.soundEnabled && !locallyMuted ? 'volume' : 'volume-off'}
                 size={14}
               />
-              <span>{!feedbackPreferences.soundEnabled ? '全局静音' : locallyMuted ? '本场静音' : '声音'}</span>
+              <span className="hidden sm:inline">{!feedbackPreferences.soundEnabled ? '全局静音' : locallyMuted ? '本场静音' : '声音'}</span>
             </button>
-            </div>
-            <span data-testid="playback-mode-description" className="truncate text-[9px] text-slate-500">
+            <span data-testid="playback-mode-description" className="sr-only sm:ml-1 sm:block sm:min-w-0 sm:truncate sm:text-[9px] sm:text-slate-500">
               {selectedPlaybackMode.label}{selectedPlaybackMode.recommended ? ' · 推荐' : ''}：{selectedPlaybackMode.description}
             </span>
           </div>
-          <div className="flex justify-end gap-2">
-            {!finished && <button onClick={skip} className="min-h-11 px-3 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer">跳过 →</button>}
+          <div className="flex items-center justify-end gap-1 sm:gap-2">
+            {!finished && <button onClick={skip} className="min-h-11 px-2 py-1 text-[10px] text-slate-500 hover:text-slate-300 cursor-pointer sm:px-3">跳过 →</button>}
             <button disabled={finished && !finalActionsReady} onClick={requestClose} className="min-w-11 min-h-11 px-3 py-1 text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-md cursor-pointer disabled:cursor-wait disabled:text-slate-600">
               {finished ? (finalActionsReady ? '关闭' : '归档中') : '退出'}
             </button>
