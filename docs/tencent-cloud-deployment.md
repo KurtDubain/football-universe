@@ -1,6 +1,8 @@
 # 腾讯云部署与维护
 
-2026-09-25 19:25（北京时间）已更新，应用版本 **4.61.11**，公开品牌为《下一季见：足球编年史》，两版继续开启 ICP 页脚。本次从干净的 `main/09a5984` 构建，更新腾讯云两个现有站点，没有 Git commit/push。
+2026-11-11 15:44（北京时间）已更新**个人版**，应用版本 **4.62.0**，公开品牌为《下一季见：足球编年史》，继续开启 ICP 页脚。本次从干净的 `main/f0956e2` 构建，只更新 `football.dyp02.vip`；参赛版 `cup.dyp02.vip` 未构建、未上传、未切换。
+
+上一轮 2026-09-25 19:25 从 `main/09a5984` 同时更新两版至 **4.61.11**。
 
 | 用途 | 地址 | 服务器目录 | Nginx 配置 |
 | --- | --- | --- | --- |
@@ -30,7 +32,25 @@ football-personal/ 或 football-contest/
 - 游戏 ACME 验证目录：`/www/wwwroot/apps/_acme/.well-known/acme-challenge`。
 - 日志轮转：`/etc/logrotate.d/football-static`，每日轮转、保留 14 份，并设 20 MB 阈值。
 
-## 当前发布来源（4.61.11）
+## 当前发布来源（4.62.0，仅个人版）
+
+- 仓库：`git@github.com:KurtDubain/football-universe.git`；分支 `main`；完整提交 `f0956e2cc96b862082741b664106abe3f1a7f825`。构建前后与发布前均确认工作区干净、提交未变；本节等运维记录随后补写，不是附加游戏源码。
+- **本轮只发布个人版。** 参赛版未构建、未上传、未切换；个人版切换后重新读取 `https://cup.dyp02.vip/version.json`，实测仍为 `4.61.11 / contest:three-shores-v1:contest:09a59843ae00b449ef53a63c3bef59530d90c687`。
+- 个人版 `current`：`v4.62.0-f0956e2-20261111`；`previous`：`v4.61.11-09a5984-20260925`。实际切换 15:44:15。
+- 本机 Node 22.22.2 / pnpm 10.34.5 构建，ICP 开启、audit 关闭，`PERSONAL_SITE_URL=https://football.dyp02.vip`。产物身份 `personal:personal-v1:personal:f0956e2cc96b862082741b664106abe3f1a7f825`，126 文件；上传后在服务器端复算 SHA-256 与本地一致，再原子切换。旧 release 与旧哈希资源保留。
+- 门禁全过：`changelog:check`、`docs:check`、`scripts:check`、`typecheck`、`test --maxWorkers=1`（164 文件 / 1,192 测试）、`editions:check`、`budgets:check`。`lint` 需加 `--ignore-pattern 'output/**'`：16 项 `no-explicit-any` 全部落在生成证据目录，不在源码内。
+- PWA 预缓存条目上限 86 → 87：Ballon d'Or 需要规范的 `sortStandings`，使 `src/engine/standings` 成为 season-awards / season-manager / storage-limits 三方共享 chunk，不再被内联。字节预算未动（实测 1,949,209 < 2,150,000）。
+- 发布前资源记录：`/www/backups/football-deploy/20261111-154415-927023-activate-personal`。
+- 私有上传目录：`/www/server/football-deploy/incoming/v4.62.0-f0956e2-20261111/`，只含构建包与 `version.json`，不上传源码、凭据或数据库。本地证据：`output/tencent-release-20261111-v4620/`。
+- 发布后线上核验：`/healthz` 返回 `football-personal-ok`；`/version.json` 为 4.62.0 且 buildId 与构建身份一致；`index.html`、主包 `assets/index-CrxB4DUP.js`、新增共享 chunk `assets/standings-DnU3pXyU.js` 均 HTTP 200；`sw.js` 预缓存清单 87 项，与预算一致。
+- **未做浏览器试玩。** 作者于 2026-11-11 明确要求跳过上线前试玩直接发布，因此镜头推近观感、PWA 离线更新行为、存档版本门禁拒绝路径只有单元测试、构建门禁与发布后 HTTP 检查背书，没有人工会话或真机证据。
+- 没有修改 Nginx 配置、DNS、证书、续签任务、博客、history-war、office-signal-relay 或 Vercel。没有新增容器/端口、重载/重启服务或整机。腾讯云仍为手动部署。
+
+```text
+personal.tar.gz  1d1ad7a191fe6cd5ef9c65728087a036e6c8b6f6099ef25d7604c6ec175203df
+```
+
+## 上次发布来源（4.61.11 归档）
 
 - 仓库：`git@github.com:KurtDubain/football-universe.git`；分支 `main`；完整提交 `09a59843ae00b449ef53a63c3bef59530d90c687`。构建前后、发布前及部署验收期间均确认工作区干净、提交未变；本节等运维记录随后补写，不是附加游戏源码。
 - 两版 `current`：`v4.61.11-09a5984-20260925`；`previous`：`v4.61.10-f0b2d63-local-80c7a776-20260915`。个人版实际切换 19:25:49，参赛版 19:25:50。
@@ -187,16 +207,16 @@ curl --fail https://cup.dyp02.vip/version.json
 
 ## 怎么回滚
 
-以下是将当前 4.61.11 回滚到上一版 4.61.10 的实际命令，在服务器执行。上一版保留 ICP 页脚、新游戏名及冠军归档修复，但没有本轮人物记忆与赛季回顾改进；恢复当前版本可将版本名换为 `v4.61.11-09a5984-20260925`。
+当前个人版为 4.62.0，上一版为 4.61.11。把个人版回滚到上一版的命令如下，在服务器执行。
+
+**回滚会同时把 `SAVE_SCHEMA_VERSION` 从 26 降回 25**：4.62.0 写出的存档在 4.61.11 下会被版本门禁拒绝，回滚前需确认线上没有依赖新档的玩家。参赛版本轮未变更，无需回滚。
 
 ```sh
-python3 /www/server/football-deploy/bin/manage-static.py rollback personal v4.61.10-f0b2d63-local-80c7a776-20260915
-python3 /www/server/football-deploy/bin/manage-static.py rollback contest v4.61.10-f0b2d63-local-80c7a776-20260915
+python3 /www/server/football-deploy/bin/manage-static.py rollback personal v4.61.11-09a5984-20260925
 curl --fail https://football.dyp02.vip/version.json
-curl --fail https://cup.dyp02.vip/version.json
 ```
 
-首次 4.61.7 部署时已分别发布同产物演练副本，再回滚原 release，检查前后健康和版别均通过；本次没有为演练将线上 4.61.11 降回旧版。这验证了服务端发布/回滚机制，不是跨游戏版本存档降级测试。已打开的 PWA 可能仍持有旧页面，需在游戏内检查更新；回滚操作本身不会删除玩家浏览器存档。
+首次 4.61.7 部署时已分别发布同产物演练副本，再回滚原 release，检查前后健康和版别均通过；4.61.11 与 4.62.0 两次发布都没有为演练把线上版本降回旧版。这验证了服务端发布/回滚机制，不是跨游戏版本存档降级测试。已打开的 PWA 可能仍持有旧页面，需在游戏内检查更新；回滚操作本身不会删除玩家浏览器存档。
 
 ## HTTPS 与自动续签
 
