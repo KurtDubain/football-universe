@@ -15,6 +15,9 @@ import {
  * - `goal` at minute <= 120 counts as a player goal and big chance. This
  *   includes open-play goals, set pieces, regular-time penalties, and
  *   extra-time penalties; the generator emits all of those as `goal`.
+ *   `goals` accumulates across EVERY competition; `leagueGoals` accumulates
+ *   only from `competitionType === 'league'`. The two feed different honours
+ *   (Golden Boot vs league top scorer) and must not be interchanged.
  * - `assist` at minute <= 120 counts as a player assist and key pass.
  * - `own_goal` is a team scoreline event only. It never increments the
  *   named player's normal scorer table totals.
@@ -173,6 +176,10 @@ function buildMatchStatDeltas(
   globalWindowIdx: number,
 ): Map<string, PlayerStatDelta> {
   const deltas = new Map<string, PlayerStatDelta>();
+  // `goals` is an all-competitions total (the Golden Boot's basis); the league
+  // top scorer needs its own numerator so its schedule normalisation divides
+  // league goals by league rounds rather than mixing the two bases.
+  const isLeagueMatch = result.competitionType === 'league';
   const homeMatchday = resolveResultMatchday(result, 'home', squads[result.homeTeamId], globalWindowIdx);
   const awayMatchday = resolveResultMatchday(result, 'away', squads[result.awayTeamId], globalWindowIdx);
   const duration = result.homeMatchday?.durationMinutes ?? result.awayMatchday?.durationMinutes ?? (result.extraTime ? 120 : 90);
@@ -217,7 +224,9 @@ function buildMatchStatDeltas(
     if (event.type === 'penalty_goal' || event.type === 'penalty_miss' || event.minute > 120) continue;
     if (event.type === 'goal' || event.type === 'own_goal') {
       if (event.type === 'goal') {
-        incrementDelta(deltas, event.playerId, event.teamId, { goals: 1, bigChances: 1 });
+        incrementDelta(deltas, event.playerId, event.teamId, isLeagueMatch
+          ? { goals: 1, bigChances: 1, leagueGoals: 1 }
+          : { goals: 1, bigChances: 1 });
       }
       const defendingTeamId = opposingTeamId(event.teamId);
       for (const player of matchdayByTeam.get(defendingTeamId) ?? []) {

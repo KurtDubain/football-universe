@@ -7,6 +7,13 @@ import type {
   PlayerSeasonStatsHistoryEntry,
 } from '../../types/player';
 import { emptyPlayerStat, playerTeamStatKey } from './stats';
+import { leagueGoalsOf } from './player-stat-fields';
+import {
+  describeLeagueTopScorer,
+  leagueTopScorerBreakdown,
+  leagueTopScorerScore,
+} from '../awards/award-scoring';
+import type { LeagueTier } from '../awards/award-weights';
 import { computePlayerCareerTotals } from './career-totals';
 import {
   computePlayerPerformance,
@@ -181,6 +188,9 @@ function statFromHistory(playerId: string, history: PlayerSeasonStatsHistoryEntr
     playerId,
     teamId: history.teamId,
     goals: history.goals,
+    // Absent on rows archived before the league/all-competitions split;
+    // leagueGoalsOf applies the documented fallback.
+    leagueGoals: history.leagueGoals,
     assists: history.assists,
     yellowCards: history.yellowCards,
     redCards: history.redCards,
@@ -498,8 +508,68 @@ export function getCurrentCreatorRows(world: GameWorld, limit = 20): PlayerStatR
   ).slice(0, limit);
 }
 
+/**
+ * Tier a team played in during a given season.
+ *
+ * `teamSeasonRecords` is authoritative once a season is archived; the
+ * in-progress season has no record yet, so it falls back to the levels captured
+ * at season start.
+ */
+export function teamTierInSeason(
+  world: GameWorld,
+  teamId: string,
+  seasonNumber?: number,
+): LeagueTier {
+  if (seasonNumber !== undefined) {
+    const record = world.teamSeasonRecords?.[teamId]
+      ?.find((row) => row.seasonNumber === seasonNumber);
+    if (record?.leagueLevel) return record.leagueLevel as LeagueTier;
+  }
+  return (world.seasonStartLevels?.[teamId] ?? 1) as LeagueTier;
+}
+
+/**
+ * 射手王 — the season's league top scorer.
+ *
+ * Ranks LEAGUE goals over league rounds, schedule-normalised so a 14-round tier
+ * is not structurally excluded by the top flight's 30. Deliberately a different
+ * measurement from the Golden Boot, which ranks all-competitions goals; the two
+ * name different players in roughly two seasons out of three.
+ */
 export function getSeasonTopScorerRows(world: GameWorld, seasonNumber: number, limit = 20): PlayerStatRow[] {
-  return sortRowsByGoals(getSeasonPlayerStatRows(world, seasonNumber).filter((row) => row.goals > 0)).slice(0, limit);
+  const scored = getSeasonPlayerStatRows(world, seasonNumber)
+    .filter((row) => leagueGoalsOf(row) > 0)
+    .map((row) => {
+      const leagueGoals = leagueGoalsOf(row);
+      return {
+        row,
+        leagueGoals,
+        score: leagueTopScorerScore(leagueGoals, teamTierInSeason(world, row.teamId, seasonNumber)),
+      };
+    });
+
+  // Same tiebreak chain as the award comparator: score, then raw league goals,
+  // then assists. Never object-key order.
+  scored.sort((a, b) => b.score - a.score
+    || b.leagueGoals - a.leagueGoals
+    || b.row.assists - a.row.assists);
+
+  return scored.slice(0, limit).map((entry) => entry.row);
+}
+
+/**
+ * Display line for a league top-scorer row, printing the schedule derivation
+ * whenever an adjustment applies so the result stays reconstructable.
+ */
+export function seasonTopScorerLabel(
+  world: GameWorld,
+  row: Pick<PlayerStatRow, 'teamId' | 'goals'> & { leagueGoals?: number },
+  seasonNumber?: number,
+): string {
+  return describeLeagueTopScorer(leagueTopScorerBreakdown(
+    leagueGoalsOf(row),
+    teamTierInSeason(world, row.teamId, seasonNumber),
+  ));
 }
 
 export function getSeasonTopAssistRows(world: GameWorld, seasonNumber: number, limit = 20): PlayerStatRow[] {

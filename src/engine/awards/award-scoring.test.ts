@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   ballonDorTeamFactor,
   describeGoldenBoot,
+  describeLeagueTopScorer,
   domesticCupMultiplier,
   goldenBootBreakdown,
   goldenBootScore,
+  leagueTopScorerBreakdown,
+  leagueTopScorerScore,
   placementOf,
   positionAwardScore,
   positionAwardTeamFactor,
@@ -13,8 +16,8 @@ import {
 } from './award-scoring';
 import {
   BALLON_DOR_TEAM,
-  GOLDEN_BOOT_TIER_COEFFICIENT,
   POSITION_AWARD_TEAM,
+  SCORING_TIER_COEFFICIENT,
   TIER_COEFFICIENT,
 } from './award-weights';
 
@@ -110,80 +113,118 @@ describe('domesticCupMultiplier', () => {
   });
 });
 
-describe('goldenBootScore', () => {
+describe('leagueTopScorerScore (射手王)', () => {
   const REFERENCE_ROUNDS = 30;
   const LOWER_ROUNDS = 14;
 
   it('leaves a top-flight season untouched', () => {
-    expect(goldenBootScore(30, 1)).toBeCloseTo(30, 6);
+    expect(leagueTopScorerScore(30, 1)).toBeCloseTo(30, 6);
   });
 
   it('converts a shorter schedule to the 30-round basis before weighting', () => {
-    const breakdown = goldenBootBreakdown(14, 2);
+    const breakdown = leagueTopScorerBreakdown(14, 2);
     expect(breakdown.scheduleAdjusted).toBeCloseTo(14 * (REFERENCE_ROUNDS / LOWER_ROUNDS), 6);
     expect(breakdown.score).toBeCloseTo(
-      breakdown.scheduleAdjusted * GOLDEN_BOOT_TIER_COEFFICIENT[2],
+      breakdown.scheduleAdjusted * SCORING_TIER_COEFFICIENT[2],
       6,
     );
   });
 
   it('gives schedule length no weight of its own', () => {
     // The same scoring rate in two leagues must differ by exactly the
-    // coefficient — never by the raw goal difference, which is what the
-    // pre-normalisation formula measured.
-    expect(goldenBootScore(30, 1)).toBeCloseTo(30, 6);
-    expect(goldenBootScore(14, 2)).toBeCloseTo(30 * GOLDEN_BOOT_TIER_COEFFICIENT[2], 6);
+    // coefficient — never by the raw goal difference, which is what a plain
+    // goal count would have measured.
+    expect(leagueTopScorerScore(30, 1)).toBeCloseTo(30, 6);
+    expect(leagueTopScorerScore(14, 2)).toBeCloseTo(30 * SCORING_TIER_COEFFICIENT[2], 6);
   });
 
   it('lets a genuinely more prolific lower-tier season win', () => {
     // 24 in 14 rounds is 1.71 per round against 0.67 for 20 in 30.
-    expect(goldenBootScore(24, 2)).toBeGreaterThan(goldenBootScore(20, 1));
+    expect(leagueTopScorerScore(24, 2)).toBeGreaterThan(leagueTopScorerScore(20, 1));
   });
 
   it('still favours the stronger league at an equal scoring rate', () => {
-    expect(goldenBootScore(14, 2)).toBeLessThan(goldenBootScore(30, 1));
-    expect(goldenBootScore(14, 3)).toBeLessThan(goldenBootScore(14, 2));
+    expect(leagueTopScorerScore(14, 2)).toBeLessThan(leagueTopScorerScore(30, 1));
+    expect(leagueTopScorerScore(14, 3)).toBeLessThan(leagueTopScorerScore(14, 2));
   });
 
   it('keeps the coefficient below the tier-blind value', () => {
-    // A 90-season audit measured 0.90 / 0.80 as tier-blind: at that setting the
-    // lower tiers won 52% of Golden Boots, matching their share of clubs. A
-    // coefficient at or above it would stop expressing any preference for the
-    // stronger league, so this guards the finding rather than the number.
-    expect(GOLDEN_BOOT_TIER_COEFFICIENT[2]).toBeLessThan(0.9);
-    expect(GOLDEN_BOOT_TIER_COEFFICIENT[3]).toBeLessThan(GOLDEN_BOOT_TIER_COEFFICIENT[2]);
-    expect(GOLDEN_BOOT_TIER_COEFFICIENT[1]).toBe(1);
+    // A 90-season audit measured 0.90 / 0.80 as tier-blind on this basis: the
+    // lower tiers won their proportional share. A coefficient at or above it
+    // would stop expressing any preference for the stronger league, so this
+    // guards the finding rather than the number.
+    expect(SCORING_TIER_COEFFICIENT[2]).toBeLessThan(0.9);
+    expect(SCORING_TIER_COEFFICIENT[3]).toBeLessThan(SCORING_TIER_COEFFICIENT[2]);
+    expect(SCORING_TIER_COEFFICIENT[1]).toBe(1);
+  });
+
+  it('exposes a reconstructable breakdown', () => {
+    const breakdown = leagueTopScorerBreakdown(20, 3);
+    expect(breakdown.leagueGoals).toBe(20);
+    expect(breakdown.rounds).toBe(LOWER_ROUNDS);
+    expect(breakdown.referenceRounds).toBe(REFERENCE_ROUNDS);
+    expect(breakdown.score).toBeCloseTo(breakdown.scheduleAdjusted * breakdown.coefficient, 6);
+    expect(breakdown.isTopFlightBasis).toBe(false);
+  });
+
+  it('marks a top-flight season as needing no adjustment', () => {
+    expect(leagueTopScorerBreakdown(25, 1).isTopFlightBasis).toBe(true);
+  });
+});
+
+describe('describeLeagueTopScorer', () => {
+  it('stays short when no adjustment applies', () => {
+    expect(describeLeagueTopScorer(leagueTopScorerBreakdown(25, 1))).toBe('联赛 25球');
+  });
+
+  it('prints the whole derivation when one does', () => {
+    const breakdown = leagueTopScorerBreakdown(20, 2);
+    const label = describeLeagueTopScorer(breakdown);
+    expect(label).toContain('联赛 20球/14轮');
+    expect(label).toContain('折算42.9球');
+    expect(label).toContain('0.75');
+    // The printed result must be the value the honour actually ranked on.
+    expect(label).toContain(breakdown.score.toFixed(1));
+  });
+});
+
+describe('goldenBootScore (金靴奖)', () => {
+  it('ranks all-competitions goals with no schedule adjustment', () => {
+    // A cup run is earned rather than structural, so the Golden Boot does not
+    // normalise for schedule. That is precisely why it is a separate honour
+    // from the league top scorer: its numerator counts matches the league-round
+    // denominator knows nothing about.
+    expect(goldenBootScore(34, 1)).toBeCloseTo(34, 6);
+    expect(goldenBootScore(20, 2)).toBeCloseTo(20 * SCORING_TIER_COEFFICIENT[2], 6);
+  });
+
+  it('never picks up a schedule factor', () => {
+    // Identical totals in two tiers differ by exactly the coefficient. If this
+    // ever gains a schedule term, the two honours have collapsed into one and
+    // the numerator/denominator mismatch is back.
+    expect(goldenBootScore(20, 2) / goldenBootScore(20, 1))
+      .toBeCloseTo(SCORING_TIER_COEFFICIENT[2], 6);
   });
 
   it('exposes a reconstructable breakdown', () => {
     const breakdown = goldenBootBreakdown(20, 3);
     expect(breakdown.goals).toBe(20);
-    expect(breakdown.rounds).toBe(LOWER_ROUNDS);
-    expect(breakdown.referenceRounds).toBe(REFERENCE_ROUNDS);
-    expect(breakdown.score).toBeCloseTo(
-      breakdown.scheduleAdjusted * breakdown.coefficient,
-      6,
-    );
-    expect(breakdown.isTopFlightBasis).toBe(false);
-  });
-
-  it('marks a top-flight season as needing no adjustment', () => {
-    expect(goldenBootBreakdown(25, 1).isTopFlightBasis).toBe(true);
+    expect(breakdown.score).toBeCloseTo(breakdown.goals * breakdown.coefficient, 6);
+    expect(breakdown.isFullWeight).toBe(false);
+    expect(goldenBootBreakdown(20, 1).isFullWeight).toBe(true);
   });
 });
 
 describe('describeGoldenBoot', () => {
-  it('stays short when no adjustment applies', () => {
-    expect(describeGoldenBoot(goldenBootBreakdown(25, 1))).toBe('25球');
+  it('always says 全赛事, because the total spans every competition', () => {
+    expect(describeGoldenBoot(goldenBootBreakdown(34, 1))).toBe('全赛事 34球');
   });
 
-  it('prints the whole derivation when one does', () => {
+  it('prints the coefficient when one applies', () => {
     const breakdown = goldenBootBreakdown(20, 2);
     const label = describeGoldenBoot(breakdown);
-    expect(label).toContain('20球/14轮');
-    expect(label).toContain('折算42.9球');
+    expect(label).toContain('全赛事 20球');
     expect(label).toContain('0.75');
-    // The printed result must be the value the award actually ranked on.
     expect(label).toContain(breakdown.score.toFixed(1));
   });
 });

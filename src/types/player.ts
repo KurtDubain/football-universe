@@ -130,7 +130,15 @@ export interface PlayerSeasonStats {
   /** Holds a Player.uuid value. */
   playerId: string;
   teamId: string;
+  /** All-competitions goals. The Golden Boot ranks on this. */
   goals: number;
+  /**
+   * League goals only, which the season top scorer ranks on.
+   *
+   * Absent on saves written before the split; read it through
+   * `leagueGoalsOf` rather than directly.
+   */
+  leagueGoals?: number;
   assists: number;
   yellowCards: number;
   redCards: number;
@@ -211,7 +219,10 @@ export interface PlayerSeasonStatsHistoryEntry {
   position: PlayerPosition;
   rating?: number;
   age?: number;
+  /** All-competitions goals. */
   goals: number;
+  /** League goals only; absent on rows archived before the split. */
+  leagueGoals?: number;
   assists: number;
   appearances: number;
   starts?: number;

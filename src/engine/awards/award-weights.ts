@@ -35,46 +35,60 @@ export const YOUNG_PLAYER_TIER_COEFFICIENT: Record<LeagueTier, number> = {
   3: 0.9,
 };
 
+// ── The two scoring honours ────────────────────────────────────────
+//
+// 金靴奖 (Golden Boot)        — ALL-COMPETITIONS goals. A cup run is earned,
+//                               so no schedule normalisation is applied.
+// 射手王 (league top scorer)  — LEAGUE goals only. Numerator and denominator
+//                               finally describe the same matches, which is
+//                               the only basis on which normalising for
+//                               schedule length means anything.
+//
+// Splitting them also resolved the old defect where three "most goals"
+// implementations disagreed with each other: they now measure genuinely
+// different things, so differing answers are the point rather than a bug.
+
 /**
- * Golden Boot schedule normalisation.
+ * Schedule normalisation for the LEAGUE top scorer.
  *
- * The top flight plays 30 rounds; tiers 2 and 3 play 14. A raw goal count
- * therefore measures "who played more matches" before it measures finishing
- * ability, and a 90-season audit (3 seeds x 30 seasons) confirmed it: with raw
- * goals the lower tiers won the Golden Boot 0 times out of 90, even though a
- * lower-tier top scorer averages 1.26 goals per round against the top flight's
- * 1.03. The tier coefficient could not fix that, because a 10% discount does
- * not fight a 2.14x structural gap.
+ * The top flight plays 30 rounds; tiers 2 and 3 play 14. A raw league goal
+ * count therefore measures "who played more matches" before it measures
+ * finishing ability, and a 90-season audit confirmed it: on raw league goals
+ * the lower tiers took the honour only ~5% of the time.
  *
  * `exponent = 1` converts every league to a common 30-round basis. This is a
  * structural correction, not a concession: schedule length carries no
  * information about player quality, so it should not decide the award.
  *
- * The quality judgement lives entirely in GOLDEN_BOOT_TIER_COEFFICIENT below.
+ * Deliberately NOT applied to the Golden Boot. Its numerator counts cup
+ * matches too, so a league-round denominator would mix two bases — which was
+ * exactly the defect this split exists to fix.
  */
-export const GOLDEN_BOOT_SCHEDULE_EXPONENT = 1;
+export const LEAGUE_TOP_SCORER_SCHEDULE_EXPONENT = 1;
 
 /**
- * What a goal is worth, by the league it was scored in.
+ * What a goal is worth, by the league it was scored in. Shared by both honours.
  *
- * Applied to a schedule-normalised rate, so this is the only knob expressing
- * "a goal against weaker opposition counts for less". Deliberately separate
- * from TIER_COEFFICIENT: position awards score `positionQuality`, which is
- * already derived from per-match metrics and carries no schedule asymmetry, so
- * they keep the original 1.00 / 0.90 / 0.80 table.
+ * Why below 0.90: a 90-season audit measured 0.90 / 0.80 as the *tier-blind*
+ * value for a schedule-normalised league award — at that setting the lower
+ * tiers won 52% of league top-scorer honours, matching their 16-of-32 share of
+ * clubs almost exactly. Any genuine preference for the stronger league has to
+ * sit below it.
  *
- * Why below 0.90: the audit showed 0.90 / 0.80 is empirically the *tier-blind*
- * value — at that setting the lower tiers won 52% of Golden Boots, matching
- * their 16-of-32 share of clubs almost exactly. Any genuine preference for the
- * stronger league has to sit below it.
- *
- * Measured at 0.75 / 0.58 across 3 seeds x 30 seasons: top flight 71%,
- * tier 2 ~27%, tier 3 ~2%. Crucially the winner's scoring rate stays at
+ * Measured at 0.75 / 0.58 on the league basis (3 seeds x 20 seasons): top
+ * flight ~62%, tier 2 ~32%, tier 3 ~7%. The winner's scoring rate stays at
  * 5.2-5.6x their own league's average at every coefficient tested, so tuning
  * this changes which league the standout comes from, never whether they are
  * genuinely exceptional.
+ *
+ * On the Golden Boot this coefficient is **not load-bearing**: a 60-season
+ * audit produced identical winners with and without it, because the
+ * all-competitions schedule gap (34 vs 19 matches per season) dwarfs any sane
+ * discount. It is kept for one shared table and because it states the right
+ * intent — not because it changes outcomes today. The cross-tier route is the
+ * league top scorer.
  */
-export const GOLDEN_BOOT_TIER_COEFFICIENT: Record<LeagueTier, number> = {
+export const SCORING_TIER_COEFFICIENT: Record<LeagueTier, number> = {
   1: 1.0,
   2: 0.75,
   3: 0.58,
@@ -177,9 +191,9 @@ export const BUZZ_WEIGHTS = {
  * The award ranks by weighted goals directly; the buzz panel needs a bounded
  * 0-100 component so it can blend goals with form and momentum on one scale.
  *
- * Raised from 30 when schedule normalisation landed: a 28-goal tier-2 season
- * now scores 45, where under raw goals it scored 25.2. The ceiling tracks the
- * post-normalisation scale, not the raw one.
+ * Calibrated against the all-competitions basis: winning totals average ~30
+ * with an observed maximum near 52, so 45 puts a typical leader at ~67% and
+ * leaves headroom for a record season without saturating early.
  */
 export const BUZZ_GOLDEN_BOOT_CEILING = 45;
 

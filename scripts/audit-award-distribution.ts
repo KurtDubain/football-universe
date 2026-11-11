@@ -63,7 +63,9 @@ for (let index = 0; index < SEASONS; index += 1) {
 
     if (award.type === 'golden_boot') {
       bootTiers.push(level);
-      const raw = Number(/^(\d+)球/.exec(award.statLabel)?.[1] ?? Number.NaN);
+      // Label is now 全赛事 N球 [× coef = M], so the count is no longer anchored
+      // to the start of the string.
+      const raw = Number(/(\d+)球/.exec(award.statLabel)?.[1] ?? Number.NaN);
       if (Number.isFinite(raw)) bootRawGoals.push(raw);
     }
   }

@@ -16,7 +16,9 @@ import {
   getSeasonOverallRows,
   getSeasonTopAssistRows,
   getSeasonTopScorerRows,
+  seasonTopScorerLabel,
 } from '../engine/players/player-stat-selectors';
+import { leagueGoalsOf } from '../engine/players/player-stat-fields';
 import { AWARD_META } from '../engine/awards/season-awards';
 import type { StorylineType } from '../engine/season/storylines';
 import type {
@@ -410,9 +412,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                     {kingNum}
                   </Link>
                   <div>
-                    <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
+                    <div className="text-[10px] text-amber-400 font-semibold">赛季射手王（联赛）</div>
                     <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
-                    <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
+                    <div className="text-xs text-amber-400 font-bold">{seasonTopScorerLabel(world, king, seasonNumber)}</div>
                     <div className="text-[10px] text-slate-500">{king.appearances}场 · {king.starts ?? 0}首发 · {king.minutesPlayed ?? 0}分钟</div>
                   </div>
                 </div>
@@ -425,7 +427,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
                         <span className="flex-1 truncate text-slate-300" title={`${s.identity.teamName} ${s.identity.playerName}`}>{s.identity.teamName} {s.identity.playerName}</span>
-                        <span className="text-slate-200 font-bold">{s.goals}球</span>
+                        <span className="text-slate-200 font-bold">{leagueGoalsOf(s)}球</span>
                       </div>
                     );
                   })}

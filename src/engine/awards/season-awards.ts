@@ -192,12 +192,14 @@ export function computeSeasonAwards(
   }
 
   // ── Golden Boot (金靴奖) ─────────────────────────────────────
-  // Goals converted to a common 30-round basis, then weighted by what a goal
-  // in that league is worth. The two steps answer different questions and are
-  // tuned separately — see GOLDEN_BOOT_SCHEDULE_EXPONENT.
+  // ALL-COMPETITIONS goals, weighted by what a goal in that league is worth.
+  // No schedule normalisation: a cup run is earned, and the numerator counts
+  // matches the league-round denominator knows nothing about.
   //
-  // Ties resolve through the shared comparator, so this can no longer disagree
-  // with the season-review top-scorer card.
+  // This deliberately measures something different from the league top scorer
+  // (射手王), which ranks on league goals over league rounds. They disagree in
+  // roughly two seasons out of three — that is the design, not a defect. Ties
+  // inside this award still resolve through the shared comparator.
   const bootCandidates = candidatesFrom(
     allStats.filter(s => s.goals > 0),
     (stat) => goldenBootScore(stat.goals, levelOf(stat.teamId)),

@@ -535,7 +535,7 @@ describe('computeSeasonAwards — redesigned award set', () => {
     expect(awards).toHaveLength(7);
   });
 
-  it('normalises the Golden Boot for schedule, then weights it by league tier', () => {
+  it('ranks the Golden Boot on all-competitions goals, with no schedule adjustment', () => {
     const top = makeTeam('top', 85);
     const second = makeTeam('second', 70);
     const squads = {
@@ -544,33 +544,30 @@ describe('computeSeasonAwards — redesigned award set', () => {
     };
     const standings = [makeStanding('top', 30, 20)];
 
-    // Tier 2 plays 14 rounds, so 24 goals is 1.71 per round against the top
-    // flight's 0.67. Converted: 24 x (30/14) x 0.75 = 38.57, beating 20.
-    const lowerTierWins = computeSeasonAwards(1, {
+    // Tier 2's 14 rounds do NOT inflate 24 goals here — schedule normalisation
+    // belongs to the league top scorer, whose numerator and denominator both
+    // describe league matches. 24 x 0.75 = 18 falls short of 20.
+    const topTierWins = computeSeasonAwards(1, {
       'top-9': makeStat('top-9', 'top', 20, 0),
       'second-9': makeStat('second-9', 'second', 24, 0),
     }, squads, { top, second }, standings, {}, { second: 2 });
-    const weighted = lowerTierWins.find(award => award.type === 'golden_boot');
-    expect(weighted?.playerId).toBe('second-9');
-    // The label prints the whole derivation, so the result stays reconstructable.
-    expect(weighted?.statLabel).toContain('24球/14轮');
-    expect(weighted?.statLabel).toContain('折算51.4球');
-    expect(weighted?.statLabel).toContain('0.75');
-    // The reported value is the normalised score, not the raw goal count.
-    expect(weighted?.statValue).toBeCloseTo(38.6, 1);
-
-    // At an identical scoring rate the stronger league wins by exactly the
-    // coefficient: 30 goals in 30 rounds and 14 in 14 are both 1.0 per round,
-    // and 14 x (30/14) x 0.75 = 22.5 falls short of 30.
-    const topTierWins = computeSeasonAwards(1, {
-      'top-9': makeStat('top-9', 'top', 30, 0),
-      'second-9': makeStat('second-9', 'second', 14, 0),
-    }, squads, { top, second }, standings, {}, { second: 2 });
     const topWinner = topTierWins.find(award => award.type === 'golden_boot');
     expect(topWinner?.playerId).toBe('top-9');
-    // A top-flight winner sits on the reference schedule at full weight, so the
-    // label needs no arithmetic.
-    expect(topWinner?.statLabel).toBe('30球');
+    // The label always says 全赛事, because the total spans every competition.
+    expect(topWinner?.statLabel).toBe('全赛事 20球');
+
+    // A lower-tier total has to be genuinely larger to overcome the
+    // coefficient: 30 x 0.75 = 22.5 beats 20.
+    const lowerTierWins = computeSeasonAwards(1, {
+      'top-9': makeStat('top-9', 'top', 20, 0),
+      'second-9': makeStat('second-9', 'second', 30, 0),
+    }, squads, { top, second }, standings, {}, { second: 2 });
+    const weighted = lowerTierWins.find(award => award.type === 'golden_boot');
+    expect(weighted?.playerId).toBe('second-9');
+    expect(weighted?.statLabel).toContain('全赛事 30球');
+    expect(weighted?.statLabel).toContain('0.75');
+    // The reported value is the weighted score, not the raw goal count.
+    expect(weighted?.statValue).toBeCloseTo(22.5, 6);
   });
 
   it('breaks a Golden Boot tie on assists, not on object-key order', () => {

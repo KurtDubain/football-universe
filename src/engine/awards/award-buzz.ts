@@ -187,9 +187,9 @@ function describeLine(
       // not buzz state — the player can already rank scorers from the player
       // centre — so showing it leaks nothing the buzz ranking depends on.
       const breakdown = goldenBootBreakdown(stat.goals, level);
-      return breakdown.isTopFlightBasis
-        ? `${goals} · ${assists}`
-        : `${breakdown.goals}球/${breakdown.rounds}轮 · 折算${breakdown.score.toFixed(1)}`;
+      return breakdown.isFullWeight
+        ? `全赛事 ${breakdown.goals}球 · ${assists}`
+        : `全赛事 ${breakdown.goals}球 × ${breakdown.coefficient.toFixed(2)}`;
     }
     case 'best_goalkeeper':
       return `位置表现 ${performance.positionQuality.toFixed(1)} · 扑救率 ${(performance.metrics.savePercentage * 100).toFixed(1)}%`;
