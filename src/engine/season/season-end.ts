@@ -400,6 +400,15 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     world.league1Standings,
     world.playerStatSegments ?? {},
     world.seasonStartLevels ?? {},
+    {
+      continentalCupWinners: [mainlandCupWinner, southernCupWinner, easternCupWinner]
+        .filter((id): id is string => Boolean(id)),
+    },
+    // No World Cup on purpose. `initializeWorldCup` runs at the very end of
+    // this function, so at award time `world.worldCup` still holds the
+    // PREVIOUS edition — passing it would credit last cycle's winner with this
+    // season's Ballon d'Or. The timing redesign supplies the live tournament.
+    null,
   );
   for (const award of seasonAwards) {
     const meta = AWARD_META[award.type];

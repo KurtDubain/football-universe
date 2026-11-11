@@ -3,6 +3,8 @@ import { computeSeasonAwards } from './season-awards';
 import { Player, PlayerSeasonStats, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
+import type { WorldCupState } from '../../types/cup';
+import type { PlayerAward } from '../../types/award';
 
 function makeTeam(id: string, overall: number): TeamBase {
   return {
@@ -355,6 +357,111 @@ describe('computeSeasonAwards — tie-breaking and mid-season transfers', () => 
     expect(gb?.playerId).toBe('teamA-9');
     expect(gb?.teamId).toBe('teamB');
     expect(gb?.playerName).toBe('teamA-9');
+  });
+});
+
+describe('computeSeasonAwards — Ballon d\'Or weighting', () => {
+  /**
+   * Two clubs of identical strength whose players post identical numbers, so
+   * the only thing that can separate them is the Ballon d'Or weighting.
+   */
+  function evenFixture() {
+    const teamA = makeTeam('teamA', 82);
+    const teamB = makeTeam('teamB', 82);
+    const squads = {
+      teamA: [makePlayer('teamA', 9, 'FW')],
+      teamB: [makePlayer('teamB', 9, 'FW')],
+    };
+    const stats = {
+      'teamA-9': { ...makeStat('teamA-9', 'teamA', 20, 8), minutesPlayed: 2700 },
+      'teamB-9': { ...makeStat('teamB-9', 'teamB', 20, 8), minutesPlayed: 2700 },
+    };
+    return { teamA, teamB, squads, stats };
+  }
+
+  const mvpOf = (awards: PlayerAward[]) => awards.find(a => a.type === 'mvp');
+
+  it('follows the title when two seasons are otherwise identical', () => {
+    const { teamA, teamB, squads, stats } = evenFixture();
+
+    // makeStanding fixes points and goalsFor, so goal difference ranks the table.
+    const aOnTop = computeSeasonAwards(1, stats, squads, { teamA, teamB }, [
+      makeStanding('teamA', 30, 15),
+      makeStanding('teamB', 30, 30),
+    ]);
+    const bOnTop = computeSeasonAwards(1, stats, squads, { teamA, teamB }, [
+      makeStanding('teamB', 30, 15),
+      makeStanding('teamA', 30, 30),
+    ]);
+
+    expect(mvpOf(aOnTop)?.playerId).toBe('teamA-9');
+    expect(mvpOf(bOnTop)?.playerId).toBe('teamB-9');
+  });
+
+  it('never leaks the weighting into the reported score', () => {
+    const { teamA, teamB, squads, stats } = evenFixture();
+    const aOnTop = mvpOf(computeSeasonAwards(1, stats, squads, { teamA, teamB }, [
+      makeStanding('teamA', 30, 15),
+      makeStanding('teamB', 30, 30),
+    ]));
+    const bOnTop = mvpOf(computeSeasonAwards(1, stats, squads, { teamA, teamB }, [
+      makeStanding('teamB', 30, 15),
+      makeStanding('teamA', 30, 30),
+    ]));
+
+    // Different winners from identical seasons: the champion multiplier decided
+    // the ranking, yet both report the same untouched season score, which is
+    // what the player page, career board and news line read.
+    expect(aOnTop?.playerId).not.toBe(bOnTop?.playerId);
+    expect(aOnTop?.statValue).toBe(bOnTop?.statValue);
+    expect(aOnTop?.statLabel).toContain('赛季综合评分');
+  });
+
+  it('lets a continental cup carry a runner-up past the champion', () => {
+    const { teamA, teamB, squads, stats } = evenFixture();
+    const standings = [makeStanding('teamA', 30, 15), makeStanding('teamB', 30, 30)];
+
+    const withoutCup = computeSeasonAwards(1, stats, squads, { teamA, teamB }, standings);
+    expect(mvpOf(withoutCup)?.playerId).toBe('teamA-9');
+
+    // Runner-up 1.08 x continental 1.10 = 1.188, just past the champion's 1.18.
+    const withCup = computeSeasonAwards(
+      1, stats, squads, { teamA, teamB }, standings, {}, {},
+      { continentalCupWinners: ['teamB'] },
+    );
+    expect(mvpOf(withCup)?.playerId).toBe('teamB-9');
+  });
+
+  it('credits a completed world cup but not an unfinished one', () => {
+    const { teamA, teamB, squads, stats } = evenFixture();
+    const standings = [makeStanding('teamA', 30, 15), makeStanding('teamB', 30, 30)];
+    const base = {
+      groups: [], knockoutRounds: [], groupStageCompleted: true,
+      participantIds: ['teamA', 'teamB'],
+    };
+    const award = (worldCup: WorldCupState) => mvpOf(computeSeasonAwards(
+      1, stats, squads, { teamA, teamB }, standings, {}, {}, {}, worldCup,
+    ))?.playerId;
+
+    // Runner-up 1.08 x world cup 1.15 = 1.242, past the champion's 1.18.
+    const completed = { ...base, completed: true, winnerId: 'teamB' } as unknown as WorldCupState;
+    expect(award(completed)).toBe('teamB-9');
+
+    // An in-flight tournament must not hand out the multiplier, otherwise a
+    // stale previous edition would decide this season's award.
+    const inFlight = { ...base, completed: false, winnerId: 'teamB' } as unknown as WorldCupState;
+    expect(award(inFlight)).toBe('teamA-9');
+  });
+
+  it('discounts a lower-tier season even when the raw numbers match', () => {
+    const { teamA, teamB, squads, stats } = evenFixture();
+    const standings = [makeStanding('teamA', 30, 15), makeStanding('teamB', 30, 30)];
+
+    // teamB's season was played in the second tier.
+    const awards = computeSeasonAwards(
+      1, stats, squads, { teamA, teamB }, standings, {}, { teamB: 2 },
+    );
+    expect(mvpOf(awards)?.playerId).toBe('teamA-9');
   });
 });
 

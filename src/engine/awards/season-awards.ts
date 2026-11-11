@@ -3,11 +3,20 @@ import { PlayerSeasonStats, Player, PlayerTeamSeasonStats } from '../../types/pl
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
 import { computePlayerPerformance, computeSegmentedPlayerPerformance } from '../players/player-performance';
+import {
+  ballonDorScore,
+  buildBallonDorContextResolver,
+  type TeamHonourLookup,
+} from './ballon-dor';
+import type { WorldCupState } from '../../types/cup';
 
 /**
  * Compute end-of-season player awards from final stats.
  *
- * - MVP: highest attendance-aware cross-position season score
+ * - MVP (Ballon d'Or): `seasonScore` weighted by team achievement, league tier
+ *   and sample size. The league table and `seasonStartLevels` are always
+ *   supplied, so the title, top-four, relegation-zone and tier multipliers
+ *   always apply; `honours` and `worldCup` only add the cup multipliers.
  * - Golden Boot: most goals across all leagues
  * - Best Defender / Goalkeeper: highest individual position score among
  *   top-league players with actual minutes
@@ -21,6 +30,8 @@ export function computeSeasonAwards(
   league1Standings: StandingEntry[],
   playerStatSegments: Record<string, PlayerTeamSeasonStats> = {},
   seasonStartLevels: Record<string, 1 | 2 | 3> = {},
+  honours: TeamHonourLookup = {},
+  worldCup?: WorldCupState | null,
 ): PlayerAward[] {
   const awards: PlayerAward[] = [];
   const allStats = Object.values(playerStats);
@@ -76,32 +87,55 @@ export function computeSeasonAwards(
   };
 
   // ── MVP (金球奖) ─────────────────────────────────────────────
-  // Ties are broken by minutes played, then by uuid, so the winner never
-  // depends on object-key insertion order.
+  // Ranked by the Ballon d'Or weighting, not the raw season score: team
+  // achievement and league tier matter, and a thin sample cannot win.
+  // Ties fall back to minutes played, then uuid, so the winner never depends
+  // on object-key insertion order.
+  const contextFor = buildBallonDorContextResolver(
+    league1Standings,
+    honours,
+    seasonStartLevels,
+    worldCup,
+  );
+
   const mvpCandidates = allStats
     .filter(s => s.appearances >= 5)
     .map(s => {
       const player = findPlayer(s.playerId);
       if (!player) return null;
-      return { stat: s, player, score: performanceFor(player, s).seasonScore };
+      const performance = performanceFor(player, s);
+      const minutes = s.minutesPlayed ?? s.appearances * 90;
+      return {
+        stat: s,
+        player,
+        // Reported to the player page and the news line.
+        seasonScore: performance.seasonScore,
+        // Used only to rank award candidates.
+        awardScore: ballonDorScore(performance.seasonScore, contextFor(s.teamId, minutes)),
+        minutes,
+      };
     })
-    .filter((entry): entry is { stat: PlayerSeasonStats; player: Player; score: number } => entry !== null);
+    .filter((entry): entry is {
+      stat: PlayerSeasonStats;
+      player: Player;
+      seasonScore: number;
+      awardScore: number;
+      minutes: number;
+    } => entry !== null);
 
   const mvpBest = mvpCandidates.length > 0
     ? mvpCandidates.reduce((best, entry) => {
-        if (entry.score > best.score) return entry;
-        if (entry.score < best.score) return best;
-        // Equal score: more minutes wins, then stable uuid order.
-        const entryMinutes = entry.stat.minutesPlayed ?? entry.stat.appearances * 90;
-        const bestMinutes = best.stat.minutesPlayed ?? best.stat.appearances * 90;
-        if (entryMinutes > bestMinutes) return entry;
-        if (entryMinutes < bestMinutes) return best;
+        if (entry.awardScore > best.awardScore) return entry;
+        if (entry.awardScore < best.awardScore) return best;
+        // Equal award score: more minutes wins, then stable uuid order.
+        if (entry.minutes > best.minutes) return entry;
+        if (entry.minutes < best.minutes) return best;
         return entry.player.uuid.localeCompare(best.player.uuid) < 0 ? entry : best;
       })
     : null;
 
   const mvpStat: PlayerSeasonStats | null = mvpBest ? mvpBest.stat : null;
-  const mvpScoreValue = mvpBest ? Math.round(mvpBest.score * 10) / 10 : 0;
+  const mvpScoreValue = mvpBest ? Math.round(mvpBest.seasonScore * 10) / 10 : 0;
   if (mvpStat) {
     const a = buildAward('mvp', mvpStat, mvpScoreValue, `赛季综合评分 ${mvpScoreValue.toFixed(1)}`);
     if (a) awards.push(a);
