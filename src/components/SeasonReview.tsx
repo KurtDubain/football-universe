@@ -16,7 +16,9 @@ import {
   getSeasonOverallRows,
   getSeasonTopAssistRows,
   getSeasonTopScorerRows,
+  seasonTopScorerLabel,
 } from '../engine/players/player-stat-selectors';
+import { leagueGoalsOf } from '../engine/players/player-stat-fields';
 import { AWARD_META } from '../engine/awards/season-awards';
 import type { StorylineType } from '../engine/season/storylines';
 import type {
@@ -81,6 +83,18 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
   }
 
   const l1Records = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
+  /**
+   * Overperformance baseline for the coach cards.
+   *
+   * `expectation` runs 1-5, so an expectation-5 side maps to expected position 0
+   * and rates -1 even when it wins the league. That is correct for an
+   * overperformance award and useless as the only coach card, which is why the
+   * champion now gets a card of its own.
+   */
+  const expectedPositionFor = (teamId: string) => {
+    const expectation = tb[teamId]?.expectation ?? 3;
+    return Math.round(l1Records.length * (1 - (expectation - 1) / 4));
+  };
   const competitionStats = selectSeasonCompetitionStats(world, seasonNumber);
 
   const bestDefense = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGA < b.leagueGA ? r : b) : null;
@@ -398,9 +412,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                     {kingNum}
                   </Link>
                   <div>
-                    <div className="text-[10px] text-amber-400 font-semibold">赛季射手王</div>
+                    <div className="text-[10px] text-amber-400 font-semibold">赛季射手王（联赛）</div>
                     <Link to={`/player/${king.playerId}`} className="text-sm font-bold text-slate-100 hover:text-blue-400">{king.identity.teamName} {kingName}</Link>
-                    <div className="text-xs text-amber-400 font-bold">{king.goals}球 {king.assists > 0 ? `${king.assists}助` : ''}</div>
+                    <div className="text-xs text-amber-400 font-bold">{seasonTopScorerLabel(world, king, seasonNumber)}</div>
                     <div className="text-[10px] text-slate-500">{king.appearances}场 · {king.starts ?? 0}首发 · {king.minutesPlayed ?? 0}分钟</div>
                   </div>
                 </div>
@@ -413,7 +427,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                         <span className="w-4 text-center text-slate-500">{i + 2}</span>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.identity.teamColor ?? '#666' }} />
                         <span className="flex-1 truncate text-slate-300" title={`${s.identity.teamName} ${s.identity.playerName}`}>{s.identity.teamName} {s.identity.playerName}</span>
-                        <span className="text-slate-200 font-bold">{s.goals}球</span>
+                        <span className="text-slate-200 font-bold">{leagueGoalsOf(s)}球</span>
                       </div>
                     );
                   })}
@@ -467,20 +481,40 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           <h3 className="text-sm font-bold text-[var(--competition-gold)]">球队与教练观察</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-700/30">
-          {/* Best Coach — team with highest position vs expectation */}
+          {/* Champion's coach. Before this card existed, strong sides had no
+              route onto the panel at all — see expectedPositionFor. */}
           {l1Records.length > 0 && (() => {
-            const bestCoach = l1Records.reduce((best, r) => {
-              const exp = tb[r.teamId]?.expectation ?? 3;
-              const expectedPos = Math.round(l1Records.length * (1 - (exp - 1) / 4));
-              const overperformance = expectedPos - r.leaguePosition;
-              const bestExp = tb[best.teamId]?.expectation ?? 3;
-              const bestExpPos = Math.round(l1Records.length * (1 - (bestExp - 1) / 4));
-              const bestOver = bestExpPos - best.leaguePosition;
-              return overperformance > bestOver ? r : best;
-            });
+            const champion = l1Records[0];
+            const coachName = world.coachBases[champion.coachId]?.name ?? '未知';
+            return (
+              <AwardCard
+                emoji="🏆"
+                title="冠军教头"
+                value={coachName}
+                sub={`${getTeamName(champion.teamId, tb)} 第${champion.leaguePosition}名`}
+              />
+            );
+          })()}
+          {/* Best Coach — biggest overperformance against expectation. The
+              champion is excluded so one coach never fills two cards. */}
+          {l1Records.length > 1 && (() => {
+            const championTeamId = l1Records[0].teamId;
+            const bestCoach = l1Records
+              .filter(record => record.teamId !== championTeamId)
+              .reduce((best, record) => (
+                expectedPositionFor(record.teamId) - record.leaguePosition
+                  > expectedPositionFor(best.teamId) - best.leaguePosition
+                  ? record
+                  : best
+              ));
             const coachName = world.coachBases[bestCoach.coachId]?.name ?? '未知';
             return (
-              <AwardCard emoji="👔" title="最佳教练" value={coachName} sub={`${getTeamName(bestCoach.teamId, tb)} 第${bestCoach.leaguePosition}名`} />
+              <AwardCard
+                emoji="👔"
+                title="最佳教练"
+                value={coachName}
+                sub={`${getTeamName(bestCoach.teamId, tb)} 第${bestCoach.leaguePosition}名 · 超额完成预期`}
+              />
             );
           })()}
           {/* Most Improved — team that climbed the most positions vs last season */}

@@ -495,6 +495,8 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
 const AWARD_META: Record<string, { label: string; icon: IconName; accent: string; color: string }> = {
   mvp:           { label: '金球奖',  icon: 'trophy',     accent: '#fbbf24', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
   golden_boot:   { label: '金靴奖',  icon: 'boot',       accent: '#fb923c', color: 'bg-orange-900/40 text-orange-300 border-orange-700/40' },
+  best_forward:  { label: '最佳前锋', icon: 'target',     accent: '#f87171', color: 'bg-red-900/40 text-red-300 border-red-700/40' },
+  best_midfielder:{ label: '最佳中场', icon: 'bolt',      accent: '#4ade80', color: 'bg-green-900/40 text-green-300 border-green-700/40' },
   best_defender: { label: '最佳后卫', icon: 'shield',     accent: '#3b82f6', color: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
   best_goalkeeper:{ label: '最佳门将', icon: 'gloves',     accent: '#22d3ee', color: 'bg-cyan-900/40 text-cyan-300 border-cyan-700/40' },
   young_player:  { label: '最佳新星', icon: 'sparkle',    accent: '#34d399', color: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },

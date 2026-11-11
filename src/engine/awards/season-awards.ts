@@ -1,27 +1,95 @@
 import { PlayerAward } from '../../types/award';
-import { PlayerSeasonStats, Player, PlayerTeamSeasonStats } from '../../types/player';
+import { PlayerSeasonStats, Player, PlayerTeamSeasonStats, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
-import { computePlayerPerformance, computeSegmentedPlayerPerformance } from '../players/player-performance';
+import { sortStandings } from '../standings/standings';
+import { createCandidateContext } from './candidate-context';
 import {
   ballonDorScore,
   buildBallonDorContextResolver,
   type TeamHonourLookup,
 } from './ballon-dor';
+import {
+  describeGoldenBoot,
+  goldenBootBreakdown,
+  goldenBootScore,
+  placementOf,
+  positionAwardScore,
+  sampleGateMultiplier,
+  tierNeutralScore,
+  type TeamPlacement,
+} from './award-scoring';
+import {
+  BALLON_DOR_MIN_APPEARANCES,
+  YOUNG_PLAYER_TIER_COEFFICIENT,
+  type LeagueTier,
+} from './award-weights';
 import type { WorldCupState } from '../../types/cup';
 
 /**
  * Compute end-of-season player awards from final stats.
  *
- * - MVP (Ballon d'Or): `seasonScore` weighted by team achievement, league tier
- *   and sample size. The league table and `seasonStartLevels` are always
- *   supplied, so the title, top-four, relegation-zone and tier multipliers
- *   always apply; `honours` and `worldCup` only add the cup multipliers.
- * - Golden Boot: most goals across all leagues
- * - Best Defender / Goalkeeper: highest individual position score among
- *   top-league players with actual minutes
- * - Young Player: best eligible under-23 season performance
+ * Seven awards, all deterministic. Every coefficient lives in
+ * `award-weights.ts`; the rationale is in docs/award-system-redesign.md.
+ *
+ * The invariant this file exists to hold: **tier and team weighting are applied
+ * exactly once per award.** `seasonScore` already carries a 10% league-strength
+ * term, so anything that also multiplies by a tier coefficient must first pass
+ * through `tierNeutralScore`.
+ *
+ * - MVP (金球奖): tier-neutral season score × team achievement × tier × sample.
+ * - Golden Boot (金靴奖): goals × tier coefficient.
+ * - Best Forward / Midfielder / Defender / Goalkeeper: position quality ×
+ *   availability × tier × light team factor × sample, top flight only.
+ * - Young Player (最佳新星): tier-neutral season score × a deliberately milder
+ *   tier coefficient, under-23, excluding same-season winners.
  */
+
+/** Position awards share one scorer; only the position filter differs. */
+const POSITION_AWARDS: ReadonlyArray<{ type: PlayerAward['type']; position: PlayerPosition }> = [
+  { type: 'best_forward', position: 'FW' },
+  { type: 'best_midfielder', position: 'MF' },
+  { type: 'best_defender', position: 'DF' },
+  { type: 'best_goalkeeper', position: 'GK' },
+];
+
+interface Candidate {
+  stat: PlayerSeasonStats;
+  player: Player;
+  /** Ranking value for this specific award. */
+  awardScore: number;
+  minutes: number;
+  leagueLevel: LeagueTier;
+  positionQuality: number;
+  /** Player-page season score, reported to the news line and the player page. */
+  displayScore: number;
+}
+
+/**
+ * Total order for award candidates.
+ *
+ * Every award ends with the same uuid tiebreak, so a winner never depends on
+ * object-key insertion order. Before the redesign the Golden Boot used a bare
+ * `goals > topGoals` scan, which handed ties to whichever row the stats record
+ * happened to yield first — and disagreed with the season-review top-scorer
+ * card, which breaks ties on assists.
+ */
+function compareCandidates(a: Candidate, b: Candidate): number {
+  if (a.awardScore !== b.awardScore) return b.awardScore - a.awardScore;
+  if (a.stat.goals !== b.stat.goals) return b.stat.goals - a.stat.goals;
+  if (a.stat.assists !== b.stat.assists) return b.stat.assists - a.stat.assists;
+  if (a.minutes !== b.minutes) return b.minutes - a.minutes;
+  return a.player.uuid.localeCompare(b.player.uuid);
+}
+
+function pickBest(candidates: Candidate[]): Candidate | null {
+  let best: Candidate | null = null;
+  for (const candidate of candidates) {
+    if (best === null || compareCandidates(candidate, best) < 0) best = candidate;
+  }
+  return best;
+}
+
 export function computeSeasonAwards(
   seasonNumber: number,
   playerStats: Record<string, PlayerSeasonStats>,
@@ -29,7 +97,7 @@ export function computeSeasonAwards(
   teamBases: Record<string, TeamBase>,
   league1Standings: StandingEntry[],
   playerStatSegments: Record<string, PlayerTeamSeasonStats> = {},
-  seasonStartLevels: Record<string, 1 | 2 | 3> = {},
+  seasonStartLevels: Record<string, LeagueTier> = {},
   honours: TeamHonourLookup = {},
   worldCup?: WorldCupState | null,
 ): PlayerAward[] {
@@ -37,60 +105,69 @@ export function computeSeasonAwards(
   const allStats = Object.values(playerStats);
   if (allStats.length === 0) return awards;
 
-  // playerId is a stable Player.uuid, not the legacy `${teamId}-${number}`
-  // string. Build both indexes once instead of rescanning the whole league for
-  // every stat row — the previous lookup rebuilt an ~800-element array per call,
-  // and the segment filter rescanned every segment per player.
-  const playerByUuid = new Map<string, Player>();
-  for (const squad of Object.values(squads)) {
-    for (const player of squad) {
-      if (!playerByUuid.has(player.uuid)) playerByUuid.set(player.uuid, player);
-    }
-  }
+  const { findPlayer, performanceFor, minutesOf, levelOf } = createCandidateContext(
+    squads, playerStatSegments, seasonStartLevels,
+  );
 
-  const segmentsByPlayer = new Map<string, PlayerTeamSeasonStats[]>();
-  for (const segment of Object.values(playerStatSegments)) {
-    const existing = segmentsByPlayer.get(segment.playerId);
-    if (existing) existing.push(segment);
-    else segmentsByPlayer.set(segment.playerId, [segment]);
-  }
+  // Ranked once with the engine's own tiebreakers. Array order is not a ranking.
+  const rankedStandings = sortStandings(league1Standings);
+  const positionByTeam = new Map(rankedStandings.map((row, index) => [row.teamId, index + 1] as const));
+  const topLeagueTeamIds = new Set(positionByTeam.keys());
+  const leagueSize = rankedStandings.length;
 
-  const findPlayer = (playerUuid: string): Player | undefined => playerByUuid.get(playerUuid);
-
-  const performanceFor = (player: Player, stat: PlayerSeasonStats) => {
-    const segments = segmentsByPlayer.get(player.uuid);
-    return segments && segments.length > 0
-      ? computeSegmentedPlayerPerformance(player.position, segments, seasonStartLevels, stat)
-      : computePlayerPerformance(player.position, stat, seasonStartLevels[stat.teamId]);
+  const placementFor = (teamId: string): TeamPlacement => {
+    const leaguePosition = positionByTeam.get(teamId) ?? 0;
+    return placementOf(leaguePosition, leaguePosition === 0 ? 0 : leagueSize, levelOf(teamId));
   };
 
   const buildAward = (
     type: PlayerAward['type'],
-    stat: PlayerSeasonStats,
+    candidate: Candidate,
     statValue: number,
     statLabel: string,
   ): PlayerAward | null => {
-    const player = findPlayer(stat.playerId);
-    const team = teamBases[stat.teamId];
-    if (!player || !team) return null;
+    const team = teamBases[candidate.stat.teamId];
+    if (!team) return null;
     return {
       season: seasonNumber,
       type,
-      playerId: stat.playerId,
-      playerName: player.name ?? `${player.number}号`,
-      playerNumber: player.number,
-      teamId: stat.teamId,
+      playerId: candidate.stat.playerId,
+      playerName: candidate.player.name ?? `${candidate.player.number}号`,
+      playerNumber: candidate.player.number,
+      teamId: candidate.stat.teamId,
       teamName: team.name,
       statValue,
       statLabel,
     };
   };
 
+  /**
+   * Candidate rows require a resolvable player and team. Filtering here rather
+   * than at `buildAward` time means an unresolvable row (a released player with
+   * stale stats, say) can never silently void an award — the prize falls to the
+   * next genuine candidate instead.
+   */
+  const candidatesFrom = (
+    stats: PlayerSeasonStats[],
+    score: (stat: PlayerSeasonStats, player: Player) => number,
+  ): Candidate[] => stats.flatMap((stat) => {
+    const player = findPlayer(stat.playerId);
+    if (!player || !teamBases[stat.teamId]) return [];
+    const performance = performanceFor(player, stat);
+    return [{
+      stat,
+      player,
+      awardScore: score(stat, player),
+      minutes: minutesOf(stat),
+      leagueLevel: levelOf(stat.teamId),
+      positionQuality: performance.positionQuality,
+      displayScore: performance.seasonScore,
+    }];
+  });
+
   // ── MVP (金球奖) ─────────────────────────────────────────────
   // Ranked by the Ballon d'Or weighting, not the raw season score: team
   // achievement and league tier matter, and a thin sample cannot win.
-  // Ties fall back to minutes played, then uuid, so the winner never depends
-  // on object-key insertion order.
   const contextFor = buildBallonDorContextResolver(
     league1Standings,
     honours,
@@ -98,134 +175,114 @@ export function computeSeasonAwards(
     worldCup,
   );
 
-  const mvpCandidates = allStats
-    .filter(s => s.appearances >= 5)
-    .map(s => {
-      const player = findPlayer(s.playerId);
-      if (!player) return null;
-      const performance = performanceFor(player, s);
-      const minutes = s.minutesPlayed ?? s.appearances * 90;
-      return {
-        stat: s,
-        player,
-        // Reported to the player page and the news line.
-        seasonScore: performance.seasonScore,
-        // Used only to rank award candidates.
-        awardScore: ballonDorScore(performance.seasonScore, contextFor(s.teamId, minutes)),
-        minutes,
-      };
-    })
-    .filter((entry): entry is {
-      stat: PlayerSeasonStats;
-      player: Player;
-      seasonScore: number;
-      awardScore: number;
-      minutes: number;
-    } => entry !== null);
+  const mvpCandidates = candidatesFrom(
+    allStats.filter(s => s.appearances >= BALLON_DOR_MIN_APPEARANCES),
+    (stat, player) => {
+      const performance = performanceFor(player, stat);
+      const minutes = minutesOf(stat);
+      return ballonDorScore(tierNeutralScore(performance), contextFor(stat.teamId, minutes));
+    },
+  );
 
-  const mvpBest = mvpCandidates.length > 0
-    ? mvpCandidates.reduce((best, entry) => {
-        if (entry.awardScore > best.awardScore) return entry;
-        if (entry.awardScore < best.awardScore) return best;
-        // Equal award score: more minutes wins, then stable uuid order.
-        if (entry.minutes > best.minutes) return entry;
-        if (entry.minutes < best.minutes) return best;
-        return entry.player.uuid.localeCompare(best.player.uuid) < 0 ? entry : best;
-      })
-    : null;
-
-  const mvpStat: PlayerSeasonStats | null = mvpBest ? mvpBest.stat : null;
-  const mvpScoreValue = mvpBest ? Math.round(mvpBest.seasonScore * 10) / 10 : 0;
-  if (mvpStat) {
-    const a = buildAward('mvp', mvpStat, mvpScoreValue, `赛季综合评分 ${mvpScoreValue.toFixed(1)}`);
-    if (a) awards.push(a);
+  const mvpBest = pickBest(mvpCandidates);
+  if (mvpBest) {
+    const score = Math.round(mvpBest.displayScore * 10) / 10;
+    const award = buildAward('mvp', mvpBest, score, `赛季综合评分 ${score.toFixed(1)}`);
+    if (award) awards.push(award);
   }
 
   // ── Golden Boot (金靴奖) ─────────────────────────────────────
-  let topGoals = 0;
-  let topGoalStat: PlayerSeasonStats | null = null;
-  for (const s of allStats) {
-    if (s.goals > topGoals) {
-      topGoals = s.goals;
-      topGoalStat = s;
-    }
-  }
-  if (topGoalStat && topGoals > 0) {
-    const a = buildAward('golden_boot', topGoalStat, topGoals, `${topGoals}球`);
-    if (a) awards.push(a);
-  }
-
-  const topLeagueTeamIds = new Set(league1Standings.map(row => row.teamId));
-  // Eligibility uses the team the stats belong to (stat.teamId), not the
-  // player's current club. A mid-season mover would otherwise be judged
-  // against a different league than the one their numbers came from.
-  const rankedDefensivePlayer = (position: 'DF' | 'GK') => Object.values(squads)
-    .flat()
-    .filter(player => player.position === position)
-    .map(player => ({
-      player,
-      stat: playerStats[player.uuid],
-      performance: playerStats[player.uuid]
-        ? performanceFor(player, playerStats[player.uuid])
-        : computePlayerPerformance(position, undefined, 1),
-    }))
-    .filter(entry => entry.stat
-      && entry.performance.eligible
-      && topLeagueTeamIds.has(entry.stat.teamId))
-    .sort((a, b) => b.performance.score - a.performance.score
-      || (b.stat.minutesPlayed ?? 0) - (a.stat.minutesPlayed ?? 0)
-      || a.player.uuid.localeCompare(b.player.uuid))[0];
-
-  const bestDefender = rankedDefensivePlayer('DF');
-  if (bestDefender) {
+  // ALL-COMPETITIONS goals, weighted by what a goal in that league is worth.
+  // No schedule normalisation: a cup run is earned, and the numerator counts
+  // matches the league-round denominator knows nothing about.
+  //
+  // This deliberately measures something different from the league top scorer
+  // (射手王), which ranks on league goals over league rounds. They disagree in
+  // roughly two seasons out of three — that is the design, not a defect. Ties
+  // inside this award still resolve through the shared comparator.
+  const bootCandidates = candidatesFrom(
+    allStats.filter(s => s.goals > 0),
+    (stat) => goldenBootScore(stat.goals, levelOf(stat.teamId)),
+  );
+  const bootBest = pickBest(bootCandidates);
+  if (bootBest) {
+    // The label prints the whole derivation whenever an adjustment applies, so
+    // the result stays reconstructable from what the player can see.
+    const breakdown = goldenBootBreakdown(bootBest.stat.goals, bootBest.leagueLevel);
     const award = buildAward(
-      'best_defender',
-      bestDefender.stat,
-      bestDefender.performance.score,
-      `赛季综合评分 ${bestDefender.performance.score.toFixed(1)}`,
+      'golden_boot',
+      bootBest,
+      Math.round(breakdown.score * 10) / 10,
+      describeGoldenBoot(breakdown),
     );
     if (award) awards.push(award);
   }
 
-  const bestGoalkeeper = rankedDefensivePlayer('GK');
-  if (bestGoalkeeper) {
+  // ── Position awards ──────────────────────────────────────────
+  // Top flight only, exactly as the defender and goalkeeper awards have always
+  // been. Forwards and midfielders previously had no position award at all.
+  for (const { type, position } of POSITION_AWARDS) {
+    const positionStats: PlayerSeasonStats[] = [];
+    for (const squad of Object.values(squads)) {
+      for (const player of squad) {
+        if (player.position !== position) continue;
+        const stat = playerStats[player.uuid];
+        // Eligibility uses the team the stats belong to (stat.teamId), not the
+        // player's current club. A mid-season mover would otherwise be judged
+        // against a different league than the one their numbers came from.
+        if (!stat || !topLeagueTeamIds.has(stat.teamId)) continue;
+        positionStats.push(stat);
+      }
+    }
+
+    const positionCandidates = candidatesFrom(positionStats, (stat, player) => {
+      const performance = performanceFor(player, stat);
+      if (!performance.eligible) return Number.NEGATIVE_INFINITY;
+      return positionAwardScore(performance, placementFor(stat.teamId), minutesOf(stat));
+    }).filter(candidate => candidate.awardScore !== Number.NEGATIVE_INFINITY);
+
+    const best = pickBest(positionCandidates);
+    if (!best) continue;
     const award = buildAward(
-      'best_goalkeeper',
-      bestGoalkeeper.stat,
-      bestGoalkeeper.performance.score,
-      `赛季综合评分 ${bestGoalkeeper.performance.score.toFixed(1)}`,
+      type,
+      best,
+      Math.round(best.awardScore * 10) / 10,
+      `位置表现 ${best.positionQuality.toFixed(1)}`,
     );
     if (award) awards.push(award);
   }
 
   // ── Young Player (最佳新星) ──────────────────────────────────
-  // True age eligibility. Keep the existing no-duplicate presentation rule,
-  // then compare the same attendance-aware season score used elsewhere.
-  const exclude = new Set(awards.map((a) => a.playerId));
-  let youngTopStat: PlayerSeasonStats | null = null;
-  let youngTopScore = -1;
-  let youngTopAge = 0;
-  for (const s of allStats) {
-    if (exclude.has(s.playerId)) continue;
-    const player = findPlayer(s.playerId);
-    if (!player || player.age >= 23) continue;
-    const performance = performanceFor(player, s);
-    if (!performance.eligible) continue;
-    if (performance.seasonScore > youngTopScore) {
-      youngTopScore = performance.seasonScore;
-      youngTopStat = s;
-      youngTopAge = player.age;
-    }
-  }
-  if (youngTopStat) {
-    const roundedScore = Math.round(youngTopScore * 10) / 10;
-    const a = buildAward(
+  // True age eligibility, then the same attendance-aware season score used
+  // elsewhere. The tier coefficient is milder than the general one on purpose:
+  // this is the designated route for a standout in a smaller league.
+  //
+  // No "breakthrough" weighting: an award the player cannot reconstruct from
+  // the displayed numbers is an award they cannot trust. Season-over-season
+  // progress is shown as context on the buzz card instead.
+  const exclude = new Set(awards.map(award => award.playerId));
+  const youngCandidates = candidatesFrom(
+    allStats.filter(s => !exclude.has(s.playerId)),
+    (stat, player) => {
+      if (player.age >= 23) return Number.NEGATIVE_INFINITY;
+      const performance = performanceFor(player, stat);
+      if (!performance.eligible) return Number.NEGATIVE_INFINITY;
+      return tierNeutralScore(performance)
+        * YOUNG_PLAYER_TIER_COEFFICIENT[levelOf(stat.teamId)]
+        * sampleGateMultiplier(minutesOf(stat));
+    },
+  ).filter(candidate => candidate.awardScore !== Number.NEGATIVE_INFINITY);
+
+  const youngBest = pickBest(youngCandidates);
+  if (youngBest) {
+    const score = Math.round(youngBest.displayScore * 10) / 10;
+    const award = buildAward(
       'young_player',
-      youngTopStat,
-      roundedScore,
-      `${youngTopAge}岁 · 赛季综合评分 ${roundedScore.toFixed(1)}`,
+      youngBest,
+      score,
+      `${youngBest.player.age}岁 · 赛季综合评分 ${score.toFixed(1)}`,
     );
-    if (a) awards.push(a);
+    if (award) awards.push(award);
   }
 
   return awards;
@@ -238,6 +295,8 @@ export const AWARD_META: Record<
 > = {
   mvp: { label: '金球奖', emoji: '🏅', color: 'text-amber-400' },
   golden_boot: { label: '金靴奖', emoji: '👟', color: 'text-yellow-400' },
+  best_forward: { label: '最佳前锋', emoji: '⚽', color: 'text-red-400' },
+  best_midfielder: { label: '最佳中场', emoji: '🎯', color: 'text-green-400' },
   best_defender: { label: '最佳后卫', emoji: '🛡️', color: 'text-blue-400' },
   best_goalkeeper: { label: '最佳门将', emoji: '🧤', color: 'text-cyan-300' },
   young_player: { label: '最佳新星', emoji: '🌟', color: 'text-emerald-400' },

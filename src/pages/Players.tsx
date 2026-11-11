@@ -21,6 +21,7 @@ import type { PlayerPosition } from '../types/player';
 import { PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 import { Icon } from '../components/Icon';
+import AwardBuzzPanel from '../components/AwardBuzzPanel';
 import {
   buildRecentPlayerForm,
   FAVORITE_PLAYER_LIMIT,
@@ -439,6 +440,8 @@ export default function Players() {
           ? '生涯总计'
           : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
       />
+
+      <AwardBuzzPanel world={world} recentForms={recentForms} />
 
       <section aria-labelledby="star-observation-heading" className="space-y-2">
         <div className="flex items-end justify-between gap-3">

@@ -8,6 +8,7 @@ import {
   updatePlayerStatsAndSegmentsFromResults,
   updatePlayerStatsFromResults,
 } from './stats';
+import { leagueGoalsOf } from './player-stat-fields';
 import type { MatchResult, MatchEvent } from '../../types/match';
 import type { Player } from '../../types/player';
 
@@ -68,6 +69,71 @@ function mkLeagueResult(
     roundLabel: 'R1',
   };
 }
+
+describe('league vs all-competitions goal split', () => {
+  const goal = (teamId: string, playerId: string): MatchEvent => ({
+    minute: 30, type: 'goal', teamId, playerId, playerName: '测试', description: '进球',
+  });
+
+  it('counts a league goal in both totals', () => {
+    const player = mkPlayer('p-1', 'A');
+    const squads = { A: [player], B: [] };
+    const updated = updatePlayerStatsFromResults(
+      createInitialPlayerStats(squads),
+      [mkLeagueResult('A', 'B', 1, 0, [goal('A', player.uuid)])],
+      squads,
+    );
+    expect(updated[player.uuid].goals).toBe(1);
+    expect(updated[player.uuid].leagueGoals).toBe(1);
+  });
+
+  it('counts a cup goal only in the all-competitions total', () => {
+    // The Golden Boot ranks `goals`; the league top scorer ranks `leagueGoals`.
+    // Conflating them is how schedule normalisation ended up with a numerator
+    // and a denominator describing different sets of matches.
+    const player = mkPlayer('p-1', 'A');
+    const squads = { A: [player], B: [] };
+    const cupResult = { ...mkResult([goal('A', player.uuid)]), homeGoals: 1, awayGoals: 0 };
+    const updated = updatePlayerStatsFromResults(
+      createInitialPlayerStats(squads),
+      [cupResult],
+      squads,
+    );
+    expect(updated[player.uuid].goals).toBe(1);
+    expect(updated[player.uuid].leagueGoals).toBe(0);
+  });
+
+  it('keeps the two totals separate across a mixed run', () => {
+    const player = mkPlayer('p-1', 'A');
+    const squads = { A: [player], B: [] };
+    const results = [
+      mkLeagueResult('A', 'B', 1, 0, [goal('A', player.uuid)]),
+      {
+        ...mkResult([goal('A', player.uuid), goal('A', player.uuid)]),
+        homeGoals: 2,
+        awayGoals: 0,
+      },
+      mkLeagueResult('A', 'B', 1, 0, [goal('A', player.uuid)]),
+    ];
+    const updated = updatePlayerStatsFromResults(
+      createInitialPlayerStats(squads),
+      results,
+      squads,
+    );
+    expect(updated[player.uuid].goals).toBe(4);
+    expect(updated[player.uuid].leagueGoals).toBe(2);
+  });
+
+  it('falls back to the all-competitions total on a pre-split save', () => {
+    // Rows written before the split carry no leagueGoals, and an in-progress
+    // season cannot be retroactively divided. The fallback keeps the league top
+    // scorer working there; archived seasons are never recomputed.
+    expect(leagueGoalsOf({ goals: 12 })).toBe(12);
+    expect(leagueGoalsOf({ goals: 12, leagueGoals: 7 })).toBe(7);
+    // An explicit zero must win over the fallback.
+    expect(leagueGoalsOf({ goals: 12, leagueGoals: 0 })).toBe(0);
+  });
+});
 
 describe('updatePlayerStatsFromResults — shootout exclusion', () => {
   it('updates totals and club segments from the same match deltas', () => {

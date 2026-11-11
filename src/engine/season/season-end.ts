@@ -15,6 +15,13 @@ import { GameWorld, NewsItem } from './season-manager';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
+import {
+  describeLeagueTopScorer,
+  leagueTopScorerBreakdown,
+  leagueTopScorerScore,
+} from '../awards/award-scoring';
+import type { LeagueTier } from '../awards/award-weights';
+import { leagueGoalsOf } from '../players/player-stat-fields';
 import { processTransferWindow } from '../transfers/transfer-window';
 import { processRetirements } from '../players/retirement';
 import { cloneSquadsForMutation } from '../players/injuries';
@@ -342,14 +349,30 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
 
   // ── Season summary news ──
 
-  // Top scorer — read from LOCAL playerStats (still equals world.playerStats
-  // at this point, but we use the local for consistency with the patch convention).
+  // League top scorer (射手王) — LEAGUE goals only, ranked through the same
+  // schedule-normalised score the season-review card uses, so the news line and
+  // the card can no longer name different players. Read from LOCAL playerStats
+  // (still equals world.playerStats here, per the patch convention).
+  //
+  // Distinct from the Golden Boot, which ranks all-competitions goals.
   const allPlayerStats = Object.values(playerStats);
-  const topScorer = allPlayerStats.reduce<PlayerSeasonStats | null>(
-    (best, s) => (s.goals > (best?.goals ?? 0) ? s : best),
-    null,
-  );
-  if (topScorer && topScorer.goals > 0) {
+  const seasonStartLevels = (world.seasonStartLevels ?? {}) as Record<string, LeagueTier>;
+  let topScorer: PlayerSeasonStats | null = null;
+  let topScorerScore = -Infinity;
+  for (const stat of allPlayerStats) {
+    const leagueGoals = leagueGoalsOf(stat);
+    if (leagueGoals <= 0) continue;
+    const score = leagueTopScorerScore(leagueGoals, seasonStartLevels[stat.teamId] ?? 1);
+    // Ties fall through to raw league goals, then assists, matching the card.
+    const better = topScorer === null
+      || score > topScorerScore
+      || (score === topScorerScore && (
+        leagueGoals > leagueGoalsOf(topScorer)
+        || (leagueGoals === leagueGoalsOf(topScorer) && stat.assists > topScorer.assists)
+      ));
+    if (better) { topScorer = stat; topScorerScore = score; }
+  }
+  if (topScorer) {
     const teamName = world.teamBases[topScorer.teamId]?.name ?? topScorer.teamId;
     // topScorer.playerId holds a uuid; locate the player by walking the
     // owner's squad. Fall back to a generic "##号" label only if the player
@@ -357,11 +380,15 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     const scorerPlayer = squads[topScorer.teamId]?.find(p => p.uuid === topScorer.playerId);
     const playerName = scorerPlayer?.name
       ?? (scorerPlayer ? `${scorerPlayer.number}号` : '射手王');
+    const breakdown = leagueTopScorerBreakdown(
+      leagueGoalsOf(topScorer),
+      seasonStartLevels[topScorer.teamId] ?? 1,
+    );
     news.push({
       id: createNewsId(seasonNumber, windowIndex, 'scorer'),
       seasonNumber, windowIndex, type: 'trophy',
-      title: `赛季射手王: ${teamName} ${playerName} (${topScorer.goals}球)`,
-      description: `${teamName}的${playerName}以${topScorer.goals}粒进球荣获本赛季射手王。`,
+      title: `赛季射手王: ${teamName} ${playerName} (${describeLeagueTopScorer(breakdown)})`,
+      description: `${teamName}的${playerName}以${leagueGoalsOf(topScorer)}粒联赛进球荣获本赛季射手王。`,
     });
   }
 
@@ -400,6 +427,10 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     world.seasonStartLevels ?? {},
     {
       continentalCupWinners: [mainlandCupWinner, southernCupWinner, easternCupWinner]
+        .filter((id): id is string => Boolean(id)),
+      // The domestic cups were previously omitted entirely, so a league-cup +
+      // super-cup double contributed nothing to any individual award.
+      domesticCupWinners: [leagueCupWinner, superCupWinner]
         .filter((id): id is string => Boolean(id)),
     },
     // The tournament now closes the season, so this is the live edition and

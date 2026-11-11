@@ -737,7 +737,10 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     }
     for (const award of requireArray(summary, 'awards')) {
       if (!isRecord(award) || award.playerId !== retired.uuid
-        || !['mvp', 'golden_boot', 'best_defender', 'best_goalkeeper', 'young_player'].includes(String(award.type))) {
+        // Widened for best_forward / best_midfielder. This is additive: saves
+        // written before the redesign only carry the original five types and
+        // still validate, so SAVE_SCHEMA_VERSION does not need to move.
+        || !['mvp', 'golden_boot', 'best_forward', 'best_midfielder', 'best_defender', 'best_goalkeeper', 'young_player'].includes(String(award.type))) {
         throw new Error('退役个人荣誉无效');
       }
       for (const key of ['playerId', 'playerName', 'teamId', 'teamName', 'statLabel']) requireString(award, key, '退役荣誉');

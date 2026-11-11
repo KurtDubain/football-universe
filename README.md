@@ -207,7 +207,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 
 Current release: **v4.62.0**, deployed 2026-11-11 15:44 Asia/Shanghai to https://football.dyp02.vip/ from `main/f0956e2`. Personal edition only — https://cup.dyp02.vip/ was not rebuilt and remains on **v4.61.11**. This release was published without a browser playtest, at the author's explicit instruction.
 
-67k+ production TypeScript lines · 220+ production source files · 160+ test files · 45+ browser/simulation audit commands
+68k+ production TypeScript lines · 220+ production source files · 160+ test files · 45+ browser/simulation audit commands
 
 当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 

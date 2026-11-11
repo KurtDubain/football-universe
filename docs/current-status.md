@@ -17,7 +17,7 @@ This file is the single current roadmap. Older checklists preserve implementatio
 ## Current Health
 
 - 1,192 unit and component tests across 164 files passed on the clean v4.62.0 release using one worker, with no test-timeout/config changes. The personal edition passed production build, edition isolation and unchanged byte budgets. The v4.62.0 release carries **no browser playtest and no real-device evidence**: the author explicitly skipped the pre-release preview on 2026-11-11, so broadcast camera feel, PWA offline update behavior and the save-gate rejection path rest on unit tests, build gates and post-deploy HTTP checks only. The earlier v4.61.11 release did carry three-viewport live flows and an actual 4.61.10-to-4.61.11 HTTPS/PWA update that preserved both isolated S1 QA saves byte-for-byte through reload and offline reopening; those QA saves do not prove every long-term user save compatible, and v4.62.0 rejects pre-26 saves by design. All 126 new public files passed SHA checks, the previous release was retained for rollback, and other server services remained unchanged.
-- More than 67,000 production TypeScript lines across 266 production files (identity data is held in edition-specific JSON).
+- More than 68,000 production TypeScript lines across 271 production files (identity data is held in edition-specific JSON).
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 87 entries / 2.15 MB for the PWA precache. The entry ratchet moved 86 to 87 in v4.62.0 when the Ballon d'Or ranking made `src/engine/standings` a chunk shared by season-awards, season-manager and storage-limits; measured precache bytes are 1,949,209, so the byte cap did not move.
 - Live Canvas verification gates rolling average, P95, and maximum draw cost under normal and 4x CPU profiles, alongside frame cadence, consecutive slow frames, particles, long tasks, pause/resume, and final-score integrity.
@@ -36,6 +36,25 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - Every remote push is treated as a release: bump `package.json` and `APP_VERSION`, add the matching in-game changelog entry, and synchronize the current-version documentation before pushing.
 
 ## Active Work
+
+### 评奖系统重设计（第一期，分支 `feat/award-system-redesign`，未发布）
+
+授权于 2026-11-11。起因是一次实测：山东泰山拿下联赛杯 + 超级杯双冠，五项个人奖加最佳教练无一入选，而射手王出自该队。完整设计见 [award-system-redesign.md](award-system-redesign.md)。
+
+第一期已完成并通过审计，尚未合并 main、未部署：
+
+- 七奖口径统一，系数集中在 `src/engine/awards/award-weights.ts`；每项奖的层级与团队加权**恰好施加一次**（此前 `seasonScore` 的 10% 联赛强度项与金球的 ×0.90 构成双重折扣）。
+- 补最佳前锋 / 最佳中场两个位置奖——此前中场球员在评奖体系里没有任何位置路径。
+- 联赛杯 / 超级杯进入荣誉表（此前只认三个六年一届的洲际杯，国内杯贡献为零）；国内杯合计上限 ×1.08，使双冠不超过洲际杯。
+- 最佳教练拆为「冠军教头」（始终展示）+「最佳教练」（超额公式，排除冠军）。此前 `expectation = 5` 的三支豪门 `expectedPos = 0`，数学上永远拿不到该奖。
+- 两个进球荣誉拆成两个口径。此前 `playerStats.goals` 实为**全赛事**口径（`season-manager.ts` 把整个 `windowResult.results` 交给 `updatePlayerStatsAndSegmentsFromResults`，`buildMatchStatDeltas` 不做赛事过滤），而「射手王」名义上只该看联赛。现为**金靴 = 全赛事进球 × 联赛系数**、**射手王 = 纯联赛进球 × (30/联赛轮次) × 联赛系数**。赛程归一只属于射手王：金靴的分子含杯赛而分母只知道联赛轮次，任何归一都会重蹈第一版分子分母不匹配的覆辙。新增可选计数器 `leagueGoals`，读取一律走 `leagueGoalsOf`，对拆分前存档回退到 `goals`，因此不升 `SAVE_SCHEMA_VERSION`。
+- 进球系数 1.00 / 0.75 / 0.58 由两个荣誉共用（原 0.90 / 0.80 实测恰好是层级中立值，等于完全抵消低级别每轮多进 22% 的效率优势，想表达任何偏好必须低于它）。60 季实测：射手王低级别 38%、最佳新星 15%、金靴 0%——全赛事口径下顶级球队踢更多杯赛、走得更深，这个优势是挣来的，低级别通道在射手王那边。两荣誉颁给不同球员占 72%；不变量「联赛进球 ≤ 全赛事进球」60 季 0 例违例；获奖者进球效率恒为本联赛均值 5.2–5.6 倍。
+- 「奖项风向」面板挂在球员中心顶部，第 16 轮起出现。热度公式与评奖公式**不同**（0.5 赛季分 + 0.3 近 5 场状态 + 0.2 球队势头），用阈值带代替名次，不显示任何 buzz 专有数字。不引入随机——RNG 流是承重墙，颁奖时插抽签会让全部种子审计作废。
+- 存档兼容：奖项类型白名单加法扩展，**不升 `SAVE_SCHEMA_VERSION`**，现有存档不丢。已归档赛季的旧奖项按旧规则保留，不回溯重算。
+
+第二期（球员中心整体重构：单层榜单导航、每榜口径说明行、荣誉列、候选徽标、拆掉创造力榜混排）已获授权，排在第一期之后。
+
+### 既有在办事项
 
 Work authorized on 2026-09-23 and refined on 2026-09-25 is included in the deployed v4.61.11: the default ten world-focus seats now protect at most four distinct previous-season major award winners for one season, independently from actual match lineups. Followed cards retain known identity at zero minutes; season-boundary summaries prioritize champion changes, individual honors and team movement. Player threads keep at most four nodes with current injuries protected. Important retirees keep compact facts without new club-trophy copies; unmatched legacy snapshots remain readable. Goal drama follows one complete score timeline. Save schema and edition identities remain unchanged; no real user save was opened or rewritten. This does not reactivate older checklists. One nonblocking display omission remains: the contest Settings changelog's newest entry is still v4.61.10, although the actual app and update identity are v4.61.11; deployment did not alter application code to address it.
 
