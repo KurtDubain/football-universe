@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatchResult } from '../../types/match';
 import { pickFocusMatches } from '../season/match-importance';
 import { executeCurrentWindow, initializeGameWorld } from '../season/season-manager';
+import { firstMatchdayWorld } from '../season/test-world';
 import { buildObservationTheme } from './observation-theme';
 import { buildMatchdayNarrativeDigest, buildResultNarrativeDigest } from './narrative-sources';
 
@@ -110,7 +111,7 @@ describe('narrative source adapters', () => {
   });
 
   it('merges the observation arc, preserves prior Matchday sources, and exposes no hidden potential', () => {
-    const world = initializeGameWorld(20260812);
+    const world = firstMatchdayWorld(20260812);
     const currentWindow = world.seasonState.calendar[world.seasonState.currentWindowIndex];
     const observedTeamId = currentWindow.fixtures[0].homeTeamId;
     const observationTheme = buildObservationTheme(

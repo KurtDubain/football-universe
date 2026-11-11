@@ -175,6 +175,11 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
     unbeaten_run: '联赛不败征程',
     cup_giant_killer: '杯赛巨人杀手',
   };
+  // A thread that stopped being tracked before season end carries no verdict;
+  // labelling it 定格 would report a judgement the engine never made.
+  const resolutionLabel = (outcome: Storyline['outcome']): string => (
+    outcome === 'success' ? '成章' : outcome === 'failure' ? '定格' : '未判定'
+  );
   const resolved = (world.storylineHistory ?? [])
     .filter(story =>
       story.phase === '落幕'
@@ -196,7 +201,7 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       seasonNumber: story.seasonNumber,
       seasonPhase: '落幕',
       storylineType: story.type,
-      title: `${labels[story.type]} · ${story.outcome === 'success' ? '成章' : '定格'}`,
+      title: `${labels[story.type]} · ${resolutionLabel(story.outcome)}`,
       summary: archivedStoryConclusion(story.conclusion),
       evidence: story.evidence.map((detail, index) => (
         fact('storyline', `story:${story.id}:resolved-evidence:${index}`, '历程证据', detail)
@@ -209,11 +214,14 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       )],
       nextWatch: story.outcome === 'success'
         ? '这段故事已进入赛季档案，下一阶段由真实赛程继续书写'
-        : '这段故事已经结束，只有新的事实达到门槛才会重新开启',
+        : story.outcome === 'failure'
+          ? '这段故事已经结束，只有新的事实达到门槛才会重新开启'
+          : '这段故事未等到赛季判定，只有新的事实达到门槛才会重新开启',
       destinations: [teamDestination(story.teamId)],
       visualKind: storyVisual(story.type),
       visualLevel: story.outcome === 'success' ? 'world_moment' as const : 'chapter' as const,
-      presentationPriority: story.outcome === 'success' ? 100 : 85,
+      // An unjudged thread is the least notable outcome: it earned no verdict.
+      presentationPriority: story.outcome === 'success' ? 100 : story.outcome === 'failure' ? 85 : 78,
       seasonBoundaryRole: 'historic_resolution' as const,
       fingerprint: createNarrativeFingerprint([
         story.id,
@@ -223,10 +231,10 @@ function storylineCandidates(world: GameWorld): NarrativeCandidate[] {
       ]),
       changedAt: story.lastUpdatedElapsedWindow,
       weights: {
-        importance: story.outcome === 'success' ? 86 : 72,
+        importance: story.outcome === 'success' ? 86 : story.outcome === 'failure' ? 72 : 66,
         relevance: 20,
         continuity: 88,
-        historical: story.outcome === 'success' ? 72 : 40,
+        historical: story.outcome === 'success' ? 72 : story.outcome === 'failure' ? 40 : 32,
       },
     }));
   return [...active, ...resolved];

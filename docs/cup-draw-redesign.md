@@ -2,7 +2,7 @@
 
 创建日期：2026-11-11
 
-> 状态：阶段 1 已实施（分支 `fix/records-ties-and-bugs`），阶段 2–5 仍为方案。诊断基于 `origin/main` @ `09a5984` 的代码通读，方向已由作者确认，见第 3 节。
+> 状态：阶段 1 已实施（分支 `fix/records-ties-and-bugs`），阶段 5 与赛季开幕窗口已实施（分支 `feat/narrative-trim`），阶段 2–4 仍为方案。诊断基于 `origin/main` @ `09a5984` 的代码通读，方向已由作者确认，见第 3 节。
 
 处理杯赛抽签的制度不自洽与仪式缺失。**不改变赛制本身**——参赛规模、轮次、晋级规则、中立场规则全部保持，只动抽签的分档逻辑与结果呈现。
 
@@ -12,7 +12,9 @@
 
 抽签的"仪式"目前只有四条新闻，其中两条没有实质内容：联赛杯的抽签新闻只有一句标题、没有任何对阵；洲际杯的抽签新闻只列系数排名、不列分组结果（分组数据在 `cup.groups` 里已经算好了）。
 
-方向已定：**只补超级杯分档，仪式走新闻增强**。不做独立抽签页、不做赛季抽签窗口、不动联赛杯的纯随机。
+方向已定：**只补超级杯分档，仪式走开幕窗口 + 新闻增强**。不做独立抽签页、不动联赛杯的纯随机。
+
+> **2026-11-11 更新：赛季抽签窗口已实施**，推翻了本节原先「不做赛季抽签窗口」的判断。作者判断赛前瞩目值得一个专属窗口的投入产出。看点判定（阶段 2）的一部分随开幕窗口一起落地，见 3.1 与 5.6。
 
 ## 1. 现状：四个赛事的抽签实现
 
@@ -106,11 +108,23 @@ for (let i = 0; i < shuffled.length && i < groupCount; i++) {
 
 ## 3. 已定方向
 
-### 3.1 仪式形态：新闻增强
+### 3.1 仪式形态：开幕窗口 + 新闻增强
 
-作者已确认走新闻增强，不做独立抽签页、不做赛季抽签窗口。
+作者最初确认走新闻增强，理由是投入产出；**2026-11-11 改为追加一个赛季开幕窗口**，新闻增强仍然要做。
 
-理由是投入产出：四条抽签新闻已经在赛季构建时生成，缺的只是内容。把分组结果、逐档归属、死亡之组与强弱对话写进正文，改动集中在 `season-manager.ts` 的新闻生成段，不动存档结构、不动 calendar、不新增路由。
+改判的理由是赛前瞩目不只有抽签：卫冕者、升班马、休赛期换帅、窗口标王、上季个人荣誉、休赛期退役，这些内容此前散落在赛季回顾与新闻流里，开赛时并没有一个「本赛季从什么局面开始」的入口。
+
+开幕窗口的实现约束（全部已落地）：
+
+- **零 RNG**。`pre_season` 窗口的 handler 不创建也不消费随机数，内容由 `buildSeasonOpening` 从 world 现算。这是整个设计成立的前提——阶段 1 的 RNG 位移曾让 20 个候选种子全部失效（见第 7 节）。护栏是 `season-opening.test.ts` 里 `rngState` 前后相等的断言，它直接锁住「这个窗口一位随机数都没花」；下游赛果因此按构造不变。不要拿 `observer-experience.test.ts` 当证据——它守的是首战**可读性**（净胜球 ≤ 3），从不钉具体比分。
+- **内容现算不存 world**。与 goalScoring 的「存巅峰、读时算」同模式：不新增存档字段、不迁移、老存档照开。`save-schema.ts` 的 `validateCalendarWindow` 只校验 `type` 是字符串，加窗口类型不动 schema。
+- **不递增 `totalElapsedWindows`**。该字段的定义是「match-bearing 窗口」计数，开幕窗口无比赛，伤病 `untilWindow` 计时与叙事记忆完全不受影响。
+- **批量推进不吞掉它**。`batchAdvance` / `skipCurrentSeason` 本就在赛季边界停，会自然落在新赛季的开幕窗口；`advanceUntil` 额外加了 pre_season 断点，覆盖 `type === 'cup'` 跨赛季仍未遇到杯赛窗口的情况。
+- **`planNextKeyNode` 注册为 `season_open`**，站在开幕窗口时 `blocked: true`——它是必须先看完的内容，不是可跳过的节点。
+
+关键文件：`src/engine/season/season-opening.ts`（纯函数）、`src/components/SeasonOpeningPanel.tsx`、`src/engine/season/calendar-builder.ts`（窗口）、`src/engine/season/season-manager.ts`（handler）、`src/engine/observation/key-node.ts`。
+
+仍然不做独立抽签页——开幕窗口是日历里的一个窗口，不是新路由。
 
 ### 3.2 分档范围：只补超级杯
 
@@ -121,7 +135,7 @@ for (let i = 0; i < shuffled.length && i < groupCount; i++) {
 ### 3.3 明确不做的事
 
 - 不做独立抽签回放页
-- 不把抽签变成 calendar window（不改存档 schema）
+- ~~不把抽签变成 calendar window~~ → **已推翻**：赛季开幕窗口就是一个 `pre_season` calendar window，但仍然不改存档 schema（见 3.1）
 - 不给联赛杯引入种子队保护
 - 不改淘汰赛对阵模式（见 2.3）
 - 不改超级杯的客场进球规则（`awayGoalRule: true`）。**另案记录**：客场进球规则 2021 年已被欧足联废除，是否跟进属于赛制调整，不在抽签范围内
@@ -223,14 +237,29 @@ interface DrawHighlight {
 
 每个赛事最多输出 3 条看点，按"值得说"的程度排序，避免新闻变成清单。
 
+### 5.6 已落地的部分（开幕窗口）
+
+开幕窗口没有实现 `DrawHighlight` 接口，而是直接在 `season-opening.ts` 里内联阈值判定，输出形态换成 `OpeningDraw.highlight`（一句话）+ `OpeningGroup.note`（组级标签）：
+
+| 赛事 | 判定口径 | 已实现 | 未实现 |
+| --- | --- | --- | --- |
+| 超级杯 | 极差 < 6 判死亡之组；前二差 > 12 判一枝独秀 | 死亡之组、一枝独秀 | 弱组、档位倒挂 |
+| 世界杯 / 洲际杯 | 前二差 < 3 判接近；> 12 判一枝独秀 | 前二接近、一枝独秀 | — |
+| 联赛杯 | 级别差 ≥ 2 的对阵计数 + 最大级别差 | 跨级对阵 | 同级别强强、重赛 |
+
+每个赛事最多标注 2 组（`MAX_GROUP_NOTES`），按极差升序取——8 组全标等于没标。联赛杯展示全部 16 组 R32 对阵，不做筛选。
+
+阈值仍取自 5.2 / 5.3，没有数据支撑，与第 7 节的记录一致。
+
 ## 6. 验收
 
-- [ ] 超级杯分组每组恰好 1 队/档，有测试断言
+- [x] 超级杯分组每组恰好 1 队/档，有测试断言（阶段 1，60 个种子）
 - [ ] `drawGroups` 在 pot 队数 ≠ 组数时抛错，有测试覆盖（当前完全未测）
 - [ ] `drawSimpleKnockout` 在奇数队时抛错
 - [ ] 四条抽签新闻都包含对阵或分组结果，`draw-lc` 不再只有标题
-- [ ] 看点判定是纯函数，单测覆盖每种 `kind` 的触发与不触发
-- [ ] `pages/Cup.tsx` 文案与实现一致
+- [ ] 看点判定是纯函数，单测覆盖每种 `kind` 的触发与不触发（开幕窗口只覆盖 5.6 列出的子集，见 `season-opening.test.ts`）
+- [x] `pages/Cup.tsx` 文案与实现一致（改为「按实力排位分 4 档，每组各档取 1 队」，`world-cup.ts` JSDoc 同步）
+- [x] 开幕窗口：零 RNG、纯函数不改 world、窗口存在、key node、内容非空、S1 无档案回落 —— `season-opening.test.ts` 覆盖
 - [ ] 全量测试通过，未调整超时或产品断言
 
 ## 7. 风险与未决
@@ -241,6 +270,7 @@ interface DrawHighlight {
 - **"德比"无法实现**。数据里没有球队地区字段，只能用"同联赛"近似，或者不做。
 - **"重赛"只能查 3 季**。`MATCH_HISTORY_SEASONS = 3`，更早的交手记录已被清理。
 - **看点阈值是拍的**。5.2 / 5.3 里的 6、3、12 这些数字没有数据支撑，需要跑几个赛季看命中频率再调。建议先按现值实现，附一个统计脚本统计各 `kind` 的触发率。
+- **开幕窗口刻意避开了 RNG 位移**。阶段 1 的教训是「动抽签就动种子」，所以 `pre_season` 的 handler 与 `buildSeasonOpening` 都不碰随机数。这条约束一旦被破坏（比如以后想在开幕窗口里加抽签动画、重抽、或随机选「本周焦点」），推荐种子会再次失效，且失效方式是静默的。`season-opening.test.ts` 里有一条断言直接锁住 `rngState` 不变，就是这条约束的护栏。
 
 ## 8. 相关文件
 
@@ -250,3 +280,7 @@ interface DrawHighlight {
 - `src/config/competitions.ts`
 - `src/pages/Cup.tsx`
 - `src/engine/history/storage-limits.ts`（`MATCH_HISTORY_SEASONS`）
+- `src/engine/season/season-opening.ts` / `season-opening.test.ts`（开幕窗口内容）
+- `src/components/SeasonOpeningPanel.tsx`（开幕窗口 UI）
+- `src/engine/season/calendar-builder.ts`（`pre_season` 窗口）
+- `src/engine/season/test-world.ts`（`firstMatchdayWorld` / `pastSeasonOpening`，供测试跳过开幕窗口）

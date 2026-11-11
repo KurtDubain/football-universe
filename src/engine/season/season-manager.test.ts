@@ -6,6 +6,7 @@ import {
   getCurrentWindow,
   type NewsItem,
 } from './season-manager';
+import { firstMatchdayWorld } from './test-world';
 import { defaultTeams } from '../../config/teams';
 import { CUP_PRIZE } from '../economy/finance';
 import { PLAYER_SCORE_VERSION } from '../players/player-performance';
@@ -369,7 +370,9 @@ describe('executeCurrentWindow', () => {
   });
 
   it('does not mutate the input world or its player objects', () => {
-    const world = initializeGameWorld(20260729);
+    // The first matchday, not the fixture-less opening window: the aliasing
+    // contract under test belongs to the match-execution path.
+    const world = firstMatchdayWorld(20260729);
     const before = structuredClone(world);
     const firstTeamId = Object.keys(world.squads)[0];
 
@@ -413,7 +416,9 @@ describe('executeCurrentWindow', () => {
   it('updates deterministic storylines through the real window execution path', () => {
     let world = initializeGameWorld(20260718);
     const storylineNews: NewsItem[] = [];
-    for (let index = 0; index < 12; index++) {
+    // 13 windows, not 12: the first is the fixture-less season opening, so a
+    // storyline still needs its eight league rounds inside the remaining twelve.
+    for (let index = 0; index < 13; index++) {
       const result = executeCurrentWindow(world);
       world = result.world;
       storylineNews.push(...result.news.filter(item => item.type === 'storyline'));

@@ -205,9 +205,9 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.63.0**, live on https://football.dyp02.vip/ since 2026-11-11. Personal edition only — https://cup.dyp02.vip/ was not rebuilt and remains on **v4.61.11**. This release carries desktop and 390x844/430x932/375x667/320x568 live-broadcast evidence plus the four-viewport `verify:match` gate, but no real-device playtest.
+Current release: **v4.64.0**, cut from branch `feat/narrative-trim` and **not yet deployed** — https://football.dyp02.vip/ still serves **v4.63.0** and https://cup.dyp02.vip/ remains on **v4.61.11**. v4.64.0 adds a fixture-less season-opening window carrying the cup draws and the pre-season read; it consumes no randomness and adds no save field, so seeded results and existing saves are unchanged. It was exercised in a local desktop browser playtest covering the opening panel, its advance control, the calendar legend, a season skip into the next opening window and team links; that is not a real-device playtest, so touch feel, PWA offline update behavior and the save-gate rejection path still rest on unit tests and build gates. Carried forward from v4.63.0: desktop and 390x844/430x932/375x667/320x568 live-broadcast evidence plus the four-viewport `verify:match` gate.
 
-68k+ production TypeScript lines · 220+ production source files · 160+ test files · 45+ browser/simulation audit commands
+70k+ production TypeScript lines · 270+ production source files · 160+ test files · 45+ browser/simulation audit commands
 
 当前版本状态、有效待办与明确不做项统一记录在 [`docs/current-status.md`](docs/current-status.md)。旧阶段清单保留为实施与验证台账，不再作为现行任务来源。
 

@@ -7,6 +7,7 @@ import {
   type MatchStats,
 } from '../../types';
 import { Player } from '../../types/player';
+import { effectiveGoalScoring } from '../players/development';
 import type { MatchApproach } from '../../types/coach';
 import { SeededRNG } from './rng';
 
@@ -172,7 +173,9 @@ function pickPlayer(
 ): Player {
   const weights = squad.map((p) => {
     const posWeight = positionWeights[p.position] ?? 1;
-    const scoringWeight = useGoalScoring ? Math.max(1, p.goalScoring) : 10;
+    // goalScoring is the stored PEAK instinct; the age curve is applied here
+    // so a 38-year-old no longer takes the same share of goals as he did at 27.
+    const scoringWeight = useGoalScoring ? Math.max(1, effectiveGoalScoring(p)) : 10;
     const clutchMul = isBigMatch && p.tag === 'clutch' ? 1.3 : 1;
     const abilityMultiplier = Math.max(0.55, 1 + ((p.rating - 60) / 40) * abilityWeight);
     return posWeight * scoringWeight * clutchMul * abilityMultiplier;

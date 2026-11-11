@@ -92,9 +92,11 @@ describe('generator — peakRating / peakAge assignment', () => {
     }
   });
 
-  it('goalScoring is NOT affected by peakRating / peakAge logic', () => {
-    // goalScoring is its own position-keyed roll; it must not be touched by
-    // the development curve. Confirm FW players still hit the 55-100 band.
+  it('stores goalScoring as a position-keyed PEAK roll, untouched by peakRating / peakAge', () => {
+    // goalScoring is its own position-keyed roll and is stored as the player's
+    // ceiling. The development curve is applied at read time by
+    // effectiveGoalScoring, never written back onto the stored peak — so the
+    // generated value must stay in the raw 55-100 band.
     const teams = [makeTeam('a', 75)];
     const { squads } = generateAllSquads(teams, 33333);
     const fws = Object.values(squads).flat().filter(p => p.position === 'FW');

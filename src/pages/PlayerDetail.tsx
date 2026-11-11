@@ -3,6 +3,7 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
 import { TAG_META } from '../engine/players/tags';
+import { effectiveGoalScoring } from '../engine/players/development';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
@@ -167,6 +168,11 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
     }
     return { finalGoals, lateGoals, hatTricks };
   }, [world.seasonState.calendar, uuid]);
+
+  // `goalScoring` is the stored peak; the age curve is applied at read time, so
+  // the panel has to show the aged value or it would contradict the match engine.
+  const goalScoringNow = player ? Math.round(effectiveGoalScoring(player)) : 0;
+  const goalScoringPeak = player ? Math.round(player.goalScoring) : 0;
 
   const clubStats = useMemo(
     () => (teamId ? getPlayerClubStatRow(world, uuid, teamId) : undefined),
@@ -391,7 +397,12 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">球员属性</h3>
         <div className="space-y-2">
           <AttrBar label="综合能力" value={player.rating} max={99} />
-          <AttrBar label="进球倾向" value={player.goalScoring} max={100} color="bg-amber-500" />
+          <AttrBar
+            label={goalScoringNow < goalScoringPeak - 1 ? `进球倾向（巅峰 ${goalScoringPeak}）` : '进球倾向'}
+            value={goalScoringNow}
+            max={100}
+            color="bg-amber-500"
+          />
         </div>
       </div>
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { computeCurrentRating, recomputeAllRatings } from './development';
+import {
+  ageMultiplier,
+  computeCurrentRating,
+  effectiveGoalScoring,
+  recomputeAllRatings,
+} from './development';
 import { Player } from '../../types/player';
 
 /**
@@ -194,5 +199,73 @@ describe('recomputeAllRatings', () => {
     expect(result.teamA[0].rating).toBe(75);
     expect(result.teamA[0].peakRating).toBe(75);
     expect(result.teamA[0].peakAge).toBe(27);
+  });
+});
+
+describe('ageMultiplier', () => {
+  it('is exactly 1.00 across the plateau', () => {
+    for (const age of [25, 26, 27, 28, 29]) {
+      expect(ageMultiplier(age, 27)).toBe(1);
+    }
+  });
+
+  it('agrees with computeCurrentRating on the un-rounded ratio', () => {
+    // The reason it was extracted: one curve, two consumers. If these ever
+    // drift apart, goal scoring and ability age on different schedules again.
+    for (const age of [16, 18, 21, 25, 30, 33, 37, 38, 42, 43, 50]) {
+      expect(ageMultiplier(age, 27))
+        .toBeCloseTo(computeCurrentRating(90, age, 27) / 90, 1);
+    }
+  });
+
+  it('never increases past the plateau', () => {
+    let prev = ageMultiplier(29, 27);
+    for (let age = 30; age <= 55; age++) {
+      const m = ageMultiplier(age, 27);
+      expect(m).toBeLessThanOrEqual(prev);
+      prev = m;
+    }
+  });
+});
+
+describe('effectiveGoalScoring', () => {
+  const mk = (goalScoring: number, age: number, peakAge = 27) =>
+    ({ goalScoring, age, peakAge }) as Pick<Player, 'goalScoring' | 'age' | 'peakAge'>;
+
+  it('equals the stored peak while the player is on his plateau', () => {
+    expect(effectiveGoalScoring(mk(90, 27))).toBe(90);
+    expect(effectiveGoalScoring(mk(90, 25))).toBe(90);
+    expect(effectiveGoalScoring(mk(90, 29))).toBe(90);
+  });
+
+  it('ages a veteran striker down the same curve as his rating', () => {
+    // peakAge 27, peak 90. age 38 → 0.75 - (38-37)*0.040 = 0.710
+    expect(effectiveGoalScoring(mk(90, 38))).toBeCloseTo(63.9, 5);
+    // age 43 → max(0.40, 0.55 - 1*0.050) = 0.500
+    expect(effectiveGoalScoring(mk(90, 43))).toBeCloseTo(45, 5);
+    // Regression guard for the bug this was written for: before the change a
+    // 38-year-old kept his full roll, so measured output at 36-38 was 96% of
+    // a 27-29 year old's. Anything above 75% of peak means the curve is gone.
+    expect(effectiveGoalScoring(mk(90, 38)))
+      .toBeLessThan(effectiveGoalScoring(mk(90, 27)) * 0.75);
+  });
+
+  it('discounts a teenager who has not reached his peak yet', () => {
+    // 19 with peakAge 27 → t = 1/7 → 0.70 + 0.30/7 ≈ 0.7429
+    expect(effectiveGoalScoring(mk(90, 19))).toBeCloseTo(66.86, 1);
+  });
+
+  it('keeps a keeper roll at zero and never goes negative', () => {
+    expect(effectiveGoalScoring(mk(0, 30))).toBe(0);
+    expect(effectiveGoalScoring(mk(2, 60))).toBeGreaterThanOrEqual(0);
+  });
+
+  it('survives a malformed player', () => {
+    expect(effectiveGoalScoring(mk(NaN, 27))).toBe(0);
+    expect(effectiveGoalScoring({
+      goalScoring: 80,
+      age: undefined as unknown as number,
+      peakAge: undefined as unknown as number,
+    })).toBe(80);
   });
 });

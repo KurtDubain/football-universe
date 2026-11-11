@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { getCurrentWindow, initializeGameWorld } from './season-manager';
+import { getCurrentWindow } from './season-manager';
+import { firstMatchdayWorld } from './test-world';
 import { computeFixtureImportance, pickFocusMatches } from './match-importance';
 import type { MatchFixture } from '../../types/match';
 
 describe('observer fixture importance', () => {
   it('weights the primary observer team above secondary favorites', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const window = getCurrentWindow(world)!;
     const primaryTeamId = window.fixtures[0].homeTeamId;
     const secondaryFixture = window.fixtures.find(fixture => (
@@ -29,7 +30,7 @@ describe('observer fixture importance', () => {
   });
 
   it('keeps the primary team in the focus list ahead of unrelated marquee matches', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const window = getCurrentWindow(world)!;
     const primaryTeamId = window.fixtures.at(-1)!.awayTeamId;
 
@@ -41,7 +42,7 @@ describe('observer fixture importance', () => {
   });
 
   it('applies the documented focus hierarchy before raw importance score', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const template = getCurrentWindow(world)!.fixtures[0];
     const rankedIds = world.league1Standings.map(entry => entry.teamId);
     world.league1Standings.forEach(entry => { entry.played = 4; });
@@ -120,7 +121,7 @@ describe('observer fixture importance', () => {
   });
 
   it('uses fixture id as a deterministic final tie-breaker', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const template = getCurrentWindow(world)!.fixtures[0];
     const fixtures: MatchFixture[] = [
       { ...template, id: 'fixture-b', roundLabel: 'Final', competitionType: 'league_cup' },
@@ -135,7 +136,7 @@ describe('observer fixture importance', () => {
   });
 
   it('does not call a three-match table sample a title or relegation showdown', () => {
-    const world = initializeGameWorld(20260709);
+    const world = firstMatchdayWorld(20260709);
     const [first, second] = world.league1Standings;
     const fixture = {
       ...getCurrentWindow(world)!.fixtures[0],
@@ -155,7 +156,7 @@ describe('observer fixture importance', () => {
   });
 
   it('does not misclassify semi-finals or quarter-finals as finals', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const template = getCurrentWindow(world)!.fixtures[0];
 
     expect(computeFixtureImportance(
@@ -221,7 +222,7 @@ describe('observer fixture importance', () => {
   });
 
   it('surfaces the final group round as a factual qualification-stage focus', () => {
-    const world = initializeGameWorld(20260718);
+    const world = firstMatchdayWorld(20260718);
     const template = getCurrentWindow(world)!.fixtures[0];
     const closing = computeFixtureImportance({
       ...template,

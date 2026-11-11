@@ -11,6 +11,7 @@ export type KeyNodeReason =
   | 'favorite_match'
   | 'cup'
   | 'playoff'
+  | 'season_open'
   | 'season_end';
 
 export interface KeyNodePlan {
@@ -132,6 +133,22 @@ function planForWindow(
       detail: '先推进本轮查看判断结果，再前往下一关键节点。',
       blocked: true,
       fixtureId: world.pendingObservationJudgment.fixtureId,
+    };
+  }
+
+  // The opening window carries the draw and the offseason read. It has no
+  // fixtures, so every fixture-driven branch below would miss it — and a batch
+  // that consumed it silently would take the season's opening with it.
+  if (window.type === 'pre_season') {
+    return {
+      seasonNumber,
+      windowIndex,
+      windowLabel: window.label,
+      skipWindows,
+      reason: 'season_open',
+      reasonLabel: '赛季开幕',
+      detail: '抽签结果与赛前展望已就绪，先看完再进入联赛。',
+      blocked: skipWindows === 0,
     };
   }
 

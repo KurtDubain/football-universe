@@ -77,7 +77,11 @@ describe('save compaction', () => {
 
   it('reports separate size categories and bounds metadata without archiving matches', () => {
     let world = initializeGameWorld(99);
-    world = executeCurrentWindow(world).world;
+    // A season opens on a fixture-less window; advance to the first matchday so
+    // there are real results to measure.
+    while (world.seasonState.calendar.flatMap(window => window.results).length === 0) {
+      world = executeCurrentWindow(world).world;
+    }
     world = { ...world, newsLog: Array.from({ length: 250 }, (_, index) => ({
       id: `news-${index}`,
       seasonNumber: 1,

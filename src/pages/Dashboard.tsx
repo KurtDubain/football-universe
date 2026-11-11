@@ -36,7 +36,10 @@ import { formatMoney } from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
-import { describeDashboardAction } from '../engine/observation/dashboard-action';
+import {
+  describeDashboardAction,
+  shouldAutoOpenTransferMarket,
+} from '../engine/observation/dashboard-action';
 import { describeTransferWindowHandoff } from '../engine/transfers/transfer-window-summary';
 import { IcpFiling, SegmentedControl } from '../components/ui';
 import { WorldMomentFeature } from '../components/WorldMomentFeature';
@@ -46,6 +49,7 @@ import { buildObservationTheme } from '../engine/observation/observation-theme';
 import { buildMatchdayNarrativeDigest } from '../engine/observation/narrative-sources';
 import NarrativeDigest from '../components/NarrativeDigest';
 import SeasonNarrativeOverview from '../components/SeasonNarrativeOverview';
+import SeasonOpeningPanel from '../components/SeasonOpeningPanel';
 import { useAdvancePreferences } from '../app/advance-preferences';
 import {
   getCurrentKeyNodeGuard,
@@ -183,22 +187,28 @@ function DashboardContent({ world }: { world: GameWorld }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTick]);
 
+  const currentWindow = getCurrentWindow();
+
   // v20 — auto-redirect to /market when transfer window opens
   useEffect(() => {
-    if (
-      world?.transferWindow?.status === 'open'
-      && window.location.pathname !== '/market'
-      && !lastWorldResponse
-    ) {
+    if (shouldAutoOpenTransferMarket({
+      transferWindowStatus: world?.transferWindow?.status,
+      pathname: window.location.pathname,
+      hasWorldResponse: Boolean(lastWorldResponse),
+      windowType: currentWindow?.type,
+    })) {
       navigate('/market');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world?.transferWindow?.status, lastWorldResponse?.id]);
-
-  const currentWindow = getCurrentWindow();
+  }, [world?.transferWindow?.status, lastWorldResponse?.id, currentWindow?.type]);
+  // The first-observation onboarding belongs to the first window that actually
+  // has a match. Seasons now open on a fixture-less `pre_season` window, so
+  // "index 0" is no longer the same thing as "the opening matchday" — keying off
+  // `totalElapsedWindows` plus a real fixture keeps the 01/02/03 path pointing
+  // at a round it can actually walk through.
   const openingObservation = world.seasonState.seasonNumber === 1
-    && world.seasonState.currentWindowIndex === 0
-    && world.totalElapsedWindows === 0;
+    && world.totalElapsedWindows === 0
+    && (currentWindow?.fixtures.length ?? 0) > 0;
   const transferWindowPresentation = transferWindowHandoff
     ? describeTransferWindowHandoff(transferWindowHandoff)
     : null;
@@ -625,7 +635,7 @@ function DashboardMasthead({
 //  Tab: 比赛日
 // ══════════════════════════════════════════════════════════════════════
 
-function MatchdayTab({
+export function MatchdayTab({
   world,
   currentWindow,
   lastResults,
@@ -726,7 +736,9 @@ function MatchdayTab({
     );
   }
 
-  if (currentWindow.fixtures.length === 0) {
+  // The opening window is fixture-less by design and still has content to
+  // show, so it must not fall into the empty-stage branch.
+  if (currentWindow.fixtures.length === 0 && currentWindow.type !== 'pre_season') {
     return (
       <div className="text-center py-12">
         <p className="text-sm text-slate-500">本阶段无比赛安排</p>
@@ -743,8 +755,8 @@ function MatchdayTab({
     ...narrativeDigest.signals.flatMap(item => item.fixtureIds ?? []),
   ]);
   const isOpeningObservation = world.seasonState.seasonNumber === 1
-    && world.seasonState.currentWindowIndex === 0
-    && world.totalElapsedWindows === 0;
+    && world.totalElapsedWindows === 0
+    && currentWindow.fixtures.length > 0;
   const inspectableKeyNode = currentWindow.fixtures.length > 0
     && isInspectableKeyNode(currentKeyNode)
     ? currentKeyNode
@@ -793,7 +805,11 @@ function MatchdayTab({
         <div className="flex min-h-11 items-center gap-2 border-b border-slate-700/60 px-3 py-2">
           <Icon name="eye" size={16} className="shrink-0 text-emerald-400" />
           <span className="shrink-0 text-xs font-bold text-slate-100">
-            {isOpeningObservation ? '首次观察' : '本轮观察'}
+            {isOpeningObservation
+              ? '首次观察'
+              : currentWindow.type === 'pre_season'
+                ? '开幕'
+                : '本轮观察'}
           </span>
           {isOpeningObservation ? (
             <ol className="opening-observation-path" aria-label="首次观察路线">
@@ -977,39 +993,72 @@ function MatchdayTab({
           </section>
         )}
 
-        <div className="border-t border-slate-700/60 px-3 py-2.5">
-          <Suspense fallback={<div aria-hidden className="h-11 w-full rounded border border-slate-700 bg-slate-900/50" />}>
-            <ObservationPanel
-              world={world}
-              fixtures={focusMatches.length > 0 ? focusMatches.map(entry => entry.fixture) : currentWindow.fixtures.slice(0, 2)}
-              embedded
-              advanceAction={{
-                isAdvancing,
-                label: actionPresentation.label,
-                ariaLabel: actionPresentation.ariaLabel,
-                stageLabel: getWindowTypeLabel(currentWindow.type),
-                onAdvance: () => void advanceWindow(),
+        {currentWindow.type === 'pre_season' ? (
+          // ObservationPanel is built around a match prediction and renders
+          // nothing without a fixture — which would take the advance button
+          // with it. The opening window gets its own control.
+          <div className="border-t border-slate-700/60 px-3 py-2.5">
+            <button
+              type="button"
+              data-testid="season-opening-advance"
+              aria-label="看完开幕内容并进入联赛首轮"
+              aria-busy={isAdvancing}
+              disabled={isAdvancing}
+              onClick={() => {
+                playUiFeedback('advance');
+                void advanceWindow();
               }}
-            />
-          </Suspense>
-        </div>
+              className="ui-action-feedback flex min-h-11 w-full items-center justify-center gap-2 rounded bg-[var(--action)] px-3 text-white transition-colors hover:bg-[var(--action-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)]"
+            >
+              <Icon name="play" size={16} />
+              <span className="text-xs font-semibold">{isAdvancing ? '推进中' : '进入联赛'}</span>
+              <span className="hidden text-[11px] text-white/65 sm:inline">开幕 → 首轮</span>
+            </button>
+          </div>
+        ) : (
+          <div className="border-t border-slate-700/60 px-3 py-2.5">
+            <Suspense fallback={<div aria-hidden className="h-11 w-full rounded border border-slate-700 bg-slate-900/50" />}>
+              <ObservationPanel
+                world={world}
+                fixtures={focusMatches.length > 0 ? focusMatches.map(entry => entry.fixture) : currentWindow.fixtures.slice(0, 2)}
+                embedded
+                advanceAction={{
+                  isAdvancing,
+                  label: actionPresentation.label,
+                  ariaLabel: actionPresentation.ariaLabel,
+                  stageLabel: getWindowTypeLabel(currentWindow.type),
+                  onAdvance: () => void advanceWindow(),
+                }}
+              />
+            </Suspense>
+          </div>
+        )}
       </section>
 
-      <NarrativeDigest
-        digest={narrativeDigest}
-        windowLabel={currentWindow.label}
-        onFixtureClick={openNarrativeFixture}
-      />
+      {currentWindow.type === 'pre_season' ? (
+        // The opening window has no fixtures, so the matchday digest and the
+        // fixture grid would both render empty. The draw and the pre-season
+        // read take their place.
+        <SeasonOpeningPanel world={world} favoriteTeamIds={favoriteTeamIds} />
+      ) : (
+        <>
+          <NarrativeDigest
+            digest={narrativeDigest}
+            windowLabel={currentWindow.label}
+            onFixtureClick={openNarrativeFixture}
+          />
 
-      <FixtureGroupList
-        key={`${world.seasonState.seasonNumber}:${world.seasonState.currentWindowIndex}`}
-        groups={sorted}
-        world={world}
-        primaryTeamId={favoriteTeamId}
-        focusFixtureIds={focusFixtureIds}
-        teamTopScorers={teamTopScorers}
-        onFixtureClick={onFixtureClick}
-      />
+          <FixtureGroupList
+            key={`${world.seasonState.seasonNumber}:${world.seasonState.currentWindowIndex}`}
+            groups={sorted}
+            world={world}
+            primaryTeamId={favoriteTeamId}
+            focusFixtureIds={focusFixtureIds}
+            teamTopScorers={teamTopScorers}
+            onFixtureClick={onFixtureClick}
+          />
+        </>
+      )}
     </div>
   );
 }

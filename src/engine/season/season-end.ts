@@ -1184,12 +1184,23 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     const ratio = total > 0 ? position / total : 1;
 
     // ── Performance-based growth ──
-    if (ratio <= 0.15) {
+    if (position === 1) {
+      // Winning the division has to be worth more than the drift a strong
+      // club pays every season. The old ladder had a single top bracket,
+      // `ratio <= 0.15` → +1..+2, so a champion earned exactly what a
+      // mid-table top-15% finish earned. A club at OVR 90 then needed to
+      // win roughly one season in three just to hold station, against an
+      // expected title rate of one in sixteen.
+      //
+      // Keyed on position rather than ratio so the bonus means the same
+      // thing in a 16-team top flight and an 8-team third tier.
+      base.overall = Math.min(97, base.overall + rng.nextInt(3, 4));
+    } else if (ratio <= 0.15) {
       base.overall = Math.min(97, base.overall + rng.nextInt(1, 2));
     } else if (ratio <= 0.35) {
       base.overall = Math.min(97, base.overall + rng.nextInt(0, 1));
     } else if (ratio >= 0.85) {
-      const declineMax = base.overall > 60 ? 2 : 1;
+      const declineMax = base.overall > 60 ? 3 : 2;
       base.overall = Math.max(38, base.overall - rng.nextInt(1, declineMax));
     } else if (ratio >= 0.7) {
       if (base.overall > 50) {
@@ -1208,7 +1219,12 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
 
     // ── Mean reversion: gentle pull, skip teams that just won ──
-    const leagueMean = 65;
+    // The target has to track the real population. At 65 it sat sixteen
+    // points below the measured mean of 81.4, so every club above 85 was
+    // dragged down about 0.21 a season. With year-over-year correlation of
+    // 0.982 nothing pushed clubs apart again, and the top flight compressed
+    // from sd 6.7 to 3.6 across 150 seasons.
+    const leagueMean = 81;
     const distFromMean = base.overall - leagueMean;
     if (Math.abs(distFromMean) > 20 && ratio > 0.15) {
       const pullChance = Math.min(0.4, Math.abs(distFromMean) / 120);
@@ -1256,8 +1272,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
 
     // Strong teams have a chance of "internal turmoil"
-    if (base.overall >= 87 && rng.next() < 0.10) {
-      const drop = rng.nextInt(2, 4);
+    // A 10% chance of a small drop taxed every strong club by 0.30 a season,
+    // which compressed the whole top flight. A rarer, sharper shock keeps
+    // the drama but spreads clubs apart instead of levelling them.
+    if (base.overall >= 87 && rng.next() < 0.04) {
+      const drop = rng.nextInt(4, 8);
       base.overall = Math.max(70, base.overall - drop);
       base.attack = Math.max(60, base.attack - rng.nextInt(1, 2));
       base.stability = Math.max(50, base.stability - rng.nextInt(1, 3));

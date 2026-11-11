@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initializeGameWorld } from '../engine/season/season-manager';
+import { pastSeasonOpening } from '../engine/season/test-world';
 import { __flushCompressedStorageForTests, compressedStorage, replaceCompressedStorageItem } from './compressed-storage';
 import { useGameStore } from './game-store';
 import { exportCurrentSave, importCurrentSave } from './save-backup';
@@ -64,6 +65,9 @@ describe('game store current-save persistence', () => {
 
   it('does not duplicate result/news batches and reconstructs them on hydration', async () => {
     await useGameStore.getState().newGame(13579);
+    // The season opens on a fixture-less window, so results only exist from
+    // the first matchday on.
+    useGameStore.setState({ world: pastSeasonOpening(useGameStore.getState().world!) });
     await useGameStore.getState().advanceWindow();
     const resultCount = useGameStore.getState().lastResults.length;
     expect(resultCount).toBeGreaterThan(0);
@@ -105,7 +109,9 @@ describe('game store current-save persistence', () => {
 
   it('preserves a pending observation and its bounded lifetime record', async () => {
     await useGameStore.getState().newGame(20260722);
-    const world = useGameStore.getState().world!;
+    // A judgment has to point at a real fixture, so stand on the first matchday.
+    const world = pastSeasonOpening(useGameStore.getState().world!);
+    useGameStore.setState({ world });
     const fixtureId = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures[0].id;
     useGameStore.getState().setObservationJudgment(fixtureId, 'goals', 'over-2');
     useGameStore.setState({

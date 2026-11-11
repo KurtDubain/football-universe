@@ -11,6 +11,12 @@ import {
 } from '../src/engine/season/storylines';
 
 const seedCount = Number.parseInt(process.env.STORYLINE_AUDIT_SEEDS ?? '12', 10);
+// Assertions below encode the subtraction: a quieter engine that still speaks.
+const MIN_AVERAGE_STORIES = 2;
+const MAX_AVERAGE_STORIES = 5;
+const MIN_SEASON_SPREAD = 2;
+const MAX_CRISIS_PRESENCE = 0.7;
+const MIN_DARK_HORSE_JUDGED_SHARE = 0.5;
 const seasonsPerSeed = Number.parseInt(process.env.STORYLINE_AUDIT_SEASONS ?? '3', 10);
 if (!Number.isInteger(seedCount) || seedCount < 1 || !Number.isInteger(seasonsPerSeed) || seasonsPerSeed < 1) {
   throw new Error('Storyline audit seed and season counts must be positive integers.');
@@ -28,6 +34,8 @@ const counts = Object.fromEntries(storyTypes.map(type => [type, 0])) as Record<S
 const outcomeCounts = Object.fromEntries(storyTypes.flatMap(type => outcomes.map(outcome => (
   [`${type}:${outcome}`, 0]
 )))) as Record<`${StorylineType}:${StorylineOutcome}`, number>;
+const unjudgedCounts = Object.fromEntries(storyTypes.map(type => [type, 0])) as Record<StorylineType, number>;
+const presence = Object.fromEntries(storyTypes.map(type => [type, 0])) as Record<StorylineType, number>;
 const seasonTotals: number[] = [];
 const violations: string[] = [];
 let maxActive = 0;
@@ -59,8 +67,10 @@ for (let seedOffset = 1; seedOffset <= seedCount; seedOffset++) {
         violations.push(`S${seasonNumber} seed ${seed}: ${typeStories.length} ${type} stories`);
       }
       counts[type] += typeStories.length;
+      if (typeStories.length > 0) presence[type]++;
       for (const story of typeStories) {
         if (story.outcome) outcomeCounts[`${type}:${story.outcome}`]++;
+        else unjudgedCounts[type]++;
       }
     }
   }
@@ -69,17 +79,52 @@ for (let seedOffset = 1; seedOffset <= seedCount; seedOffset++) {
 const totalSeasons = seasonTotals.length;
 const averageStories = seasonTotals.reduce((total, count) => total + count, 0)
   / Math.max(1, totalSeasons);
-if (counts.unbeaten_run < totalSeasons || counts.unbeaten_run > totalSeasons * 2) {
-  violations.push(`Unbeaten story frequency ${counts.unbeaten_run}/${totalSeasons} is outside 1-2 per season.`);
+const minStories = Math.min(...seasonTotals);
+const maxStories = Math.max(...seasonTotals);
+
+// The per-season cap itself is enforced per season above; the average has
+// its own threshold below, so there is nothing to check here.
+// Quieter is the goal, silent is a bug.
+if (averageStories < MIN_AVERAGE_STORIES) {
+  violations.push(`Average story frequency ${averageStories.toFixed(2)} fell below ${MIN_AVERAGE_STORIES}; the engine stopped narrating.`);
 }
-if (counts.cup_giant_killer < Math.max(1, Math.floor(totalSeasons * 0.1))) {
-  violations.push(`Cup giant-killer frequency ${counts.cup_giant_killer}/${totalSeasons} is too low.`);
+
+// The subtraction itself: the old engine emitted 7.4-7.5 stories every season.
+if (averageStories > MAX_AVERAGE_STORIES) {
+  violations.push(`Average story frequency ${averageStories.toFixed(2)} is back above ${MAX_AVERAGE_STORIES}; the season review is crowding again.`);
 }
-if (averageStories < 4 || averageStories > MAX_STORYLINES_PER_SEASON) {
-  violations.push(`Average story frequency ${averageStories.toFixed(2)} is outside the 4-${MAX_STORYLINES_PER_SEASON} target.`);
+
+// Event-driven, not scheduled. A quota-bound engine produces identical
+// seasons; the old one emitted 7.4-7.5 stories every single season.
+if (maxStories - minStories < MIN_SEASON_SPREAD) {
+  violations.push(`Season story counts span only ${minStories}-${maxStories}; stories look scheduled rather than event-driven.`);
 }
-for (const type of ['dark_horse', 'giant_crisis', 'promoted_survival'] as const) {
-  if (counts[type] === 0) violations.push(`Existing story family ${type} disappeared from the audit.`);
+
+// Every family must still appear somewhere in the audit.
+for (const type of storyTypes) {
+  if (counts[type] === 0) violations.push(`Story family ${type} disappeared from the audit.`);
+}
+
+// giant_crisis used to record a hardcoded success on 67-71% of its
+// closures. It now only opens for a giant in the direct relegation places,
+// so it must be genuinely occasional.
+const crisisPresence = presence.giant_crisis / Math.max(1, totalSeasons);
+if (crisisPresence >= MAX_CRISIS_PRESENCE) {
+  violations.push(`giant_crisis appeared in ${Math.round(crisisPresence * 100)}% of seasons; a giant in the relegation places should be rare.`);
+}
+
+// A dark horse that opens should be a real one. Most must reach a season
+// verdict rather than quietly stop being tracked: the old gate opened on
+// noise and 85-91% of its stories died unjudged.
+//
+// Skipped when the family never appeared at all: the disappearance check
+// above already covers that, and a share over an empty sample is just 0%.
+if (counts.dark_horse > 0) {
+  const darkHorseJudgedShare = (counts.dark_horse - unjudgedCounts.dark_horse)
+    / counts.dark_horse;
+  if (darkHorseJudgedShare < MIN_DARK_HORSE_JUDGED_SHARE) {
+    violations.push(`Only ${Math.round(darkHorseJudgedShare * 100)}% of dark_horse stories reached a season verdict; the trigger is opening on noise.`);
+  }
 }
 
 const report = {
@@ -90,8 +135,10 @@ const report = {
   counts,
   outcomeCounts,
   averageStories: Math.round(averageStories * 100) / 100,
-  minStories: Math.min(...seasonTotals),
-  maxStories: Math.max(...seasonTotals),
+  minStories,
+  maxStories,
+  presence,
+  unjudgedCounts,
   maxActive,
   violations,
 };

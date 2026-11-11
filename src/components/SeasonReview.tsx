@@ -20,7 +20,7 @@ import {
 } from '../engine/players/player-stat-selectors';
 import { leagueGoalsOf } from '../engine/players/player-stat-fields';
 import { AWARD_META } from '../engine/awards/season-awards';
-import type { StorylineType } from '../engine/season/storylines';
+import type { StorylineOutcome, StorylineType } from '../engine/season/storylines';
 import type {
   ObserverSeasonCheckpoint,
   ObserverSeasonTrajectory,
@@ -55,7 +55,11 @@ const STORYLINE_META: Record<StorylineType, { label: string; icon: IconName; col
   cup_giant_killer: { label: '杯赛巨人杀手', icon: 'trophy', color: 'text-amber-300' },
 };
 
-function storylineOutcomeLabel(type: StorylineType, succeeded: boolean): string {
+function storylineOutcomeLabel(type: StorylineType, outcome: StorylineOutcome | undefined): string {
+  // An unjudged thread stopped being tracked before the season could rule on
+  // it, so it must not borrow a success or failure word.
+  if (!outcome) return '未判定';
+  const succeeded = outcome === 'success';
   if (type === 'dark_horse') return succeeded ? '兑现' : '回落';
   if (type === 'giant_crisis') return succeeded ? '化解' : '延续';
   if (type === 'promoted_survival') return succeeded ? '保级' : '降级';
@@ -63,8 +67,9 @@ function storylineOutcomeLabel(type: StorylineType, succeeded: boolean): string 
   return succeeded ? '成章' : '止步';
 }
 
-function storylineOutcomeClass(type: StorylineType, succeeded: boolean): string {
-  if (succeeded) return 'bg-emerald-950/70 text-emerald-300';
+function storylineOutcomeClass(type: StorylineType, outcome: StorylineOutcome | undefined): string {
+  if (!outcome) return 'bg-slate-800/70 text-slate-400';
+  if (outcome === 'success') return 'bg-emerald-950/70 text-emerald-300';
   if (type === 'unbeaten_run') return 'bg-sky-950/60 text-sky-300';
   if (type === 'cup_giant_killer') return 'bg-amber-950/60 text-amber-300';
   return 'bg-red-950/60 text-red-300';
@@ -277,9 +282,9 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
                         <span className={`shrink-0 text-[11px] ${meta.color}`}>{meta.label}</span>
                         <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] ${storylineOutcomeClass(
                           storyline.type,
-                          storyline.outcome === 'success',
+                          storyline.outcome,
                         )}`}>
-                          {storylineOutcomeLabel(storyline.type, storyline.outcome === 'success')}
+                          {storylineOutcomeLabel(storyline.type, storyline.outcome)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs leading-5 text-slate-400">{archivedStoryConclusion(storyline.conclusion)}</p>

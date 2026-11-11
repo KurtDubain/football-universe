@@ -3,7 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initializeGameWorld } from '../engine/season/season-manager';
+import { firstMatchdayWorld } from '../engine/season/test-world';
 import { useGameStore } from '../store/game-store';
 import ObservationPanel from './ObservationPanel';
 
@@ -17,7 +17,8 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  const world = initializeGameWorld(20260718);
+  // The first matchday, not the fixture-less season-opening window.
+  const world = firstMatchdayWorld(20260718);
   useGameStore.setState({ world });
 });
 
@@ -33,7 +34,7 @@ describe('ObservationPanel dashboard action flow', () => {
     act(() => root.render(
       <ObservationPanel
         world={world}
-        fixtures={world.seasonState.calendar[0].fixtures.slice(0, 2)}
+        fixtures={world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures.slice(0, 2)}
         embedded
         advanceAction={{
           isAdvancing: false,
@@ -59,7 +60,7 @@ describe('ObservationPanel dashboard action flow', () => {
     act(() => root.render(
       <ObservationPanel
         world={world}
-        fixtures={world.seasonState.calendar[0].fixtures.slice(0, 2)}
+        fixtures={world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures.slice(0, 2)}
         embedded
         advanceAction={{
           isAdvancing: false,

@@ -36,9 +36,10 @@ function cupFixturesToMatchFixtures(
 }
 
 /**
- * Build the complete season calendar with ~49 windows.
+ * Build the complete season calendar with ~50 windows.
  *
  * Layout:
+ * - Season opening (no fixtures — draws and pre-season context)
  * - 30 top league rounds interleaved with 14 mid/low rounds
  * - 5 league cup rounds inserted between league windows
  * - 6 super cup group rounds inserted between league windows
@@ -176,6 +177,24 @@ export function buildSeasonCalendar(input: CalendarBuildInput): CalendarWindow[]
   }
 
   // === Build the calendar ===
+
+  // The season opens before a ball is kicked. This window carries no fixtures:
+  // the draw and the pre-season read are derived from world state at render
+  // time by `buildSeasonOpening`, and its window handler must not touch the
+  // RNG, so adding it leaves every seeded match result unchanged.
+  windows.push({
+    id: windowId++,
+    type: 'pre_season',
+    label: '赛季开幕',
+    description: `第${seasonNumber}赛季 抽签揭晓与赛前展望`,
+    fixtures: [],
+    completed: false,
+    results: [],
+  });
+
+  // The `Wn` markers below name competition stages from the original layout.
+  // They now sit one index later than the window id, because the opening
+  // window takes id 0. They label the stage, not the position.
 
   // W0: League R1 (all tiers)
   addLeagueWindow(); // topR1 + midR1 + lowR1
