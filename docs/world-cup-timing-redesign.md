@@ -2,9 +2,9 @@
 
 创建日期：2026-11-11
 
-> 状态：设计阶段，未实现。本文件所有代码块均为方案示意，不代表仓库现状。当前状态以 [\`current-status.md](\`current-status.md) 为准。
+> 状态：阶段 1–3 已实现于分支 \`fix/records-ties-and-bugs\`，阶段 4–5 未开始。本文件第 4–6 节的代码块为方案示意，与实现有若干已记录偏差（见 0.1）；第 7–8 节仍是纯方案。当前状态以 [\`current-status.md\`](\`current-status.md\`) 为准。
 >
-> **依赖关系**：\`rating-and-records-redesign.md\` 阶段 C 的 \`wonWorldCup\` 乘子依赖本方案完成。在本方案落地前，该乘子拿不到数据。
+> **依赖关系**：\`rating-and-records-redesign.md\` 阶段 C 的 \`wonWorldCup\` 乘子依赖本方案阶段 3。阶段 3 已落地，该乘子现已生效。
 
 这份方案把环球冠军杯从“赛季结算之后的尾巴”改为“赛季之内的收官赛事”，使世界杯冠军能够参与当季评奖、荣誉与档案记录。**不改变赛事规模、赛制、分档规则或东道主选择逻辑。**
 
@@ -12,13 +12,22 @@
 
 ## 0. 完成记录
 
-- [ ] 阶段 1：日历插入函数与窗口编号重排。
-- [ ] 阶段 2：世界杯初始化时机前移至赛季构建期。
-- [ ] 阶段 3：评奖、荣誉与档案在世界杯决赛后统一结算。
+- [x] 阶段 1：日历插入函数与窗口编号重排。→ `ab4102a`
+- [x] 阶段 2：世界杯初始化时机前移至赛季构建期。
+- [x] 阶段 3：评奖、荣誉与档案在世界杯决赛后统一结算。
 - [ ] 阶段 4：删除 \`finalizeWorldCup\` 回补逻辑与 \`worldCupPhase\` 字段。
 - [ ] 阶段 5：存档迁移与回归验证。
 
-已完成的准备工作：`rating-and-records-redesign.md` 阶段 C 的 `wonWorldCup` 乘子已按"赛事未完成则不生效"实现（`ballon-dor.ts` 读 `worldCup.completed`），且 `season-end.ts` 调用处显式传 `null` 而非 `world.worldCup`——后者此刻仍是上一届赛事。本方案阶段 3 完成后，只需把该实参改为当季赛事即可激活乘子，无需改动 `ballon-dor.ts`。
+阶段 2 与 3 合并为一次提交，见 0.1 的第一条。
+
+### 0.1 实现与方案的偏差
+
+- **阶段 2 与 3 必须合并落地**。方案把它们拆开，但阶段 2 一旦让 `worldCupPhase` 恒为 false，`season-manager.ts` 里 `if (isSeasonDone && worldCupPhase)` 的分支就永不触发，`finalizeWorldCup` 不再被调用——世界杯奖金会整条丢失。只做阶段 2 会引入一个比原问题更严重的回归。
+- **过渡守卫取代阶段 5 的存档迁移决策**。方案 8.2 要求作者在「回退重结算」与「允许打完」之间选择。实现改为在 `handleSeasonEnd` 末尾判断：世界杯年的日历里若已含世界杯窗口，走新路径；否则判定为改造前建立的存档，仍走 `initializeWorldCup` 旧路径。旧档因此完全不受影响，无需迁移，也无需现在做那个决策。阶段 4 删除旧路径时才需要它。
+- **东道主公布时机原本就没问题**。方案 2.4 与 5.3 称「东道主在赛季结算后才公布，玩家整季无感知」——核查后不成立：`initializeNewSeason` 早已调用 `ensureWorldCupEdition` 并在 windowIndex 0 推送 `world-cup-host-S{N}` 新闻。本次只补了分组抽签新闻（`draw-wc-S{N}`）。
+- **分档提前一季**。旧路径在赛季 N 结算后取当季 `teamBases` 分档；新路径在赛季 N 开始时取值，即上赛季结算后的 overall。收官赛事不可能用自己这一季的最终数据分档，这是时序改造的必然漂移，已在方案 5.4 的「需决策」中记录为接受。
+- **`worldCupResult` 的兜底值由 `'参赛中'` 改为 `'参赛'`**，并要求 `worldCup.completed` 才写入。新时序下决赛先于结算，`'参赛中'` 这个僵尸状态不复存在；测试断言全部 32 队都有确定值且不含 `'参赛中'`。
+- **`finalizeWorldCup` 与 `initializeWorldCup` 保留为 legacy 路径**，标注了适用范围，等阶段 4/5 再删。`appendWorldCupWindows` 同样保留（见阶段 1 提交）。
 
 ## 1. 问题确认
 
@@ -136,7 +145,7 @@ export function selectWorldCupParticipants(allTeamIds, teamOveralls): string[] {
 
 东道主由 \`ensureWorldCupEdition\` → \`selectWorldCupHost\` 选出：洲际轮换（承办次数最少的大洲优先）+ 排除上届大洲 + 排除近三届东道主 + 不看能力/声望/级别。
 
-**当前问题**：东道主在赛季结算后才公布，\`announcedSeasonNumber = seasonNumber\`，玩家整季无感知。
+~~**当前问题**：东道主在赛季结算后才公布，玩家整季无感知。~~ **核查后撤回**：\`initializeNewSeason\` 早已在赛季构建期调用 \`ensureWorldCupEdition\`，并在 windowIndex 0 推送东道主新闻，玩家从第一轮就能看到。这一项无需改动，只需补上分组抽签新闻。
 
 ## 3. 目标时序
 
@@ -263,7 +272,7 @@ handleSeasonEnd (W54)
 
 ### 5.3 东道主公布时机
 
-\`ensureWorldCupEdition\` 的 \`announcedSeasonNumber = seasonNumber\` 语义保持不变，但调用点前移后，玩家从赛季第一轮就能看到东道主身份。
+\`ensureWorldCupEdition\` 的 \`announcedSeasonNumber = seasonNumber\` 语义保持不变。东道主公布本来就在赛季构建期（见 2.4 的更正），本阶段只需把分组抽签新闻一并移到赛季开始。
 
 \`selectWorldCupHost\` 依赖 \`editions\` 历史与 \`teamBases.region\`，两者在赛季开始时均已就绪，**无需修改选择逻辑**。
 

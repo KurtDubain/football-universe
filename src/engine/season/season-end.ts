@@ -1,15 +1,19 @@
-import { SeasonState } from '../../types/season';
+import { SeasonState, CalendarWindow } from '../../types/season';
 import { retainPlayerArchives } from '../players/retirement-archive';
 import { SeasonRecord } from '../../types/team';
 import { CoachBase } from '../../types/coach';
 import { StandingEntry } from '../../types/league';
-import { CupFixture, CupRound } from '../../types/cup';
+import { CupRound } from '../../types/cup';
 import { PlayerSeasonStats } from '../../types/player';
 import { SeededRNG } from '../match/rng';
 import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
 import { checkAchievements } from '../achievements';
-import { selectWorldCupParticipants, initWorldCup } from '../cups/world-cup';
+import {
+  selectWorldCupParticipants,
+  initWorldCup,
+  getWorldCupGroupRoundFixtures,
+} from '../cups/world-cup';
 import { completeWorldCupEdition, ensureWorldCupEdition } from '../cups/world-cup-host';
 import { getAllTeamIds, createNewsId, cnRoundLabel } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
@@ -36,8 +40,8 @@ import {
   formatMoney,
   attributeCupPrizes,
   WORLD_CUP_TIERS,
+  emptyFinanceBreakdown,
 } from '../economy/finance';
-import { worldCupConfig } from '../../config/competitions';
 import { getLeagueName } from '../../utils/format';
 
 /**
@@ -404,11 +408,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       continentalCupWinners: [mainlandCupWinner, southernCupWinner, easternCupWinner]
         .filter((id): id is string => Boolean(id)),
     },
-    // No World Cup on purpose. `initializeWorldCup` runs at the very end of
-    // this function, so at award time `world.worldCup` still holds the
-    // PREVIOUS edition — passing it would credit last cycle's winner with this
-    // season's Ballon d'Or. The timing redesign supplies the live tournament.
-    null,
+    // The tournament now closes the season, so this is the live edition and
+    // its winner is eligible for the world cup multiplier.
+    world.worldCup,
   );
   for (const award of seasonAwards) {
     const meta = AWARD_META[award.type];
@@ -891,8 +893,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       }
     }
 
-    // World cup
-    if (world.worldCup) {
+    // World cup. The tournament closes the season, so by settlement every
+    // branch resolves. The old post-season timing could leave a team recorded
+    // as '参赛中' permanently, because the bracket had not resolved yet when
+    // the season record was written.
+    if (world.worldCup?.completed) {
       if (teamId === worldCupWinner) worldCupResult = '冠军';
       else if (world.worldCup.participantIds.includes(teamId)) {
         const wcFinal = world.worldCup.knockoutRounds.at(-1);
@@ -904,13 +909,11 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
           const elimRound = findTeamEliminationRound(world.worldCup.knockoutRounds, teamId);
           if (elimRound) {
             worldCupResult = cnRoundLabel(elimRound);
-          } else if (world.worldCup.completed) {
+          } else {
             const inAnyKO = world.worldCup.knockoutRounds.some(r =>
               r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
             );
-            worldCupResult = inAnyKO ? '参赛中' : '小组赛淘汰';
-          } else {
-            worldCupResult = '参赛中';
+            worldCupResult = inAnyKO ? '参赛' : '小组赛淘汰';
           }
         }
       }
@@ -1316,6 +1319,67 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   }
   coachBases = agedCoachBases;
 
+  // ── World cup prize money + edition record ───────────────────
+  // The tournament now closes the season, so its bracket is already settled
+  // when income lands and the prize belongs in the normal breakdown.
+  //
+  // Previously this had to be patched onto the just-archived finance record by
+  // `finalizeWorldCup`, because the world cup ran in windows appended after
+  // settlement — and before that fix existed the prize silently vanished in
+  // every world cup year.
+  let worldCupEditions = world.worldCupEditions;
+  if (worldCupWinner && world.worldCup?.completed) {
+    const wcFinal = world.worldCup.knockoutRounds.at(-1)?.fixtures[0];
+    const worldCupRunnerUp = wcFinal
+      ? (wcFinal.homeTeamId === worldCupWinner ? wcFinal.awayTeamId : wcFinal.homeTeamId)
+      : undefined;
+
+    worldCupEditions = completeWorldCupEdition(
+      world.worldCupEditions,
+      world.worldCup,
+      seasonNumber,
+      worldCupWinner,
+      worldCupRunnerUp,
+    );
+
+    const winnerName = world.teamBases[worldCupWinner]?.name ?? worldCupWinner;
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, 'trophy-world-cup'),
+      seasonNumber, windowIndex, type: 'trophy',
+      importance: 'major',
+      title: `${winnerName} 夺得环球冠军杯冠军！`,
+      description: `${winnerName} 在第${seasonNumber}届环球冠军杯决赛中胜出，登上世界之巅。`,
+    });
+
+    // Sorted by amount so the news log surfaces the winner first.
+    const wcPrizes = attributeCupPrizes(world.worldCup.knockoutRounds, WORLD_CUP_TIERS);
+    for (const [teamId, amount] of Object.entries(wcPrizes).sort((a, b) => b[1] - a[1])) {
+      const fin = teamFinances[teamId];
+      const currentBreakdown = financeBreakdown[teamId];
+      if (!fin || !currentBreakdown || amount <= 0) continue;
+
+      teamFinances[teamId] = { ...fin, cash: fin.cash + amount };
+      financeBreakdown[teamId] = addFinanceBreakdown(
+        currentBreakdown,
+        { ...emptyFinanceBreakdown(), prizeMoney: amount },
+      );
+
+      let role = '参赛';
+      if (teamId === worldCupWinner) role = '冠军';
+      else if (teamId === worldCupRunnerUp) role = '亚军';
+      else if (amount >= CUP_PRIZE.world_cup_semi) role = '四强';
+      else if (amount >= CUP_PRIZE.world_cup_qf) role = '八强';
+      else if (amount >= CUP_PRIZE.world_cup_r16) role = '16强';
+      const teamName = world.teamBases[teamId]?.name ?? teamId;
+      news.push({
+        id: createNewsId(seasonNumber, windowIndex, `wc-prize-${teamId}`),
+        seasonNumber, windowIndex, type: 'prize_money',
+        title: `${teamName} 环球冠军杯${role}奖金 ${formatMoney(amount)}`,
+        description: `${teamName} 在第${seasonNumber}届环球冠军杯打入${role}，收获 ${formatMoney(amount)} 奖金。`,
+      });
+    }
+  }
+
   // ── Phase H: Archive finance — push the season's totals to history ──
   // and reset the running totalIncome / totalExpense counters. Cash carries
   // forward unchanged. We do this LAST so all flows from this season
@@ -1339,6 +1403,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     coachTrophies,
     teamSeasonRecords,
     honorHistory,
+    worldCupEditions,
     achievements,
     prediction,
     predictionHistory,
@@ -1372,16 +1437,28 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     rngState: rng.getState(),
   };
 
-  // Check for world cup year — caller handles the transition
-  if (seasonState.isWorldCupYear) {
+  // Legacy saves only. A world cup year whose calendar carries no world cup
+  // windows was built before the timing redesign, so its tournament still has
+  // to be created after settlement. Seasons built by the current code insert
+  // the windows up front and never reach this branch.
+  if (seasonState.isWorldCupYear && !hasWorldCupWindows(seasonState.calendar)) {
     return initializeWorldCup(updatedWorld);
   }
 
   return updatedWorld;
 }
 
+/** True when the season's calendar already contains the tournament. */
+function hasWorldCupWindows(calendar: CalendarWindow[]): boolean {
+  return calendar.some(w => w.type === 'world_cup' || w.type === 'world_cup_group');
+}
+
 /**
  * Initialize the world cup phase after a world cup year season ends.
+ *
+ * Legacy path: only reached by saves whose calendar predates the timing
+ * redesign. New seasons build the tournament in `initializeNewSeason` and
+ * insert its windows before the season-end window.
  */
 export function initializeWorldCup(world: GameWorld): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
@@ -1405,19 +1482,7 @@ export function initializeWorldCup(world: GameWorld): GameWorld {
   // Initialize world cup
   const worldCup = initWorldCup(participants, seasonNumber, rng, hostPlan.edition.hostTeamId);
 
-  // Get group fixtures for all 3 neutral single-round-robin rounds.
-  const groupRoundFixtures: CupFixture[][] = [];
-  for (let r = 1; r <= worldCupConfig.groupRounds; r++) {
-    const roundFixtures: CupFixture[] = [];
-    for (const group of worldCup.groups) {
-      for (const fixture of group.fixtures) {
-        if (fixture.round === r) {
-          roundFixtures.push(fixture);
-        }
-      }
-    }
-    groupRoundFixtures.push(roundFixtures);
-  }
+  const groupRoundFixtures = getWorldCupGroupRoundFixtures(worldCup);
 
   // Append world cup windows to the calendar
   const calendar = appendWorldCupWindows(

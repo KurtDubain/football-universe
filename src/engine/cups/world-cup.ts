@@ -3,6 +3,7 @@ import { StandingEntry } from '../../types/league';
 import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 import { drawGroups } from './draw';
+import { worldCupConfig } from '../../config/competitions';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,6 +168,20 @@ export function initWorldCup(
     participantIds,
     ...(hostTeamId ? { hostTeamId } : {}),
   };
+}
+
+/**
+ * Group the drawn group-stage fixtures by round, in calendar order.
+ *
+ * Shared by the in-season calendar build and the legacy post-season path so
+ * both lay the tournament out identically.
+ */
+export function getWorldCupGroupRoundFixtures(state: WorldCupState): CupFixture[][] {
+  const rounds: CupFixture[][] = [];
+  for (let round = 1; round <= worldCupConfig.groupRounds; round++) {
+    rounds.push(state.groups.flatMap(group => group.fixtures.filter(f => f.round === round)));
+  }
+  return rounds;
 }
 
 /**

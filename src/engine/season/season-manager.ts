@@ -17,13 +17,18 @@ import { initLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { initSuperCup, getSuperCupGroupFixtures } from '../cups/super-cup';
 import { continentalCupWindowCount, initContinentalCup } from '../cups/continental-cup';
 import { ensureWorldCupEdition } from '../cups/world-cup-host';
+import {
+  selectWorldCupParticipants,
+  initWorldCup,
+  getWorldCupGroupRoundFixtures,
+} from '../cups/world-cup';
 import { generateAllSquads } from '../players/generator';
 import {
   createInitialPlayerStatSegments,
   createInitialPlayerStats,
   updatePlayerStatsAndSegmentsFromResults,
 } from '../players/stats';
-import { buildSeasonCalendar, CalendarBuildInput } from './calendar-builder';
+import { buildSeasonCalendar, insertWorldCupWindows, CalendarBuildInput } from './calendar-builder';
 import { getTeamIdsByLeague, getAllTeamIds, createNewsId } from './helpers';
 import { defaultTeams, createInitialTeamStates } from '../../config/teams';
 import { defaultCoaches, defaultCoachAssignments, createInitialCoachStates } from '../../config/coaches';
@@ -728,7 +733,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
         .map(continentalCupWindowCount),
     ),
   };
-  const calendar = buildSeasonCalendar(calendarInput);
+  const baseCalendar = buildSeasonCalendar(calendarInput);
 
   // Create initial standings
   const league1Standings = createInitialStandings(l1Teams);
@@ -747,6 +752,31 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     )
     : null;
   const worldCupEditions = worldCupPlan?.editions ?? world.worldCupEditions ?? [];
+
+  // A world cup year closes with the tournament, so its windows belong to this
+  // season's calendar and its winner exists before settlement — which is what
+  // lets awards, honours, team archives and prize money see it at all.
+  //
+  // Pots are seeded from `world.teamBases`, the overalls left by last season's
+  // settlement. The old post-season path seeded them at the end of the season
+  // the tournament followed, so the draw now reads one season earlier: a
+  // tournament that closes a season cannot be seeded by that same season's
+  // final numbers.
+  const teamOveralls: Record<string, number> = {};
+  for (const teamId of allTeamIds) {
+    teamOveralls[teamId] = world.teamBases[teamId]?.overall ?? 0;
+  }
+  const worldCup = isWorldCupYear
+    ? initWorldCup(
+      selectWorldCupParticipants(allTeamIds, teamOveralls),
+      seasonNumber,
+      rng,
+      worldCupPlan?.edition.hostTeamId,
+    )
+    : null;
+  const calendar = worldCup
+    ? insertWorldCupWindows(baseCalendar, seasonNumber, getWorldCupGroupRoundFixtures(worldCup))
+    : baseCalendar;
 
   const seasonState: SeasonState = {
     seasonNumber,
@@ -772,6 +802,19 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
       importance: 'major',
       title: `第${seasonNumber}赛季环球冠军杯主办地揭晓`,
       description: `${host?.name ?? worldCupPlan.edition.hostTeamId}成为本届东道主。全部32队仍将参赛，比赛保持中立场规则；东道主在自己的比赛中获得4%赛会氛围加成。`,
+    });
+  }
+
+  if (worldCup) {
+    const wcGroupInfo = worldCup.groups
+      .map(g => `${g.groupName}组: ${g.teamIds.map(id => world.teamBases[id]?.name?.slice(0, 3) ?? id).join('/')}`)
+      .join(' | ');
+    drawNews.push({
+      id: `draw-wc-S${seasonNumber}`,
+      seasonNumber, windowIndex: 0, type: 'trophy',
+      importance: 'major',
+      title: `环球冠军杯分组抽签揭晓`,
+      description: `本届赛事全部比赛按中立场计算，东道主在自己的比赛中获得4%赛会氛围加成。${wcGroupInfo}`,
     });
   }
 
@@ -897,7 +940,7 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     league3Standings,
     leagueCup,
     superCup,
-    worldCup: null,
+    worldCup,
     worldCupEditions,
     continentalCups,
     coachChangesThisSeason: [],

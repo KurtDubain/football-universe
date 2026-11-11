@@ -7,6 +7,7 @@ import {
   type NewsItem,
 } from './season-manager';
 import { defaultTeams } from '../../config/teams';
+import { CUP_PRIZE } from '../economy/finance';
 import { playerTeamStatKey } from '../players/stats';
 import { validateWorldData } from '../validation/world-data';
 import type { StandingEntry } from '../../types/league';
@@ -540,28 +541,38 @@ describe('executeCurrentWindow', () => {
 
   it('refreshes World Cup season stats without replacing the pre-aging identity', () => {
     let world = initializeGameWorld(20260720);
-    while (world.seasonState.seasonNumber < 4 || getCurrentWindow(world)?.type !== 'season_end') {
+    // The tournament now closes the season, so it exists from the first window
+    // of a world cup year: the host is announced before a ball is kicked.
+    while (world.seasonState.seasonNumber < 4 || getCurrentWindow(world)?.type !== 'world_cup_group') {
       world = executeCurrentWindow(world).world;
     }
     const announcedEdition = world.worldCupEditions?.find(edition => edition.seasonNumber === 4);
     expect(announcedEdition?.hostTeamId).toBeTruthy();
     expect(world.newsLog.some(item => item.id === 'world-cup-host-S4')).toBe(true);
-    const identityByPlayer = new Map(Object.values(world.squads).flat().map(player => [
-      player.uuid,
-      { age: player.age, rating: player.rating },
-    ]));
-    const domesticInput = world;
-    const domesticBefore = structuredClone(domesticInput);
-    world = executeCurrentWindow(domesticInput).world;
-    expect(domesticInput).toEqual(domesticBefore);
-    expect(world.squads).not.toBe(domesticInput.squads);
-    expect(world.seasonState.calendar.filter(window => window.type === 'world_cup_group')).toHaveLength(3);
-    expect(world.seasonState.calendar.filter(window => window.type === 'world_cup')).toHaveLength(4);
+    expect(world.newsLog.some(item => item.id === 'draw-wc-S4')).toBe(true);
+
+    // The windows belong to this season and precede settlement, which is what
+    // lets awards, honours, archives and prize money see the winner.
+    const season4Calendar = world.seasonState.calendar;
+    const seasonEndIdx = season4Calendar.findIndex(window => window.type === 'season_end');
+    expect(season4Calendar.filter(window => window.type === 'world_cup_group')).toHaveLength(3);
+    expect(season4Calendar.filter(window => window.type === 'world_cup')).toHaveLength(4);
+    expect(season4Calendar.findIndex(window => window.type === 'world_cup_group')).toBeLessThan(seasonEndIdx);
+    expect(season4Calendar.map(window => window.id)).toEqual(season4Calendar.map((_, i) => i));
+
+    // Already live before the first group ball is kicked.
+    expect(world.worldCup!.completed).toBe(false);
     expect(world.worldCup!.hostTeamId).toBe(announcedEdition!.hostTeamId);
     expect(world.worldCup!.groups.flatMap(group => group.fixtures).every(fixture => fixture.isNeutralVenue)).toBe(true);
     expect(world.worldCup!.groups.flatMap(group => group.fixtures).every(
       fixture => fixture.tournamentHostTeamId === announcedEdition!.hostTeamId,
     )).toBe(true);
+
+    const identityByPlayer = new Map(Object.values(world.squads).flat().map(player => [
+      player.uuid,
+      { age: player.age, rating: player.rating },
+    ]));
+    const worldCupParticipantIds = [...world.worldCup!.participantIds];
     const worldCupTeamId = world.worldCup!.participantIds[0];
     const starter = [...world.squads[worldCupTeamId]].sort((a, b) => b.rating - a.rating)[0];
     const domesticAppearances = world.playerStats[starter.uuid].appearances;
@@ -577,26 +588,45 @@ describe('executeCurrentWindow', () => {
     )).toBe(true);
     world = firstGroupRound.world;
 
-    let completionNews = [] as ReturnType<typeof executeCurrentWindow>['news'];
     while (world.seasonState.seasonNumber === 4) {
       const worldCupInput = world;
       const worldCupBefore = structuredClone(worldCupInput);
       const result = executeCurrentWindow(worldCupInput);
       expect(worldCupInput).toEqual(worldCupBefore);
       world = result.world;
-      completionNews = result.news;
     }
     const archived = world.playerStatsHistory[starter.uuid]?.find(entry => entry.season === 4);
 
     expect(archived).toMatchObject(identityByPlayer.get(starter.uuid)!);
     expect(archived!.appearances).toBeGreaterThan(domesticAppearances);
-    expect(world.worldCupEditions?.find(edition => edition.seasonNumber === 4)).toMatchObject({
+    const completedEdition = world.worldCupEditions?.find(edition => edition.seasonNumber === 4);
+    expect(completedEdition).toMatchObject({
       hostTeamId: announcedEdition!.hostTeamId,
       winnerId: expect.any(String),
       runnerUpId: expect.any(String),
       hostResult: expect.any(String),
     });
-    expect(completionNews.some(item => item.title.includes('环球冠军杯冠军') && item.importance === 'major')).toBe(true);
+    expect(world.newsLog.some(item => item.title.includes('环球冠军杯冠军') && item.importance === 'major')).toBe(true);
+
+    // Regression: the prize used to vanish in every world cup year, because the
+    // tournament ran in windows appended after settlement and no winner existed
+    // when income was applied. It must now land in the season's finance record.
+    const winnerId = completedEdition?.winnerId;
+    expect(winnerId).toBeTruthy();
+    const winnerRecord = winnerId
+      ? world.teamFinances[winnerId]?.history.find(entry => entry.season === 4)
+      : undefined;
+    expect(winnerRecord?.prizeMoney).toBeGreaterThanOrEqual(CUP_PRIZE.world_cup_winner);
+
+    // Acceptance: under the old timing a team could be archived as '参赛中'
+    // permanently, because the bracket had not resolved when the season record
+    // was written. Every participant must now carry a determinate result.
+    expect(worldCupParticipantIds).toHaveLength(32);
+    for (const teamId of worldCupParticipantIds) {
+      const record = world.teamSeasonRecords[teamId]?.find(entry => entry.seasonNumber === 4);
+      expect(record?.worldCupResult).toBeTruthy();
+      expect(record?.worldCupResult).not.toBe('参赛中');
+    }
   }, 10_000);
 
   it('long smoke test: advances multiple seasons without validation errors', () => {
