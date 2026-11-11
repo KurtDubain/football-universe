@@ -257,6 +257,24 @@ async function verifyViewport(
 
     const commentaryLog = dialog.getByTestId('live-event-log');
     const scrollRegion = dialog.getByTestId('live-scroll-region');
+    const feedToggle = dialog.getByTestId('live-feed-toggle');
+    const toggleVisible = await feedToggle.isVisible().catch(() => false);
+    if (name.startsWith('mobile') !== toggleVisible) {
+      throw new Error(`${name}: commentary collapse toggle visibility mismatch (${toggleVisible})`);
+    }
+    if (toggleVisible) {
+      if (await feedToggle.getAttribute('aria-expanded') !== 'false') {
+        throw new Error(`${name}: commentary log should start collapsed on narrow screens`);
+      }
+      if (await commentaryLog.isVisible()) {
+        throw new Error(`${name}: collapsed commentary log is still painted`);
+      }
+      await feedToggle.click();
+      await page.waitForTimeout(80);
+      if (!await commentaryLog.isVisible()) {
+        throw new Error(`${name}: commentary log did not expand`);
+      }
+    }
     await scrollRegion.evaluate(element => {
       element.scrollTop = element.scrollHeight - element.clientHeight;
     });

@@ -6,6 +6,7 @@
 // the helpers free of refs and React state so they can be tested in
 // isolation. Optional seeds make replay and capture effects reproducible.
 
+import { LOGICAL_PITCH_WIDTH } from './geometry';
 import type { Particle } from './types';
 
 const PARTICLE_CAP = 350;
@@ -57,9 +58,15 @@ export function spawnGoalBurst(
   color: string,
   floor: number,
   seed?: number,
+  portrait = false,
 ): Particle[] {
   const out: Particle[] = [];
   const random = createRandomSource(seed);
+  // Screen-up in drawing space. In portrait the drawing space is rotated a
+  // quarter turn, so "up" runs along +x; every upward bias and the confetti
+  // spawn edge have to follow it or the celebration falls sideways.
+  const upX = portrait ? 1 : 0;
+  const upY = portrait ? 0 : -1;
 
   // ── Wave 1: chunky team-colored disc burst (radial, normal blend) ─
   for (let i = 0; i < 18; i++) {
@@ -67,8 +74,8 @@ export function spawnGoalBurst(
     const speed = 2.5 + random() * 3.5;
     out.push(newParticle({
       x: goalX, y: goalY,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 1.2,
+      vx: Math.cos(angle) * speed + upX * 1.2,
+      vy: Math.sin(angle) * speed + upY * 1.2,
       color,
       size: 2 + random() * 1.8,
       life: 60 + random() * 30,
@@ -87,8 +94,8 @@ export function spawnGoalBurst(
     out.push(newParticle({
       x: goalX + (random() - 0.5) * 6,
       y: goalY + (random() - 0.5) * 6,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 1.8,
+      vx: Math.cos(angle) * speed + upX * 1.8,
+      vy: Math.sin(angle) * speed + upY * 1.8,
       color: '#fff8c0',
       size: 1.4 + random() * 1.2,
       life: 22 + random() * 14,
@@ -120,14 +127,18 @@ export function spawnGoalBurst(
   // ── Wave 4: confetti rain (tumbling rectangles from ABOVE) ────────
   const confettiPalette = [color, '#fbbf24', '#f87171', '#60a5fa', '#34d399', '#ffffff'];
   for (let i = 0; i < 32; i++) {
-    const startX = goalX + (random() - 0.5) * 140;
-    // Spawn just above the canvas; cull threshold is y < -60, so all of
-    // these survive the first frame and visibly drop in.
-    const startY = -5 - random() * 18;
+    // Spawn just beyond the canvas edge the rain enters from; the cull
+    // threshold sits 60 units past it, so all of these survive the first
+    // frame and visibly drop in.
+    const lateral = (random() - 0.5) * 140;
+    const fall = 1.2 + random() * 1.5;
+    const drift = (random() - 0.5) * 1.8;
+    const startX = portrait ? LOGICAL_PITCH_WIDTH + 5 + random() * 18 : goalX + lateral;
+    const startY = portrait ? goalY + lateral : -5 - random() * 18;
     out.push(newParticle({
       x: startX, y: startY,
-      vx: (random() - 0.5) * 1.8,
-      vy: 1.2 + random() * 1.5,
+      vx: portrait ? -fall : drift,
+      vy: portrait ? drift : fall,
       color: confettiPalette[i % confettiPalette.length],
       size: 1.6 + random() * 1.4,
       life: 130 + random() * 50,
@@ -238,8 +249,9 @@ export function spawnGrassKick(cx: number, cy: number, dx: number, dy: number, s
  */
 export function updateAndCullParticles(
   particles: Particle[],
-  height: number,
+  extent: number,
   particleCap: number = PARTICLE_CAP,
+  portrait = false,
 ): Particle[] {
   const live: Particle[] = [];
   for (const ptcl of particles) {
@@ -248,20 +260,34 @@ export function updateAndCullParticles(
     // Air drag (per-frame velocity decay)
     ptcl.vx *= (1 - ptcl.drag);
     ptcl.vy *= (1 - ptcl.drag);
-    ptcl.vy += ptcl.gravity;
+    // Gravity, the floor and the cull bounds all live on the screen-vertical
+    // axis. In portrait that axis is drawing -x rather than drawing +y.
+    if (portrait) ptcl.vx -= ptcl.gravity;
+    else ptcl.vy += ptcl.gravity;
     ptcl.x += ptcl.vx;
     ptcl.y += ptcl.vy;
     ptcl.rotation += ptcl.angularVel;
     // Floor bounce
-    if (ptcl.bounces > 0 && ptcl.y >= ptcl.bounceY && ptcl.vy > 0) {
-      ptcl.y = ptcl.bounceY;
-      ptcl.vy = -ptcl.vy * 0.45;
-      ptcl.vx *= 0.55;
-      ptcl.angularVel *= 0.6;
-      ptcl.bounces--;
+    if (portrait) {
+      if (ptcl.bounces > 0 && ptcl.x <= ptcl.bounceY && ptcl.vx < 0) {
+        ptcl.x = ptcl.bounceY;
+        ptcl.vx = -ptcl.vx * 0.45;
+        ptcl.vy *= 0.55;
+        ptcl.angularVel *= 0.6;
+        ptcl.bounces--;
+      }
+      if (ptcl.x < -30 || ptcl.x > extent + 60) continue;
+    } else {
+      if (ptcl.bounces > 0 && ptcl.y >= ptcl.bounceY && ptcl.vy > 0) {
+        ptcl.y = ptcl.bounceY;
+        ptcl.vy = -ptcl.vy * 0.45;
+        ptcl.vx *= 0.55;
+        ptcl.angularVel *= 0.6;
+        ptcl.bounces--;
+      }
+      // Cull: off-screen far below or above (relaxed for rain-from-above confetti)
+      if (ptcl.y > extent + 30 || ptcl.y < -60) continue;
     }
-    // Cull: off-screen far below or above (relaxed for rain-from-above confetti)
-    if (ptcl.y > height + 30 || ptcl.y < -60) continue;
     live.push(ptcl);
   }
   // Bound at PARTICLE_CAP — keep youngest if exceeded

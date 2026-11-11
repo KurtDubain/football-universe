@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { BASE_FORMATION, getFormationSlots, type PassPhase, type PlayerState } from './types';
-import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
+import { createPitchGeometry, NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 
 function initialPlayers(): PlayerState[] {
   return Array.from({ length: 22 }, (_, index) => {
@@ -563,6 +563,101 @@ describe('pitch player movement', () => {
     expect(players[0].y).toBeLessThan(0.5);
     expect(players[0].y).toBeGreaterThan(0.42);
     expect(players[0].x).toBeGreaterThanOrEqual(0.03);
+  });
+
+  it('separates overlapping silhouettes to the drawn body width, not a fixed constant', () => {
+    const cluster = (): PlayerState[] => {
+      const players = initialPlayers();
+      for (const index of [8, 9, 10]) {
+        players[index].x = 0.84;
+        players[index].y = 0.5;
+      }
+      return players;
+    };
+    const gapFromPinned = (players: PlayerState[], index: number) => Math.hypot(
+      players[index].x - players[9].x,
+      (players[index].y - players[9].y) * NORMALIZED_PITCH_SCREEN_ASPECT,
+    );
+
+    // The default must already carry the derived bound: the old fixed 0.022
+    // default left the drawn markers wider than the gap between them.
+    const byDefault = cluster();
+    separateActivePlayers(byDefault, new Set([8, 9, 10]), new Set([9]));
+    expect(gapFromPinned(byDefault, 8)).toBeGreaterThan(0.024);
+
+    const base = cluster();
+    separateActivePlayers(base, new Set([8, 9, 10]), new Set([9]), playerSeparationDistance(1));
+    const constrained = cluster();
+    separateActivePlayers(constrained, new Set([8, 9, 10]), new Set([9]), playerSeparationDistance(1.16));
+
+    expect(base[9]).toMatchObject({ x: 0.84, y: 0.5 });
+    expect(gapFromPinned(base, 8)).toBeGreaterThan(0.022);
+    expect(gapFromPinned(constrained, 8)).toBeGreaterThan(gapFromPinned(base, 8));
+    expect(gapFromPinned(constrained, 8)).toBeGreaterThan(playerSeparationDistance(1.16) * 0.85);
+  });
+
+  it('holds three defensive depths on a released shot instead of collapsing into the box', () => {
+    const players = initialPlayers();
+    const shot: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      duration: 90,
+      hold: 10,
+      arc: 0.1,
+      intercepted: false,
+      sourceOverride: { x: 0.82, y: 0.18 },
+    };
+
+    for (let frame = 0; frame < 200; frame++) {
+      updatePlayerPositions(players, 0.94, 0.18, 'home', 9, shot, 'shooting', null, 0.05);
+    }
+
+    const away = players.slice(11, 22);
+    const outfield = away.filter((_, index) => BASE_FORMATION[index].role !== 'GK');
+    const xs = outfield.map(player => player.x);
+    const meanXFor = (role: string) => {
+      const group = away.filter((_, index) => BASE_FORMATION[index].role === role);
+      return group.reduce((sum, player) => sum + player.x, 0) / group.length;
+    };
+
+    // Eleven defenders spanning 13.7 m is narrower than the penalty area: a
+    // wall, not a defence. The layers have to survive the shot.
+    expect((Math.max(...xs) - Math.min(...xs)) * 105).toBeGreaterThan(20);
+    // Away defends the x = 1 goal, so depth runs DF -> MF -> FW toward halfway.
+    expect(meanXFor('DF')).toBeGreaterThan(meanXFor('MF'));
+    expect(meanXFor('MF')).toBeGreaterThan(meanXFor('FW'));
+    // Forwards stay near halfway as the counter-attack outlet, not as cover.
+    expect(meanXFor('FW')).toBeLessThan(0.62);
+    // The block slides toward the ball's flank instead of funnelling through the middle.
+    const meanY = outfield.reduce((sum, player) => sum + player.y, 0) / outfield.length;
+    expect(meanY).toBeLessThan(0.48);
+  });
+
+  it('keeps a missed shot beside the goal instead of parking it off-canvas', () => {
+    const pitch = createPitchGeometry();
+    const sceneTarget = {
+      x: pitch.padding + 1.008 * pitch.fieldWidth,
+      y: pitch.padding + 0.63 * pitch.fieldHeight,
+    };
+
+    const miss = computePostShotBallPosition({
+      outcome: 'miss', target: sceneTarget, attackingHome: true, progress: 1, seed: 5,
+    });
+    const mirrored = computePostShotBallPosition({
+      outcome: 'miss',
+      target: { x: pitch.padding - 0.008 * pitch.fieldWidth, y: sceneTarget.y },
+      attackingHome: false,
+      progress: 1,
+      seed: 5,
+    });
+
+    // The goal line sits 10 px inside the canvas edge; the ball must stay drawn.
+    expect(miss.bx).toBeLessThanOrEqual(pitch.canvasWidth - 3);
+    expect(mirrored.bx).toBeGreaterThanOrEqual(3);
+    // Residual motion runs across the face of goal, not on down the field.
+    expect(Math.abs(miss.by - sceneTarget.y)).toBeGreaterThan(Math.abs(miss.bx - sceneTarget.x));
   });
 });
 

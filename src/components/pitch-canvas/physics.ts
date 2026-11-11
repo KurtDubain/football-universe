@@ -2,7 +2,7 @@
 // Operates entirely in normalized (0-1) field coordinates.
 
 import { clamp, dist, lerp, seededRand } from './math';
-import { NORMALIZED_PITCH_SCREEN_ASPECT } from './geometry';
+import { NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 import { setPiecePlayerTarget } from './set-pieces';
 import {
   BASE_FORMATION,
@@ -139,12 +139,15 @@ export function separateActivePlayers(
   playerPos: PlayerState[],
   activePlayerIndices: ReadonlySet<number>,
   pinnedPlayerIndices: ReadonlySet<number> = new Set<number>(),
-  minimumScreenDistance = 0.022,
+  minimumScreenDistance = playerSeparationDistance(),
 ): void {
   const indices = [...activePlayerIndices].filter(index => playerPos[index] !== undefined);
   const pitchAspect = NORMALIZED_PITCH_SCREEN_ASPECT;
 
-  for (let iteration = 0; iteration < 2; iteration++) {
+  // Four relaxation passes rather than two. A released shot drives ten
+  // defenders toward the same band, and two passes could not untangle a
+  // cluster that dense, so the pile-up survived all the way to the screen.
+  for (let iteration = 0; iteration < 4; iteration++) {
     for (let firstIndex = 0; firstIndex < indices.length; firstIndex++) {
       for (let secondIndex = firstIndex + 1; secondIndex < indices.length; secondIndex++) {
         const aIndex = indices[firstIndex];
@@ -320,8 +323,14 @@ export function computePostShotBallPosition(input: PostShotBallInput): BallCompu
     };
   }
   const sideDirection = seededRand(input.seed + 211) < 0.5 ? -1 : 1;
-  const distance = input.outcome === 'block' ? 34 : input.outcome === 'save' ? 18 : 16;
-  const lateral = input.outcome === 'block' ? 24 : input.outcome === 'save' ? 8 : 13;
+  // A miss keeps travelling across the face of goal rather than straight on.
+  // Sending it further downfield parked the ball roughly 5 m outside the pitch
+  // in the dark surround, where it sat until the next phase began. The goal
+  // line sits at 510 with only 10 px of surround before the canvas edge, so a
+  // miss that already aims past the post can barely advance at all without the
+  // ball being clipped off-canvas; nearly all of its residual motion is lateral.
+  const distance = input.outcome === 'block' ? 34 : input.outcome === 'save' ? 18 : 2;
+  const lateral = input.outcome === 'block' ? 24 : input.outcome === 'save' ? 8 : 20;
   const fieldDirection = input.outcome === 'miss' ? attackDirection : -attackDirection;
   const lift = input.outcome === 'block' ? 7 : input.outcome === 'save' ? 4 : 2;
   return {
@@ -538,7 +547,12 @@ export function resolvePhasePoints(
   const passerSlot = getBaseSlot(phase.passerIdx, phase.attackingHome, shift, formation);
   const recvSlot = phase.targetOverride ?? getBaseSlot(phase.receiverIdx, phase.attackingHome, shift, formation);
   const sourceSlot = phase.sourceOverride ?? passerSlot;
-  const source = { x: P + sourceSlot.x * fw, y: P + sourceSlot.y * fh };
+  // No phase begins outside the pitch. A source inherited from a ball that had
+  // already gone out of play used to place the next pass out in the surround.
+  const source = {
+    x: P + clamp(sourceSlot.x, 0.03, 0.97) * fw,
+    y: P + clamp(sourceSlot.y, 0.05, 0.95) * fh,
+  };
   return { source, dx: recvSlot.x - passerSlot.x, dy: recvSlot.y - passerSlot.y };
 }
 
@@ -657,14 +671,23 @@ export function updatePlayerPositions(
       const pressureY = phaseState === 'passing' && currentPhase.kind === 'pass' ? passDestination.y : ballNY;
       const defendingReleasedShot = currentPhase.kind === 'shot' && phaseState !== 'holding' && slot.role !== 'GK';
       if (defendingReleasedShot) {
+        // A released shot pulls the block back, but it must not flatten the
+        // team onto one line.
+        //
+        // The previous table (DF 0.085 / MF 0.17 / FW 0.28 measured from the
+        // goal line, with every lane lerped toward the centre) measured a
+        // 13.7 m x-span across all eleven defenders — narrower than the penalty
+        // area — with four of them within 0.003 of the same x. That is a wall,
+        // not a defence: no layers, no width, and no counter-attack outlet.
+        //
+        // Three depths with each role holding its own band, and the block
+        // slides toward the ball's flank instead of collapsing through the
+        // middle. Forwards stay near halfway; they are the outlet, not cover.
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
-        const lineDepth = slot.role === 'DF' ? 0.085 : slot.role === 'MF' ? 0.17 : 0.28;
+        const lineDepth = slot.role === 'DF' ? 0.105 : slot.role === 'MF' ? 0.255 : 0.42;
         targetX_n = ownGoalX + (isHomeTeam ? lineDepth : -lineDepth);
-        targetY_n = slot.role === 'DF'
-          ? lerp(slot.y, 0.5, 0.2)
-          : slot.role === 'MF'
-            ? lerp(slot.y, 0.5, 0.3)
-            : lerp(slot.y, 0.5, 0.16);
+        const flankPull = slot.role === 'DF' ? 0.3 : slot.role === 'MF' ? 0.2 : 0.08;
+        targetY_n = clamp(lerp(slot.y, ballNY, flankPull), 0.12, 0.88);
       } else if (i === defensiveRoles.presserIndex) {
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
         const pressureGap = ownGoalX < pressureX ? -0.025 : 0.025;

@@ -8,7 +8,7 @@
 import { clamp, hexToRgbStr } from './math';
 import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
-import { createPitchGeometry } from './geometry';
+import { createPitchGeometry, type PitchOrientation } from './geometry';
 import { MAX_BROADCAST_ZOOM, broadcastCameraPan } from './camera';
 
 // Mutable {current: number} shape — matches React.MutableRefObject<number>
@@ -32,6 +32,37 @@ export interface BroadcastCameraTransform {
   panX: number;
   panY: number;
   zoom: number;
+  /** Canvas-space dimensions, which differ from drawing space in portrait. */
+  canvasWidth?: number;
+  canvasHeight?: number;
+  orientation?: PitchOrientation;
+}
+
+/**
+ * Draw upright glyphs inside a rotated drawing space.
+ *
+ * The portrait transform turns the whole drawing space a quarter turn, which
+ * would render every jersey number and label on its side. Rotating back about
+ * the anchor for the duration of the text draw keeps them readable while the
+ * surrounding shapes stay in drawing coordinates.
+ */
+function withUprightText(
+  ctx: CanvasRenderingContext2D,
+  anchorX: number,
+  anchorY: number,
+  orientation: PitchOrientation,
+  draw: () => void,
+): void {
+  if (orientation !== 'portrait') {
+    draw();
+    return;
+  }
+  ctx.save();
+  ctx.translate(anchorX, anchorY);
+  ctx.rotate(Math.PI / 2);
+  ctx.translate(-anchorX, -anchorY);
+  draw();
+  ctx.restore();
 }
 
 /**
@@ -189,13 +220,16 @@ export function drawHalftime(
   H: number,
   label = '中场休息',
   sublabel = 'HALF TIME',
+  orientation: PitchOrientation = 'landscape',
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(label, W / 2, H / 2 - 4);
-  ctx.font = '11px sans-serif'; ctx.fillStyle = '#94a3b8';
-  ctx.fillText(sublabel, W / 2, H / 2 + 14);
+  withUprightText(ctx, W / 2, H / 2, orientation, () => {
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(label, W / 2, H / 2 - 4);
+    ctx.font = '11px sans-serif'; ctx.fillStyle = '#94a3b8';
+    ctx.fillText(sublabel, W / 2, H / 2 + 14);
+  });
 }
 
 /**
@@ -218,6 +252,7 @@ export function drawPlayer(
   visualScale = 1,
   featured = false,
   teamSide: 'home' | 'away' = 'home',
+  orientation: PitchOrientation = 'landscape',
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -253,8 +288,11 @@ export function drawPlayer(
     ctx.stroke();
   }
 
-  // Soft shadow
-  ctx.beginPath(); ctx.ellipse(px, py + 5, 5, 1.8, 0, 0, Math.PI * 2);
+  // Soft shadow. In portrait both the offset and the flattening axis swap so
+  // the shadow still reads as cast below the player on screen.
+  ctx.beginPath();
+  if (orientation === 'portrait') ctx.ellipse(px - 5, py, 1.8, 5, 0, 0, Math.PI * 2);
+  else ctx.ellipse(px, py + 5, 5, 1.8, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
 
   // Featured players keep a quiet broadcast marker throughout the match.
@@ -287,15 +325,17 @@ export function drawPlayer(
     ctx.beginPath(); ctx.arc(px, py, 10 * pulse, 0, Math.PI * 2);
     ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.stroke();
     if (label) {
-      ctx.font = 'bold 7px sans-serif';
-      const labelY = action === 'save' || action === 'catch' || action === 'block' ? py + 15 : Math.max(8, py - 11);
-      const labelWidth = ctx.measureText(label).width + 5;
-      const labelX = clamp(px, P + labelWidth / 2 + 3, P + fw - labelWidth / 2 - 3);
-      ctx.fillStyle = 'rgba(2,6,23,0.72)';
-      ctx.fillRect(labelX - labelWidth / 2, labelY - 7, labelWidth, 9);
-      ctx.fillStyle = '#fef3c7';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, labelX, labelY);
+      withUprightText(ctx, px, py, orientation, () => {
+        ctx.font = 'bold 7px sans-serif';
+        const labelY = action === 'save' || action === 'catch' || action === 'block' ? py + 15 : Math.max(8, py - 11);
+        const labelWidth = ctx.measureText(label).width + 5;
+        const labelX = clamp(px, P + labelWidth / 2 + 3, P + fw - labelWidth / 2 - 3);
+        ctx.fillStyle = 'rgba(2,6,23,0.72)';
+        ctx.fillRect(labelX - labelWidth / 2, labelY - 7, labelWidth, 9);
+        ctx.fillStyle = '#fef3c7';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, labelX, labelY);
+      });
     }
   }
 
@@ -397,10 +437,12 @@ export function drawPlayer(
   ctx.stroke();
   ctx.restore();
 
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 6.5px sans-serif'; ctx.textAlign = 'center';
-  ctx.strokeStyle = 'rgba(2,6,23,0.9)'; ctx.lineWidth = 1.4;
-  ctx.strokeText(String(num), px, py + 2.2);
-  ctx.fillText(String(num), px, py + 2.2);
+  withUprightText(ctx, px, py, orientation, () => {
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 6.5px sans-serif'; ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(2,6,23,0.9)'; ctx.lineWidth = 1.4;
+    ctx.strokeText(String(num), px, py + 2.2);
+    ctx.fillText(String(num), px, py + 2.2);
+  });
 
   if (facingLength > 0.01) {
     const shoulderX = -directionY;
@@ -444,15 +486,24 @@ export function drawBall(
   ballArcLift: number,
   ballSpin: number,
   visualScale = 1,
+  orientation: PitchOrientation = 'landscape',
 ): void {
   const radius = 3.5 * visualScale;
   const shadowSpread = 1 + ballArcLift * 0.05;
+  // Aerial lift and the ground shadow both have to read against the screen.
+  // In portrait screen-up is drawing +x, so the lift runs along the pitch
+  // length and the shadow sits on the far side of it.
+  const portrait = orientation === 'portrait';
+  const ballX = bx + (portrait ? ballArcLift : 0);
+  const ballY = by - (portrait ? 0 : ballArcLift);
+  const shadowX = bx - (portrait ? 4 * visualScale : 0);
+  const shadowY = by + (portrait ? 0 : 4 * visualScale);
   ctx.beginPath();
   ctx.ellipse(
-    bx,
-    by + 4 * visualScale,
-    4 * visualScale / shadowSpread,
-    1.5 * visualScale / shadowSpread,
+    shadowX,
+    shadowY,
+    (portrait ? 1.5 : 4) * visualScale / shadowSpread,
+    (portrait ? 4 : 1.5) * visualScale / shadowSpread,
     0,
     0,
     Math.PI * 2,
@@ -460,7 +511,7 @@ export function drawBall(
   ctx.fillStyle = `rgba(0,0,0,${0.3 / shadowSpread})`; ctx.fill();
   // Ball with pentagon panel rotation
   ctx.save();
-  ctx.translate(bx, by - ballArcLift);
+  ctx.translate(ballX, ballY);
   ctx.rotate(ballSpin * 0.15);
   ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.fillStyle = '#fff'; ctx.fill();
@@ -667,6 +718,9 @@ export function applyCameraShake(
   shakeMaxRef: MutNum,
   W: number, H: number,
   camera: BroadcastCameraState = { focusX: W / 2, focusY: H / 2, zoom: 1 },
+  orientation: PitchOrientation = 'landscape',
+  canvasWidth = W,
+  canvasHeight = H,
 ): BroadcastCameraTransform {
   let offX = 0, offY = 0;
   if (shakeRef.current > 0) {
@@ -678,26 +732,37 @@ export function applyCameraShake(
     shakeRef.current--;
   }
   ctx.save();
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  if (orientation === 'portrait') {
+    // Quarter turn so the 520 x 344 drawing space fills a portrait canvas.
+    // Everything downstream — pitch bitmap, players, ball, particles, camera —
+    // keeps working in unrotated drawing coordinates. Only the handful of
+    // elements that must read against the screen (text, shadows, ball lift)
+    // compensate, via withUprightText and the orientation-aware draws below.
+    ctx.translate(0, canvasHeight);
+    ctx.rotate(-Math.PI / 2);
+  }
   const zoom = clamp(camera.zoom, 1, MAX_BROADCAST_ZOOM);
   const { panX, panY } = broadcastCameraPan(camera.focusX, camera.focusY, zoom, W, H);
   ctx.translate(W / 2 + panX + offX, H / 2 + panY + offY);
   ctx.scale(zoom, zoom);
   ctx.translate(-W / 2, -H / 2);
-  return { offX, offY, panX, panY, zoom };
+  return { offX, offY, panX, panY, zoom, canvasWidth, canvasHeight, orientation };
 }
 
 export function cameraPointToScreen(
   x: number,
   y: number,
-  canvasWidth: number,
-  canvasHeight: number,
+  drawingWidth: number,
+  drawingHeight: number,
   transform: BroadcastCameraTransform,
 ): { x: number; y: number } {
-  return {
-    x: (x - canvasWidth / 2) * transform.zoom + canvasWidth / 2 + transform.panX + transform.offX,
-    y: (y - canvasHeight / 2) * transform.zoom + canvasHeight / 2 + transform.panY + transform.offY,
-  };
+  const zoomedX = (x - drawingWidth / 2) * transform.zoom + drawingWidth / 2 + transform.panX + transform.offX;
+  const zoomedY = (y - drawingHeight / 2) * transform.zoom + drawingHeight / 2 + transform.panY + transform.offY;
+  if (transform.orientation === 'portrait') {
+    return { x: zoomedY, y: (transform.canvasHeight ?? drawingWidth) - zoomedX };
+  }
+  return { x: zoomedX, y: zoomedY };
 }
 
 /**

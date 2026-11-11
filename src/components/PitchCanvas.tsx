@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useRef, useMemo, useState } from 'react';
 import type { MatchdaySnapshot, MatchEvent } from '../types/match';
 import type { CoachFormation, MatchApproach } from '../types/coach';
 import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxonomy';
@@ -9,10 +9,14 @@ import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './
 import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
 import { broadcastCameraTarget, type BroadcastCameraMoment } from './pitch-canvas/camera';
 import {
+  canvasAspectRatio,
+  canvasLogicalSize,
   createPitchGeometry,
   LOGICAL_PITCH_HEIGHT,
   LOGICAL_PITCH_WIDTH,
   PITCH_PADDING,
+  playerSeparationDistance,
+  type PitchOrientation,
 } from './pitch-canvas/geometry';
 import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
@@ -59,6 +63,35 @@ import {
   EMPTY_RENDER_METRICS,
   type RenderMetricsSnapshot,
 } from './pitch-canvas/render-metrics';
+
+/**
+ * Portrait framing for phones held upright.
+ *
+ * A 105 x 68 m pitch squeezed across a 390 px-wide landscape canvas leaves
+ * 3.2 px per metre — measured on device, an 8.7 px player body and a 4.9 px
+ * jersey number, which is not small but unreadable. Turning the pitch a
+ * quarter turn lets the full pitch run down the screen's long axis instead:
+ * 5.7 px per metre, nothing cropped, and every marker 1.77x larger.
+ */
+const PORTRAIT_MAX_VIEWPORT_WIDTH = 560;
+
+/**
+ * Below this the viewport-height cap on the canvas shrinks a portrait pitch
+ * past what the landscape letterbox already delivered. Measured at 320x568:
+ * 1.9 px per metre portrait against 2.8 landscape, because the surrounding
+ * chrome claims roughly 260 px of a 568 px screen either way. The crossover
+ * sits near 760 px, where portrait reaches 3.7 px per metre against 3.6.
+ */
+const PORTRAIT_MIN_VIEWPORT_HEIGHT = 760;
+
+function resolvePitchOrientation(): PitchOrientation {
+  if (typeof window === 'undefined') return 'landscape';
+  const { innerWidth, innerHeight } = window;
+  if (innerWidth > PORTRAIT_MAX_VIEWPORT_WIDTH) return 'landscape';
+  if (innerHeight <= innerWidth) return 'landscape';
+  if (innerHeight < PORTRAIT_MIN_VIEWPORT_HEIGHT) return 'landscape';
+  return 'portrait';
+}
 
 interface Props {
   minute: number;
@@ -383,6 +416,27 @@ function PitchCanvas(props: Props) {
     pendingImpactSceneRef.current = scene;
   }, [allEvents, flashEvent, homeTeamId]);
 
+  // Orientation drives the canvas element's aspect ratio, so it is React
+  // state; the render loop reads the ref instead, so a device rotation
+  // re-frames the pitch without restarting the loop.
+  const [orientation, setOrientation] = useState<PitchOrientation>(resolvePitchOrientation);
+  const orientationRef = useRef(orientation);
+  const canvasSizeAttr = canvasLogicalSize(orientation);
+
+  useEffect(() => {
+    orientationRef.current = orientation;
+  }, [orientation]);
+
+  useEffect(() => {
+    const sync = () => setOrientation(resolvePitchOrientation());
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    return () => {
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+    };
+  }, []);
+
   // Main rAF loop — starts once on mount, reads from liveRef. No restarts.
   useEffect(() => {
     const canvasElement = canvasRef.current;
@@ -436,8 +490,9 @@ function PitchCanvas(props: Props) {
     function resizeCanvas(): void {
       // clientWidth is layout-space width and is unaffected by the modal's
       // scale-in transform, so the initial backing buffer reaches full DPR.
-      const cssWidth = canvas.clientWidth || LOGICAL_PITCH_WIDTH;
-      const cssHeight = cssWidth * LOGICAL_PITCH_HEIGHT / LOGICAL_PITCH_WIDTH;
+      const canvasSize = canvasLogicalSize(orientationRef.current);
+      const cssWidth = canvas.clientWidth || canvasSize.width;
+      const cssHeight = cssWidth * canvasSize.height / canvasSize.width;
       const dpr = Math.min(window.devicePixelRatio || 1, renderBudget.dprCap);
       currentDpr = dpr;
       const nextWidth = Math.round(cssWidth * dpr);
@@ -446,24 +501,23 @@ function PitchCanvas(props: Props) {
         canvas.width = nextWidth;
         canvas.height = nextHeight;
       }
-      if (pitchLayer.width !== nextWidth || pitchLayer.height !== nextHeight) {
-        pitchLayer.width = nextWidth;
-        pitchLayer.height = nextHeight;
-        pitchLayerContext.setTransform(
-          nextWidth / LOGICAL_PITCH_WIDTH,
-          0,
-          0,
-          nextHeight / LOGICAL_PITCH_HEIGHT,
-          0,
-          0,
-        );
+      // The cached pitch bitmap always stays in landscape drawing space; the
+      // quarter turn happens once, in the camera transform. The canvas aspect
+      // is locked to the pitch, so one uniform scale covers both axes.
+      const drawingScale = nextWidth / canvasSize.width;
+      const layerWidth = Math.round(W * drawingScale);
+      const layerHeight = Math.round(H * drawingScale);
+      if (pitchLayer.width !== layerWidth || pitchLayer.height !== layerHeight) {
+        pitchLayer.width = layerWidth;
+        pitchLayer.height = layerHeight;
+        pitchLayerContext.setTransform(drawingScale, 0, 0, drawingScale, 0, 0);
         drawPitch(pitchLayerContext, W, H, P);
       }
       ctx.setTransform(
-        dpr * cssWidth / LOGICAL_PITCH_WIDTH,
+        nextWidth / canvasSize.width,
         0,
         0,
-        dpr * cssHeight / LOGICAL_PITCH_HEIGHT,
+        nextHeight / canvasSize.height,
         0,
         0,
       );
@@ -635,7 +689,15 @@ function PitchCanvas(props: Props) {
         const goalColor = scene.attackingHome ? currentHomeColor : currentAwayColor;
         goalCelebColor.current = goalColor;
         goalCelebRightSide.current = scene.attackingHome;
-        addParticles(spawnGoalBurst(targetX, targetY, goalColor, H - P, scene.seed));
+        const portraitBurst = orientationRef.current === 'portrait';
+        addParticles(spawnGoalBurst(
+          targetX,
+          targetY,
+          goalColor,
+          portraitBurst ? P : H - P,
+          scene.seed,
+          portraitBurst,
+        ));
         return;
       }
 
@@ -830,14 +892,26 @@ function PitchCanvas(props: Props) {
 
       // Broadcast camera and restrained impact shake share one transform so
       // the pitch never receives competing scale/translation operations.
-      const cameraTransform = applyCameraShake(ctx, cameraShakeRef, cameraShakeMax, W, H, cameraRef.current);
+      const frameCanvasSize = canvasLogicalSize(orientationRef.current);
+      const portraitMode = orientationRef.current === 'portrait';
+      const cameraTransform = applyCameraShake(
+        ctx,
+        cameraShakeRef,
+        cameraShakeMax,
+        W,
+        H,
+        cameraRef.current,
+        orientationRef.current,
+        frameCanvasSize.width,
+        frameCanvasSize.height,
+      );
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
       ctx.drawImage(pitchLayer, 0, 0, pitchLayer.width, pitchLayer.height, 0, 0, W, H);
 
       if (halftime) {
-        drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel);
+        drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel, orientationRef.current);
         ctx.restore();
         recordRenderDuration(performance.now() - renderStarted);
         return;
@@ -1293,7 +1367,12 @@ function PitchCanvas(props: Props) {
         const eventDefender = defendingRoster.find(player => player.playerId === directedActors.defenderId);
         if (eventDefender) pinnedPlayerIndices.add((defendingHome ? 0 : 11) + eventDefender.slotIndex);
       }
-      separateActivePlayers(playerPosRef.current, activePlayerIndices, pinnedPlayerIndices);
+      separateActivePlayers(
+        playerPosRef.current,
+        activePlayerIndices,
+        pinnedPlayerIndices,
+        playerSeparationDistance(visualPlayerScale),
+      );
       const attackerActionProgress = currentPhase.kind === 'shot'
         ? clamp(phaseFrameRef.current / Math.max(1, currentPhase.duration), 0, 1)
         : phaseProgress;
@@ -1345,6 +1424,7 @@ function PitchCanvas(props: Props) {
           playerVisualScale,
           liveFeaturedPlayerIds.has(player.playerId),
           'home',
+          orientationRef.current,
         );
       }
       for (const player of visibleAway) {
@@ -1378,6 +1458,7 @@ function PitchCanvas(props: Props) {
           playerVisualScale,
           liveFeaturedPlayerIds.has(player.playerId),
           'away',
+          orientationRef.current,
         );
       }
 
@@ -1449,7 +1530,12 @@ function PitchCanvas(props: Props) {
       };
 
       // ── Particles update + draw ──
-      particlesRef.current = updateAndCullParticles(particlesRef.current, H, renderBudget.particleCap);
+      particlesRef.current = updateAndCullParticles(
+        particlesRef.current,
+        portraitMode ? W : H,
+        renderBudget.particleCap,
+        portraitMode,
+      );
       renderParticles(ctx, particlesRef.current);
 
       // ── Ball trail ──
@@ -1516,7 +1602,7 @@ function PitchCanvas(props: Props) {
         shotOutcomeFrameRef.current--;
       }
 
-      drawBall(ctx, displayBx, displayBy, displayArcLift, ballSpinRef.current, ballVisualScale);
+      drawBall(ctx, displayBx, displayBy, displayArcLift, ballSpinRef.current, ballVisualScale, orientationRef.current);
 
       ctx.restore();
 
@@ -1527,13 +1613,13 @@ function PitchCanvas(props: Props) {
           outcomeLabel.outcome,
           outcomeLabel.x,
           outcomeLabel.y,
-          W,
-          H,
+          frameCanvasSize.width,
+          frameCanvasSize.height,
         );
       }
 
       // ── White flash on goal (drawn on top of everything, no shake) ──
-      applyWhiteFlash(ctx, flashWhiteRef, W, H);
+      applyWhiteFlash(ctx, flashWhiteRef, frameCanvasSize.width, frameCanvasSize.height);
       recordRenderDuration(performance.now() - renderStarted);
 
     }
@@ -1571,11 +1657,25 @@ function PitchCanvas(props: Props) {
   return (
     <canvas
       ref={canvasRef}
-      width={LOGICAL_PITCH_WIDTH}
-      height={LOGICAL_PITCH_HEIGHT}
+      width={canvasSizeAttr.width}
+      height={canvasSizeAttr.height}
       data-testid="pitch-canvas"
+      data-orientation={orientation}
       aria-label="比赛实时战术动画"
-      className="w-full aspect-[65/43] rounded-md border border-emerald-900/30"
+      style={{
+        aspectRatio: String(canvasAspectRatio(orientation)),
+        // A portrait pitch is tall by construction. Left uncapped it pushed the
+        // progress bar, the current commentary and the collapsed feed toggle
+        // clean out of the scroll region — 80 px of overflow on a 390x844 phone,
+        // which hid the toggle completely. The cap is expressed as a width so
+        // `aspect-ratio` still governs the height and the canvas keeps matching
+        // the pitch exactly; a `max-height` here would break that invariant and
+        // the single uniform drawing scale that depends on it.
+        maxWidth: orientation === 'portrait'
+          ? `calc((100dvh - 23rem) * ${canvasAspectRatio(orientation)})`
+          : undefined,
+      }}
+      className="mx-auto w-full rounded-md border border-emerald-900/30"
     />
   );
 }
