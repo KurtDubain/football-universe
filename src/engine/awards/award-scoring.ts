@@ -1,8 +1,11 @@
 import type { PlayerPerformanceResult } from '../players/player-performance';
+import { leagueConfigs } from '../../config/competitions';
 import {
   BALLON_DOR_TEAM,
   BOTTOM_PLACES,
   FULL_SAMPLE_MINUTES,
+  GOLDEN_BOOT_SCHEDULE_EXPONENT,
+  GOLDEN_BOOT_TIER_COEFFICIENT,
   PARTIAL_SAMPLE_MINUTES,
   PARTIAL_SAMPLE_MULTIPLIER,
   POSITION_AWARD_AVAILABILITY_FLOOR,
@@ -119,16 +122,62 @@ export function positionAwardScore(
     * sampleGateMultiplier(minutes);
 }
 
+/** Rounds a tier actually plays, read from config so a schedule change follows through. */
+export function roundsForTier(leagueLevel: LeagueTier): number {
+  return leagueConfigs.find(config => config.level === leagueLevel)?.rounds ?? 30;
+}
+
 /**
- * Golden Boot weights raw goals by tier, the way the European Golden Shoe
- * weights by league coefficient.
+ * Full arithmetic behind a Golden Boot score.
  *
- * See GOLDEN_BOOT_SCHEDULE_NOTE in award-weights.ts: tiers 2 and 3 play 14
- * rounds against the top flight's 30, so this coefficient alone cannot make the
- * award genuinely contestable across tiers.
+ * Exposed so the award label and the buzz card can print the whole derivation
+ * rather than a bare weighted number. An award the player cannot reconstruct
+ * from the displayed numbers is an award they cannot trust — and this one now
+ * involves a schedule conversion, so showing the working matters more than
+ * before, not less.
+ */
+export interface GoldenBootBreakdown {
+  goals: number;
+  /** Rounds the player's league plays. */
+  rounds: number;
+  /** The 30-round basis every league is converted to. */
+  referenceRounds: number;
+  /** goals converted to the reference schedule. */
+  scheduleAdjusted: number;
+  coefficient: number;
+  /** Final ranking value. */
+  score: number;
+  /** True when no adjustment applies, so copy can stay short. */
+  isTopFlightBasis: boolean;
+}
+
+export function goldenBootBreakdown(goals: number, leagueLevel: LeagueTier): GoldenBootBreakdown {
+  const rounds = roundsForTier(leagueLevel);
+  const referenceRounds = roundsForTier(1);
+  const scheduleAdjusted = goals * (referenceRounds / rounds) ** GOLDEN_BOOT_SCHEDULE_EXPONENT;
+  const coefficient = GOLDEN_BOOT_TIER_COEFFICIENT[leagueLevel];
+  return {
+    goals,
+    rounds,
+    referenceRounds,
+    scheduleAdjusted,
+    coefficient,
+    score: scheduleAdjusted * coefficient,
+    isTopFlightBasis: rounds === referenceRounds && coefficient === 1,
+  };
+}
+
+/**
+ * Golden Boot ranking value: goals converted to a common schedule, then
+ * weighted by what a goal in that league is worth.
+ *
+ * The two factors answer different questions and must not be collapsed:
+ * schedule length is a structural artefact carrying no quality signal, while
+ * the coefficient is the actual judgement about opposition strength. See
+ * GOLDEN_BOOT_SCHEDULE_EXPONENT and GOLDEN_BOOT_TIER_COEFFICIENT.
  */
 export function goldenBootScore(goals: number, leagueLevel: LeagueTier): number {
-  return goals * TIER_COEFFICIENT[leagueLevel];
+  return goldenBootBreakdown(goals, leagueLevel).score;
 }
 
 /** Tier label used in award copy so a weighted result reads honestly. */
@@ -137,6 +186,18 @@ export const TIER_LABELS: Record<LeagueTier, string> = {
   2: '甲级',
   3: '乙级',
 };
+
+/**
+ * Copy for a Golden Boot result, showing the derivation whenever an adjustment
+ * applies. Top-flight winners need no arithmetic — their goals already sit on
+ * the reference schedule at full weight.
+ */
+export function describeGoldenBoot(breakdown: GoldenBootBreakdown): string {
+  if (breakdown.isTopFlightBasis) return `${breakdown.goals}球`;
+  return `${breakdown.goals}球/${breakdown.rounds}轮 → 折算`
+    + `${breakdown.scheduleAdjusted.toFixed(1)}球 × ${breakdown.coefficient.toFixed(2)}`
+    + ` = ${breakdown.score.toFixed(1)}`;
+}
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));

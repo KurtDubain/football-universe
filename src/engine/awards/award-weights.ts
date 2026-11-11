@@ -11,12 +11,13 @@ import type { PlayerAwardType } from '../../types/award';
 export type LeagueTier = 1 | 2 | 3;
 
 /**
- * Tier weighting for awards that should reward the strongest opposition.
+ * Tier weighting for awards scored from rate-like metrics.
  *
- * Note the schedule asymmetry this sits on top of: the top flight plays 30
- * rounds while tiers 2 and 3 play 14. Raw-count awards therefore already
- * favour the top flight before any coefficient applies. See
- * GOLDEN_BOOT_SCHEDULE_NOTE below.
+ * Safe to use as-is for anything derived from per-match output — position
+ * quality, season score — because those already normalise for match count.
+ *
+ * NOT safe for raw counting stats. The Golden Boot keeps its own table; see
+ * GOLDEN_BOOT_TIER_COEFFICIENT and GOLDEN_BOOT_SCHEDULE_EXPONENT below.
  */
 export const TIER_COEFFICIENT: Record<LeagueTier, number> = {
   1: 1.0,
@@ -35,23 +36,49 @@ export const YOUNG_PLAYER_TIER_COEFFICIENT: Record<LeagueTier, number> = {
 };
 
 /**
- * Golden Boot weights raw goals by tier, the way the European Golden Shoe
- * weights by league coefficient.
+ * Golden Boot schedule normalisation.
  *
- * KNOWN ASYMMETRY: tier 2 and 3 play 14 rounds against the top flight's 30, so
- * a tier-2 top scorer (~14 goals) cannot realistically reach a top-flight top
- * scorer (~25 goals) even before the 0.90 coefficient. The coefficient is
- * therefore close to decorative today.
+ * The top flight plays 30 rounds; tiers 2 and 3 play 14. A raw goal count
+ * therefore measures "who played more matches" before it measures finishing
+ * ability, and a 90-season audit (3 seeds x 30 seasons) confirmed it: with raw
+ * goals the lower tiers won the Golden Boot 0 times out of 90, even though a
+ * lower-tier top scorer averages 1.26 goals per round against the top flight's
+ * 1.03. The tier coefficient could not fix that, because a 10% discount does
+ * not fight a 2.14x structural gap.
  *
- * If `scripts/audit-award-distribution.ts` confirms the imbalance, the fix is
- * a schedule normalisation of the form
- * `goals × (REFERENCE_ROUNDS / leagueRounds) ^ exponent × tierCoefficient`,
- * with the exponent as the single tuning knob. It is deliberately NOT applied
- * yet: the approved design is the plain tier coefficient, and the audit
- * numbers should decide whether to change it.
+ * `exponent = 1` converts every league to a common 30-round basis. This is a
+ * structural correction, not a concession: schedule length carries no
+ * information about player quality, so it should not decide the award.
+ *
+ * The quality judgement lives entirely in GOLDEN_BOOT_TIER_COEFFICIENT below.
  */
-export const GOLDEN_BOOT_SCHEDULE_NOTE =
-  'Tier 2/3 play 14 rounds vs 30 in the top flight; the coefficient alone cannot close that gap.';
+export const GOLDEN_BOOT_SCHEDULE_EXPONENT = 1;
+
+/**
+ * What a goal is worth, by the league it was scored in.
+ *
+ * Applied to a schedule-normalised rate, so this is the only knob expressing
+ * "a goal against weaker opposition counts for less". Deliberately separate
+ * from TIER_COEFFICIENT: position awards score `positionQuality`, which is
+ * already derived from per-match metrics and carries no schedule asymmetry, so
+ * they keep the original 1.00 / 0.90 / 0.80 table.
+ *
+ * Why below 0.90: the audit showed 0.90 / 0.80 is empirically the *tier-blind*
+ * value — at that setting the lower tiers won 52% of Golden Boots, matching
+ * their 16-of-32 share of clubs almost exactly. Any genuine preference for the
+ * stronger league has to sit below it.
+ *
+ * Measured at 0.75 / 0.58 across 3 seeds x 30 seasons: top flight 71%,
+ * tier 2 ~27%, tier 3 ~2%. Crucially the winner's scoring rate stays at
+ * 5.2-5.6x their own league's average at every coefficient tested, so tuning
+ * this changes which league the standout comes from, never whether they are
+ * genuinely exceptional.
+ */
+export const GOLDEN_BOOT_TIER_COEFFICIENT: Record<LeagueTier, number> = {
+  1: 1.0,
+  2: 0.75,
+  3: 0.58,
+};
 
 // ── Team achievement multipliers ────────────────────────────────────
 
@@ -143,6 +170,18 @@ export const BUZZ_WEIGHTS = {
   recentForm: 0.3,
   teamMomentum: 0.2,
 } as const;
+
+/**
+ * Weighted goals that map to a full 100 on the Golden Boot buzz scale.
+ *
+ * The award ranks by weighted goals directly; the buzz panel needs a bounded
+ * 0-100 component so it can blend goals with form and momentum on one scale.
+ *
+ * Raised from 30 when schedule normalisation landed: a 28-goal tier-2 season
+ * now scores 45, where under raw goals it scored 25.2. The ceiling tracks the
+ * post-normalisation scale, not the raw one.
+ */
+export const BUZZ_GOLDEN_BOOT_CEILING = 45;
 
 /** Matches considered for a player's recent form. */
 export const BUZZ_FORM_MATCHES = 5;

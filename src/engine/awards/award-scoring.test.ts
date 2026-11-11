@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   ballonDorTeamFactor,
+  describeGoldenBoot,
   domesticCupMultiplier,
+  goldenBootBreakdown,
   goldenBootScore,
   placementOf,
   positionAwardScore,
@@ -9,7 +11,12 @@ import {
   sampleGateMultiplier,
   tierNeutralScore,
 } from './award-scoring';
-import { BALLON_DOR_TEAM, POSITION_AWARD_TEAM, TIER_COEFFICIENT } from './award-weights';
+import {
+  BALLON_DOR_TEAM,
+  GOLDEN_BOOT_TIER_COEFFICIENT,
+  POSITION_AWARD_TEAM,
+  TIER_COEFFICIENT,
+} from './award-weights';
 
 describe('tierNeutralScore', () => {
   it('is an exact inversion of the 10% league-strength term', () => {
@@ -104,22 +111,80 @@ describe('domesticCupMultiplier', () => {
 });
 
 describe('goldenBootScore', () => {
-  it('weights goals by tier coefficient', () => {
-    expect(goldenBootScore(20, 1)).toBeCloseTo(20, 6);
-    expect(goldenBootScore(20, 2)).toBeCloseTo(18, 6);
-    expect(goldenBootScore(20, 3)).toBeCloseTo(16, 6);
+  const REFERENCE_ROUNDS = 30;
+  const LOWER_ROUNDS = 14;
+
+  it('leaves a top-flight season untouched', () => {
+    expect(goldenBootScore(30, 1)).toBeCloseTo(30, 6);
   });
 
-  it('lets a prolific lower-tier season outscore a top-flight one', () => {
+  it('converts a shorter schedule to the 30-round basis before weighting', () => {
+    const breakdown = goldenBootBreakdown(14, 2);
+    expect(breakdown.scheduleAdjusted).toBeCloseTo(14 * (REFERENCE_ROUNDS / LOWER_ROUNDS), 6);
+    expect(breakdown.score).toBeCloseTo(
+      breakdown.scheduleAdjusted * GOLDEN_BOOT_TIER_COEFFICIENT[2],
+      6,
+    );
+  });
+
+  it('gives schedule length no weight of its own', () => {
+    // The same scoring rate in two leagues must differ by exactly the
+    // coefficient — never by the raw goal difference, which is what the
+    // pre-normalisation formula measured.
+    expect(goldenBootScore(30, 1)).toBeCloseTo(30, 6);
+    expect(goldenBootScore(14, 2)).toBeCloseTo(30 * GOLDEN_BOOT_TIER_COEFFICIENT[2], 6);
+  });
+
+  it('lets a genuinely more prolific lower-tier season win', () => {
+    // 24 in 14 rounds is 1.71 per round against 0.67 for 20 in 30.
     expect(goldenBootScore(24, 2)).toBeGreaterThan(goldenBootScore(20, 1));
   });
 
-  it('still favours the top flight at similar counts', () => {
-    expect(goldenBootScore(22, 2)).toBeLessThan(goldenBootScore(20, 1));
+  it('still favours the stronger league at an equal scoring rate', () => {
+    expect(goldenBootScore(14, 2)).toBeLessThan(goldenBootScore(30, 1));
+    expect(goldenBootScore(14, 3)).toBeLessThan(goldenBootScore(14, 2));
   });
 
-  it('uses the shared tier table', () => {
-    expect(goldenBootScore(10, 3)).toBeCloseTo(10 * TIER_COEFFICIENT[3], 6);
+  it('keeps the coefficient below the tier-blind value', () => {
+    // A 90-season audit measured 0.90 / 0.80 as tier-blind: at that setting the
+    // lower tiers won 52% of Golden Boots, matching their share of clubs. A
+    // coefficient at or above it would stop expressing any preference for the
+    // stronger league, so this guards the finding rather than the number.
+    expect(GOLDEN_BOOT_TIER_COEFFICIENT[2]).toBeLessThan(0.9);
+    expect(GOLDEN_BOOT_TIER_COEFFICIENT[3]).toBeLessThan(GOLDEN_BOOT_TIER_COEFFICIENT[2]);
+    expect(GOLDEN_BOOT_TIER_COEFFICIENT[1]).toBe(1);
+  });
+
+  it('exposes a reconstructable breakdown', () => {
+    const breakdown = goldenBootBreakdown(20, 3);
+    expect(breakdown.goals).toBe(20);
+    expect(breakdown.rounds).toBe(LOWER_ROUNDS);
+    expect(breakdown.referenceRounds).toBe(REFERENCE_ROUNDS);
+    expect(breakdown.score).toBeCloseTo(
+      breakdown.scheduleAdjusted * breakdown.coefficient,
+      6,
+    );
+    expect(breakdown.isTopFlightBasis).toBe(false);
+  });
+
+  it('marks a top-flight season as needing no adjustment', () => {
+    expect(goldenBootBreakdown(25, 1).isTopFlightBasis).toBe(true);
+  });
+});
+
+describe('describeGoldenBoot', () => {
+  it('stays short when no adjustment applies', () => {
+    expect(describeGoldenBoot(goldenBootBreakdown(25, 1))).toBe('25球');
+  });
+
+  it('prints the whole derivation when one does', () => {
+    const breakdown = goldenBootBreakdown(20, 2);
+    const label = describeGoldenBoot(breakdown);
+    expect(label).toContain('20球/14轮');
+    expect(label).toContain('折算42.9球');
+    expect(label).toContain('0.75');
+    // The printed result must be the value the award actually ranked on.
+    expect(label).toContain(breakdown.score.toFixed(1));
   });
 });
 

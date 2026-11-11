@@ -2,25 +2,25 @@ import { PlayerAward } from '../../types/award';
 import { PlayerSeasonStats, Player, PlayerTeamSeasonStats, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
 import { StandingEntry } from '../../types/league';
-import { computePlayerPerformance, computeSegmentedPlayerPerformance } from '../players/player-performance';
 import { sortStandings } from '../standings/standings';
+import { createCandidateContext } from './candidate-context';
 import {
   ballonDorScore,
   buildBallonDorContextResolver,
   type TeamHonourLookup,
 } from './ballon-dor';
 import {
+  describeGoldenBoot,
+  goldenBootBreakdown,
   goldenBootScore,
   placementOf,
   positionAwardScore,
   sampleGateMultiplier,
   tierNeutralScore,
-  TIER_LABELS,
   type TeamPlacement,
 } from './award-scoring';
 import {
   BALLON_DOR_MIN_APPEARANCES,
-  TIER_COEFFICIENT,
   YOUNG_PLAYER_TIER_COEFFICIENT,
   type LeagueTier,
 } from './award-weights';
@@ -105,35 +105,9 @@ export function computeSeasonAwards(
   const allStats = Object.values(playerStats);
   if (allStats.length === 0) return awards;
 
-  // playerId is a stable Player.uuid, not the legacy `${teamId}-${number}`
-  // string. Build both indexes once instead of rescanning the whole league for
-  // every stat row — the previous lookup rebuilt an ~800-element array per call,
-  // and the segment filter rescanned every segment per player.
-  const playerByUuid = new Map<string, Player>();
-  for (const squad of Object.values(squads)) {
-    for (const player of squad) {
-      if (!playerByUuid.has(player.uuid)) playerByUuid.set(player.uuid, player);
-    }
-  }
-
-  const segmentsByPlayer = new Map<string, PlayerTeamSeasonStats[]>();
-  for (const segment of Object.values(playerStatSegments)) {
-    const existing = segmentsByPlayer.get(segment.playerId);
-    if (existing) existing.push(segment);
-    else segmentsByPlayer.set(segment.playerId, [segment]);
-  }
-
-  const findPlayer = (playerUuid: string): Player | undefined => playerByUuid.get(playerUuid);
-
-  const performanceFor = (player: Player, stat: PlayerSeasonStats) => {
-    const segments = segmentsByPlayer.get(player.uuid);
-    return segments && segments.length > 0
-      ? computeSegmentedPlayerPerformance(player.position, segments, seasonStartLevels, stat)
-      : computePlayerPerformance(player.position, stat, seasonStartLevels[stat.teamId]);
-  };
-
-  const minutesOf = (stat: PlayerSeasonStats) => stat.minutesPlayed ?? stat.appearances * 90;
-  const levelOf = (teamId: string): LeagueTier => seasonStartLevels[teamId] ?? 1;
+  const { findPlayer, performanceFor, minutesOf, levelOf } = createCandidateContext(
+    squads, playerStatSegments, seasonStartLevels,
+  );
 
   // Ranked once with the engine's own tiebreakers. Array order is not a ranking.
   const rankedStandings = sortStandings(league1Standings);
@@ -218,20 +192,27 @@ export function computeSeasonAwards(
   }
 
   // ── Golden Boot (金靴奖) ─────────────────────────────────────
-  // Goals weighted by tier, the way the European Golden Shoe weights by league
-  // coefficient. Ties resolve through the shared comparator, so this can no
-  // longer disagree with the season-review top-scorer card.
+  // Goals converted to a common 30-round basis, then weighted by what a goal
+  // in that league is worth. The two steps answer different questions and are
+  // tuned separately — see GOLDEN_BOOT_SCHEDULE_EXPONENT.
+  //
+  // Ties resolve through the shared comparator, so this can no longer disagree
+  // with the season-review top-scorer card.
   const bootCandidates = candidatesFrom(
     allStats.filter(s => s.goals > 0),
     (stat) => goldenBootScore(stat.goals, levelOf(stat.teamId)),
   );
   const bootBest = pickBest(bootCandidates);
   if (bootBest) {
-    const coefficient = TIER_COEFFICIENT[bootBest.leagueLevel];
-    const label = bootBest.leagueLevel === 1
-      ? `${bootBest.stat.goals}球`
-      : `${bootBest.stat.goals}球 · ${TIER_LABELS[bootBest.leagueLevel]}×${coefficient.toFixed(2)}`;
-    const award = buildAward('golden_boot', bootBest, bootBest.awardScore, label);
+    // The label prints the whole derivation whenever an adjustment applies, so
+    // the result stays reconstructable from what the player can see.
+    const breakdown = goldenBootBreakdown(bootBest.stat.goals, bootBest.leagueLevel);
+    const award = buildAward(
+      'golden_boot',
+      bootBest,
+      Math.round(breakdown.score * 10) / 10,
+      describeGoldenBoot(breakdown),
+    );
     if (award) awards.push(award);
   }
 
