@@ -27,7 +27,15 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // edge, at the cost of widening computeSeasonAwards and
     // buildBallonDorContextResolver and rewriting ~22 call sites across two
     // verified award test files — not worth it for one precache entry.
-    entries: 87,
+    //
+    // 87 → 88 for v4.63.0. The award rework put the seven scoring formulas in
+    // src/engine/awards/award-scoring, which five non-test modules now import:
+    // season-end, season-awards, ballon-dor, award-buzz and the player stat
+    // selectors behind the player centre. That fan-out is the point — one
+    // formula per award, applied exactly once — so it became a shared chunk
+    // rather than being inlined into season-manager. Measured precache bytes
+    // are 1,957,575 against the 2,150,000 cap, so only the entry count moved.
+    entries: 88,
     bytes: 2_150_000,
   },
 } as const;

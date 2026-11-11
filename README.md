@@ -205,7 +205,7 @@ pnpm audit:long-save           # 1/50/100/150 赛季存档恢复与容量
 | Rendering | **Canvas 2D** (match live broadcast) |
 | Deploy | **Vercel** (static site, CDN edge) |
 
-Current release: **v4.62.0**, deployed 2026-11-11 15:44 Asia/Shanghai to https://football.dyp02.vip/ from `main/f0956e2`. Personal edition only — https://cup.dyp02.vip/ was not rebuilt and remains on **v4.61.11**. This release was published without a browser playtest, at the author's explicit instruction.
+Current release: **v4.63.0**, deployment to https://football.dyp02.vip/ in progress. Personal edition only — https://cup.dyp02.vip/ is not rebuilt and remains on **v4.61.11**. This release carries desktop and 390x844/430x932/375x667/320x568 live-broadcast evidence plus the four-viewport `verify:match` gate, but no real-device playtest.
 
 68k+ production TypeScript lines · 220+ production source files · 160+ test files · 45+ browser/simulation audit commands
 
