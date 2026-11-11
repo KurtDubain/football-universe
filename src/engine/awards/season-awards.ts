@@ -27,14 +27,28 @@ export function computeSeasonAwards(
   if (allStats.length === 0) return awards;
 
   // playerId is a stable Player.uuid, not the legacy `${teamId}-${number}`
-  // string. We still need the teamId to find the right squad to scan.
-  const findPlayer = (playerUuid: string, teamId: string): Player | undefined =>
-    squads[teamId]?.find((p) => p.uuid === playerUuid)
-    ?? Object.values(squads).flat().find((p) => p.uuid === playerUuid);
+  // string. Build both indexes once instead of rescanning the whole league for
+  // every stat row — the previous lookup rebuilt an ~800-element array per call,
+  // and the segment filter rescanned every segment per player.
+  const playerByUuid = new Map<string, Player>();
+  for (const squad of Object.values(squads)) {
+    for (const player of squad) {
+      if (!playerByUuid.has(player.uuid)) playerByUuid.set(player.uuid, player);
+    }
+  }
+
+  const segmentsByPlayer = new Map<string, PlayerTeamSeasonStats[]>();
+  for (const segment of Object.values(playerStatSegments)) {
+    const existing = segmentsByPlayer.get(segment.playerId);
+    if (existing) existing.push(segment);
+    else segmentsByPlayer.set(segment.playerId, [segment]);
+  }
+
+  const findPlayer = (playerUuid: string): Player | undefined => playerByUuid.get(playerUuid);
 
   const performanceFor = (player: Player, stat: PlayerSeasonStats) => {
-    const segments = Object.values(playerStatSegments).filter(segment => segment.playerId === player.uuid);
-    return segments.length > 0
+    const segments = segmentsByPlayer.get(player.uuid);
+    return segments && segments.length > 0
       ? computeSegmentedPlayerPerformance(player.position, segments, seasonStartLevels, stat)
       : computePlayerPerformance(player.position, stat, seasonStartLevels[stat.teamId]);
   };
@@ -45,7 +59,7 @@ export function computeSeasonAwards(
     statValue: number,
     statLabel: string,
   ): PlayerAward | null => {
-    const player = findPlayer(stat.playerId, stat.teamId);
+    const player = findPlayer(stat.playerId);
     const team = teamBases[stat.teamId];
     if (!player || !team) return null;
     return {
@@ -62,20 +76,32 @@ export function computeSeasonAwards(
   };
 
   // ── MVP (金球奖) ─────────────────────────────────────────────
-  let mvpScore = -1;
-  let mvpStat: PlayerSeasonStats | null = null;
-  let mvpScoreValue = 0;
-  for (const s of allStats) {
-    if (s.appearances < 5) continue;
-    const player = findPlayer(s.playerId, s.teamId);
-    if (!player) continue;
-    const score = performanceFor(player, s).seasonScore;
-    if (score > mvpScore) {
-      mvpScore = score;
-      mvpStat = s;
-      mvpScoreValue = Math.round(score * 10) / 10;
-    }
-  }
+  // Ties are broken by minutes played, then by uuid, so the winner never
+  // depends on object-key insertion order.
+  const mvpCandidates = allStats
+    .filter(s => s.appearances >= 5)
+    .map(s => {
+      const player = findPlayer(s.playerId);
+      if (!player) return null;
+      return { stat: s, player, score: performanceFor(player, s).seasonScore };
+    })
+    .filter((entry): entry is { stat: PlayerSeasonStats; player: Player; score: number } => entry !== null);
+
+  const mvpBest = mvpCandidates.length > 0
+    ? mvpCandidates.reduce((best, entry) => {
+        if (entry.score > best.score) return entry;
+        if (entry.score < best.score) return best;
+        // Equal score: more minutes wins, then stable uuid order.
+        const entryMinutes = entry.stat.minutesPlayed ?? entry.stat.appearances * 90;
+        const bestMinutes = best.stat.minutesPlayed ?? best.stat.appearances * 90;
+        if (entryMinutes > bestMinutes) return entry;
+        if (entryMinutes < bestMinutes) return best;
+        return entry.player.uuid.localeCompare(best.player.uuid) < 0 ? entry : best;
+      })
+    : null;
+
+  const mvpStat: PlayerSeasonStats | null = mvpBest ? mvpBest.stat : null;
+  const mvpScoreValue = mvpBest ? Math.round(mvpBest.score * 10) / 10 : 0;
   if (mvpStat) {
     const a = buildAward('mvp', mvpStat, mvpScoreValue, `赛季综合评分 ${mvpScoreValue.toFixed(1)}`);
     if (a) awards.push(a);
@@ -96,9 +122,12 @@ export function computeSeasonAwards(
   }
 
   const topLeagueTeamIds = new Set(league1Standings.map(row => row.teamId));
+  // Eligibility uses the team the stats belong to (stat.teamId), not the
+  // player's current club. A mid-season mover would otherwise be judged
+  // against a different league than the one their numbers came from.
   const rankedDefensivePlayer = (position: 'DF' | 'GK') => Object.values(squads)
     .flat()
-    .filter(player => player.position === position && topLeagueTeamIds.has(player.teamId))
+    .filter(player => player.position === position)
     .map(player => ({
       player,
       stat: playerStats[player.uuid],
@@ -106,7 +135,9 @@ export function computeSeasonAwards(
         ? performanceFor(player, playerStats[player.uuid])
         : computePlayerPerformance(position, undefined, 1),
     }))
-    .filter(entry => entry.stat && entry.performance.eligible)
+    .filter(entry => entry.stat
+      && entry.performance.eligible
+      && topLeagueTeamIds.has(entry.stat.teamId))
     .sort((a, b) => b.performance.score - a.performance.score
       || (b.stat.minutesPlayed ?? 0) - (a.stat.minutesPlayed ?? 0)
       || a.player.uuid.localeCompare(b.player.uuid))[0];
@@ -142,7 +173,7 @@ export function computeSeasonAwards(
   let youngTopAge = 0;
   for (const s of allStats) {
     if (exclude.has(s.playerId)) continue;
-    const player = findPlayer(s.playerId, s.teamId);
+    const player = findPlayer(s.playerId);
     if (!player || player.age >= 23) continue;
     const performance = performanceFor(player, s);
     if (!performance.eligible) continue;

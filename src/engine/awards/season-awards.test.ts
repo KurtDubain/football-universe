@@ -208,3 +208,153 @@ describe('computeSeasonAwards', () => {
     expect(computeSeasonAwards(1, {}, {}, {}, [])).toEqual([]);
   });
 });
+
+describe('computeSeasonAwards — tie-breaking and mid-season transfers', () => {
+  it('breaks an MVP score tie by minutes played, not by input order', () => {
+    const teamA = makeTeam('teamA', 85);
+    const squads = {
+      teamA: [makePlayer('teamA', 9, 'FW'), makePlayer('teamA', 10, 'FW')],
+    };
+    // Identical output, different minutes. Both clear the appearance gate.
+    const stats = {
+      'teamA-9': { ...makeStat('teamA-9', 'teamA', 20, 5), minutesPlayed: 1800 },
+      'teamA-10': { ...makeStat('teamA-10', 'teamA', 20, 5), minutesPlayed: 2700 },
+    };
+    const standings = [makeStanding('teamA', 30, 20)];
+
+    const forward = computeSeasonAwards(1, stats, squads, { teamA }, standings);
+    const reversed = computeSeasonAwards(
+      1,
+      { 'teamA-10': stats['teamA-10'], 'teamA-9': stats['teamA-9'] },
+      squads,
+      { teamA },
+      standings,
+    );
+
+    expect(forward.find(a => a.type === 'mvp')?.playerId).toBe('teamA-10');
+    // Key order must not change the winner.
+    expect(reversed.find(a => a.type === 'mvp')?.playerId).toBe('teamA-10');
+  });
+
+  it('is deterministic when score and minutes are both equal', () => {
+    const teamA = makeTeam('teamA', 85);
+    const squads = {
+      teamA: [makePlayer('teamA', 9, 'FW'), makePlayer('teamA', 10, 'FW')],
+    };
+    const stats = {
+      'teamA-9': { ...makeStat('teamA-9', 'teamA', 20, 5), minutesPlayed: 2700 },
+      'teamA-10': { ...makeStat('teamA-10', 'teamA', 20, 5), minutesPlayed: 2700 },
+    };
+    const standings = [makeStanding('teamA', 30, 20)];
+
+    const first = computeSeasonAwards(1, stats, squads, { teamA }, standings);
+    const second = computeSeasonAwards(
+      1,
+      { 'teamA-10': stats['teamA-10'], 'teamA-9': stats['teamA-9'] },
+      squads,
+      { teamA },
+      standings,
+    );
+
+    // Stable uuid order decides: 'teamA-10' sorts before 'teamA-9'.
+    const firstMvp = first.find(a => a.type === 'mvp')?.playerId;
+    const secondMvp = second.find(a => a.type === 'mvp')?.playerId;
+    expect(firstMvp).toBe(secondMvp);
+    expect(firstMvp).toBe('teamA-10');
+  });
+
+  it('judges a transferred defender by the team their stats belong to', () => {
+    const topTeam = makeTeam('topTeam', 85);
+    const lowerTeam = makeTeam('lowerTeam', 70);
+
+    // The mover now sits in the lower-tier squad, but their season stats were
+    // recorded for the top-flight club. Only topTeam is in league1Standings.
+    const mover = { ...makePlayer('mover', 4, 'DF', 85), teamId: 'lowerTeam' };
+    const squads = {
+      lowerTeam: [mover],
+      topTeam: [makePlayer('topTeam', 4, 'DF', 70)],
+    };
+
+    const stats = {
+      'mover-4': {
+        ...makeStat('mover-4', 'topTeam', 0, 0, 30),
+        minutesPlayed: 2700,
+        interceptions: 120,
+        clearances: 160,
+        keyBlocks: 5,
+        goalsConcededWhileOnPitch: 12,
+        cleanSheetMinutes: 900,
+      },
+      'topTeam-4': {
+        ...makeStat('topTeam-4', 'topTeam', 0, 0, 30),
+        minutesPlayed: 2700,
+        interceptions: 40,
+        clearances: 60,
+        goalsConcededWhileOnPitch: 30,
+        cleanSheetMinutes: 300,
+      },
+    };
+    const standings = [makeStanding('topTeam', 30, 20)];
+
+    const awards = computeSeasonAwards(1, stats, squads, { topTeam, lowerTeam }, standings);
+    const bd = awards.find(a => a.type === 'best_defender');
+
+    // Eligible because stat.teamId is the top-flight club, and credited there.
+    expect(bd?.playerId).toBe('mover-4');
+    expect(bd?.teamId).toBe('topTeam');
+  });
+
+  it('excludes a defender whose stats belong to a club outside the top flight', () => {
+    const topTeam = makeTeam('topTeam', 85);
+    const lowerTeam = makeTeam('lowerTeam', 70);
+
+    const squads = {
+      topTeam: [makePlayer('topTeam', 4, 'DF', 70)],
+      lowerTeam: [makePlayer('lowerTeam', 4, 'DF', 90)],
+    };
+    const stats = {
+      'topTeam-4': {
+        ...makeStat('topTeam-4', 'topTeam', 0, 0, 30),
+        minutesPlayed: 2700,
+        interceptions: 40,
+        clearances: 60,
+        goalsConcededWhileOnPitch: 30,
+        cleanSheetMinutes: 300,
+      },
+      // Better numbers, but the season was played in the lower tier.
+      'lowerTeam-4': {
+        ...makeStat('lowerTeam-4', 'lowerTeam', 0, 0, 14),
+        minutesPlayed: 1260,
+        interceptions: 90,
+        clearances: 130,
+        keyBlocks: 4,
+        goalsConcededWhileOnPitch: 8,
+        cleanSheetMinutes: 700,
+      },
+    };
+    const standings = [makeStanding('topTeam', 30, 20)];
+
+    const awards = computeSeasonAwards(1, stats, squads, { topTeam, lowerTeam }, standings);
+    const bd = awards.find(a => a.type === 'best_defender');
+    expect(bd?.playerId).toBe('topTeam-4');
+  });
+
+  it('resolves a player whose squad entry moved by uuid, not by stated team', () => {
+    const teamA = makeTeam('teamA', 85);
+    // The stat row claims teamB, but the player lives in teamA's squad.
+    const squads = { teamA: [makePlayer('teamA', 9, 'FW')] };
+    const stats = {
+      'teamA-9': makeStat('teamA-9', 'teamB', 25, 10),
+    };
+    const teamB = makeTeam('teamB', 80);
+    const standings = [makeStanding('teamA', 30, 20), makeStanding('teamB', 30, 25)];
+
+    const awards = computeSeasonAwards(1, stats, squads, { teamA, teamB }, standings);
+    const gb = awards.find(a => a.type === 'golden_boot');
+    // Award is credited to the stats' team, and the player is still found.
+    expect(gb?.playerId).toBe('teamA-9');
+    expect(gb?.teamId).toBe('teamB');
+    expect(gb?.playerName).toBe('teamA-9');
+  });
+});
+
