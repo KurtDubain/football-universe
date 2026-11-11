@@ -126,7 +126,7 @@ export function selectWorldCupParticipants(
 /**
  * Initialize the world cup — 32 teams, 8 groups of 4.
  *
- * Pot system based on league level for balanced groups:
+ * Pot system based on squad overall, not league level:
  *   Pot 1: top 8 (by overall) — seeded into 8 groups
  *   Pot 2: next 8
  *   Pot 3: next 8

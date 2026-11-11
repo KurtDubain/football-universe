@@ -89,7 +89,8 @@ function checkDestinations(world: GameWorld, digest: NarrativeDigest, label: str
         violations.push(`${label}: unresolved fixture destination ${destination.fixtureId}`);
       }
       if (!destination.to) continue;
-      const [, kind, id] = destination.to.split('/');
+      const [, kind, rawId] = destination.to.split('/');
+      const id = rawId.split('#')[0];
       const valid = kind === 'team'
         ? Boolean(world.teamBases[id])
         : kind === 'coach'

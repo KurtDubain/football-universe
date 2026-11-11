@@ -1,7 +1,8 @@
 export const BALANCE = {
   // match simulation
   HOME_ADVANTAGE: 0.08,
-  BASE_GOAL_RATE: 1.3,
+  BASE_GOAL_RATE: 1.40,       // was 1.3 against the ratio form, which inflated
+                              // goals for weak clubs; see STRENGTH_EDGE_* below
   CUP_RANDOMNESS: 0.25,       // cups are more volatile
   LEAGUE_RANDOMNESS: 0.10,
   MORALE_WEIGHT: 0.12,
@@ -10,6 +11,18 @@ export const BALANCE = {
   COACH_BUFF_WEIGHT: 1.0,
   PLAYER_BOOST_WEIGHT: 1.0,   // multiplier on the player-derived squad boost (set to 0 to disable entirely)
   PLAYER_BOOST_CAP: 15,        // ± cap per side (attack/midfield/defense) — keeps elite stacks from doubling team.overall
+  // How much a rating gap is worth. The strength term used to be a plain
+  // attack/defense ratio, which shrank a fixed gap as teams got stronger: a
+  // five-point gap bought 0.130 expected goals at OVR 89 but 0.184 at OVR 63.
+  // That made the top flight measurably more random than the third tier
+  // (rank correlation 0.15 vs 0.60). tanh is odd, so the average goal rate is
+  // unchanged, and it saturates so a mismatch cannot run away.
+  // Slope near zero is MAX/SCALE = 0.018 per rating point, level-independent.
+  // The ratio form's slope was 1/OVR: 0.0115 at OVR 87 but 0.0139 at OVR 72.
+  // SCALE 30 saturated too early for the third tier, whose routine mismatches
+  // run to 25 points, and cost it a third of its strength signal.
+  STRENGTH_EDGE_SCALE: 45,     // rating points per unit of tanh argument
+  STRENGTH_EDGE_MAX: 0.81,     // a gap can move expectancy by at most ±81%
 
   // post-match effects
   WIN_MORALE_BOOST: 6,

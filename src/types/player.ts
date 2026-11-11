@@ -28,7 +28,13 @@ export interface Player {
    * never re-derives from peakRating in a hot path.
    */
   rating: number;
-  goalScoring: number; // 0-100, chance weight for being picked as scorer (NOT age-affected)
+  /**
+   * 0-100 PEAK chance weight for being picked as scorer, rolled position-keyed
+   * at generation. This is the ceiling, not the current value: read it through
+   * `effectiveGoalScoring` in `engine/players/development.ts`, which scales it
+   * by the same age curve `rating` uses. Reading it raw makes forwards immortal.
+   */
+  goalScoring: number;
   marketValue: number; // in millions, e.g. 85 for €85M
   age: number;         // simulated age, increments each season
   /**

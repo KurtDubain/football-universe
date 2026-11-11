@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveObservationSelection } from '../engine/observation/judgment';
 import { planNextKeyNode } from '../engine/observation/key-node';
+import { executeCurrentWindow, getCurrentWindow } from '../engine/season/season-manager';
 import { __resetCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import { useGameStore } from './game-store';
 import { SAVE_STORAGE_KEY } from './save-schema';
@@ -35,6 +36,12 @@ describe('game store observation settlement paths', () => {
     });
     compressedStorage.removeItem(SAVE_STORAGE_KEY);
     await useGameStore.getState().newGame(20260722);
+    // A season opens on a fixture-less pre_season window. Every test here is
+    // about judging and settling a real matchday, so start on the first one.
+    const opened = useGameStore.getState().world!;
+    if (getCurrentWindow(opened)?.type === 'pre_season') {
+      useGameStore.setState({ world: executeCurrentWindow(opened).world });
+    }
   });
 
   afterEach(() => {
@@ -104,7 +111,9 @@ describe('game store observation settlement paths', () => {
 
   it('allows only current-window fixtures and replaces the one pending judgment', () => {
     const world = useGameStore.getState().world!;
-    const [first, second] = world.seasonState.calendar[0].fixtures;
+    // The current window, not index 0 — a season opens on a fixture-less
+    // pre_season window and this test is specifically about current-window scope.
+    const [first, second] = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures;
     useGameStore.getState().setObservationJudgment('future-fixture', 'upset', 'yes');
     expect(useGameStore.getState().world?.pendingObservationJudgment).toBeNull();
 

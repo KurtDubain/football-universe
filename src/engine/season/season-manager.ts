@@ -1111,6 +1111,36 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
 
+  // The season-opening window is pure presentation: its draws and pre-season
+  // read are derived from world state at render time by `buildSeasonOpening`.
+  // This branch touches no RNG and simulates nothing, which is what lets the
+  // window exist without moving a single seeded match result.
+  //
+  // `totalElapsedWindows` counts *match-bearing* windows, so it stays put as
+  // well — injury and suspension `untilWindow` timers are unaffected.
+  //
+  // The transfer auto-resolve above this branch has already run, so its notice
+  // has to be returned. Returning an empty list here swallowed "N 项转会决策已
+  // 自动完成" on exactly the window where a carried-over window lands.
+  if (window.type === 'pre_season') {
+    const calendar = [...world.seasonState.calendar];
+    calendar[windowIndex] = { ...calendar[windowIndex], completed: true, results: [] };
+    const nextWindowIndex = windowIndex + 1;
+    return {
+      world: {
+        ...world,
+        seasonState: {
+          ...world.seasonState,
+          calendar,
+          currentWindowIndex: nextWindowIndex,
+          completed: nextWindowIndex >= calendar.length,
+        },
+      },
+      results: [],
+      news: preNews,
+    };
+  }
+
   // Season end is a special case — delegates to season-end module
   if (window.type === 'season_end') {
     // Freeze the completed season before annual revaluation ages players and

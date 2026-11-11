@@ -93,9 +93,13 @@ export function buildTeamNarrativeThread(world: GameWorld, teamId: string): Narr
       id: `resolved-story:${story.id}`,
       season: story.seasonNumber,
       order: story.seasonNumber * 10_000 + (story.endedWindow ?? story.lastUpdatedWindow),
-      title: `${STORY_LABELS[story.type]} · ${story.outcome === 'success' ? '成章' : '定格'}`,
+      title: `${STORY_LABELS[story.type]} · ${story.outcome === 'success' ? '成章' : story.outcome === 'failure' ? '定格' : '未判定'}`,
       detail: story.conclusion ?? story.evidence.join(' · '),
-      tone: story.outcome === 'success' ? 'stage' : story.type === 'giant_crisis' ? 'fall' : 'neutral',
+      tone: story.outcome === 'success'
+        ? 'stage'
+        : !story.outcome
+          ? 'neutral'
+          : story.type === 'giant_crisis' ? 'fall' : 'neutral',
       summaryOnly: true,
     });
   }
@@ -110,7 +114,9 @@ export function buildTeamNarrativeThread(world: GameWorld, teamId: string): Narr
         order: latestHonor.seasonNumber * 10_000 + 9_999,
         title: label.title,
         detail: label.detail,
-        tone: label.type === 'dynasty' ? 'stage' : label.type === 'promotion_run' ? 'rise' : 'fall',
+        tone: label.type === 'dynasty' || label.type === 'longevity'
+          ? 'stage'
+          : label.type === 'promotion_run' ? 'rise' : 'fall',
         to: '/history',
         summaryOnly: true,
       });

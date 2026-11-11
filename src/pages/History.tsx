@@ -804,6 +804,8 @@ const EVENT_PRESENTATION: Record<SeasonHistoryEvent['type'], {
 
 const LABEL_TONE: Record<SeasonHistorySummary['labels'][number]['type'], string> = {
   dynasty: 'border-amber-700/50 bg-amber-950/30 text-amber-200',
+  drought: 'border-orange-700/50 bg-orange-950/30 text-orange-200',
+  longevity: 'border-teal-700/50 bg-teal-950/30 text-teal-200',
   promotion_run: 'border-emerald-700/50 bg-emerald-950/30 text-emerald-200',
   relegation_run: 'border-rose-700/50 bg-rose-950/30 text-rose-200',
   decline: 'border-slate-600 bg-slate-900/50 text-slate-300',

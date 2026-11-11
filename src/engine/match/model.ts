@@ -369,9 +369,16 @@ export function expectedGoals(
   competitionType: CompetitionType,
   noiseMultiplier = 1,
 ): number {
-  const effectiveAttack = attackStrength * (0.6 + midfieldDominance * 0.4);
-  const effectiveDefense = defenseStrength * (0.8 + (1 - midfieldDominance) * 0.2);
-  let goals = BALANCE.BASE_GOAL_RATE * (effectiveAttack / effectiveDefense);
+  const attackWeight = 0.6 + midfieldDominance * 0.4;
+  const defenseWeight = 0.8 + (1 - midfieldDominance) * 0.2;
+  const midfieldEdge = attackWeight / defenseWeight;
+  // Strength enters as a difference, not a ratio, so a fixed rating gap is
+  // worth the same at every level. The old attack/defense ratio bought less
+  // and less advantage as clubs got stronger, which is why the top flight
+  // correlated with squad strength at 0.15 while the third tier hit 0.60.
+  const strengthEdge = BALANCE.STRENGTH_EDGE_MAX
+    * Math.tanh((attackStrength - defenseStrength) / BALANCE.STRENGTH_EDGE_SCALE);
+  let goals = BALANCE.BASE_GOAL_RATE * midfieldEdge * (1 + strengthEdge);
 
   // Keep modifier order aligned with the simulator's established seeded path.
   goals *= noiseMultiplier;

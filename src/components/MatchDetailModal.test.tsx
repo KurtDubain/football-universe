@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { initializeGameWorld } from '../engine/season/season-manager';
+import { firstMatchdayWorld } from '../engine/season/test-world';
 import MatchDetailModal from './MatchDetailModal';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,8 +25,8 @@ afterEach(() => {
 
 describe('MatchDetailModal prediction semantics', () => {
   it('presents a starting 83-rated previous winner as a pre-match focus', () => {
-    const world = initializeGameWorld(20260709);
-    const fixture = world.seasonState.calendar[0].fixtures[0];
+    const world = firstMatchdayWorld(20260709);
+    const fixture = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures[0];
     for (const player of [...world.squads[fixture.homeTeamId], ...world.squads[fixture.awayTeamId]]) player.rating = 72;
     const keeper = world.squads[fixture.homeTeamId].find(player => player.position === 'GK')!;
     keeper.rating = 83;
@@ -40,8 +40,8 @@ describe('MatchDetailModal prediction semantics', () => {
   });
 
   it('labels decimal model output as expected goals rather than a predicted score', () => {
-    const world = initializeGameWorld(20260709);
-    const fixture = world.seasonState.calendar[0].fixtures[0];
+    const world = firstMatchdayWorld(20260709);
+    const fixture = world.seasonState.calendar[world.seasonState.currentWindowIndex].fixtures[0];
 
     act(() => root.render(
       <MemoryRouter>

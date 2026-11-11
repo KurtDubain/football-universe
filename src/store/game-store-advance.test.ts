@@ -1,8 +1,23 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pastSeasonOpening } from '../engine/season/test-world';
 import { __resetCompressedStorageForTests, compressedStorage } from './compressed-storage';
 import { useGameStore } from './game-store';
 import { SAVE_STORAGE_KEY } from './save-schema';
+
+/**
+ * Start a fresh game already standing on the first matchday.
+ *
+ * Every season opens with a fixture-less `pre_season` window carrying the
+ * draw and the pre-season read. These tests are about advancing through
+ * match-bearing windows, so they start one window later. Skipping the
+ * opening window consumes no randomness, so the matchday reached here is
+ * the one this seed produced before the opening window existed.
+ */
+async function startOnFirstMatchday(seed: number) {
+  await useGameStore.getState().newGame(seed);
+  useGameStore.setState({ world: pastSeasonOpening(useGameStore.getState().world!) });
+}
 
 describe('game store advance scheduling', () => {
   let frames: FrameRequestCallback[];
@@ -40,7 +55,7 @@ describe('game store advance scheduling', () => {
       newAchievements: [],
     });
     compressedStorage.removeItem(SAVE_STORAGE_KEY);
-    await useGameStore.getState().newGame(20260716);
+    await startOnFirstMatchday(20260716);
   });
 
   afterEach(() => {
@@ -111,7 +126,7 @@ describe('game store advance scheduling', () => {
     // Replay the same seed with that club followed. Achievements are granted
     // only at season_end windows, so the batch run below spans exactly the same
     // stretch of calendar as advanceUntil + advanceWindow.
-    await useGameStore.getState().newGame(20260716);
+    await startOnFirstMatchday(20260716);
     useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
 
     await completeAdvance(useGameStore.getState().advanceUntil('season_end'));
@@ -123,7 +138,7 @@ describe('game store advance scheduling', () => {
     expect(singleNotifications.length).toBeGreaterThan(0);
     expect(singleNotifications.every(achievement => achievement.teamId === favoriteTeamId)).toBe(true);
 
-    await useGameStore.getState().newGame(20260716);
+    await startOnFirstMatchday(20260716);
     useGameStore.getState().setFavoriteTeams([favoriteTeamId]);
     await completeAdvance(useGameStore.getState().batchAdvance(60));
 
@@ -191,7 +206,7 @@ describe('game store advance scheduling', () => {
       newAchievements: [achievement],
     });
 
-    await useGameStore.getState().newGame(20260809);
+    await startOnFirstMatchday(20260809);
     expect(useGameStore.getState()).toMatchObject({
       advanceTick: 0,
       favoriteTeamId: null,

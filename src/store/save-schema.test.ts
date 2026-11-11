@@ -107,7 +107,11 @@ it('loads last-season-honor match snapshots with the existing save version', () 
     season: 2, type: 'mvp', playerId: player.uuid, playerName: player.name, playerNumber: player.number,
     teamId: player.teamId, teamName: player.teamId, statValue: 83, statLabel: '综合83',
   }));
-  save.state.world = executeCurrentWindow(save.state.world).world;
+  // A season opens on a fixture-less window, so advance to the first matchday.
+  for (let step = 0; step < 8
+    && !save.state.world.seasonState.calendar.some(window => window.results.length > 0); step++) {
+    save.state.world = executeCurrentWindow(save.state.world).world;
+  }
   expect(save.state.world.seasonState.calendar.flatMap(window => window.results ?? [])
     .some(result => result.featuredPlayers?.some(player => player.reason === 'previous_award'))).toBe(true);
   expect(parseCurrentSave(JSON.stringify(save)).state.world).toEqual(save.state.world);
@@ -321,7 +325,11 @@ describe('current schema hydration boundary', () => {
     })],
     ['out-of-range tactical snapshot', (() => {
       const save = makeSave();
-      save.state.world = executeCurrentWindow(save.state.world).world;
+      // A season opens on a fixture-less window, so advance to the first matchday.
+      for (let step = 0; step < 8
+        && !save.state.world.seasonState.calendar.some(window => window.results.length > 0); step++) {
+        save.state.world = executeCurrentWindow(save.state.world).world;
+      }
       const result = save.state.world.seasonState.calendar.flatMap(window => window.results)[0];
       if (!result?.homeTactics) throw new Error('Expected a completed match with tactics');
       result.homeTactics.attackDelta = 99;
@@ -329,7 +337,11 @@ describe('current schema hydration boundary', () => {
     })()],
     ['focus player outside the real starting lineup', (() => {
       const save = makeSave();
-      save.state.world = executeCurrentWindow(save.state.world).world;
+      // A season opens on a fixture-less window, so advance to the first matchday.
+      for (let step = 0; step < 8
+        && !save.state.world.seasonState.calendar.some(window => window.results.length > 0); step++) {
+        save.state.world = executeCurrentWindow(save.state.world).world;
+      }
       const result = save.state.world.seasonState.calendar.flatMap(window => window.results)[0];
       if (!result) throw new Error('Expected a completed match');
       result.featuredPlayers = [{

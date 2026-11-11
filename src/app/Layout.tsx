@@ -372,11 +372,16 @@ export default function Layout({ children }: LayoutProps) {
     : { completedWindows: 0, totalWindows: 0, currentWindowNumber: null };
   const calendarLen = windowDisplay.totalWindows;
   const completedWindows = windowDisplay.completedWindows;
+  // The first-observation onboarding belongs to the first window that actually
+  // has a match. Seasons open on a fixture-less `pre_season` window, so index 0
+  // is no longer the opening matchday — requiring a real fixture keeps the
+  // floating action from promising "揭晓首轮" on a window with no round.
   const openingObservation = Boolean(
     world
     && world.seasonState.seasonNumber === 1
-    && world.seasonState.currentWindowIndex === 0
-    && world.totalElapsedWindows === 0,
+    && world.totalElapsedWindows === 0
+    && currentWindow
+    && currentWindow.fixtures.length > 0,
   );
   const floatingAction = location.pathname === '/' && currentWindow
     ? describeFloatingAdvanceAction({

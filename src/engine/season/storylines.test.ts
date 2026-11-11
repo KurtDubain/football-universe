@@ -9,6 +9,8 @@ import {
   getFixtureStorylineLabel,
   getStorylineArcKey,
   STORYLINE_COOLDOWN_WINDOWS,
+  STORYLINE_OPEN_MIN_LEAGUE_MATCHES,
+  STORYLINE_QUIET_WINDOWS,
   MAX_STORYLINES_PER_SEASON,
   STORYLINES_PER_TYPE_PER_SEASON,
   UNBEATEN_RUN_TRIGGER_LONG,
@@ -62,6 +64,7 @@ function world(params: {
   played?: number;
   pressure?: number;
   season?: number;
+  teamCount?: number;
   records?: SeasonRecord[];
   elapsed?: number;
 } = {}): GameWorld {
@@ -78,7 +81,7 @@ function world(params: {
     },
     teamBases: { target: team(expectation) },
     teamStates: { target: state(params.pressure) },
-    league1Standings: table(params.rank ?? 1, played),
+    league1Standings: table(params.rank ?? 1, played, params.teamCount ?? 8),
     league2Standings: [],
     league3Standings: [],
     teamSeasonRecords: { target: params.records ?? [] },
@@ -99,7 +102,8 @@ function move(worldValue: GameWorld, rank: number, played: number, season = worl
       seasonNumber: season,
       currentWindowIndex: played,
     },
-    league1Standings: table(rank, played),
+    // Preserve the league size so progress-driven phases stay comparable.
+    league1Standings: table(rank, played, worldValue.league1Standings.length || 8),
     totalElapsedWindows: played,
   };
 }
@@ -212,12 +216,16 @@ function activeStory(type: StorylineType, seasonNumber = 1): Storyline {
 
 describe('storyline trigger boundaries', () => {
   it.each([
-    ['leader', { expectation: 2, rank: 1, played: 4 }, true],
+    ['leader', { expectation: 2, rank: 1, played: 8 }, true],
     ['runner-up', { expectation: 2, rank: 2, played: 8 }, true],
     ['large expectation gap', { expectation: 1, rank: 3, played: 10 }, true],
     ['too early', { expectation: 2, rank: 1, played: 3 }, false],
+    ['below the open threshold', { expectation: 2, rank: 1, played: STORYLINE_OPEN_MIN_LEAGUE_MATCHES - 1 }, false],
+    ['at the open threshold', { expectation: 2, rank: 1, played: STORYLINE_OPEN_MIN_LEAGUE_MATCHES }, true],
     ['outside top group', { expectation: 2, rank: 4, played: 8 }, false],
     ['already expected giant', { expectation: 4, rank: 2, played: 8 }, false],
+    // rankDelta 3 used to open a story; a four-round hot streak is not an arc.
+    ['gap of three no longer opens', { expectation: 2, rank: 3, played: 8 }, false],
   ])('checks dark-horse scenario: %s', (_name, params, expected) => {
     expect(detectTeamStorylineSignals(world(params), 'target')
       .some(signal => signal.type === 'dark_horse')).toBe(expected);
@@ -225,23 +233,31 @@ describe('storyline trigger boundaries', () => {
 
   it.each([
     ['bottom giant', { expectation: 5, rank: 8, played: 8, pressure: 70 }, true],
-    ['lower-half giant', { expectation: 5, rank: 5, played: 8, pressure: 20 }, true],
-    ['expectation-four slump', { expectation: 4, rank: 6, played: 8, pressure: 20 }, true],
-    ['pressure boundary', { expectation: 5, rank: 4, played: 8, pressure: 55 }, true],
+    ['direct relegation place', { expectation: 4, rank: 7, played: 8, pressure: 20 }, true],
+    // A bottom-half finish is a bad autumn, not a crisis. With nine big clubs
+    // in a sixteen-team top flight this gate fired in 97% of audited seasons.
+    ['lower-half giant no longer opens', { expectation: 5, rank: 5, played: 8, pressure: 20 }, false],
+    ['expectation-four slump outside the drop places', { expectation: 4, rank: 6, played: 8, pressure: 20 }, false],
     ['within expectation', { expectation: 5, rank: 3, played: 8, pressure: 80 }, false],
     ['non-giant', { expectation: 3, rank: 8, played: 8, pressure: 80 }, false],
+    ['gap of three no longer opens', { expectation: 4, rank: 5, played: 8, pressure: 80 }, false],
+    // Coach pressure is the fallback for a club imploding before the table
+    // catches up, so it has to mean an explosive dugout, not ordinary heat.
+    ['explosive pressure carries an upper-half crisis', { expectation: 5, rank: 5, played: 8, pressure: 85, teamCount: 16 }, true],
+    ['ordinary pressure does not', { expectation: 5, rank: 5, played: 8, pressure: 84, teamCount: 16 }, false],
   ])('checks giant-crisis scenario: %s', (_name, params, expected) => {
     expect(detectTeamStorylineSignals(world(params), 'target')
       .some(signal => signal.type === 'giant_crisis')).toBe(expected);
   });
 
   it.each([
-    ['safe promoted side', { season: 2, rank: 2, records: [record()] }, true],
-    ['relegation-zone promoted side', { season: 2, rank: 8, records: [record()] }, true],
-    ['safety-line promoted side', { season: 2, rank: 5, records: [record()] }, true],
-    ['record too old', { season: 3, rank: 5, records: [record()] }, false],
-    ['not actually promoted', { season: 2, rank: 5, records: [record({ promoted: false })] }, false],
-    ['first season has no source record', { season: 1, rank: 5, records: [] }, false],
+    ['safe promoted side', { season: 2, rank: 2, played: 8, records: [record()] }, true],
+    ['relegation-zone promoted side', { season: 2, rank: 8, played: 8, records: [record()] }, true],
+    ['safety-line promoted side', { season: 2, rank: 5, played: 8, records: [record()] }, true],
+    ['record too old', { season: 3, rank: 5, played: 8, records: [record()] }, false],
+    ['not actually promoted', { season: 2, rank: 5, played: 8, records: [record({ promoted: false })] }, false],
+    ['first season has no source record', { season: 1, rank: 5, played: 8, records: [] }, false],
+    ['below the open threshold', { season: 2, rank: 2, played: STORYLINE_OPEN_MIN_LEAGUE_MATCHES - 1, records: [record()] }, false],
   ])('checks promoted-survival scenario: %s', (_name, params, expected) => {
     expect(detectTeamStorylineSignals(world(params), 'target')
       .some(signal => signal.type === 'promoted_survival')).toBe(expected);
@@ -250,24 +266,24 @@ describe('storyline trigger boundaries', () => {
 
 describe('chronological unbeaten stories', () => {
   it('requires a meaningful run and adapts the threshold to league length', () => {
+    // played is held at the open threshold throughout: this test is about run
+    // length against league length, not about when a story may open.
     const shortFive = withTimeline(
-      world({ expectation: 3, rank: 4, played: 5 }),
+      world({ expectation: 3, rank: 4, played: 8 }),
       leagueRun(UNBEATEN_RUN_TRIGGER_SHORT - 1),
     );
     const shortSix = withTimeline(
-      world({ expectation: 3, rank: 4, played: 6 }),
+      world({ expectation: 3, rank: 4, played: 8 }),
       leagueRun(UNBEATEN_RUN_TRIGGER_SHORT),
     );
     const longSix = withTimeline(
-      world({ expectation: 3, rank: 6, played: 6 }),
+      world({ expectation: 3, rank: 6, played: 8, teamCount: 16 }),
       leagueRun(UNBEATEN_RUN_TRIGGER_LONG - 1),
     );
-    longSix.league1Standings = table(6, 6, 16);
     const longSeven = withTimeline(
-      world({ expectation: 3, rank: 6, played: 7 }),
+      world({ expectation: 3, rank: 6, played: 8, teamCount: 16 }),
       leagueRun(UNBEATEN_RUN_TRIGGER_LONG),
     );
-    longSeven.league1Standings = table(6, 7, 16);
 
     expect(detectTeamStorylineSignals(shortFive, 'target')
       .some(signal => signal.type === 'unbeaten_run')).toBe(false);
@@ -311,7 +327,7 @@ describe('chronological unbeaten stories', () => {
 
   it('concludes immediately on defeat, preserves the peak, and honors cooldown across seasons', () => {
     const started = advanceStorylines(withTimeline(
-      world({ expectation: 3, rank: 4, played: 6 }),
+      world({ expectation: 3, rank: 4, played: 8 }),
       leagueRun(6),
     )).world;
     expect(started.activeStorylines).toContainEqual(expect.objectContaining({ type: 'unbeaten_run' }));
@@ -328,8 +344,10 @@ describe('chronological unbeaten stories', () => {
     });
 
     const coolingUntil = interrupted.storylineCooldowns?.at(-1)?.untilElapsedWindow ?? 0;
+    // played is above the open threshold in both worlds, so the only thing that
+    // can block the restart is the cooldown itself.
     const nextSeason = withTimeline(
-      move(interrupted, 4, 6, 2),
+      move(interrupted, 4, 8, 2),
       leagueRun(6),
     );
     nextSeason.totalElapsedWindows = coolingUntil - 1;
@@ -468,6 +486,9 @@ describe('cup giant-killer stories', () => {
     });
     expect(eliminated.storylineHistory?.at(-1)?.conclusion).toContain('四强后止步');
     expect(eliminated.storylineHistory?.at(-1)?.conclusion).not.toContain('Final');
+    // A finished cup campaign is a measured fact, so unlike a season-long arc it
+    // keeps a verdict even though the season never ruled on it.
+    expect(eliminated.storylineHistory?.at(-1)?.outcome).toBeDefined();
     expect(eliminated.storylineCooldowns?.at(-1)?.key).toContain('cup_giant_killer');
   });
 
@@ -516,61 +537,108 @@ describe('cup giant-killer stories', () => {
 
 describe('storyline lifecycle', () => {
   it('starts deterministically without consuming RNG and only reports meaningful changes', () => {
-    const initial = world({ rank: 2, played: 4 });
+    // A 16-team league gives 30 rounds, so played 8 is still 出现 (0.27) and
+    // played 13 crosses into 发展 (0.43). An 8-team league is already at 0.57 by
+    // the open threshold, which would hide the phase upgrade entirely.
+    const initial = world({ rank: 2, played: 8, teamCount: 16 });
     const first = advanceStorylines(initial);
     expect(first.world.rngState).toBe(initial.rngState);
     expect(first.world.activeStorylines).toHaveLength(1);
+    expect(first.world.activeStorylines?.[0].phase).toBe('出现');
     expect(first.news).toHaveLength(1);
     expect(first.news[0]).toMatchObject({ type: 'storyline', title: expect.stringContaining('故事出现') });
 
-    const development = advanceStorylines(move(first.world, 2, 7));
+    const development = advanceStorylines(move(first.world, 2, 13));
     expect(development.world.activeStorylines?.[0].phase).toBe('发展');
     expect(development.news[0]?.title).toContain('故事升级');
 
-    const unchanged = advanceStorylines(move(development.world, 2, 8));
+    const unchanged = advanceStorylines(move(development.world, 2, 14));
     expect(unchanged.news).toEqual([]);
     expect(unchanged.world.activeStorylines?.[0].phase).toBe('发展');
   });
 
-  it('requires two quiet windows before ending and never flaps on one weak window', () => {
-    const started = advanceStorylines(world({ rank: 2, played: 4 })).world;
-    const firstQuiet = advanceStorylines(move(started, 4, 5));
-    expect(firstQuiet.world.activeStorylines?.[0].quietWindows).toBe(1);
-    expect(firstQuiet.world.storylineHistory).toHaveLength(0);
+  it('requires four quiet windows before ending and never flaps on one weak window', () => {
+    // Rank 6 is outside both the dark-horse opening gate (top three) and its
+    // keep-alive band (top five), so every window here is genuinely quiet.
+    const started = advanceStorylines(world({ rank: 2, played: 8 })).world;
+    expect(started.activeStorylines).toHaveLength(1);
 
-    const secondQuiet = advanceStorylines(move(firstQuiet.world, 4, 6));
-    expect(secondQuiet.world.activeStorylines).toHaveLength(0);
-    expect(secondQuiet.world.storylineHistory?.[0]).toMatchObject({
+    const firstQuiet = advanceStorylines(move(started, 6, 9)).world;
+    const secondQuiet = advanceStorylines(move(firstQuiet, 6, 10)).world;
+    const thirdQuiet = advanceStorylines(move(secondQuiet, 6, 11)).world;
+    expect(thirdQuiet.activeStorylines?.[0].quietWindows).toBe(3);
+    expect(thirdQuiet.storylineHistory).toHaveLength(0);
+
+    const fourthQuiet = advanceStorylines(move(thirdQuiet, 6, 12));
+    expect(fourthQuiet.world.activeStorylines).toHaveLength(0);
+    const archived = fourthQuiet.world.storylineHistory?.[0];
+    expect(archived).toMatchObject({
       type: 'dark_horse',
       phase: '落幕',
-      outcome: 'failure',
+      conclusion: expect.stringContaining(`连续${STORYLINE_QUIET_WINDOWS}个观察窗口`),
     });
-    expect(secondQuiet.news[0]?.title).toContain('故事落幕');
+    // Mid-season silence is not a verdict.
+    expect(archived?.outcome).toBeUndefined();
+    expect(archived?.conclusion).toContain('未做赛季判定');
+    expect(fourthQuiet.news[0]?.title).toContain('故事落幕');
   });
 
-  it('resolves a midseason giant crisis after two windows below the crisis threshold', () => {
+  it('drops a midseason giant crisis after four quiet windows, without a verdict', () => {
     const initial = world({ expectation: 5, rank: 3, played: 8, pressure: 20 });
     initial.activeStorylines = [activeStory('giant_crisis')];
     const firstQuiet = advanceStorylines(initial).world;
-    const secondQuiet = advanceStorylines(move(firstQuiet, 3, 9));
+    const secondQuiet = advanceStorylines(move(firstQuiet, 3, 9)).world;
+    const thirdQuiet = advanceStorylines(move(secondQuiet, 3, 10)).world;
+    expect(thirdQuiet.activeStorylines).toHaveLength(1);
+    expect(thirdQuiet.storylineHistory).toHaveLength(0);
 
-    expect(secondQuiet.world.storylineHistory?.[0]).toMatchObject({
+    const fourthQuiet = advanceStorylines(move(thirdQuiet, 3, 11));
+    const archived = fourthQuiet.world.storylineHistory?.[0];
+    expect(archived).toMatchObject({
       type: 'giant_crisis',
       phase: '落幕',
-      outcome: 'success',
-      conclusion: expect.stringContaining('连续两个观察窗口'),
+      conclusion: expect.stringContaining(`连续${STORYLINE_QUIET_WINDOWS}个观察窗口`),
     });
-    expect(secondQuiet.world.storylineHistory?.[0].conclusion).not.toContain('最终排名');
+    // A crisis that quietly stops clearing the bar was never judged against the
+    // season. Recording `success` here reported a verdict the engine never made.
+    expect(archived?.outcome).toBeUndefined();
+    expect(archived?.conclusion).toContain('未做赛季判定');
+    expect(archived?.conclusion).not.toContain('最终排名');
+  });
+
+  it('keeps a crisis alive while the club is still in the relegation places', () => {
+    // Sixth of eight is a relegation place but no longer clears the opening
+    // gate, which only fires in the bottom two. The arc must survive it:
+    // 70% of crisis stories used to be dropped while still in trouble.
+    const initial = world({ expectation: 5, rank: 7, played: 8, pressure: 20 });
+    initial.activeStorylines = [activeStory('giant_crisis')];
+    let current = advanceStorylines(initial).world;
+    expect(current.activeStorylines).toHaveLength(1);
+
+    for (let played = 9; played <= 9 + STORYLINE_QUIET_WINDOWS; played++) {
+      current = advanceStorylines(move(current, 6, played)).world;
+    }
+    expect(current.activeStorylines).toHaveLength(1);
+    expect(current.activeStorylines?.[0].quietWindows).toBe(0);
+    expect(current.storylineHistory).toHaveLength(0);
+
+    // Clear of the drop zone it may finally go quiet.
+    const safe = advanceStorylines(move(current, 2, 15)).world;
+    expect(safe.activeStorylines?.[0].quietWindows).toBe(1);
   });
 
   it('keeps an ended story cooling across a season boundary before allowing restart', () => {
-    const started = advanceStorylines(world({ rank: 2, played: 4 })).world;
-    const quiet = advanceStorylines(move(started, 4, 5)).world;
-    const ended = advanceStorylines(move(quiet, 4, 6)).world;
+    const started = advanceStorylines(world({ rank: 2, played: 8 })).world;
+    const firstQuiet = advanceStorylines(move(started, 6, 9)).world;
+    const secondQuiet = advanceStorylines(move(firstQuiet, 6, 10)).world;
+    const thirdQuiet = advanceStorylines(move(secondQuiet, 6, 11)).world;
+    const ended = advanceStorylines(move(thirdQuiet, 6, 12)).world;
     const coolingUntil = ended.storylineCooldowns?.[0].untilElapsedWindow ?? 0;
-    expect(coolingUntil).toBe(6 + STORYLINE_COOLDOWN_WINDOWS);
+    expect(coolingUntil).toBe(12 + STORYLINE_COOLDOWN_WINDOWS);
 
-    const nextSeason = move(ended, 2, 7, 2);
+    // rank 2 clears the dark-horse bar at every window below, so only the
+    // cooldown can hold the restart back.
+    const nextSeason = move(ended, 2, 13, 2);
     expect(advanceStorylines(nextSeason).world.activeStorylines).toHaveLength(0);
 
     const afterCooldown = {
@@ -600,6 +668,44 @@ describe('storyline lifecycle', () => {
     });
   });
 
+  it('still records a verdict when the closing fact is self-sufficient', () => {
+    const started = advanceStorylines(withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      leagueRun(9),
+    )).world;
+    expect(started.activeStorylines).toContainEqual(expect.objectContaining({ type: 'unbeaten_run' }));
+
+    const interrupted = advanceStorylines(withTimeline(
+      move(started, 4, 9),
+      [...leagueRun(9), result({ id: 'run-ending-loss', outcome: 'loss' })],
+    )).world;
+    // Unlike a season-long arc, a broken run is a measured fact rather than a
+    // projection, so its mid-season close keeps a verdict.
+    expect(interrupted.storylineHistory?.at(-1)).toMatchObject({
+      type: 'unbeaten_run',
+      phase: '落幕',
+      outcome: 'success',
+      conclusion: expect.stringContaining('定格在9场'),
+    });
+  });
+
+  it('drops a midseason promoted-survival thread without claiming survival or relegation', () => {
+    const initial = world({ expectation: 3, rank: 5, played: 8 });
+    initial.activeStorylines = [activeStory('promoted_survival')];
+    const firstQuiet = advanceStorylines(initial).world;
+    const secondQuiet = advanceStorylines(move(firstQuiet, 5, 9)).world;
+    const thirdQuiet = advanceStorylines(move(secondQuiet, 5, 10)).world;
+    expect(thirdQuiet.activeStorylines).toHaveLength(1);
+
+    const fourthQuiet = advanceStorylines(move(thirdQuiet, 5, 11));
+    const archived = fourthQuiet.world.storylineHistory?.[0];
+    expect(archived?.type).toBe('promoted_survival');
+    // Survival is only decidable against a final table, never a mid-season one.
+    expect(archived?.outcome).toBeUndefined();
+    expect(archived?.conclusion).toContain('未做赛季判定');
+    expect(archived?.conclusion).not.toContain('最终排名');
+  });
+
   it('produces identical state and news for identical worlds', () => {
     const initial = world({ rank: 2, played: 8 });
     const first = advanceStorylines(initial);
@@ -623,7 +729,7 @@ describe('storyline lifecycle', () => {
     expect(result.news).toEqual([]);
   });
 
-  it('keeps type quotas inside the eight-story season budget', () => {
+  it('keeps type quotas inside the season budget', () => {
     expect(Object.values(STORYLINES_PER_TYPE_PER_SEASON)
       .reduce((total, cap) => total + cap, 0)).toBe(MAX_STORYLINES_PER_SEASON);
     const initial = world({ rank: 2, played: 8 });

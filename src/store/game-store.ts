@@ -453,6 +453,10 @@ export const useGameStore = create<GameStore>()(
             // Stop conditions
             if (type === 'cup' && (cw.type === 'league_cup' || cw.type === 'super_cup' || cw.type === 'super_cup_group')) break;
             if (type === 'season_end' && cw.type === 'season_end') break;
+            // Stop in front of a season opening rather than consuming it. The
+            // `outcomes.length > 0` guard keeps advancing *from* the opening
+            // window working — you only stop at one you have not reached yet.
+            if (cw.type === 'pre_season' && outcomes.length > 0) break;
             const result = executeWindowWithObservationSettlement(
               world,
               favoriteTeamIds,

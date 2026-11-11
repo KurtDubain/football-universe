@@ -53,17 +53,65 @@ export interface StorylineSignal {
 export const MAX_ACTIVE_STORYLINES = 8;
 export const MAX_STORYLINE_HISTORY = 60;
 export const MAX_STORYLINE_COOLDOWNS = 64;
-export const MAX_STORYLINES_PER_SEASON = 8;
+/**
+ * Season budget. The old budget of 8 was reached in nearly every season: the
+ * per-type caps were the binding constraint, not the triggers, so the arcs
+ * read as scheduled rather than earned.
+ */
+export const MAX_STORYLINES_PER_SEASON = 5;
 export const STORYLINE_MIN_LEAGUE_MATCHES = 4;
-export const STORYLINE_QUIET_WINDOWS = 2;
+/**
+ * League matches required before a story may OPEN. The observation layer
+ * keeps using the looser `STORYLINE_MIN_LEAGUE_MATCHES`, which also appears
+ * in player-facing copy; only story creation is held to this higher bar, so
+ * a four-round hot streak can no longer open a season-long arc.
+ */
+export const STORYLINE_OPEN_MIN_LEAGUE_MATCHES = 8;
+/**
+ * Windows a story may go without a fresh signal before it stops being tracked.
+ * At 2, most arcs died mid-season on ordinary noise: a 150-season audit found
+ * 85-91% of dark-horse stories ended without ever reaching a season verdict,
+ * because one flat fortnight is normal, not an ending.
+ */
+export const STORYLINE_QUIET_WINDOWS = 4;
 export const STORYLINE_COOLDOWN_WINDOWS = 6;
 export const UNBEATEN_RUN_TRIGGER_LONG = 7;
 export const UNBEATEN_RUN_TRIGGER_SHORT = 6;
+/**
+ * A dark horse has to be a genuine underdog contesting the title. The old
+ * gate was non-binding twice over: any expectation<=3 club in the top four
+ * of sixteen already clears rankDelta by construction, and even the top two
+ * filled the cap in 100% of audited seasons. Expectation 2 means the club
+ * was expected around 12th; anything higher is a mid-table side on a run.
+ */
+export const DARK_HORSE_MAX_EXPECTATION = 2;
+export const DARK_HORSE_MAX_RANK = 3;
+/**
+ * A crisis means the direct relegation places. With nine expectation>=4
+ * clubs in a sixteen-team top flight, a bottom-half gate fired in 97% of
+ * audited seasons; a bad autumn is not a crisis.
+ */
+export const GIANT_CRISIS_MIN_RANK_FROM_BOTTOM = 2;
+/**
+ * Keep-alive gates. These are deliberately wider than the opening gates: an
+ * arc has to be hard to start, but once started it must be allowed to finish.
+ * Reusing the opening gate to decide whether a story may continue killed arcs
+ * at their own boundary — a giant that climbed from 16th to 14th stopped
+ * signalling while still in a relegation place, and 70% of crisis arcs were
+ * dropped mid-crisis rather than judged.
+ */
+export const DARK_HORSE_KEEP_MAX_RANK = 5;
+export const GIANT_CRISIS_KEEP_COACH_PRESSURE = 70;
+export const GIANT_CRISIS_MIN_COACH_PRESSURE = 85;
+/**
+ * One arc per family per season. Two of each turned the season review into a
+ * fixed programme; scarcity is what lets a quiet season actually be quiet.
+ */
 export const STORYLINES_PER_TYPE_PER_SEASON: Record<StorylineType, number> = {
-  dark_horse: 2,
-  giant_crisis: 2,
+  dark_horse: 1,
+  giant_crisis: 1,
   promoted_survival: 1,
-  unbeaten_run: 2,
+  unbeaten_run: 1,
   cup_giant_killer: 1,
 };
 
@@ -408,7 +456,7 @@ function detectCupGiantKillerSignal(
 
 export function detectTeamStorylineSignals(world: GameWorld, teamId: string): StorylineSignal[] {
   const situation = getTeamSituation(world, teamId);
-  if (!situation || situation.row.played < STORYLINE_MIN_LEAGUE_MATCHES) return [];
+  if (!situation || situation.row.played < STORYLINE_OPEN_MIN_LEAGUE_MATCHES) return [];
   const { team, state, standings, row, rank, expected, relegationLine, safetyGap } = situation;
   const totalGames = Math.max(1, (standings.length - 1) * 2);
   const progress = row.played / totalGames;
@@ -421,7 +469,10 @@ export function detectTeamStorylineSignals(world: GameWorld, teamId: string): St
   ].filter((item): item is string => Boolean(item));
   const signals: StorylineSignal[] = [];
 
-  if (team.expectation <= 3 && rank <= Math.max(3, Math.ceil(standings.length / 4)) && rankDelta >= 3) {
+  // A dark horse has to be genuinely ahead of expectation, not merely in the
+  // top quarter. At rankDelta >= 3 the signal fired so often that the per-type
+  // cap bound every single season, which is what made the arc feel scheduled.
+  if (team.expectation <= DARK_HORSE_MAX_EXPECTATION && rank <= DARK_HORSE_MAX_RANK && rankDelta >= 4) {
     signals.push({
       teamId,
       type: 'dark_horse',
@@ -442,8 +493,9 @@ export function detectTeamStorylineSignals(world: GameWorld, teamId: string): St
   const crisisDelta = rank - expected;
   if (
     team.expectation >= 4
-    && crisisDelta >= 3
-    && (rank > standings.length / 2 || state.coachPressure >= 55)
+    && crisisDelta >= 4
+    && (rank > standings.length - GIANT_CRISIS_MIN_RANK_FROM_BOTTOM
+      || state.coachPressure >= GIANT_CRISIS_MIN_COACH_PRESSURE)
   ) {
     signals.push({
       teamId,
@@ -495,6 +547,25 @@ export function detectStorylineSignals(world: GameWorld): StorylineSignal[] {
       || a.type.localeCompare(b.type));
 }
 
+/**
+ * True while the situation that opened an arc still holds. Used only to keep
+ * an existing story alive; it never opens one, so widening it costs no extra
+ * cards per season.
+ */
+export function storylineStillRelevant(world: GameWorld, storyline: Storyline): boolean {
+  const situation = getTeamSituation(world, storyline.teamId);
+  if (!situation) return false;
+  const { rank, relegationLine } = situation;
+  const coachPressure = world.teamStates[storyline.teamId]?.coachPressure ?? 0;
+  if (storyline.type === 'giant_crisis') {
+    return rank >= relegationLine || coachPressure >= GIANT_CRISIS_KEEP_COACH_PRESSURE;
+  }
+  if (storyline.type === 'dark_horse') {
+    return rank <= DARK_HORSE_KEEP_MAX_RANK;
+  }
+  return false;
+}
+
 export function describeStoryline(world: GameWorld, storyline: Storyline): StorylineSignal | null {
   const detected = storyline.type === 'cup_giant_killer'
     ? detectCupGiantKillerSignal(world, storyline.teamId, storyline.competitionName)
@@ -515,7 +586,7 @@ export function describeStoryline(world: GameWorld, storyline: Storyline): Story
   } else if (storyline.type === 'giant_crisis') {
     title = `${team.name}的赛季危机`;
     body = `目前排名第${rank}，赛前位置预期约为第${expected}，危机是否解除仍需继续观察。`;
-    nextWatch = '能否连续两个窗口回到正常区间';
+    nextWatch = `能否连续${STORYLINE_QUIET_WINDOWS}个窗口回到正常区间`;
   } else if (storyline.type === 'promoted_survival') {
     title = `${team.name}的升级首季`;
     body = `目前排名第${rank}，${rank <= relegationLine ? '仍在降级区之外' : '仍处于降级区'}。`;
@@ -562,15 +633,21 @@ function concludeStoryline(
     return {
       ...storyline,
       phase: '落幕',
-      outcome: 'failure',
-      conclusion: '球队已不在当前赛事结构中，故事停止追踪。',
+      // No table to judge against, so no verdict: this is a dropped thread,
+      // not a failed one.
+      outcome: undefined,
+      conclusion: '球队已不在当前赛事结构中，故事停止追踪，未做赛季判定。',
       endedWindow: world.seasonState.currentWindowIndex,
       lastUpdatedWindow: world.seasonState.currentWindowIndex,
       lastUpdatedElapsedWindow: world.totalElapsedWindows ?? 0,
     };
   }
   const { rank, expected, standings, relegationLine } = situation;
-  let outcome: StorylineOutcome;
+  // Undefined means "stopped being tracked before the season could judge it".
+  // The standings-driven families below only claim success or failure at
+  // season end. `unbeaten_run` and `cup_giant_killer` are judged from
+  // completed matches instead, so they can close mid-season.
+  let outcome: StorylineOutcome | undefined;
   let conclusion: string;
   let canonicalEvidence: string[] | undefined;
 
@@ -596,28 +673,46 @@ function concludeStoryline(
         : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${cnRoundLabel(campaign.deepestRoundLabel)}${campaign.eliminated ? '后止步。' : '并在赛季末写入档案。'}`
       : `${storyline.competitionName ?? '杯赛'}的巨人杀手征程已结束，详细赛果无法继续重建。`;
   } else if (storyline.type === 'dark_horse') {
-    outcome = finalSeason
-      && rank <= Math.max(4, Math.ceil(standings.length / 4))
-      && expected - rank >= 2
-      ? 'success'
-      : 'failure';
-    conclusion = outcome === 'success'
-      ? `最终排名第${rank}，比赛季前位置预期高${Math.max(0, expected - rank)}位，黑马赛季得到兑现。`
-      : `${finalSeason ? '最终' : '该观察窗口'}排名第${rank}，已不再满足黑马追踪条件。`;
+    if (finalSeason) {
+      outcome = rank <= Math.max(4, Math.ceil(standings.length / 4))
+        && expected - rank >= 2
+        ? 'success'
+        : 'failure';
+      conclusion = outcome === 'success'
+        ? `最终排名第${rank}，比赛季前位置预期高${Math.max(0, expected - rank)}位，黑马赛季得到兑现。`
+        : `最终排名第${rank}，已不再满足黑马兑现条件。`;
+    } else {
+      // Same rule as giant_crisis: a thread that stops clearing the bar
+      // mid-season was never judged, so it must not record a verdict the
+      // engine never computed.
+      outcome = undefined;
+      conclusion = `该观察窗口排名第${rank}，连续${STORYLINE_QUIET_WINDOWS}个观察窗口未再达到黑马标准，故事停止追踪，未做赛季判定。`;
+    }
   } else if (storyline.type === 'giant_crisis') {
-    outcome = finalSeason
-      ? (rank <= expected + 1 ? 'success' : 'failure')
-      : 'success';
-    conclusion = outcome === 'success'
-      ? finalSeason
+    if (finalSeason) {
+      outcome = rank <= expected + 1 ? 'success' : 'failure';
+      conclusion = outcome === 'success'
         ? `最终排名第${rank}，与赛季前位置预期的偏差缩小到${Math.max(0, rank - expected)}位。`
-        : `该观察窗口排名第${rank}，连续两个观察窗口未再达到危机标准。`
-      : `最终排名第${rank}，仍低于赛季前约第${expected}的预期。`;
+        : `最终排名第${rank}，仍低于赛季前约第${expected}的预期。`;
+    } else {
+      // A crisis that quietly stops meeting the tracking bar was never judged
+      // against the season. Recording `success` here reported a verdict the
+      // engine never computed — 67-71% of crisis stories ended this way.
+      outcome = undefined;
+      conclusion = `该观察窗口排名第${rank}，连续${STORYLINE_QUIET_WINDOWS}个观察窗口未再达到危机标准，故事停止追踪，未做赛季判定。`;
+    }
   } else {
-    outcome = rank <= relegationLine ? 'success' : 'failure';
-    conclusion = outcome === 'success'
-      ? `升级首季最终排名第${rank}，成功留在当前级别。`
-      : `升级首季最终排名第${rank}，未能留在当前级别。`;
+    // promoted_survival: survival is only decidable against a final table,
+    // never against a mid-season one.
+    if (finalSeason) {
+      outcome = rank <= relegationLine ? 'success' : 'failure';
+      conclusion = outcome === 'success'
+        ? `升级首季最终排名第${rank}，成功留在当前级别。`
+        : `升级首季最终排名第${rank}，未能留在当前级别。`;
+    } else {
+      outcome = undefined;
+      conclusion = `该观察窗口排名第${rank}，连续${STORYLINE_QUIET_WINDOWS}个观察窗口未再出现升级首季信号，故事停止追踪，未做赛季判定。`;
+    }
   }
 
   return {
@@ -724,6 +819,12 @@ export function advanceStorylines(
     if (!signal) {
       if (isStorylineInterrupted(world, storyline)) {
         finish(storyline);
+        continue;
+      }
+      // The opening gate no longer fires, but the situation that opened this
+      // arc may still hold. That is a continuing story, not a quiet one.
+      if (storylineStillRelevant(world, storyline)) {
+        active.push({ ...storyline, quietWindows: 0 });
         continue;
       }
       const quietWindows = storyline.quietWindows + 1;
