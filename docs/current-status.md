@@ -1,7 +1,7 @@
 # 下一季见：足球编年史 Current Status
 
-Last reviewed: 2026-09-25
-Current release: v4.61.11 (source release), prepared for the authorized Git push; deployment has not been verified. Last recorded Tencent release: v4.61.10, deployed on 2026-09-15 11:24 Asia/Shanghai at https://football.dyp02.vip/ and https://cup.dyp02.vip/. That build used main/f0b2d63 plus the explicitly captured local snapshot 80c7a776 (not a clean-commit build); see [deployment provenance and acceptance](tencent-cloud-deployment.md).
+Last reviewed: 2026-11-11
+Current release: v4.62.0 (source release from main, Tencent deployment pending). Last verified Tencent release: v4.61.11, deployed 2026-09-25 19:25 Asia/Shanghai at https://football.dyp02.vip/ and https://cup.dyp02.vip/ from clean main/09a59843ae00b449ef53a63c3bef59530d90c687 with ICP enabled and audit disabled; see [deployment provenance and acceptance](tencent-cloud-deployment.md). v4.62.0 raises SAVE_SCHEMA_VERSION from 25 to 26, so saves written by earlier versions are rejected by the version gate and must be restarted; this is intended, not a defect.
 Status: v4.61.4 is the current feature-freeze candidate. Public-facing documentation and screenshots are aligned with this candidate; human and real-device validation comes next.
 
 This file is the single current roadmap. Older checklists preserve implementation decisions and validation evidence, but unchecked boxes in those files are not active work unless they are promoted here.
@@ -12,11 +12,11 @@ This file is the single current roadmap. Older checklists preserve implementatio
 - Match results, standings, player statistics, transfers, injuries, awards, and history come from one authoritative deterministic simulation.
 - Narrative, animation, audio, and imagery explain or present simulation facts; they never rewrite outcomes.
 - The project remains a pure-frontend, offline-capable PWA with current-schema saves and bounded long-term history.
-- Real club names remain the personal default. The deployed contest build uses the Three Shores preset; local and Tencent edition isolation are verified, while human content review remains pending. See [build isolation](build-editions.md) and [content review](contest-content-review.md). The author separately authorized Tencent deployment of the v4.61.10 local snapshot, not Git publication; Vercel was untouched.
+- Real club names remain the personal default. The deployed contest build uses the Three Shores preset; local and Tencent edition isolation are verified, while human content review remains pending. See [build isolation](build-editions.md) and [content review](contest-content-review.md). The author authorized this v4.61.11 Tencent deployment; Vercel was untouched.
 
 ## Current Health
 
-- 1,084 unit and component tests across 157 test files passed for the v4.61.10 release snapshot. An independent five-season baseline comparison matched all 100 numerical/state checks; both live editions passed three-viewport UI flows, static/TLS checks and old-save honor persistence through normal advancement and reload.
+- 1,110 unit and component tests across 161 files passed on the clean v4.61.11 release using one worker, with no test-timeout/config changes. Both editions passed production build, edition isolation and unchanged budgets; local and live three-viewport UI flows reached S2 with reload/offline checks. Actual 4.61.10-to-4.61.11 HTTPS/PWA updates preserved both isolated S1 QA saves byte-for-byte through reload and offline reopening. These QA saves do not prove every long-term user save compatible. All new public files and 81 retained old-only assets per edition passed SHA checks; other server services remained unchanged.
 - More than 65,000 production TypeScript lines across 257 production files (identity data is held in edition-specific JSON).
 - Strict TypeScript, ESLint, production/PWA build, bundle, dependency, browser, performance, and long-save gates are available in CI or repository scripts.
 - Production budgets are frozen at 210 KB / 66 KB gzip for the entry, 480 KB / 160 KB gzip for the initial JS graph, 190 KiB / 30 KiB gzip for CSS, 1.05 MB for application imagery, 2.4 MB for all deployed imagery, and 86 entries / 2.15 MB for the PWA precache.
@@ -37,7 +37,7 @@ This file is the single current roadmap. Older checklists preserve implementatio
 
 ## Active Work
 
-Local, unreleased work authorized on 2026-09-23 and refined on 2026-09-25: the default ten world-focus seats now protect at most four distinct previous-season major award winners for one season, independently from actual match lineups. Followed cards retain known identity at zero minutes; season-boundary summaries prioritize champion changes, individual honors and team movement. Player threads keep at most four nodes with current injuries protected. Important retirees keep compact facts without new club-trophy copies; unmatched legacy snapshots remain readable. Goal drama follows one complete score timeline. Save schema and edition identities remain unchanged; no user save was opened or rewritten. This does not reactivate older checklists or change the deployed release listed above.
+Work authorized on 2026-09-23 and refined on 2026-09-25 is included in the deployed v4.61.11: the default ten world-focus seats now protect at most four distinct previous-season major award winners for one season, independently from actual match lineups. Followed cards retain known identity at zero minutes; season-boundary summaries prioritize champion changes, individual honors and team movement. Player threads keep at most four nodes with current injuries protected. Important retirees keep compact facts without new club-trophy copies; unmatched legacy snapshots remain readable. Goal drama follows one complete score timeline. Save schema and edition identities remain unchanged; no real user save was opened or rewritten. This does not reactivate older checklists. One nonblocking display omission remains: the contest Settings changelog's newest entry is still v4.61.10, although the actual app and update identity are v4.61.11; deployment did not alter application code to address it.
 
 1. Conduct three unassisted first-five-minute playtests and record repeated points of confusion rather than individual visual preferences.
 2. Complete one fifteen-minute observer-route walkthrough on an iPhone Safari and one mid-range Android Chrome device.

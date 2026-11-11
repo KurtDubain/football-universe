@@ -1,6 +1,6 @@
 # 腾讯云部署与维护
 
-2026-09-15 11:24（北京时间）已更新，应用版本 **4.61.10**，公开品牌为《下一季见：足球编年史》，两版继续开启 ICP 页脚。本次经作者授权直接发布本地未提交修改的可追溯快照，没有 Git commit/push。
+2026-09-25 19:25（北京时间）已更新，应用版本 **4.61.11**，公开品牌为《下一季见：足球编年史》，两版继续开启 ICP 页脚。本次从干净的 `main/09a5984` 构建，更新腾讯云两个现有站点，没有 Git commit/push。
 
 | 用途 | 地址 | 服务器目录 | Nginx 配置 |
 | --- | --- | --- | --- |
@@ -30,7 +30,21 @@ football-personal/ 或 football-contest/
 - 游戏 ACME 验证目录：`/www/wwwroot/apps/_acme/.well-known/acme-challenge`。
 - 日志轮转：`/etc/logrotate.d/football-static`，每日轮转、保留 14 份，并设 20 MB 阈值。
 
-## 当前发布来源（4.61.10）
+## 当前发布来源（4.61.11）
+
+- 仓库：`git@github.com:KurtDubain/football-universe.git`；分支 `main`；完整提交 `09a59843ae00b449ef53a63c3bef59530d90c687`。构建前后、发布前及部署验收期间均确认工作区干净、提交未变；本节等运维记录随后补写，不是附加游戏源码。
+- 两版 `current`：`v4.61.11-09a5984-20260925`；`previous`：`v4.61.10-f0b2d63-local-80c7a776-20260915`。个人版实际切换 19:25:49，参赛版 19:25:50。
+- 本机 Node 22.22.2 / pnpm 10.34.5 串行构建，ICP 开启、audit 关闭。personal/personal-v1 与 contest/three-shores-v1 分别使用原 football/cup HTTPS origin。每包 125 文件上传后逐一验证 SHA-256，再原子切换；旧版本和两版独立的旧哈希资源均保留。
+- 发布前资源记录：`/www/backups/football-deploy/20260925-192549-696340-activate-personal`、`20260925-192550-898644-activate-contest`。
+- 私有上传目录：`/www/server/football-deploy/incoming/v4.61.11-09a5984-20260925/`，只包含两个构建包、产物身份清单和校验脚本，不上传源码、凭据或数据库。本地证据：`output/tencent-release-20260925-v46111/`；浏览器证据：`output/playwright/tencent-v46111/`。
+- 没有修改游戏源码、Nginx、DNS、证书、续签、博客、history-war、office-signal-relay 或 Vercel。没有新增容器/端口、重载/重启服务或整机。腾讯云仍为手动部署；未更改或重新验收 Vercel 自动部署。
+
+```text
+personal.tar.gz  23e8906b067ef5e0ea4cf765791aa4975bd67115a70f0856897a79beb8b16971
+contest.tar.gz   382d0ba53f3930915cf506f358bcab526420bb2c978449e9d3e139b597a66e96
+```
+
+## 上次发布来源（4.61.10 归档）
 
 - 仓库：`git@github.com:KurtDubain/football-universe.git`；分支 `main`；基线提交 `f0b2d63d8bb3b5d82a94d48d0a94b70af661475c` **加本地修改**。不是该提交的干净构建。修改清单包括 21 个已跟踪文件和 4 个未跟踪源码/测试脚本，均已保存补丁或文件副本；没有读取或打包凭据。
 - 构建来源标识：`f0b2d63-local-80c7a776`；完整源码快照 SHA-256 为 `80c7a776bf255e7364e441c294cbb92be19f2f228b180acf4d792ca62d358f25`；tracked patch SHA 为 `35595bfc8f434a91b7b657aa9b6115fbcf2a2ef33bd4f3e1d425bf1912473ae1`。上传前和部署后均确认应用源码未变；本节等验收文档是在构建完成后补写，不属于已部署源码快照。
@@ -173,20 +187,20 @@ curl --fail https://cup.dyp02.vip/version.json
 
 ## 怎么回滚
 
-以下是将当前 4.61.10 回滚到上一版 4.61.9 的实际命令，在服务器执行。上一版保留 ICP 页脚和新游戏名，但没有本轮冠军归档修复；恢复当前版本可将版本名换为 `v4.61.10-f0b2d63-local-80c7a776-20260915`。
+以下是将当前 4.61.11 回滚到上一版 4.61.10 的实际命令，在服务器执行。上一版保留 ICP 页脚、新游戏名及冠军归档修复，但没有本轮人物记忆与赛季回顾改进；恢复当前版本可将版本名换为 `v4.61.11-09a5984-20260925`。
 
 ```sh
-python3 /www/server/football-deploy/bin/manage-static.py rollback personal v4.61.9-f0b2d63-20260914-brand
-python3 /www/server/football-deploy/bin/manage-static.py rollback contest v4.61.9-f0b2d63-20260914-brand
+python3 /www/server/football-deploy/bin/manage-static.py rollback personal v4.61.10-f0b2d63-local-80c7a776-20260915
+python3 /www/server/football-deploy/bin/manage-static.py rollback contest v4.61.10-f0b2d63-local-80c7a776-20260915
 curl --fail https://football.dyp02.vip/version.json
 curl --fail https://cup.dyp02.vip/version.json
 ```
 
-首次 4.61.7 部署时已分别发布同产物演练副本，再回滚原 release，检查前后健康和版别均通过；本次没有为演练将线上 4.61.10 降回旧版。这验证了服务端发布/回滚机制，不是跨游戏版本存档降级测试。已打开的 PWA 可能仍持有旧页面，需在游戏内检查更新；回滚操作本身不会删除玩家浏览器存档。
+首次 4.61.7 部署时已分别发布同产物演练副本，再回滚原 release，检查前后健康和版别均通过；本次没有为演练将线上 4.61.11 降回旧版。这验证了服务端发布/回滚机制，不是跨游戏版本存档降级测试。已打开的 PWA 可能仍持有旧页面，需在游戏内检查更新；回滚操作本身不会删除玩家浏览器存档。
 
 ## HTTPS 与自动续签
 
-以下是实际线上证书的到期时间，均为北京时间：
+以下是 2026-09-25 复核的实际线上证书到期时间，均为北京时间；本轮未重新签发或修改续签任务：
 
 | 域名 | 到期时间 | 续签任务 |
 | --- | --- | --- |
@@ -210,7 +224,18 @@ openssl s_client -connect cup.dyp02.vip:443 -servername cup.dyp02.vip < /dev/nul
 
 如需修改 Nginx，先另存配置备份、记录 docker ps / ss -lntp / df -h / free -h，并执行 `/www/server/nginx/sbin/nginx -t`；修改后再次测试通过才允许 `nginx -s reload`。不要重启整机，不要直接覆盖博客配置，也不要打印或复制私钥、Token、数据库密码或 .env。
 
-## 当前版本验收（4.61.10）
+## 当前版本验收（4.61.11）
+
+- 完整 161 文件 / 1,110 项测试通过（`pnpm test --maxWorkers=1`，未调整超时或产品断言）。冻结依赖安装、类型检查、维护源码 lint（排除 `output/**` 生成证据）、docs/scripts/changelog 检查通过。
+- 两版正式构建、版别扫描和原有预算通过。initial JS gzip 个人 155,239 B、参赛 154,820 B，均低于 160,000 B；PWA 预缓存 86 / 84 项，1,948,073 / 1,932,140 B。
+- 本地和真实公网 HTTPS 各完成两版 × 1280/390/320 的六组正常 UI 流程，推进至 S2，覆盖判断、直播、战报、档案图片、转会、深链接、导出、刷新、离线和参赛隔离；错误/警告及横向溢出为 0。本地 ICP 12 状态检查通过。Web Game 客户端另完成参赛开局，两张截图均已生成，并目视复核代表截图。公网报告：`output/playwright/tencent-v46111/online-editions/report.json`。
+- 实际发布时保留两版真实 HTTPS 的 4.61.10 页面及已激活 Service Worker，通过普通导航和设置内检查更新到 4.61.11。两个隔离 QA 存档的升级前、升级后、刷新后、离线重开后 SHA-256 均完全相同；应用错误/警告及请求失败为 0。没有清缓存、注销 SW 或访问真实用户存档。证据：`output/playwright/tencent-v46111/upgrade/report.json`。
+- HTTP→HTTPS、严格 TLS、每版 124 个公开文件 SHA-256、SPA 刷新、缓存/MIME、缺失/隐藏资源 404 和参赛个人编辑器资源隔离通过；两版 `/healthz`、博客及 history-war 两站均为 200。每版额外核对 81 个仅旧包含有的哈希资源，仍可访问且内容未变，支持尚未更新的旧页面。
+- 发布前后所有 Nginx/vhost 配置哈希、发布脚本、Nginx PID/启动时间、监听地址及所属进程、容器健康和端口、其他项目 current 指向均一致，包含 `office-signal-relay-1` 的 8081。Nginx/crond 仍 active/enabled；没有通过重启服务或整机做恢复测试。
+- 已知非阻断尾项：参赛设置页更新日志首项仍为 4.61.10；实际应用版本、构建身份和检查更新均为 4.61.11。这次仅发布作者代码，不代改更新日志。
+- Web Game / Playwright 用于隔离浏览器操作和截图复核。手机检查为桌面 Chromium 视口模拟，不是实体 iPhone/Android 或全国网络认证；未重跑完整性能 smoke、跨版本存档降级或改参赛材料。旧页面请使用设置内检查更新，不要清除站点数据。
+
+## 上次版本验收（4.61.10 归档）
 
 - 两路只读 review 未发现阻断问题。低级别联赛冠军升班后的球队奖杯、教练奖杯和退休归档已修复；旧档依据保留记录幂等补齐，历史教练证据不足或冲突时不猜测归属。分享图旧网址和“待审阅”已移除；内部人工内容审阅仍待作者确认，不宣称获得授权。
 - 首轮全量 157 文件 / 1,084 测试及 typecheck/lint/docs/scripts/changelog 通过。独立基线 `f0b2d63` 与当前源码以种子 20260709 运行五季：20 个模拟/状态字段、100 项逐季比较全部相同，包含 RNG；未修改阈值或模拟代码。
