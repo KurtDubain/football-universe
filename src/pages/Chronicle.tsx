@@ -229,7 +229,12 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
   // Best stats from records
   const allRecs = [...l1, ...l2, ...l3];
   const bestAttack = allRecs.length > 0 ? allRecs.reduce((b, r) => r.leagueGF > b.leagueGF ? r : b) : null;
-  const bestDefense = allRecs.length > 0 ? allRecs.filter(r => r.leaguePlayed > 5).reduce((b, r) => r.leagueGA < b.leagueGA ? r : b, allRecs[0]) : null;
+  // Seed the reduce with an eligible row. Passing allRecs[0] here let a team
+  // with too few matches win "best defence" despite the filter above it.
+  const eligibleDefense = allRecs.filter(r => r.leaguePlayed > 5);
+  const bestDefense = eligibleDefense.length > 0
+    ? eligibleDefense.reduce((b, r) => r.leagueGA < b.leagueGA ? r : b)
+    : null;
   const mostWins = l1.length > 0 ? l1.reduce((b, r) => r.leagueWon > b.leagueWon ? r : b) : null;
   const mostLosses = l1.length > 0 ? l1.reduce((b, r) => r.leagueLost > b.leagueLost ? r : b) : null;
 

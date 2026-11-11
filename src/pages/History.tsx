@@ -19,6 +19,12 @@ import {
 } from '../engine/history/season-history-summary';
 import { Icon, type IconName } from '../components/Icon';
 import { continentalCupConfig } from '../config/competitions';
+import {
+  bestRate,
+  flattenSeasonRecords,
+  type RecordHolder,
+  type RecordResult,
+} from '../engine/history/season-records';
 
 export default function History() {
   const world = useGameStore((s) => s.world);
@@ -83,27 +89,21 @@ function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favorite
     return honors.slice(seasonRange === 'recent40' ? -40 : -10);
   }, [honors, seasonRange]);
 
-  // Fun records computed from season records
+  // Fun records computed from season records.
+  // All four competitive records use per-match rates so the 30-round top flight
+  // and the 14-round lower tiers compete fairly, and every tie is preserved.
   const funRecords = useMemo(() => {
     if (honors.length === 0) return null;
 
-    const allRecords = Object.entries(world.teamSeasonRecords).flatMap(([tid, recs]) =>
-      recs.map(r => ({ ...r, teamId: tid, teamName: getTeamName(tid, world.teamBases) }))
+    const allRecords = flattenSeasonRecords(
+      world.teamSeasonRecords,
+      tid => getTeamName(tid, world.teamBases),
     );
     if (allRecords.length === 0) return null;
 
-    // Most points in a season
-    const mostPoints = allRecords.reduce((b, r) => r.leaguePoints > (b?.leaguePoints ?? 0) ? r : b, allRecords[0]);
-    // Fewest points
-    const fewestPoints = allRecords.filter(r => r.leaguePlayed > 5).reduce((b, r) => r.leaguePoints < (b?.leaguePoints ?? 999) ? r : b, allRecords[0]);
-    // Most goals in a season
-    const mostGoals = allRecords.reduce((b, r) => r.leagueGF > (b?.leagueGF ?? 0) ? r : b, allRecords[0]);
-    // Best defense (fewest conceded)
-    const bestDefense = allRecords.filter(r => r.leaguePlayed > 5).reduce((b, r) => r.leagueGA < (b?.leagueGA ?? 999) ? r : b, allRecords[0]);
-    // Most wins
-    const mostWins = allRecords.reduce((b, r) => r.leagueWon > (b?.leagueWon ?? 0) ? r : b, allRecords[0]);
-    // Most losses
-    const mostLosses = allRecords.reduce((b, r) => r.leagueLost > (b?.leagueLost ?? 0) ? r : b, allRecords[0]);
+    const pointsPerMatch = bestRate(allRecords, r => r.leaguePoints, 'max');
+    const goalsPerMatch = bestRate(allRecords, r => r.leagueGF, 'max');
+    const concededPerMatch = bestRate(allRecords, r => r.leagueGA, 'min');
 
     // Consecutive champions (same team winning L1 in a row)
     let maxConsec = 0, consecTeam = '', consecFrom = 0;
@@ -130,7 +130,7 @@ function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favorite
     const totalMatches = allRecords.reduce((s, r) => s + r.leaguePlayed, 0) / 2;
 
     return {
-      mostPoints, fewestPoints, mostGoals, bestDefense, mostWins, mostLosses,
+      pointsPerMatch, goalsPerMatch, concededPerMatch,
       maxConsec, consecTeam, consecFrom,
       mostChanges,
       totalGoals, totalMatches,
@@ -468,14 +468,29 @@ function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favorite
             <RecordCard label="历史总场次" value={`${Math.round(funRecords.totalMatches)}`} />
           </div>
 
-          {/* Highlight records */}
+          {/* Highlight records — per-match rates so all three tiers compete fairly */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <RecordDetail emoji="🏆" title="最高赛季积分" team={funRecords.mostPoints.teamName} detail={`S${funRecords.mostPoints.seasonNumber} · ${funRecords.mostPoints.leaguePoints}分`} teamId={funRecords.mostPoints.teamId} color={world.teamBases[funRecords.mostPoints.teamId]?.color} />
-            <RecordDetail emoji="⚽" title="单赛季最多进球" team={funRecords.mostGoals.teamName} detail={`S${funRecords.mostGoals.seasonNumber} · ${funRecords.mostGoals.leagueGF}球`} teamId={funRecords.mostGoals.teamId} color={world.teamBases[funRecords.mostGoals.teamId]?.color} />
-            <RecordDetail emoji="🛡️" title="最佳防守赛季" team={funRecords.bestDefense.teamName} detail={`S${funRecords.bestDefense.seasonNumber} · 仅失${funRecords.bestDefense.leagueGA}球`} teamId={funRecords.bestDefense.teamId} color={world.teamBases[funRecords.bestDefense.teamId]?.color} />
-            <RecordDetail emoji="💪" title="单赛季最多胜场" team={funRecords.mostWins.teamName} detail={`S${funRecords.mostWins.seasonNumber} · ${funRecords.mostWins.leagueWon}胜`} teamId={funRecords.mostWins.teamId} color={world.teamBases[funRecords.mostWins.teamId]?.color} />
-            <RecordDetail emoji="😢" title="最低赛季积分" team={funRecords.fewestPoints.teamName} detail={`S${funRecords.fewestPoints.seasonNumber} · ${funRecords.fewestPoints.leaguePoints}分`} teamId={funRecords.fewestPoints.teamId} color={world.teamBases[funRecords.fewestPoints.teamId]?.color} />
-            <RecordDetail emoji="💀" title="单赛季最多败场" team={funRecords.mostLosses.teamName} detail={`S${funRecords.mostLosses.seasonNumber} · ${funRecords.mostLosses.leagueLost}负`} teamId={funRecords.mostLosses.teamId} color={world.teamBases[funRecords.mostLosses.teamId]?.color} />
+            <RateRecordDetail
+              emoji="🏆"
+              title="最强统治赛季"
+              result={funRecords.pointsPerMatch}
+              formatDetail={h => `S${h.seasonNumber} · ${h.raw}分/${h.played}场 · 场均${h.value.toFixed(2)}分`}
+              colorOf={id => world.teamBases[id]?.color}
+            />
+            <RateRecordDetail
+              emoji="⚽"
+              title="最强火力赛季"
+              result={funRecords.goalsPerMatch}
+              formatDetail={h => `S${h.seasonNumber} · ${h.raw}球/${h.played}场 · 场均${h.value.toFixed(2)}球`}
+              colorOf={id => world.teamBases[id]?.color}
+            />
+            <RateRecordDetail
+              emoji="🛡️"
+              title="最稳防线赛季"
+              result={funRecords.concededPerMatch}
+              formatDetail={h => `S${h.seasonNumber} · 失${h.raw}球/${h.played}场 · 场均${h.value.toFixed(2)}球`}
+              colorOf={id => world.teamBases[id]?.color}
+            />
           </div>
 
           {/* Special records */}
@@ -908,18 +923,61 @@ function RecordCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RecordDetail({ emoji, title, team, detail, teamId, color }: { emoji: string; title: string; team: string; detail: string; teamId: string; color?: string }) {
+/**
+ * Record card backed by a per-match rate.
+ *
+ * Ties are shown in full rather than silently resolved: the headline names the
+ * earliest holder and every other tied team is listed underneath.
+ */
+function RateRecordDetail({
+  emoji,
+  title,
+  result,
+  formatDetail,
+  colorOf,
+}: {
+  emoji: string;
+  title: string;
+  result: RecordResult | null;
+  formatDetail: (holder: RecordHolder) => string;
+  colorOf: (teamId: string) => string | undefined;
+}) {
+  if (!result || result.holders.length === 0) return null;
+  const [first, ...rest] = result.holders;
   return (
-    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 flex items-center gap-3">
+    <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-3 flex items-start gap-3">
       <span className="text-xl shrink-0">{emoji}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] text-slate-500">{title}</div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color ?? '#666' }} />
-          <Link to={`/team/${teamId}`} className="text-sm font-semibold text-slate-200 hover:text-blue-400 truncate" title={team}>{team}</Link>
+        <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+          <span>{title}</span>
+          {result.tied && (
+            <span className="px-1 py-px rounded bg-amber-900/40 text-amber-300 text-[9px]">
+              {result.holders.length} 队并列
+            </span>
+          )}
         </div>
-        <div className="text-[10px] text-slate-400 mt-0.5">{detail}</div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorOf(first.teamId) ?? '#666' }} />
+          <Link to={`/team/${first.teamId}`} className="text-sm font-semibold text-slate-200 hover:text-blue-400 truncate" title={first.teamName}>
+            {first.teamName}
+          </Link>
+        </div>
+        <div className="text-[10px] text-slate-400 mt-0.5">{formatDetail(first)}</div>
+        {rest.length > 0 && (
+          <div className="mt-1.5 pt-1.5 border-t border-slate-700/60 space-y-1">
+            {rest.map(holder => (
+              <div key={`${holder.teamId}-${holder.seasonNumber}`} className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(holder.teamId) ?? '#666' }} />
+                <Link to={`/team/${holder.teamId}`} className="text-[11px] text-slate-300 hover:text-blue-400 truncate" title={holder.teamName}>
+                  {holder.teamName}
+                </Link>
+                <span className="text-[10px] text-slate-500 shrink-0">{formatDetail(holder)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
