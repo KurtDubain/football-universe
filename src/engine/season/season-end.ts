@@ -1,4 +1,4 @@
-import { SeasonState, CalendarWindow } from '../../types/season';
+import { SeasonState } from '../../types/season';
 import { retainPlayerArchives } from '../players/retirement-archive';
 import { SeasonRecord } from '../../types/team';
 import { CoachBase } from '../../types/coach';
@@ -9,15 +9,9 @@ import { SeededRNG } from '../match/rng';
 import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
 import { checkAchievements } from '../achievements';
-import {
-  selectWorldCupParticipants,
-  initWorldCup,
-  getWorldCupGroupRoundFixtures,
-} from '../cups/world-cup';
-import { completeWorldCupEdition, ensureWorldCupEdition } from '../cups/world-cup-host';
+import { completeWorldCupEdition } from '../cups/world-cup-host';
 import { getAllTeamIds, createNewsId, cnRoundLabel } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
-import { appendWorldCupWindows } from './calendar-builder';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
@@ -1323,10 +1317,10 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // The tournament now closes the season, so its bracket is already settled
   // when income lands and the prize belongs in the normal breakdown.
   //
-  // Previously this had to be patched onto the just-archived finance record by
-  // `finalizeWorldCup`, because the world cup ran in windows appended after
-  // settlement — and before that fix existed the prize silently vanished in
-  // every world cup year.
+  // Before the timing redesign this had to be patched onto the just-archived
+  // finance record after the fact, because the tournament ran in windows
+  // appended after settlement — and before that patch existed the prize
+  // silently vanished in every world cup year.
   let worldCupEditions = world.worldCupEditions;
   if (worldCupWinner && world.worldCup?.completed) {
     const wcFinal = world.worldCup.knockoutRounds.at(-1)?.fixtures[0];
@@ -1436,252 +1430,6 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),
   };
-
-  // Legacy saves only. A world cup year whose calendar carries no world cup
-  // windows was built before the timing redesign, so its tournament still has
-  // to be created after settlement. Seasons built by the current code insert
-  // the windows up front and never reach this branch.
-  if (seasonState.isWorldCupYear && !hasWorldCupWindows(seasonState.calendar)) {
-    return initializeWorldCup(updatedWorld);
-  }
-
-  return updatedWorld;
-}
-
-/** True when the season's calendar already contains the tournament. */
-function hasWorldCupWindows(calendar: CalendarWindow[]): boolean {
-  return calendar.some(w => w.type === 'world_cup' || w.type === 'world_cup_group');
-}
-
-/**
- * Initialize the world cup phase after a world cup year season ends.
- *
- * Legacy path: only reached by saves whose calendar predates the timing
- * redesign. New seasons build the tournament in `initializeNewSeason` and
- * insert its windows before the season-end window.
- */
-export function initializeWorldCup(world: GameWorld): GameWorld {
-  const seasonNumber = world.seasonState.seasonNumber;
-  const rng = new SeededRNG(world.rngState);
-
-  // Select participants: all 32 teams
-  const allTeamIds = getAllTeamIds(world.teamStates);
-  const teamOveralls: Record<string, number> = {};
-  for (const id of allTeamIds) {
-    teamOveralls[id] = world.teamBases[id]?.overall ?? 0;
-  }
-  const participants = selectWorldCupParticipants(allTeamIds, teamOveralls);
-  const hostPlan = ensureWorldCupEdition(
-    world.worldCupEditions,
-    allTeamIds,
-    world.teamBases,
-    seasonNumber,
-    world.seed,
-  );
-
-  // Initialize world cup
-  const worldCup = initWorldCup(participants, seasonNumber, rng, hostPlan.edition.hostTeamId);
-
-  const groupRoundFixtures = getWorldCupGroupRoundFixtures(worldCup);
-
-  // Append world cup windows to the calendar
-  const calendar = appendWorldCupWindows(
-    world.seasonState.calendar,
-    seasonNumber,
-    groupRoundFixtures,
-  );
-
-  // Update season state to continue into world cup phase
-  const seasonState: SeasonState = {
-    ...world.seasonState,
-    calendar,
-    completed: false,
-    worldCupPhase: true,
-    // Reset current window to the first world cup window
-    currentWindowIndex: world.seasonState.calendar.length, // starts at first new window
-  };
-
-  // WC draw news
-  const wcGroupInfo = worldCup.groups.map(g =>
-    `${g.groupName}组: ${g.teamIds.map(id => world.teamBases[id]?.name?.slice(0, 3) ?? id).join('/')}`
-  ).join(' | ');
-  const wcDrawNews: NewsItem = {
-    id: `draw-wc-S${seasonNumber}`,
-    seasonNumber, windowIndex: world.seasonState.calendar.length, type: 'trophy',
-    importance: 'major',
-    title: `环球冠军杯抽签揭晓 — ${world.teamBases[hostPlan.edition.hostTeamId]?.shortName ?? hostPlan.edition.hostTeamId}主办`,
-    description: `东道主在本届赛事享有4%赛会氛围加成，其他比赛继续按中立场计算。${wcGroupInfo}`,
-  };
-
-  return {
-    ...world,
-    seasonState,
-    worldCup,
-    worldCupEditions: hostPlan.editions,
-    newsLog: [...world.newsLog, wcDrawNews],
-    rngState: rng.getState(),
-  };
-}
-
-/**
- * Finalize the world cup phase: patch honors, trophies, records with WC results,
- * then initialize the next season.
- */
-export function finalizeWorldCup(world: GameWorld): GameWorld {
-  let updatedWorld = { ...world };
-
-  const wcWinnerId = updatedWorld.worldCup?.winnerId;
-  if (wcWinnerId) {
-    const sn = updatedWorld.seasonState.seasonNumber;
-    const honorHistory = [...updatedWorld.honorHistory];
-    const lastHonor = honorHistory[honorHistory.length - 1];
-
-    // Determine WC runner-up
-    const wcFinal = updatedWorld.worldCup!.knockoutRounds.at(-1)?.fixtures[0];
-    const wcRunnerUp = wcFinal
-      ? (wcFinal.homeTeamId === wcWinnerId ? wcFinal.awayTeamId : wcFinal.homeTeamId)
-      : undefined;
-
-    if (lastHonor && lastHonor.seasonNumber === sn && !lastHonor.worldCupWinner) {
-      honorHistory[honorHistory.length - 1] = {
-        ...lastHonor,
-        worldCupWinner: wcWinnerId,
-        ...(updatedWorld.worldCup?.hostTeamId
-          ? { worldCupHostId: updatedWorld.worldCup.hostTeamId }
-          : {}),
-      };
-    }
-
-    // Add WC trophy to winner
-    const teamTrophies = { ...updatedWorld.teamTrophies };
-    teamTrophies[wcWinnerId] = [...(teamTrophies[wcWinnerId] ?? []), { type: 'world_cup' as const, seasonNumber: sn }];
-
-    // Add to coach trophies — derive coach for the WC winner from coachStates.
-    const coachTrophies = { ...updatedWorld.coachTrophies };
-    const winnerCoachId = getTeamCoachId(updatedWorld.coachStates, wcWinnerId);
-    if (winnerCoachId) {
-      coachTrophies[winnerCoachId] = [...(coachTrophies[winnerCoachId] ?? []), { type: 'world_cup' as const, seasonNumber: sn }];
-    }
-
-    // Patch team season records with WC results.
-    // This runs AFTER the WC final, so we can give every team an exact
-    // round label (16强 / 八强 / 四强 / 决赛 / 小组赛淘汰) — matching the
-    // detail level we give super cup / league cup in handleSeasonEnd.
-    const teamSeasonRecords = { ...updatedWorld.teamSeasonRecords };
-    for (const teamId of getAllTeamIds(updatedWorld.teamStates)) {
-      const recs = teamSeasonRecords[teamId];
-      if (!recs || recs.length === 0) continue;
-      const lastRec = recs[recs.length - 1];
-      if (lastRec.seasonNumber !== sn) continue;
-      let wcResult = '';
-      if (teamId === wcWinnerId) {
-        wcResult = '冠军';
-      } else if (teamId === wcRunnerUp) {
-        wcResult = '亚军';
-      } else if (updatedWorld.worldCup!.participantIds?.includes(teamId)) {
-        const elimRound = findTeamEliminationRound(updatedWorld.worldCup!.knockoutRounds, teamId);
-        if (elimRound) {
-          wcResult = cnRoundLabel(elimRound);
-        } else {
-          // Was a participant but never appeared in any knockout round
-          // → eliminated in group stage
-          const inAnyKO = updatedWorld.worldCup!.knockoutRounds.some(r =>
-            r.fixtures.some(f => f.homeTeamId === teamId || f.awayTeamId === teamId),
-          );
-          wcResult = inAnyKO ? '参赛' : '小组赛淘汰';
-        }
-      }
-      if (wcResult) {
-        const updated = [...recs];
-        updated[updated.length - 1] = { ...lastRec, worldCupResult: wcResult };
-        teamSeasonRecords[teamId] = updated;
-      }
-    }
-
-    const worldCupEditions = completeWorldCupEdition(
-      updatedWorld.worldCupEditions,
-      updatedWorld.worldCup!,
-      sn,
-      wcWinnerId,
-      wcRunnerUp,
-    );
-    updatedWorld = {
-      ...updatedWorld,
-      honorHistory,
-      teamTrophies,
-      coachTrophies,
-      teamSeasonRecords,
-      worldCupEditions,
-    };
-
-    // ── Phase H: WC prize money (winner / runner-up / semis / quarters / R16) ──
-    // This was originally in applyIncome (handleSeasonEnd), but at that
-    // point in WC years the WC tail hadn't run yet — winnerId was always
-    // unset, so prize money silently disappeared every WC year. Pay it
-    // here instead, AFTER the final has resolved.
-    //
-    // Tiered: every team that advanced past groups earns at least the
-    // R16 prize; quarter-finalists earn QF; semi-finalists earn SF;
-    // runner-up + winner earn the big bucks.
-    //
-    // The season's FinanceSeasonRecord was archived seconds ago in
-    // handleSeasonEnd. We patch its tail entry in-place so the breakdown
-    // (and the FinancePanel which reads from history) shows the WC prize.
-    const wcPrizes = attributeCupPrizes(updatedWorld.worldCup!.knockoutRounds, WORLD_CUP_TIERS);
-    const teamFinances = { ...updatedWorld.teamFinances };
-    const newsLog = [...updatedWorld.newsLog];
-    const windowIndex = updatedWorld.seasonState.currentWindowIndex;
-    const winnerName = updatedWorld.teamBases[wcWinnerId]?.name ?? wcWinnerId;
-    newsLog.push({
-      id: createNewsId(sn, windowIndex, 'trophy-world-cup'),
-      seasonNumber: sn,
-      windowIndex,
-      type: 'trophy',
-      importance: 'major',
-      title: `${winnerName} 夺得环球冠军杯冠军！`,
-      description: `${winnerName} 在第${sn}届环球冠军杯决赛中胜出，登上世界之巅。`,
-    });
-    // Sort recipients by amount desc so the news log surfaces winner first
-    const recipients = Object.entries(wcPrizes).sort((a, b) => b[1] - a[1]);
-    for (const [teamId, amount] of recipients) {
-      const fin = teamFinances[teamId];
-      if (!fin || amount <= 0) continue;
-      // Patch tail history entry (the season we just archived) so prize
-      // money is visible in the breakdown. If the tail isn't this season
-      // (defensive — shouldn't happen), skip the patch and just bump cash.
-      const history = [...fin.history];
-      const tail = history[history.length - 1];
-      if (tail && tail.season === sn) {
-        history[history.length - 1] = {
-          ...tail,
-          prizeMoney: tail.prizeMoney + amount,
-          endCash: tail.endCash + amount,
-        };
-      }
-      teamFinances[teamId] = {
-        ...fin,
-        cash: fin.cash + amount,
-        history,
-      };
-      // Determine role label by amount (winner/RU/SF/QF/R16)
-      let role = '参赛';
-      if (teamId === wcWinnerId) role = '冠军';
-      else if (teamId === wcRunnerUp) role = '亚军';
-      else if (amount >= CUP_PRIZE.world_cup_semi) role = '四强';
-      else if (amount >= CUP_PRIZE.world_cup_qf) role = '八强';
-      else if (amount >= CUP_PRIZE.world_cup_r16) role = '16强';
-      const teamName = updatedWorld.teamBases[teamId]?.name ?? teamId;
-      newsLog.push({
-        id: createNewsId(sn, windowIndex, `wc-prize-${teamId}`),
-        seasonNumber: sn,
-        windowIndex,
-        type: 'prize_money',
-        title: `${teamName} 环球冠军杯${role}奖金 ${formatMoney(amount)}`,
-        description: `${teamName} 在第${sn}届环球冠军杯打入${role}，收获 ${formatMoney(amount)} 奖金。`,
-      });
-    }
-    updatedWorld = { ...updatedWorld, teamFinances, newsLog };
-  }
 
   return updatedWorld;
 }

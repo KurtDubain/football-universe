@@ -120,7 +120,6 @@ function buildWorld(): GameWorld {
       calendar: [],
       completed: false,
       isWorldCupYear: false,
-      worldCupPhase: false,
     },
     teamBases: { elite, weak },
     teamStates: {} as never,

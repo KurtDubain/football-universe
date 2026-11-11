@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildSeasonCalendar,
   insertWorldCupWindows,
-  appendWorldCupWindows,
   type CalendarBuildInput,
 } from './calendar-builder';
 import type { CalendarWindow } from '../../types/season';
@@ -137,25 +136,6 @@ describe('insertWorldCupWindows', () => {
     const result = insertWorldCupWindows(calendar, 8, GROUP_ROUNDS);
     expect(result).toHaveLength(calendar.length + WORLD_CUP_WINDOW_COUNT);
     expect(result.at(-1)?.type).toBe('world_cup');
-  });
-});
-
-describe('appendWorldCupWindows (legacy timing)', () => {
-  it('still appends after the season-end window', () => {
-    const result = appendWorldCupWindows(baseCalendar(), 8, GROUP_ROUNDS);
-    expect(result.at(-1)?.type).toBe('world_cup');
-    const seasonEndIdx = result.findIndex(w => w.type === 'season_end');
-    const firstWorldCupIdx = result.findIndex(w => w.type === 'world_cup_group');
-    expect(firstWorldCupIdx).toBeGreaterThan(seasonEndIdx);
-  });
-
-  it('builds the same windows as the in-season path', () => {
-    const appended = appendWorldCupWindows(baseCalendar(), 8, GROUP_ROUNDS);
-    const inserted = insertWorldCupWindows(baseCalendar(), 8, GROUP_ROUNDS);
-    const shape = (calendar: CalendarWindow[]) => calendar
-      .filter(w => w.type === 'world_cup_group' || w.type === 'world_cup')
-      .map(({ type, label, description }) => ({ type, label, description }));
-    expect(shape(appended)).toEqual(shape(inserted));
   });
 });
 

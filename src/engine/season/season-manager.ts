@@ -38,7 +38,7 @@ import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { parseCustomTeams } from '../validation/custom-teams';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
-import { handleSeasonEnd, finalizeWorldCup } from './season-end';
+import { handleSeasonEnd } from './season-end';
 import { autoResolveRemaining } from '../transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../players/stats';
 import { generateRumors, shouldGenerateRumors } from '../transfers/rumor-generator';
@@ -784,7 +784,6 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     calendar,
     completed: false,
     isWorldCupYear,
-    worldCupPhase: false,
   };
 
   const rngState = rng.getState();
@@ -1138,15 +1137,12 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
 
     // v23 — non-blocking architecture. transferWindow no longer pauses
     // season rollover; handleSeasonEnd may have set one for favorite
-    // team UX, but we proceed straight to the next season (or to WC
-    // windows if WC year). The window lingers on `world.transferWindow`
-    // and will be:
+    // team UX, but we proceed straight to the next season. The window lingers
+    // on `world.transferWindow` and will be:
     //   - presented in the Dashboard's "S{N}回顾" tab so user can handle it
     //   - auto-resolved by the next `executeCurrentWindow` call (see
     //     pre-window auto-resolve block at the top of this function)
-    if (!updatedWorld.seasonState.worldCupPhase) {
-      updatedWorld = initializeNewSeason(updatedWorld);
-    }
+    updatedWorld = initializeNewSeason(updatedWorld);
 
     return {
       world: updatedWorld,
@@ -1305,22 +1301,9 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
     }
   }
 
-  let storylineNews: NewsItem[] = [];
-  if (!updatedWorld.seasonState.worldCupPhase) {
-    const storylineResult = advanceStorylines(updatedWorld);
-    updatedWorld = storylineResult.world;
-    storylineNews = storylineResult.news;
-  }
-
-  // WC phase just ended — finalize WC results and start next season.
-  // v23 — non-blocking: transferWindow no longer gates initializeNewSeason.
-  let completionNews: NewsItem[] = [];
-  if (isSeasonDone && updatedSeasonState.worldCupPhase) {
-    const newsCountBeforeCompletion = updatedWorld.newsLog.length;
-    updatedWorld = finalizeWorldCup(updatedWorld);
-    updatedWorld = initializeNewSeason(updatedWorld);
-    completionNews = updatedWorld.newsLog.slice(newsCountBeforeCompletion);
-  }
+  const storylineResult = advanceStorylines(updatedWorld);
+  updatedWorld = storylineResult.world;
+  const storylineNews: NewsItem[] = storylineResult.news;
 
   // Pre-populate NEXT window if it needs dynamic fixtures
   if (!isSeasonDone) {
@@ -1351,7 +1334,7 @@ export function executeCurrentWindow(world: GameWorld, options?: { favoriteTeamI
   return {
     world: updatedWorld,
     results: windowResult.results,
-    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news, ...storylineNews, ...completionNews],
+    news: [...preNews, ...windowResult.news, ...postMatch.news, ...injuryResult.news, ...storylineNews],
   };
 }
 

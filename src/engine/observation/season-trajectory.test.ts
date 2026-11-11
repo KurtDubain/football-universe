@@ -67,7 +67,6 @@ describe('observer season trajectory', () => {
         currentWindowIndex: 4,
         completed: false,
         isWorldCupYear: false,
-        worldCupPhase: false,
         calendar: [
           window(0, [result('r1', 'alpha', 'beta', 0, 2), result('r2', 'gamma', 'delta', 1, 0)]),
           window(1, [result('r3', 'alpha', 'gamma', 1, 1), result('r4', 'beta', 'delta', 1, 0)]),
@@ -130,7 +129,6 @@ describe('observer season trajectory', () => {
         currentWindowIndex: 2,
         completed: false,
         isWorldCupYear: false,
-        worldCupPhase: false,
         calendar: [
           window(0, [result('league', 'alpha', 'beta', 1, 0)]),
           window(1, [cupResult]),
@@ -199,7 +197,6 @@ describe('observer season trajectory', () => {
         currentWindowIndex: 1,
         completed: false,
         isWorldCupYear: false,
-        worldCupPhase: false,
         calendar: [window(0, [result('league', 'alpha', 'beta', 1, 0)])],
       },
       seasonStartLevels: { alpha: 1 as const, beta: 1 as const },

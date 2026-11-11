@@ -76,7 +76,6 @@ function buildWorld(args: {
       calendar: [],
       completed: false,
       isWorldCupYear: false,
-      worldCupPhase: false,
     },
     teamBases: { [team.id]: team },
     teamStates: {},
@@ -635,7 +634,6 @@ describe('handleSeasonEnd integration', () => {
         calendar: [],
         completed: false,
         isWorldCupYear: false,
-        worldCupPhase: false,
       },
       teamBases: { t1: team },
       teamStates: {

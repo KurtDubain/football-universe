@@ -650,11 +650,10 @@ export function applyIncome(
       breakdown[teamId].prizeMoney += amt;
     }
   }
-  // World cup prize money is paid by `finalizeWorldCup` in season-end.ts —
-  // NOT here. At the point applyIncome runs (season_end window),
-  // world.worldCup.winnerId is still unset (the WC tail hasn't played yet).
-  // finalizeWorldCup runs after the WC final and mutates teamFinances
-  // directly + patches the just-archived FinanceSeasonRecord.
+  // World cup prize money is paid by handleSeasonEnd in season-end.ts, not
+  // here. The tournament closes the season, so its bracket is settled by the
+  // time income runs; season-end attributes it into the season's breakdown
+  // before the finance record is archived.
 
   // Continental cups (region-aware 8-team / 4-team prize tiers)
   const continentalCupConfigs: Array<[ContinentalCupState | null | undefined, CupTierConfig]> = [

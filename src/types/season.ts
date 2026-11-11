@@ -18,7 +18,6 @@ export interface SeasonState {
   calendar: CalendarWindow[];
   completed: boolean;
   isWorldCupYear: boolean;
-  worldCupPhase: boolean; // true when in world cup phase after season
   awards?: SeasonAwards;
 }
 

@@ -63,7 +63,7 @@ function buildWorld(args: {
     seasonState: {
       seasonNumber: args.seasonNumber ?? 5,
       currentWindowIndex: 0, calendar: [], completed: false,
-      isWorldCupYear: false, worldCupPhase: false,
+      isWorldCupYear: false,
     },
     teamBases, teamStates: {} as never,
     coachBases, coachStates, coachCareers,

@@ -97,7 +97,6 @@ function buildWorld(): GameWorld {
       calendar: [],
       completed: false,
       isWorldCupYear: false,
-      worldCupPhase: false,
     },
     teamBases: { seller, buyer },
     teamStates: {} as never,

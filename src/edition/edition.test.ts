@@ -124,7 +124,8 @@ describe('edition boundary', () => {
     const world = engine.initializeGameWorld(20260709);
     const schema = await import('../store/save-schema');
     const envelope = {
-      version: 25, edition: 'contest', presetId: 'three-shores-v1',
+      // Read the constant so a schema bump never silently breaks this fixture.
+      version: schema.SAVE_SCHEMA_VERSION, edition: 'contest', presetId: 'three-shores-v1',
       state: { initialized: true, world, favoriteTeamId: null, favoriteTeamIds: [], lastResults: [], lastNews: [] },
     };
     expect(schema.parseCurrentSave(JSON.stringify(envelope)).state.world.teamBases.tsmc_fc.shortName).toBe('微光');

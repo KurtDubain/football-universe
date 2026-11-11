@@ -47,7 +47,7 @@ function world(params: {
     30 - index * 2,
   ));
   return {
-    seasonState: { seasonNumber: params.season ?? 1, currentWindowIndex: 10, calendar: [], completed: false, isWorldCupYear: false, worldCupPhase: false },
+    seasonState: { seasonNumber: params.season ?? 1, currentWindowIndex: 10, calendar: [], completed: false, isWorldCupYear: false },
     teamBases: { [params.team.id]: params.team },
     teamStates: { [params.team.id]: params.teamState ?? state(params.team.id) },
     league1Standings: table,

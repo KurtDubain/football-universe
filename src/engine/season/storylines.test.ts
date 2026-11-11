@@ -75,7 +75,6 @@ function world(params: {
       calendar: [],
       completed: false,
       isWorldCupYear: false,
-      worldCupPhase: false,
     },
     teamBases: { target: team(expectation) },
     teamStates: { target: state(params.pressure) },

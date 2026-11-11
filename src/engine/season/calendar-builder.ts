@@ -419,36 +419,20 @@ export function insertWorldCupWindows(
   groupRoundFixtures: CupFixture[][],
 ): CalendarWindow[] {
   const seasonEndIdx = calendar.findIndex(w => w.type === 'season_end');
-  // A calendar without a season-end window is not one we know how to splice.
-  // Fall back to appending rather than silently dropping the tournament.
-  if (seasonEndIdx === -1) {
-    return appendWorldCupWindows(calendar, seasonNumber, groupRoundFixtures);
-  }
-
-  const worldCupWindows = buildWorldCupWindows(seasonNumber, groupRoundFixtures, seasonEndIdx);
-  const merged = [
-    ...calendar.slice(0, seasonEndIdx),
-    ...worldCupWindows,
-    ...calendar.slice(seasonEndIdx),
-  ];
+  const worldCupWindows = buildWorldCupWindows(
+    seasonNumber,
+    groupRoundFixtures,
+    // Insert before settlement when the calendar has one. A calendar without a
+    // season-end window is not one we know how to splice, so append instead —
+    // an unexpected shape must never silently drop the tournament.
+    seasonEndIdx === -1 ? calendar.length : seasonEndIdx,
+  );
+  const merged = seasonEndIdx === -1
+    ? [...calendar, ...worldCupWindows]
+    : [
+      ...calendar.slice(0, seasonEndIdx),
+      ...worldCupWindows,
+      ...calendar.slice(seasonEndIdx),
+    ];
   return merged.map((w, i) => ({ ...w, id: i }));
-}
-
-/**
- * Append world cup windows to the end of the calendar.
- *
- * Legacy timing: the tournament ran after the season had already been
- * settled, which is why awards, honours and archives never saw it. Retained
- * so save migration can still recognise and re-order windows in saves that
- * are mid-tournament; new seasons use `insertWorldCupWindows`.
- */
-export function appendWorldCupWindows(
-  calendar: CalendarWindow[],
-  seasonNumber: number,
-  groupRoundFixtures: CupFixture[][],
-): CalendarWindow[] {
-  return [
-    ...calendar,
-    ...buildWorldCupWindows(seasonNumber, groupRoundFixtures, calendar.length),
-  ];
 }

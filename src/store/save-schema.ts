@@ -890,7 +890,6 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
   }
   requireBoolean(seasonState, 'completed', '存档赛季 ');
   requireBoolean(seasonState, 'isWorldCupYear', '存档赛季 ');
-  requireBoolean(seasonState, 'worldCupPhase', '存档赛季 ');
   const calendar = requireArray(seasonState, 'calendar');
   if (calendar.length === 0 || currentWindowIndex < 0 || currentWindowIndex > calendar.length) {
     throw new Error('存档赛程索引无效');

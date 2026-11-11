@@ -97,7 +97,7 @@ describe('UUID stability across transfer (integration)', () => {
     return {
       seasonState: {
         seasonNumber: 1, currentWindowIndex: 5, calendar: [], completed: false,
-        isWorldCupYear: false, worldCupPhase: false,
+        isWorldCupYear: false,
       },
       teamBases: { elite, weak },
       teamStates: {} as never,

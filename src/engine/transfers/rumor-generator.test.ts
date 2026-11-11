@@ -11,7 +11,6 @@ function makeWorld(currentWindow: number, calendarLen: number = 47): GameWorld {
       calendar: Array.from({ length: calendarLen }, () => ({ id: 0, type: 'league', label: 'X', description: '', fixtures: [], completed: false })),
       completed: false,
       isWorldCupYear: false,
-      worldCupPhase: false,
     },
     teamBases: {
       ELITE1: { id: 'ELITE1', name: 'Elite One', shortName: 'E1', color: '#000', overall: 90, attack: 90, midfield: 90, defense: 90, reputation: 90 },

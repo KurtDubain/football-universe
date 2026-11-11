@@ -21,7 +21,7 @@ import {
 /** Build a minimum-viable world stub with whatever fields a test needs to override. */
 function buildWorld(overrides: Partial<GameWorld>): GameWorld {
   const base: Partial<GameWorld> = {
-    seasonState: { seasonNumber: 100, currentWindowIndex: 0, calendar: [], completed: false, isWorldCupYear: false, worldCupPhase: false } as GameWorld['seasonState'],
+    seasonState: { seasonNumber: 100, currentWindowIndex: 0, calendar: [], completed: false, isWorldCupYear: false } as GameWorld['seasonState'],
     matchHistory: [],
     transferHistory: [],
     playerAwardsHistory: [],
