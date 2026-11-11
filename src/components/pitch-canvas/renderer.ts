@@ -253,6 +253,7 @@ export function drawPlayer(
   featured = false,
   teamSide: 'home' | 'away' = 'home',
   orientation: PitchOrientation = 'landscape',
+  labelPlacement: 'above' | 'below' = 'above',
 ): void {
   const px = P + p.x * fw;
   const py = P + p.y * fh;
@@ -325,9 +326,17 @@ export function drawPlayer(
     ctx.beginPath(); ctx.arc(px, py, 10 * pulse, 0, Math.PI * 2);
     ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.stroke();
     if (label) {
+      // The caller flips the nameplate under the player when the camera has
+      // pushed them against the top edge. A portrait pitch puts the attacking
+      // goal exactly there, so the scorer's name was the label most likely to
+      // be clipped, and the guard below cannot see it: it works in drawing
+      // coordinates, where the portrait rotation maps y onto the screen's
+      // horizontal axis.
+      const below = labelPlacement === 'below'
+        || action === 'save' || action === 'catch' || action === 'block';
       withUprightText(ctx, px, py, orientation, () => {
         ctx.font = 'bold 7px sans-serif';
-        const labelY = action === 'save' || action === 'catch' || action === 'block' ? py + 15 : Math.max(8, py - 11);
+        const labelY = below ? py + 15 : Math.max(8, py - 11);
         const labelWidth = ctx.measureText(label).width + 5;
         const labelX = clamp(px, P + labelWidth / 2 + 3, P + fw - labelWidth / 2 - 3);
         ctx.fillStyle = 'rgba(2,6,23,0.72)';

@@ -93,6 +93,31 @@ function resolvePitchOrientation(): PitchOrientation {
   return 'portrait';
 }
 
+/**
+ * Screen-space headroom a nameplate needs above its player, in logical canvas
+ * units: the box is drawn 11 units up and its ascent reaches 7 beyond that.
+ */
+const LABEL_SCREEN_TOP_MARGIN = 20;
+
+/**
+ * Decide which side of a player their nameplate goes on.
+ *
+ * This has to be answered in screen space. The draw-time guard inside
+ * `drawPlayer` works in drawing coordinates, and the portrait rotation maps
+ * drawing y onto the screen's horizontal axis, so it could not see a player
+ * pushed against the top edge at all — which is precisely where a portrait
+ * pitch puts the attacking goal, making the scorer's name the first casualty.
+ */
+function resolveLabelPlacement(
+  player: PlayerState,
+  P: number, fw: number, fh: number,
+  W: number, H: number,
+  transform: ReturnType<typeof applyCameraShake>,
+): 'above' | 'below' {
+  const screen = cameraPointToScreen(P + player.x * fw, P + player.y * fh, W, H, transform);
+  return screen.y < LABEL_SCREEN_TOP_MARGIN ? 'below' : 'above';
+}
+
 interface Props {
   minute: number;
   maxMinute: number;
@@ -1401,8 +1426,10 @@ function PitchCanvas(props: Props) {
         const isDefender = directedActors.defenderId === player.playerId;
         const receivingTouch = hasBall && currentPhase.kind === 'pass'
           && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
+        const playerState = playerPosRef.current[player.slotIndex];
+        const labelPlacement = resolveLabelPlacement(playerState, P, fw, fh, W, H, cameraTransform);
         drawPlayer(
-          ctx, playerPosRef.current[player.slotIndex], homeColor, player.playerNumber,
+          ctx, playerState, homeColor, player.playerNumber,
           hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
           isAttacker
             ? { x: finalTargetX, y: finalTargetY }
@@ -1425,6 +1452,7 @@ function PitchCanvas(props: Props) {
           liveFeaturedPlayerIds.has(player.playerId),
           'home',
           orientationRef.current,
+          labelPlacement,
         );
       }
       for (const player of visibleAway) {
@@ -1435,8 +1463,10 @@ function PitchCanvas(props: Props) {
         const isDefender = directedActors.defenderId === player.playerId;
         const receivingTouch = hasBall && currentPhase.kind === 'pass'
           && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
+        const playerState = playerPosRef.current[11 + player.slotIndex];
+        const labelPlacement = resolveLabelPlacement(playerState, P, fw, fh, W, H, cameraTransform);
         drawPlayer(
-          ctx, playerPosRef.current[11 + player.slotIndex], awayColor, player.playerNumber,
+          ctx, playerState, awayColor, player.playerNumber,
           hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
           isAttacker
             ? { x: finalTargetX, y: finalTargetY }
@@ -1459,6 +1489,7 @@ function PitchCanvas(props: Props) {
           liveFeaturedPlayerIds.has(player.playerId),
           'away',
           orientationRef.current,
+          labelPlacement,
         );
       }
 

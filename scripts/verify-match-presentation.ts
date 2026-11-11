@@ -102,7 +102,7 @@ async function verifyViewport(
       return render ? JSON.parse(render()).playbackMode === 'live' : false;
     });
 
-    const before = await page.evaluate(() => {
+    const readStepState = () => page.evaluate(() => {
       const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
       return render ? JSON.parse(render()) as {
         playbackMode: string;
@@ -110,15 +110,26 @@ async function verifyViewport(
         rendering: { renderedFrames: number; quality: string; particleCap: number; pauseReason: string };
       } : null;
     });
-    await page.evaluate(() => (window as typeof window & { advanceTime?: (ms: number) => void }).advanceTime?.(500));
-    const after = await page.evaluate(() => {
-      const render = (window as typeof window & { render_game_to_text?: () => string }).render_game_to_text;
-      return render ? JSON.parse(render()) as {
-        playbackMode: string;
-        ball: { x: number; y: number };
-        rendering: { renderedFrames: number; quality: string; particleCap: number; pauseReason: string };
-      } : null;
-    });
+    const stepTime = (ms: number) => page.evaluate(
+      (value: number) => (window as typeof window & { advanceTime?: (t: number) => void }).advanceTime?.(value),
+      ms,
+    );
+
+    const before = await readStepState();
+    // A set-piece scene legitimately parks the ball on the corner flag or the
+    // penalty spot while its setup runs. Measured at the default seed, a corner
+    // holds the ball still for about a second of stepped time before the kick is
+    // taken, so demanding movement inside the first 500 ms failed on a scene
+    // that was behaving exactly as designed. Step in slices and look for
+    // movement within a budget instead of insisting on the first one.
+    let after = before;
+    let ballMoved = false;
+    for (let slice = 0; slice < 8 && !ballMoved; slice += 1) {
+      await stepTime(500);
+      after = await readStepState();
+      if (!after || !before) break;
+      ballMoved = after.ball.x !== before.ball.x || after.ball.y !== before.ball.y;
+    }
 
     const metrics = await canvas.evaluate(element => {
       const pitch = element as HTMLCanvasElement;
@@ -169,7 +180,7 @@ async function verifyViewport(
     if (layers.overlayZ <= layers.stickyZ) throw new Error(`${name}: live overlay is below sticky controls`);
     if (name.startsWith('mobile') && undersizedButtons.length > 0) throw new Error(`${name}: undersized live buttons: ${undersizedButtons.join(', ')}`);
     if (controlsOverflow > 1) throw new Error(`${name}: live controls overflow by ${controlsOverflow}px`);
-    if (!before || !after || (before.ball.x === after.ball.x && before.ball.y === after.ball.y)) throw new Error(`${name}: deterministic time step did not move the ball`);
+    if (!before || !after || !ballMoved) throw new Error(`${name}: deterministic time step did not move the ball within 4s of stepping`);
     if (before?.playbackMode !== 'live') throw new Error(`${name}: text state omitted the selected complete playback mode`);
     if (errors.length > 0) throw new Error(`${name}: runtime errors: ${errors.join(' | ')}`);
 
