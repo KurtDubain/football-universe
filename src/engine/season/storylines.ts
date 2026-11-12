@@ -93,16 +93,36 @@ export const DARK_HORSE_MAX_RANK = 3;
  */
 export const GIANT_CRISIS_MIN_RANK_FROM_BOTTOM = 2;
 /**
- * Keep-alive gates. These are deliberately wider than the opening gates: an
- * arc has to be hard to start, but once started it must be allowed to finish.
- * Reusing the opening gate to decide whether a story may continue killed arcs
- * at their own boundary — a giant that climbed from 16th to 14th stopped
- * signalling while still in a relegation place, and 70% of crisis arcs were
- * dropped mid-crisis rather than judged.
+ * Keep-alive gate for a dark horse, deliberately wider than the opening gate:
+ * an arc has to be hard to start, but once started it must be allowed to
+ * finish. Reusing the opening gate to decide whether a story may continue
+ * killed arcs at their own boundary.
+ *
+ * A crisis arc has no gate at all — see `storylineStillRelevant`.
  */
 export const DARK_HORSE_KEEP_MAX_RANK = 5;
-export const GIANT_CRISIS_KEEP_COACH_PRESSURE = 70;
 export const GIANT_CRISIS_MIN_COACH_PRESSURE = 85;
+/**
+ * Knockout stage a giant-killing run must reach to count as fulfilled. 4 is
+ * the final (see `getKnockoutRoundRank`).
+ *
+ * Deliberately above the opening gate's own high-stage threshold of 3.
+ * Judging success at 3 made the verdict true the moment the arc opened: a
+ * 50-season audit found 92.6% of these stories fulfilled, because the
+ * opening gate only ever tracks campaigns already one round from the final.
+ * A tracked run now has to answer the question it was opened to ask.
+ */
+export const CUP_FULFILLED_STAGE = 4;
+/**
+ * Final rank a dark horse has to hold to count as fulfilled.
+ *
+ * Deliberately tighter than the opening gate's own `DARK_HORSE_MAX_RANK` of 3.
+ * Judging at the top quarter made the verdict true the moment the arc opened:
+ * a 50-season audit found 83-97% of these stories fulfilled, because the
+ * opening gate only ever tracks clubs already inside the top quarter. An arc
+ * opened third now has to climb, and one opened first has to hold.
+ */
+export const DARK_HORSE_FULFILLED_RANK = 2;
 /**
  * One arc per family per season. Two of each turned the season review into a
  * fixed programme; scarcity is what lets a quiet season actually be quiet.
@@ -548,20 +568,22 @@ export function detectStorylineSignals(world: GameWorld): StorylineSignal[] {
 }
 
 /**
- * True while the situation that opened an arc still holds. Used only to keep
- * an existing story alive; it never opens one, so widening it costs no extra
- * cards per season.
+ * True while an existing story should stay tracked. Used only to keep an arc
+ * alive; it never opens one, so widening it costs no extra cards per season.
  */
 export function storylineStillRelevant(world: GameWorld, storyline: Storyline): boolean {
   const situation = getTeamSituation(world, storyline.teamId);
   if (!situation) return false;
-  const { rank, relegationLine } = situation;
-  const coachPressure = world.teamStates[storyline.teamId]?.coachPressure ?? 0;
   if (storyline.type === 'giant_crisis') {
-    return rank >= relegationLine || coachPressure >= GIANT_CRISIS_KEEP_COACH_PRESSURE;
+    // A crisis verdict is a season-end fact — whether the club stayed up — so
+    // the arc is tracked to the end of its season. The old gate tracked only
+    // clubs still inside the relegation places, which dropped an arc the
+    // moment it climbed clear: precisely the outcome it was opened to ask
+    // about, filed as "never judged". 35% of crisis arcs ended that way.
+    return true;
   }
   if (storyline.type === 'dark_horse') {
-    return rank <= DARK_HORSE_KEEP_MAX_RANK;
+    return situation.rank <= DARK_HORSE_KEEP_MAX_RANK;
   }
   return false;
 }
@@ -663,43 +685,57 @@ function concludeStoryline(
       .find(item => item.competitionName === storyline.competitionName)
       ?? cupCampaigns(world, storyline.teamId)
         .sort((left, right) => cupCampaignScore(right) - cupCampaignScore(left))[0];
+    // Reaching the final is the verdict, not merely surviving to the
+    // semi-final: the opening gate already accepts a semi-final upset, so
+    // judging at stage 3 meant an arc was fulfilled the moment it opened.
     outcome = campaign && (
-      campaign.champion || campaign.upsetWins.length >= 3 || campaign.deepestStage >= 3
+      campaign.champion || campaign.deepestStage >= CUP_FULFILLED_STAGE
     ) ? 'success' : 'failure';
     canonicalEvidence = campaign ? cupCampaignEvidence(campaign) : storyline.evidence;
     conclusion = campaign
       ? campaign.champion
         ? `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门并最终夺冠，巨人杀手征程得到兑现。`
-        : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${cnRoundLabel(campaign.deepestRoundLabel)}${campaign.eliminated ? '后止步。' : '并在赛季末写入档案。'}`
+        : campaign.deepestStage >= CUP_FULFILLED_STAGE
+          ? `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门并闯入决赛，巨人杀手征程走到最后一步。`
+          : `在${campaign.competitionName}赢下${campaign.upsetWins.length}场明确冷门，征程推进至${cnRoundLabel(campaign.deepestRoundLabel)}${campaign.eliminated ? '后止步，未能走到决赛。' : '，赛季结束时仍未走到决赛。'}`
       : `${storyline.competitionName ?? '杯赛'}的巨人杀手征程已结束，详细赛果无法继续重建。`;
   } else if (storyline.type === 'dark_horse') {
     if (finalSeason) {
-      outcome = rank <= Math.max(4, Math.ceil(standings.length / 4))
-        && expected - rank >= 2
+      // The opening gate already accepts rank 3, so judging at the top quarter
+      // settled the story without the club ever having to move.
+      outcome = rank <= DARK_HORSE_FULFILLED_RANK && expected - rank >= 2
         ? 'success'
         : 'failure';
       conclusion = outcome === 'success'
         ? `最终排名第${rank}，比赛季前位置预期高${Math.max(0, expected - rank)}位，黑马赛季得到兑现。`
-        : `最终排名第${rank}，已不再满足黑马兑现条件。`;
+        : `最终排名第${rank}，未能进入前${DARK_HORSE_FULFILLED_RANK}，黑马赛季未能兑现。`;
     } else {
-      // Same rule as giant_crisis: a thread that stops clearing the bar
-      // mid-season was never judged, so it must not record a verdict the
-      // engine never computed.
+      // A thread that stops clearing the bar mid-season was never judged, so
+      // it must not record a verdict the engine never computed. A crisis arc
+      // is tracked to the season end instead; a dark horse that has fallen
+      // out of the top five is genuinely no longer a story.
       outcome = undefined;
       conclusion = `该观察窗口排名第${rank}，连续${STORYLINE_QUIET_WINDOWS}个观察窗口未再达到黑马标准，故事停止追踪，未做赛季判定。`;
     }
   } else if (storyline.type === 'giant_crisis') {
     if (finalSeason) {
-      outcome = rank <= expected + 1 ? 'success' : 'failure';
+      // The old bar was `expected + 1`, which for a club expected 1st or 4th
+      // meant finishing 2nd or 5th. Across 150 audited seasons no crisis arc
+      // ever finished above 12th of sixteen, so that verdict was unreachable:
+      // 0% fulfilled. The question this arc asks is whether the season can be
+      // pulled back from the brink, and in this table that has exactly one
+      // answer — staying up.
+      outcome = rank <= relegationLine ? 'success' : 'failure';
       conclusion = outcome === 'success'
-        ? `最终排名第${rank}，与赛季前位置预期的偏差缩小到${Math.max(0, rank - expected)}位。`
-        : `最终排名第${rank}，仍低于赛季前约第${expected}的预期。`;
+        ? `最终排名第${rank}，赛季结束时仍留在本级别，危机没有演变成降级。`
+        : `最终排名第${rank}，赛季结束时落入降级区，危机最终以一次降级收场。`;
     } else {
-      // A crisis that quietly stops meeting the tracking bar was never judged
-      // against the season. Recording `success` here reported a verdict the
-      // engine never computed — 67-71% of crisis stories ended this way.
+      // Only reachable when a season rolls over without a finalize pass: a
+      // crisis arc is tracked to the end of its own season, so it never goes
+      // quiet. Recording a verdict here would report one the engine never
+      // computed against a final table.
       outcome = undefined;
-      conclusion = `该观察窗口排名第${rank}，连续${STORYLINE_QUIET_WINDOWS}个观察窗口未再达到危机标准，故事停止追踪，未做赛季判定。`;
+      conclusion = `赛季在取得最终排名前结束，危机故事停止追踪，未做赛季判定。`;
     }
   } else {
     // promoted_survival: survival is only decidable against a final table,

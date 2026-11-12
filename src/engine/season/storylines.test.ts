@@ -509,9 +509,42 @@ describe('cup giant-killer stories', () => {
     )).world;
     const archived = eliminated.storylineHistory?.at(-1);
 
-    expect(archived?.conclusion).toContain('决赛后止步');
+    // Reaching the final is the verdict now, so losing it is still 成章.
+    expect(archived?.outcome).toBe('success');
+    expect(archived?.conclusion).toContain('闯入决赛');
     expect(archived?.evidence).toContain('最深阶段 决赛');
     expect(archived?.evidence).not.toContain('最深阶段 四强');
+  });
+
+  it('leaves a semi-final exit unfulfilled, so opening an arc cannot imply its verdict', () => {
+    // The opening gate accepts two upsets or one high-stage upset, and the old
+    // success test accepted `deepestStage >= 3`. A run that opened on a QF
+    // upset and then died in the semi-final satisfied both at the same moment,
+    // which is why 92.6% of audited arcs were already fulfilled when tracked.
+    const opened = withTimeline(
+      world({ expectation: 3, rank: 4, played: 8 }),
+      [cupUpset('cup-r16', 'R16'), cupUpset('cup-qf', 'QF')],
+    );
+    const started = advanceStorylines(opened).world;
+    expect(started.activeStorylines).toContainEqual(expect.objectContaining({
+      type: 'cup_giant_killer', competitionName: '联赛杯',
+    }));
+
+    const eliminated = advanceStorylines(withTimeline(
+      started,
+      [
+        cupUpset('cup-r16', 'R16'),
+        cupUpset('cup-qf', 'QF'),
+        cupUpset('cup-sf-loss', 'SF', 'loss'),
+      ],
+    )).world;
+
+    expect(eliminated.storylineHistory?.at(-1)).toMatchObject({
+      type: 'cup_giant_killer',
+      phase: '落幕',
+      outcome: 'failure',
+      conclusion: expect.stringContaining('四强后止步'),
+    });
   });
 
   it('records a champion conclusion at the season boundary', () => {
@@ -583,38 +616,18 @@ describe('storyline lifecycle', () => {
     expect(fourthQuiet.news[0]?.title).toContain('故事落幕');
   });
 
-  it('drops a midseason giant crisis after four quiet windows, without a verdict', () => {
-    const initial = world({ expectation: 5, rank: 3, played: 8, pressure: 20 });
-    initial.activeStorylines = [activeStory('giant_crisis')];
-    const firstQuiet = advanceStorylines(initial).world;
-    const secondQuiet = advanceStorylines(move(firstQuiet, 3, 9)).world;
-    const thirdQuiet = advanceStorylines(move(secondQuiet, 3, 10)).world;
-    expect(thirdQuiet.activeStorylines).toHaveLength(1);
-    expect(thirdQuiet.storylineHistory).toHaveLength(0);
-
-    const fourthQuiet = advanceStorylines(move(thirdQuiet, 3, 11));
-    const archived = fourthQuiet.world.storylineHistory?.[0];
-    expect(archived).toMatchObject({
-      type: 'giant_crisis',
-      phase: '落幕',
-      conclusion: expect.stringContaining(`连续${STORYLINE_QUIET_WINDOWS}个观察窗口`),
-    });
-    // A crisis that quietly stops clearing the bar was never judged against the
-    // season. Recording `success` here reported a verdict the engine never made.
-    expect(archived?.outcome).toBeUndefined();
-    expect(archived?.conclusion).toContain('未做赛季判定');
-    expect(archived?.conclusion).not.toContain('最终排名');
-  });
-
-  it('keeps a crisis alive while the club is still in the relegation places', () => {
-    // Sixth of eight is a relegation place but no longer clears the opening
-    // gate, which only fires in the bottom two. The arc must survive it:
-    // 70% of crisis stories used to be dropped while still in trouble.
+  it('keeps a crisis tracked to the season verdict, inside the drop zone or out of it', () => {
+    // The old keep-alive gate tracked only clubs still inside the relegation
+    // places, so an arc was dropped the moment it climbed out — precisely the
+    // outcome it was opened to ask about, filed as an unjudged thread. 70% of
+    // crisis arcs used to end mid-crisis, and 35% still ended unjudged.
     const initial = world({ expectation: 5, rank: 7, played: 8, pressure: 20 });
     initial.activeStorylines = [activeStory('giant_crisis')];
     let current = advanceStorylines(initial).world;
     expect(current.activeStorylines).toHaveLength(1);
 
+    // Sixth of eight is a relegation place but no longer clears the opening
+    // gate, which only fires in the bottom two. The arc must survive it.
     for (let played = 9; played <= 9 + STORYLINE_QUIET_WINDOWS; played++) {
       current = advanceStorylines(move(current, 6, played)).world;
     }
@@ -622,9 +635,20 @@ describe('storyline lifecycle', () => {
     expect(current.activeStorylines?.[0].quietWindows).toBe(0);
     expect(current.storylineHistory).toHaveLength(0);
 
-    // Clear of the drop zone it may finally go quiet.
+    // Clear of the drop zone it must still be tracked: whether the club stays
+    // up is a season-end fact, so climbing out cannot end the story.
     const safe = advanceStorylines(move(current, 2, 15)).world;
-    expect(safe.activeStorylines?.[0].quietWindows).toBe(1);
+    expect(safe.activeStorylines).toHaveLength(1);
+    expect(safe.activeStorylines?.[0].quietWindows).toBe(0);
+    expect(safe.storylineHistory).toHaveLength(0);
+
+    const settled = advanceStorylines(move(safe, 2, 16), { finalizeSeason: true });
+    expect(settled.world.storylineHistory?.[0]).toMatchObject({
+      type: 'giant_crisis',
+      phase: '落幕',
+      outcome: 'success',
+      conclusion: expect.stringContaining('仍留在本级别'),
+    });
   });
 
   it('keeps an ended story cooling across a season boundary before allowing restart', () => {
@@ -650,8 +674,13 @@ describe('storyline lifecycle', () => {
 
   it.each([
     ['dark_horse', { expectation: 2, rank: 2 }, 'success'],
+    // Rank 3 is a legal opening rank, so it must not also be a verdict.
+    ['dark_horse', { expectation: 2, rank: 3 }, 'failure'],
     ['dark_horse', { expectation: 2, rank: 7 }, 'failure'],
     ['giant_crisis', { expectation: 5, rank: 2 }, 'success'],
+    // An eight-team table relegates its bottom three, so the line is rank 5.
+    ['giant_crisis', { expectation: 5, rank: 5 }, 'success'],
+    ['giant_crisis', { expectation: 5, rank: 6 }, 'failure'],
     ['giant_crisis', { expectation: 5, rank: 7 }, 'failure'],
     ['promoted_survival', { expectation: 3, rank: 5 }, 'success'],
     ['promoted_survival', { expectation: 3, rank: 7 }, 'failure'],
@@ -666,6 +695,46 @@ describe('storyline lifecycle', () => {
       outcome,
       conclusion: expect.any(String),
     });
+  });
+  it('does not settle a dark horse on the rank that opened it', () => {
+    // Rank 3 clears the opening gate, so a top-quarter verdict was already
+    // true the moment the arc opened: 83-97% of these stories were fulfilled.
+    const stalled = world({ expectation: 2, rank: 3, played: 14 });
+    stalled.activeStorylines = [activeStory('dark_horse')];
+    const archived = advanceStorylines(stalled, { finalizeSeason: true })
+      .world.storylineHistory?.[0];
+    expect(archived?.outcome).toBe('failure');
+    expect(archived?.conclusion).toContain('未能进入前2');
+    expect(archived?.conclusion).not.toContain('得到兑现');
+
+    const climbed = world({ expectation: 2, rank: 2, played: 14 });
+    climbed.activeStorylines = [activeStory('dark_horse')];
+    expect(advanceStorylines(climbed, { finalizeSeason: true })
+      .world.storylineHistory?.[0]).toMatchObject({
+      outcome: 'success',
+      conclusion: expect.stringContaining('黑马赛季得到兑现'),
+    });
+  });
+
+  it('settles a crisis on staying up, not on matching expectation', () => {
+    // `expected + 1` asked a club that opened in the bottom two to finish
+    // second; across 150 audited seasons no crisis arc finished above 12th of
+    // sixteen, so that verdict was unreachable.
+    const survived = world({ expectation: 5, rank: 13, played: 14, teamCount: 16 });
+    survived.activeStorylines = [activeStory('giant_crisis')];
+    expect(advanceStorylines(survived, { finalizeSeason: true })
+      .world.storylineHistory?.[0]).toMatchObject({
+      outcome: 'success',
+      conclusion: expect.stringContaining('仍留在本级别'),
+    });
+
+    // Fourteenth of sixteen is the first relegation place.
+    const relegated = world({ expectation: 5, rank: 14, played: 14, teamCount: 16 });
+    relegated.activeStorylines = [activeStory('giant_crisis')];
+    const archived = advanceStorylines(relegated, { finalizeSeason: true })
+      .world.storylineHistory?.[0];
+    expect(archived?.outcome).toBe('failure');
+    expect(archived?.conclusion).toContain('落入降级区');
   });
 
   it('still records a verdict when the closing fact is self-sufficient', () => {
