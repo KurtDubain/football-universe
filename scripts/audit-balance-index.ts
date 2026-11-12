@@ -221,7 +221,7 @@ function effectiveStrength(team: TeamBase, coach: CoachBase | null, boosts: Play
     fixture: {
       homeTeamId: team.id,
       awayTeamId: AUDIT_DUMMY.id,
-      competitionType: 'league1',
+      competitionType: 'league',
       isNeutralVenue: true,
       tournamentHostTeamId: undefined,
     },
@@ -280,7 +280,7 @@ function measureImpact(world: GameWorld, gw: number, season: number, seed: numbe
       fixture: {
         homeTeamId: home.id,
         awayTeamId: away.id,
-        competitionType: 'league1',
+        competitionType: 'league',
         isNeutralVenue: true,
         tournamentHostTeamId: undefined,
       },

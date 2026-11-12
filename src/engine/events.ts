@@ -24,13 +24,21 @@ const EVENT_TEMPLATES = [
     type: 'injury' as const,
     title: (team: string) => `${team} 核心球员受伤`,
     desc: (team: string) => `${team}的核心球员遭遇伤病，将缺席数场比赛。`,
-    field: 'overall' as const, delta: -3, duration: 5, targetStrong: true,
+    // 此前是 overall −3。overall 不参与比赛计算（adjustedStrengths 只读
+    // attack / midfield / defense / stability），所以「核心球员受伤」这个
+    // 事件对比赛结果零影响，是纯装饰。改到 attack 之后它才真正生效。
+    field: 'attack' as const, delta: -3, duration: 5, targetStrong: true,
   },
   {
     type: 'wonderkid' as const,
     title: (team: string) => `${team} 青训新星崛起`,
     desc: (team: string) => `${team}的青训营走出一位天才球员，即战力大增。`,
-    field: 'attack' as const, delta: 4, duration: 0, targetStrong: false, // permanent
+    // 此前是 duration 0（永久）+4 attack，且 targetStrong=false 让候选池只剩
+    // overall < 75 的弱队。永久单向增益 + 弱队定向 = 棘轮：60 赛季实测中 L3 的
+    // attack 从 54.5 涨到 77.1 而 defense 从 50.9 掉到 44.3，L1 的 attack 与
+    // 排名相关性从 0.346 一路衰减到 −0.022。青训的长期收益本来就由青训营产出
+    // 球员承担（球员加成已经进了比赛模型），这里只保留一段赛季内的即战力。
+    field: 'attack' as const, delta: 4, duration: 12, targetStrong: false,
   },
   {
     type: 'investment' as const,
