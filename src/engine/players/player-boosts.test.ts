@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { computePlayerBoostReport, computePlayerBoosts } from './player-boosts';
 import type { Player } from '../../types/player';
 import { defaultTeams } from '../../config/teams';
+import { BALANCE } from '../../config/balance';
 import { generateAllSquads } from './generator';
 import { selectMatchday } from './injuries';
 import { selectStartingEleven } from '../match/participation';
@@ -34,7 +35,43 @@ describe('computePlayerBoosts', () => {
     expect(b.defense).toBe(0);
   });
 
-  it('all-star squad remains strong without saturating the cap', () => {
+  it('values a rating point more highly once a player is already elite', () => {
+    const squadWith = (fwRating: number): Player[] => [
+      mk('gk', 'GK', 72),
+      ...Array.from({ length: 4 }, (_, i) => mk(`df-${i}`, 'DF', 72)),
+      ...Array.from({ length: 3 }, (_, i) => mk(`mf-${i}`, 'MF', 72)),
+      mk('fw-1', 'FW', fwRating),
+      ...Array.from({ length: 2 }, (_, i) => mk(`fw-${i + 2}`, 'FW', 72)),
+    ];
+    const gain = (from: number, to: number): number =>
+      computePlayerBoosts(squadWith(to), 0).attack
+      - computePlayerBoosts(squadWith(from), 0).attack;
+
+    // 同样是涨 6 分：70→76 没碰到球星门槛，88→94 碰到了。后者的边际价值
+    // 必须明显更高，否则「顶级球员」就只是评分高一点而已。
+    expect(gain(88, 94)).toBeGreaterThan(gain(70, 76) * 1.5);
+  });
+
+  it('keeps a realistic elite squad clear of the cap', () => {
+    // 现实中的豪门是三五个球星加一批 78 分上下的主力，不是 11 个 90 分。
+    // 撞顶意味着球星之间的差距被抹平，所以真实阵容必须留出余量。
+    const realistic = [
+      ...Array.from({ length: 2 }, (_, i) => mk(`gk-${i}`, 'GK', 78)),
+      ...Array.from({ length: 5 }, (_, i) => mk(`df-${i}`, 'DF', 78)),
+      ...Array.from({ length: 5 }, (_, i) => mk(`mf-${i}`, 'MF', 78)),
+      mk('fw-star', 'FW', 90),
+      ...Array.from({ length: 3 }, (_, i) => mk(`fw-${i}`, 'FW', 80)),
+    ];
+    const b = computePlayerBoosts(realistic, 0);
+    expect(b.attack).toBeGreaterThan(15);
+    expect(b.attack).toBeLessThan(BALANCE.PLAYER_BOOST_CAP);
+    expect(b.defense).toBeGreaterThan(10);
+    expect(b.defense).toBeLessThan(BALANCE.PLAYER_BOOST_CAP);
+  });
+
+  it('leaves headroom under the cap even for an all-90 XI', () => {
+    // 上限的意义是兜底，不是日常生效。如果连 11 个 90 分的阵容都够不到，
+    // 真实比赛里就没有任何球队会被削平 —— 球星之间的差距完整保留下来。
     const squad = [
       ...Array.from({ length: 2 }, (_, i) => mk(`gk-${i}`, 'GK', 90)),
       ...Array.from({ length: 5 }, (_, i) => mk(`df-${i}`, 'DF', 90)),
@@ -42,10 +79,9 @@ describe('computePlayerBoosts', () => {
       ...Array.from({ length: 4 }, (_, i) => mk(`fw-${i}`, 'FW', 90)),
     ];
     const b = computePlayerBoosts(squad, 0);
-    expect(b.attack).toBeLessThan(15);
-    expect(b.attack).toBeGreaterThan(10);
-    expect(b.defense).toBeLessThan(15);
-    expect(b.defense).toBeGreaterThan(10);
+    expect(b.attack).toBeGreaterThan(25);
+    expect(b.attack).toBeLessThan(BALANCE.PLAYER_BOOST_CAP);
+    expect(b.defense).toBeLessThan(BALANCE.PLAYER_BOOST_CAP);
   });
 
   it('low-rated squad produces negative boost (capped at -15)', () => {
@@ -123,13 +159,14 @@ describe('computePlayerBoosts', () => {
     expect(injured.defense).toBeLessThanOrEqual(healthy.defense);
   });
 
-  it('keeps the generated top-flight distribution varied instead of all +15', () => {
+  it('keeps the generated top-flight distribution varied instead of all capped', () => {
     const { squads } = generateAllSquads(defaultTeams, 20260720);
     const boosts = defaultTeams
       .filter(team => team.initialLeagueLevel === 1)
       .map(team => computePlayerBoosts(squads[team.id], 0));
+    const cap = BALANCE.PLAYER_BOOST_CAP;
     const fullyCapped = boosts.filter(boost =>
-      boost.attack === 15 && boost.midfield === 15 && boost.defense === 15,
+      boost.attack === cap && boost.midfield === cap && boost.defense === cap,
     );
     expect(fullyCapped.length).toBe(0);
     expect(new Set(boosts.map(boost => boost.attack)).size).toBeGreaterThanOrEqual(8);

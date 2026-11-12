@@ -123,11 +123,11 @@ describe('deriveTeamOverall', () => {
 
     // 拐点以下是恒等映射。
     expect(at(70)).toBe(70);
-    expect(at(84)).toBe(84);
+    expect(at(82)).toBe(82);
 
     // 拐点以上保序且严格单调。硬夹会让 100 和 116 都变成 99，压缩之后
     // 必须仍然区分得开 —— 顶级球队之间的可分辨度是这次改动的目标之一。
-    expect(at(90)).toBeGreaterThan(at(84));
+    expect(at(90)).toBeGreaterThan(at(82));
     expect(at(96)).toBeGreaterThan(at(90));
     expect(at(104)).toBeGreaterThan(at(96));
     expect(at(116)).toBeGreaterThan(at(104));

@@ -10,7 +10,11 @@ export const BALANCE = {
   MOMENTUM_WEIGHT: 0.05,
   COACH_BUFF_WEIGHT: 1.0,
   PLAYER_BOOST_WEIGHT: 1.0,   // multiplier on the player-derived squad boost (set to 0 to disable entirely)
-  PLAYER_BOOST_CAP: 15,        // ± cap per side (attack/midfield/defense) — keeps elite stacks from doubling team.overall
+  // ± cap per side (attack/midfield/defense). Was 15, which would now flatten
+  // exactly the elite-vs-elite differences the star term exists to create.
+  // 50 clears the strongest real squad in the game (the dynasty club asks for
+  // 47.9 on attack at world creation), so only a fantasy all-90 XI saturates.
+  PLAYER_BOOST_CAP: 50,
   // How much a rating gap is worth. The strength term used to be a plain
   // attack/defense ratio, which shrank a fixed gap as teams got stronger: a
   // five-point gap bought 0.130 expected goals at OVR 89 but 0.184 at OVR 63.
