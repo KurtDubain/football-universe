@@ -1,5 +1,6 @@
 import { preset } from '../edition/preset';
 import { FAVORITE_PLAYER_LIMIT } from '../config/player-observation';
+import { BALANCE } from '../config/balance';
 import { EDITION, PRESET_ID } from '../edition/policy';
 import type { PersistStorage, StateStorage, StorageValue } from 'zustand/middleware';
 import type { GameWorld } from '../engine/season/season-manager';
@@ -318,7 +319,7 @@ function validateFeaturedPlayers(
     if (!PLAYER_IMPACT_UNITS.has(entry.impactUnit as string)) throw new Error(`${context}焦点球员 ${playerId} 影响单位无效`);
     const rating = requireFiniteNumber(entry, 'ratingAtKickoff', `${context}焦点球员 ${playerId} `);
     const marginal = requireFiniteNumber(entry, 'marginalUnitImpact', `${context}焦点球员 ${playerId} `);
-    if (rating < 0 || rating > 100 || marginal < 0 || marginal > 15) {
+    if (rating < 0 || rating > 100 || marginal < 0 || marginal > BALANCE.PLAYER_BOOST_CAP) {
       throw new Error(`${context}焦点球员 ${playerId} 数值超出范围`);
     }
     if (entry.seasonScoreAtKickoff !== undefined) {

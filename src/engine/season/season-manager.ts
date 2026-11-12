@@ -995,7 +995,13 @@ const SEASON_BUFF_TEMPLATES: {
   {
     type: 'financial_crisis', label: '财务危机',
     desc: (t) => `${t}遭遇资金链断裂，被迫甩卖球员，阵容厚度严重缩水。`,
-    effects: [{ field: 'depth', delta: -6 }, { field: 'overall', delta: -2 }],
+    // 此前第二项是 overall −2，同样对比赛零影响。财政危机应该真的削弱球队：
+    // 甩卖球员之后攻防两端同时下降。
+    effects: [
+      { field: 'depth', delta: -6 },
+      { field: 'attack', delta: -2 },
+      { field: 'defense', delta: -2 },
+    ],
     positive: false,
   },
   {

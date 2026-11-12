@@ -31,6 +31,8 @@ import {
   FIRE_SALE_PREMIUM,
   FIRE_SALE_MIN_VALUE,
   FIRE_SALE_BUYER_MIN_REP,
+  rankFireSaleCandidates,
+  fireSaleDamageScore,
 } from './finance';
 import { SeededRNG } from '../match/rng';
 import type { TeamBase, FinanceState } from '../../types/team';
@@ -370,6 +372,81 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, rng);
     expect(r.transfers).toHaveLength(2);
     expect(r.squads.POOR).toHaveLength(2);
+  });
+});
+
+describe('rankFireSaleCandidates — sell the least damaging player', () => {
+  /** Six forwards (target is five) plus one undisputed star. */
+  function stockedSquad(): Player[] {
+    const forwards = Array.from({ length: 5 }, (_, i) => mkPlayer({
+      uuid: 'fw-' + i, number: 10 + i, position: 'FW',
+      rating: 70, marketValue: 40, age: 27,
+    }));
+    return [
+      ...forwards,
+      mkPlayer({ uuid: 'fw-surplus', number: 20, position: 'FW', rating: 68, marketValue: 35, age: 27 }),
+      mkPlayer({ uuid: 'gk-star', number: 1, position: 'GK', rating: 92, marketValue: 120, age: 27 }),
+    ];
+  }
+
+  it('sells from an over-stocked position before touching the star', () => {
+    const ranked = rankFireSaleCandidates(stockedSquad());
+    // The sixth forward is surplus — he goes first even though the keeper is
+    // worth nearly four times as much.
+    expect(ranked[0].uuid).toBe('fw-surplus');
+    // The star is still sellable, just last. A fire sale is still a fire sale.
+    expect(ranked[ranked.length - 1].uuid).toBe('gk-star');
+    expect(ranked).toHaveLength(7);
+  });
+
+  it('prefers a veteran over a first choice in his prime', () => {
+    const squad = [
+      mkPlayer({ uuid: 'prime', number: 9, position: 'FW', rating: 85, marketValue: 90, age: 27 }),
+      mkPlayer({ uuid: 'vet', number: 10, position: 'MF', rating: 78, marketValue: 45, age: 34 }),
+    ];
+    expect(rankFireSaleCandidates(squad)[0].uuid).toBe('vet');
+  });
+
+  it('protects a prospect more than a peak-age squad player', () => {
+    const kid = mkPlayer({ uuid: 'kid', number: 30, position: 'MF', rating: 66, marketValue: 35, age: 20 });
+    const peak = mkPlayer({ uuid: 'peak', number: 31, position: 'MF', rating: 66, marketValue: 35, age: 27 });
+    expect(fireSaleDamageScore(kid, [kid, peak], { GK: 0, DF: 0, MF: 2, FW: 0 }))
+      .toBeGreaterThan(fireSaleDamageScore(peak, [kid, peak], { GK: 0, DF: 0, MF: 2, FW: 0 }));
+  });
+
+  it('never offers a player below the value bar, however cheap he is to lose', () => {
+    const squad = [
+      mkPlayer({ uuid: 'cheap-vet', number: 20, position: 'FW', rating: 55, marketValue: FIRE_SALE_MIN_VALUE - 1, age: 35 }),
+      mkPlayer({ uuid: 'pricey', number: 9, position: 'GK', rating: 88, marketValue: 70, age: 27 }),
+    ];
+    expect(rankFireSaleCandidates(squad).map(p => p.uuid)).toEqual(['pricey']);
+  });
+
+  it('returns nothing when nobody on the squad clears the bar', () => {
+    expect(rankFireSaleCandidates([mkPlayer({ marketValue: FIRE_SALE_MIN_VALUE - 1 })])).toEqual([]);
+  });
+
+  it('a broke club keeps its star and sells the surplus man', () => {
+    const teamBases: Record<string, TeamBase> = {
+      POOR: mkBase({ id: 'POOR', reputation: 60 }),
+      ELITE: mkBase({ id: 'ELITE', reputation: 90 }),
+    };
+    const teamFinances: Record<string, FinanceState> = {
+      POOR: { cash: -50, totalIncome: 0, totalExpense: 0, history: [] },
+      ELITE: { cash: 400, totalIncome: 0, totalExpense: 0, history: [] },
+    };
+    const squads: Record<string, Player[]> = {
+      POOR: stockedSquad(),
+      ELITE: [
+        mkPlayer({ uuid: 'e-fw', teamId: 'ELITE', number: 7, position: 'FW', rating: 60, marketValue: 20 }),
+        mkPlayer({ uuid: 'e-gk', teamId: 'ELITE', number: 1, position: 'GK', rating: 85, marketValue: 60 }),
+      ],
+    };
+    const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, new SeededRNG(7));
+    expect(r.transfers).toHaveLength(2);
+    expect(r.transfers[0].playerId).toBe('fw-surplus');
+    // The 92-rated keeper is still on the books afterwards.
+    expect(r.squads.POOR.some(p => p.uuid === 'gk-star')).toBe(true);
   });
 });
 

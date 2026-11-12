@@ -14,6 +14,9 @@ import { getAllTeamIds, createNewsId, cnRoundLabel } from './helpers';
 import { GameWorld, NewsItem } from './season-manager';
 import { processCoachFiring } from '../coaches/coach-hiring';
 import { getTeamCoachId } from '../coaches/coach-lookup';
+import { computeSelectedPlayerBoosts } from '../players/player-boosts';
+import { deriveTeamOverall } from '../team-overall';
+import { applyEventEffect } from '../events';
 import { computeSeasonAwards, AWARD_META } from '../awards/season-awards';
 import {
   describeLeagueTopScorer,
@@ -1166,11 +1169,59 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   }
 
   // ── Team growth/decline based on season performance ─────────
-  const teamBases = { ...world.teamBases };
+  // 赛季内仍在生效的窗口事件必须先回滚。post-match 只在事件自然到期时
+  // 反向，而收尾处原本直接 `activeEvents: []` 清空 —— 跨赛季未到期的
+  // 临时事件（例如 5 窗口的 injury，attack −3）会把效果永久留在球队身上。
+  let teamBases = { ...world.teamBases };
+  for (const event of world.activeEvents ?? []) {
+    teamBases = applyEventEffect(teamBases, event, true);
+  }
+
+  // 漂移路径的参考量是「俱乐部三线均值」，不是 overall。
+  //
+  // overall 现在是派生量（三线 + 教练 + 球员），赛季末会被 deriveTeamOverall
+  // 整个覆盖。把它当中间量有两个后果：
+  //   1. 路径里的 [38, 97] 硬夹是按旧存量字段调的，而派生值可以到 99
+  //      （raw 最高 116）。于是 OVR ≥ 95 的球队夺冠拿到的是
+  //      min(97, ovr + 3..4) − ovr ≤ 0 —— 顶级球队赢球反而被扣分。
+  //   2. 阈值（93 老化 / 87 动荡 / 45 托底 / 均值 81）的语义随派生值漂移：
+  //      均值回归的 `dist > 20` 分支在 97 夹之后永远不触发，只剩 `dist < −20`
+  //      的托底侧，一个稳定器退化成了单向棘轮。
+  //
+  // 改用三线均值后，漂移系统读写的正是「俱乐部自身能力」，与教练和球员
+  // 加成解耦；上界由每条线的 [35, 96] 夹承担，不再需要 overall 上的硬夹。
+  const levelMeanLines = new Map<number, number>();
+  for (const level of [1, 2, 3]) {
+    const ids = getAllTeamIds(teamStates).filter(id => teamStates[id].leagueLevel === level);
+    if (ids.length === 0) continue;
+    const sum = ids.reduce((acc, id) => {
+      const b = teamBases[id];
+      return acc + (b.attack + b.midfield + b.defense) / 3;
+    }, 0);
+    levelMeanLines.set(level, sum / ids.length);
+  }
+
   for (const teamId of getAllTeamIds(teamStates)) {
     const base = { ...teamBases[teamId] };
     const state = teamStates[teamId];
-    const originalOvr = base.overall;
+
+    const clampTo = (value: number, lo: number, hi: number): number =>
+      Math.max(lo, Math.min(hi, value));
+
+    /** 俱乐部三线均值 —— 漂移路径的读写基准。 */
+    const clubLines = (): number => (base.attack + base.midfield + base.defense) / 3;
+
+    /** 把强度变化对称施加到三条线；depth 与 stability 同步跟随。 */
+    const applyDrift = (delta: number): void => {
+      if (delta === 0) return;
+      const sign = delta > 0 ? 1 : -1;
+      const mag = Math.abs(delta);
+      base.attack = clampTo(base.attack + sign * mag, 35, 96);
+      base.midfield = clampTo(base.midfield + sign * mag, 35, 96);
+      base.defense = clampTo(base.defense + sign * mag, 35, 96);
+      base.depth = clampTo(base.depth + sign * mag, 30, 96);
+      base.stability = clampTo(base.stability + sign * rng.nextInt(0, 1), 35, 96);
+    };
 
     let growthEntry: StandingEntry | undefined;
     let growthLevel: number = state.leagueLevel;
@@ -1194,70 +1245,65 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       //
       // Keyed on position rather than ratio so the bonus means the same
       // thing in a 16-team top flight and an 8-team third tier.
-      base.overall = Math.min(97, base.overall + rng.nextInt(3, 4));
+      applyDrift(rng.nextInt(3, 4));
     } else if (ratio <= 0.15) {
-      base.overall = Math.min(97, base.overall + rng.nextInt(1, 2));
+      applyDrift(rng.nextInt(1, 2));
     } else if (ratio <= 0.35) {
-      base.overall = Math.min(97, base.overall + rng.nextInt(0, 1));
+      applyDrift(rng.nextInt(0, 1));
     } else if (ratio >= 0.85) {
-      const declineMax = base.overall > 60 ? 3 : 2;
-      base.overall = Math.max(38, base.overall - rng.nextInt(1, declineMax));
+      const declineMax = clubLines() > 60 ? 3 : 2;
+      applyDrift(-rng.nextInt(1, declineMax));
     } else if (ratio >= 0.7) {
-      if (base.overall > 50) {
-        base.overall = Math.max(38, base.overall - rng.nextInt(0, 1));
+      if (clubLines() > 50) {
+        applyDrift(-rng.nextInt(0, 1));
       }
     }
 
     // ── Natural aging: only the very top, and probabilistic ──
-    if (base.overall >= 93 && rng.next() < 0.5) {
-      base.overall = base.overall - 1;
+    // 阈值从 overall 93 换成三线均值 88。两者在初始数据里几乎相等
+    // （恒大 overall 92 / 三线均值 91.0），但派生 OVR 含教练与球员加成，
+    // 93 在 L1 会命中近四成球队；88 在三线均值上约等于 L1 的 p95。
+    if (clubLines() >= 88 && rng.next() < 0.5) {
+      applyDrift(-1);
     }
 
     // ── Floor uplift: weakest teams always improve a little ──
-    if (base.overall <= 45) {
-      base.overall = base.overall + 1;
+    if (clubLines() <= 45) {
+      applyDrift(1);
     }
 
-    // ── Mean reversion: gentle pull, skip teams that just won ──
-    // The target has to track the real population. At 65 it sat sixteen
-    // points below the measured mean of 81.4, so every club above 85 was
-    // dragged down about 0.21 a season. With year-over-year correlation of
-    // 0.982 nothing pushed clubs apart again, and the top flight compressed
-    // from sd 6.7 to 3.6 across 150 seasons.
-    const leagueMean = 81;
-    const distFromMean = base.overall - leagueMean;
-    if (Math.abs(distFromMean) > 20 && ratio > 0.15) {
+    // ── Mean reversion: gentle two-sided pull toward the team's own level ──
+    // The target has to track the real population, and it has to be the
+    // team's own division. A single global constant cannot serve three
+    // tiers whose three-line means sit roughly twenty points apart, and the
+    // old `|dist| > 20` band around 81 was unreachable above the [38, 97]
+    // clamp — only the `dist < −20` side ever fired, which turned a
+    // stabiliser into a one-way ratchet that lifted the whole pyramid.
+    const levelMean = levelMeanLines.get(state.leagueLevel) ?? clubLines();
+    const distFromMean = clubLines() - levelMean;
+    if (Math.abs(distFromMean) > 12 && ratio > 0.15) {
       const pullChance = Math.min(0.4, Math.abs(distFromMean) / 120);
       if (rng.next() < pullChance) {
-        base.overall += distFromMean > 0 ? -1 : 1;
+        applyDrift(distFromMean > 0 ? -1 : 1);
       }
     }
 
-    // Clamp overall — top 3 teams have a higher floor (dynasty DNA)
+    // Dynasty DNA — the three legacy clubs never sink into mid-table.
+    // The floor sits on the three-line mean so it constrains the club's own
+    // ability; a floor on `overall` would be erased by the derivation below.
     const PROTECTED_TEAMS = ['gz_hengda', 'shimazu', 'xibei_wolf'];
     const floor = PROTECTED_TEAMS.includes(teamId) ? 82 : 38;
-    base.overall = Math.max(floor, Math.min(97, base.overall));
-
-    // ── Proportional attribute sync ──
-    const ovrDelta = base.overall - originalOvr;
-    if (ovrDelta !== 0) {
-      const sign = ovrDelta > 0 ? 1 : -1;
-      const mag = Math.abs(ovrDelta);
-      base.attack = Math.max(35, Math.min(96, base.attack + sign * rng.nextInt(0, mag)));
-      base.midfield = Math.max(35, Math.min(96, base.midfield + sign * rng.nextInt(0, Math.max(1, mag - 1))));
-      base.defense = Math.max(35, Math.min(96, base.defense + sign * rng.nextInt(0, Math.max(1, mag - 1))));
-      base.stability = Math.max(35, Math.min(96, base.stability + sign * rng.nextInt(0, 1)));
-      base.depth = Math.max(30, Math.min(96, base.depth + sign * rng.nextInt(0, mag)));
-    }
+    const shortfall = floor - clubLines();
+    if (shortfall > 0) applyDrift(Math.ceil(shortfall));
 
     // ── Promoted teams get a boost ──
     const startLevel = (world.seasonStartLevels ?? {})[teamId] ?? base.initialLeagueLevel;
     if (state.leagueLevel < startLevel) {
       const promoBoost = rng.nextInt(3, 5);
-      base.overall = Math.min(97, base.overall + promoBoost);
-      base.depth = Math.min(97, base.depth + rng.nextInt(2, 4));
-      base.attack = Math.min(97, base.attack + rng.nextInt(1, 3));
-      base.midfield = Math.min(97, base.midfield + rng.nextInt(1, 2));
+      applyDrift(promoBoost);
+      base.depth = clampTo(base.depth + rng.nextInt(2, 4), 30, 96);
+      base.attack = clampTo(base.attack + rng.nextInt(1, 3), 35, 96);
+      base.midfield = clampTo(base.midfield + rng.nextInt(1, 2), 35, 96);
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `boost-${teamId}`),
         seasonNumber, windowIndex, type: 'match_result',
@@ -1266,20 +1312,28 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       });
     }
     // Relegated teams decline
+    // Relegated teams decline — symmetric with the promotion bonus.
+    // 此前升级是 +3..+5 而降级只有 −1..−2，每季 3 升 3 降就在 48 队里净
+    // 留下约 +7.5 点（+0.156/队/季）。V3 实测的通胀速率是 +0.19/季，两者
+    // 吻合 —— 这是整个金字塔向上的唯一系统性推力，与战绩无关。
     if (state.leagueLevel > startLevel) {
-      base.overall = Math.max(38, base.overall - rng.nextInt(1, 2));
-      base.depth = Math.max(30, base.depth - rng.nextInt(1, 2));
+      applyDrift(-rng.nextInt(3, 5));
+      base.depth = clampTo(base.depth - rng.nextInt(2, 4), 30, 96);
+      base.attack = clampTo(base.attack - rng.nextInt(1, 3), 35, 96);
+      base.midfield = clampTo(base.midfield - rng.nextInt(1, 2), 35, 96);
     }
 
     // Strong teams have a chance of "internal turmoil"
     // A 10% chance of a small drop taxed every strong club by 0.30 a season,
     // which compressed the whole top flight. A rarer, sharper shock keeps
     // the drama but spreads clubs apart instead of levelling them.
-    if (base.overall >= 87 && rng.next() < 0.04) {
+    // 阈值读三线均值而非派生 OVR：派生值在 L1 中位数就有 90，87 会命中
+    // 半数以上的顶级联赛球队，把「强队偶发动荡」变成对整个联赛的普遍抽税。
+    if (clubLines() >= 87 && rng.next() < 0.04) {
       const drop = rng.nextInt(4, 8);
-      base.overall = Math.max(70, base.overall - drop);
-      base.attack = Math.max(60, base.attack - rng.nextInt(1, 2));
-      base.stability = Math.max(50, base.stability - rng.nextInt(1, 3));
+      applyDrift(-drop);
+      base.attack = clampTo(base.attack - rng.nextInt(1, 2), 35, 96);
+      base.stability = clampTo(base.stability - rng.nextInt(1, 3), 35, 96);
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `turmoil-${teamId}`),
         seasonNumber, windowIndex, type: 'coach_fired',
@@ -1291,10 +1345,22 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     // Underperformance bonus
     const expectedPos = Math.round(total * (1 - (base.expectation - 1) / 4));
     if (position < expectedPos - 3 && ratio <= 0.4) {
-      const surpriseBoost = rng.nextInt(1, 3);
-      base.overall = Math.min(97, base.overall + surpriseBoost);
+      applyDrift(rng.nextInt(1, 3));
       base.reputation = Math.min(99, base.reputation + rng.nextInt(2, 5));
     }
+
+    // OVR 不再独立漂移：从三条线 + 教练 + 球员重算，让它始终等于比赛真正
+    // 使用的强度。上面九条路径现在直接改三条线（applyDrift），完全不经过
+    // base.overall —— 它只是这三条线加上教练与球员加成之后的读数。
+    //
+    // 此刻 squads 与教练都已是新赛季状态（退役 → 转会 → fireSale → 教练
+    // 解雇都已跑完），所以派生值描述的是新赛季的开局实力。
+    const derivedCoachId = getTeamCoachId(coachStates, teamId);
+    base.overall = deriveTeamOverall(
+      base,
+      derivedCoachId ? coachBases[derivedCoachId] ?? null : null,
+      computeSelectedPlayerBoosts(squads[teamId] ?? [], '4-3-3'),
+    );
 
     teamBases[teamId] = base;
   }

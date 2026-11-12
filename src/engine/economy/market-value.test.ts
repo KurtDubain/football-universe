@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computeInitialMarketValue, applyAnnualRevaluation } from './market-value';
+import {
+  computeInitialMarketValue,
+  computePresentMarketValue,
+  pricingRating,
+  applyAnnualRevaluation,
+  POTENTIAL_PRICED_UNTIL_AGE,
+} from './market-value';
 import { Player, PlayerSeasonStats } from '../../types/player';
 
 function mkPlayer(overrides: Partial<Player> = {}): Player {
@@ -115,14 +121,77 @@ describe('applyAnnualRevaluation — rating recompute via curve', () => {
     expect(legacy.rating).toBe(70); // unchanged
   });
 
-  it('preserves the rest of the marketValue logic (promotion bonus etc.)', () => {
-    const p = mkPlayer({ marketValue: 30, peakRating: 75, peakAge: 27, age: 25 });
-    const squads = { A: [p] };
-    applyAnnualRevaluation(squads, emptyStats(), new Set(['A']), null);
+  it('lifts a promoted squad above an identical non-promoted one', () => {
+    const promoted = mkPlayer({ marketValue: 30, peakRating: 75, peakAge: 27, age: 25 });
+    const control = mkPlayer({ marketValue: 30, peakRating: 75, peakAge: 27, age: 25 });
+    applyAnnualRevaluation({ A: [promoted] }, emptyStats(), new Set(['A']), null);
+    applyAnnualRevaluation({ A: [control] }, emptyStats(), new Set(), null);
 
-    // age 25 → 26, both inside plateau. MarketValue should have got the 1.30× bump.
-    // Within bounds: 30 * 1.30 ≈ 39 (and age multiplier same: 1.05/1.05 = 1).
-    expect(p.marketValue).toBeGreaterThan(35);
-    expect(p.marketValue).toBeLessThan(45);
+    // Promotion is still worth 1.30× — but now on a freshly-computed anchor
+    // rather than on whatever the value happened to have compounded to.
+    // Both aged 25 → 26 and were re-rated to peakRating 75 by the curve, so
+    // the anchor is tierBase(75) × 1.2 × resale(26) = 16.5 × 1.2 = 19.8.
+    expect(promoted.marketValue).toBeGreaterThan(control.marketValue);
+    // Inertia: neither snaps onto its target, both ease down from 30.
+    expect(promoted.marketValue).toBeLessThan(30);
+    expect(control.marketValue).toBeLessThan(30);
+    expect(control.marketValue).toBeGreaterThan(19.8);
+  });
+});
+
+describe('present-value re-anchoring — the compounding fix', () => {
+  function hotStats(uuid: string): Record<string, PlayerSeasonStats> {
+    return { [uuid]: { goals: 30, assists: 20, appearances: 38 } as unknown as PlayerSeasonStats };
+  }
+
+  it('stops paying for potential at POTENTIAL_PRICED_UNTIL_AGE', () => {
+    const prospect = mkPlayer({ rating: 70, peakRating: 95, peakAge: 27, age: 19 });
+    const veteran = mkPlayer({ rating: 70, peakRating: 95, peakAge: 27, age: 30 });
+    // The teenager is still partly priced on his ceiling...
+    expect(pricingRating(prospect)).toBeGreaterThan(70);
+    // ...the 30-year-old is priced on nothing but present ability, no matter
+    // that he was once destined for 95.
+    expect(pricingRating(veteran)).toBe(70);
+    expect(pricingRating(mkPlayer({ rating: 70, peakRating: 95, age: POTENTIAL_PRICED_UNTIL_AGE }))).toBe(70);
+  });
+
+  it('prices a 34-year-old below a 27-year-old of the same current rating', () => {
+    const veteran = mkPlayer({ rating: 75, peakRating: 75, peakAge: 27, age: 34 });
+    const inPeak = mkPlayer({ rating: 75, peakRating: 75, peakAge: 27, age: 27 });
+    expect(computePresentMarketValue(veteran)).toBeLessThan(computePresentMarketValue(inPeak));
+  });
+
+  it('value never rises with age at a fixed rating (the audit inversion)', () => {
+    // The 50-season audit found the opposite in every rating band: 75-79 rated
+    // players were worth €23M at 26-29 and €47M at 33-35. Lock the direction.
+    const ages = [20, 24, 28, 31, 34, 37];
+    const values = ages.map(age =>
+      computePresentMarketValue(mkPlayer({ rating: 75, peakRating: 75, peakAge: 27, age })),
+    );
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i]).toBeLessThanOrEqual(values[i - 1]);
+    }
+  });
+
+  it('repeated great seasons converge instead of compounding to the cap', () => {
+    const p = mkPlayer({ uuid: 'p-1', rating: 80, peakRating: 80, peakAge: 27, age: 26, marketValue: 20 });
+    const squads = { A: [p] };
+    const values: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      applyAnnualRevaluation(squads, hotStats('p-1'), new Set(), null);
+      values.push(p.marketValue);
+    }
+    // Old model: 20 × 1.40^8 ≈ 295, clipped to the €150M cap. New model: the
+    // value settles near anchor × 1.40 and then follows the aging curve down.
+    expect(Math.max(...values)).toBeLessThan(60);
+    expect(p.marketValue).toBeLessThan(150);
+  });
+
+  it('an aged-out star is worth a fraction of his peak, not a fortune', () => {
+    // The exact shape that produced €300M fire sales for 67-77 rated veterans.
+    const oldStar = mkPlayer({ rating: 73, peakRating: 99, peakAge: 27, age: 32 });
+    const value = computePresentMarketValue(oldStar);
+    expect(value).toBeLessThan(30);
+    expect(value * 2).toBeLessThan(60); // even at the 200% fire-sale premium
   });
 });
