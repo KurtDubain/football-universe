@@ -78,7 +78,7 @@
  * (was -€259M).
  */
 import { TeamBase, FinanceState, FinanceSeasonRecord, type FinanceBreakdown } from '../../types/team';
-import { Player } from '../../types/player';
+import { Player, PlayerPosition } from '../../types/player';
 import type { GameWorld, NewsItem } from '../season/season-manager';
 import { StandingEntry } from '../../types/league';
 import { ContinentalCupState } from '../../types/cup';
@@ -86,6 +86,7 @@ import { SeededRNG } from '../match/rng';
 import { TransferRecord } from '../../types/transfer';
 import { createNewsId } from '../season/helpers';
 import { pickFreeSquadNumber, pickTransferReleaseCandidate } from '../transfers/transfer-application';
+import { POSITION_TARGETS, isKeySquadPlayer } from '../transfers/transfer-decision';
 
 // ── Tunable parameters (chosen via 20-season sim, see TUNE_LOG above) ──
 
@@ -734,6 +735,82 @@ export function applyExpense(
   return { teamFinances: next, breakdown };
 }
 
+// ── Fire-sale piece selection ─────────────────────────────────────
+//
+// A club in financial trouble has to sell, but it does not have to sell its
+// best player. The previous rule took the single most valuable player on the
+// squad (`sort by marketValue desc, take [0]`), which — combined with the
+// compounding market-value bug fixed in market-value.ts — meant the piece was
+// the squad's top-rated player only 55% of the time but its top-VALUED
+// player 95% of the time. Clubs were routinely forced to surrender a 67-77
+// rated veteran carrying a €85-150M price tag while a 96-rated teammate
+// stayed put, and 14 of 20 such sellers were relegated within three seasons.
+//
+// The rule below ranks by "how much does losing him hurt" instead. Surplus
+// at his position and a short remaining career both make a player cheap to
+// lose; being a first choice and being good both make him expensive to lose.
+
+/** Surplus at the player's position makes him much cheaper to lose. */
+const FIRE_SALE_SURPLUS_RELIEF = 40;
+/** A player this old has little future value left to surrender. */
+const FIRE_SALE_VETERAN_AGE = 33;
+const FIRE_SALE_VETERAN_RELIEF = 30;
+const FIRE_SALE_AGING_AGE = 30;
+const FIRE_SALE_AGING_RELIEF = 15;
+/** Losing a prospect costs the future, not just this season. */
+const FIRE_SALE_PROSPECT_AGE = 21;
+const FIRE_SALE_PROSPECT_PENALTY = 15;
+/** Losing a first choice hurts more than losing a squad player. */
+const FIRE_SALE_STARTER_PENALTY = 25;
+
+/**
+ * How costly is it for this squad to lose this player to a forced sale?
+ * Higher = worse to sell. Lower = the piece a sane club would put on the
+ * market first.
+ *
+ * Ordering of concerns, most important first:
+ *   1. Position surplus — an over-stocked unit can absorb the loss.
+ *   2. Age — a 34-year-old has almost no future value left to surrender.
+ *   3. Starter status — a first choice costs more than a squad player.
+ *   4. Current rating — the residual tiebreak among otherwise equal options.
+ */
+export function fireSaleDamageScore(
+  player: Player,
+  squad: Player[],
+  positionCounts: Record<PlayerPosition, number>,
+): number {
+  const age = player.age ?? 25;
+  const surplus = Math.max(0, positionCounts[player.position] - POSITION_TARGETS[player.position]);
+
+  let score = player.rating;
+  if (surplus > 0) score -= FIRE_SALE_SURPLUS_RELIEF;
+  if (age >= FIRE_SALE_VETERAN_AGE) score -= FIRE_SALE_VETERAN_RELIEF;
+  else if (age >= FIRE_SALE_AGING_AGE) score -= FIRE_SALE_AGING_RELIEF;
+  else if (age <= FIRE_SALE_PROSPECT_AGE) score += FIRE_SALE_PROSPECT_PENALTY;
+  if (isKeySquadPlayer(squad, player)) score += FIRE_SALE_STARTER_PENALTY;
+
+  return score;
+}
+
+/**
+ * The squad's fire-sale candidates that clear the value bar, ordered
+ * least-damaging-first. Ties break toward the more valuable player so the
+ * sale still relieves as much of the cash shortfall as possible.
+ *
+ * Returns an empty array when nobody on the squad is worth enough to solve
+ * the problem — the caller treats that as "no sale fires".
+ */
+export function rankFireSaleCandidates(squad: Player[]): Player[] {
+  const positionCounts = { GK: 0, DF: 0, MF: 0, FW: 0 } as Record<PlayerPosition, number>;
+  for (const p of squad) positionCounts[p.position] += 1;
+
+  return squad
+    .filter(p => (p.marketValue ?? 0) >= FIRE_SALE_MIN_VALUE)
+    .map(p => ({ player: p, score: fireSaleDamageScore(p, squad, positionCounts) }))
+    .sort((a, b) => a.score - b.score || (b.player.marketValue ?? 0) - (a.player.marketValue ?? 0))
+    .map(entry => entry.player);
+}
+
 /**
  * Attempt fire sales for all negative-cash teams. Pure: returns new
  * teamFinances + new squads + transfer records + news.
@@ -742,6 +819,8 @@ export function applyExpense(
  *   - Eligible seller: cash < 0 AND has player with marketValue >= €30M
  *   - Eligible buyer: reputation >= 85 AND cash > price × 1.5
  *   - Sells ONE player per team per season at 200% of marketValue
+ *   - The piece is the LEAST DAMAGING eligible player (see
+ *     `rankFireSaleCandidates`), not simply the most valuable one
  *
  * Buyer is picked from elite teams by RNG; if no eligible buyer, no sale fires.
  */
@@ -775,11 +854,11 @@ export function attemptFireSale(
   for (const [teamId, fin] of Object.entries(nextFinances)) {
     if (fin.cash >= 0) continue;
     const squad = nextSquads[teamId] ?? [];
-    // Pick the most valuable player on squad if it meets threshold
-    const sortedDesc = [...squad].sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0));
-    const piece = sortedDesc[0];
+    // Pick the LEAST DAMAGING player that still clears the value bar. A club
+    // in financial trouble must sell, but it should not automatically lose
+    // its best player to do it.
+    const piece = rankFireSaleCandidates(squad)[0];
     if (!piece) continue;
-    if ((piece.marketValue ?? 0) < FIRE_SALE_MIN_VALUE) continue;
     sellers.push({ teamId, player: piece });
   }
 

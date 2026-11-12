@@ -8,7 +8,12 @@ import {
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from './transfer-application';
-import { ageMultiplier, computeInitialMarketValue } from '../economy/market-value';
+import {
+  MARKET_VALUE_CAP,
+  MARKET_VALUE_FLOOR,
+  applyMarketInertia,
+  computePresentMarketValue,
+} from '../economy/market-value';
 import { computeCurrentRating } from '../players/development';
 import { computePlayerCareerTotals } from '../players/career-totals';
 import {
@@ -608,13 +613,14 @@ export function processTransferWindow(
     const rating = typeof player.peakRating === 'number' && typeof player.peakAge === 'number'
       ? computeCurrentRating(player.peakRating, age, player.peakAge)
       : player.rating;
-    const value = (player.marketValue ?? computeInitialMarketValue(player))
-      * (ageMultiplier(age) / ageMultiplier(oldAge));
+    // Re-anchor on present value, same as the squad revaluation path — a
+    // player sitting in the pool is not exempt from the market correcting
+    // itself, and the old age-ratio multiply had the same compounding flaw.
+    const aged = { ...player, age, rating };
+    const value = applyMarketInertia(player.marketValue, computePresentMarketValue(aged));
     return {
-      ...player,
-      age,
-      rating,
-      marketValue: Math.max(0.2, Math.min(150, Math.round(value * 10) / 10)),
+      ...aged,
+      marketValue: Math.max(MARKET_VALUE_FLOOR, Math.min(MARKET_VALUE_CAP, Math.round(value * 10) / 10)),
     };
   });
   // Age-out retirees (anyone > FREE_AGENT_MAX_AGE — no team would sign)
