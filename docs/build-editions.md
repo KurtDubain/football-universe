@@ -1,6 +1,6 @@
 # 双版本构建与独立验收
 
-当前本地候选：v4.61.10，冠军荣誉归档及公开文案收尾，未提交、推送或部署。腾讯云已确认发布 v4.61.9 / f0b2d63：个人版 https://football.dyp02.vip/ ，参赛版 https://cup.dyp02.vip/ 。见 [品牌验收](brand-rename.md) 与 [部署记录](tencent-cloud-deployment.md)。下方 v4.61.8 及更早记录描述当时的发布状态，不代表当前仍未部署。
+当前发布：腾讯云个人版 **v4.65.0 / a26dae8**（https://football.dyp02.vip/ ，2026-11-12 23:53 切换），参赛版 **v4.61.11 / 09a5984**（https://cup.dyp02.vip/ ，刻意不升级），两版均为手动发布。最新一轮的构建来源、门禁与发布后核验见 [部署记录](tencent-cloud-deployment.md)。本节其余内容描述 v4.61.10 及更早阶段的做法与当时状态，不代表当前仍未部署。
 
 历史源码发布版本：v4.61.8，增加默认关闭的 ICP 备案展示；腾讯云启用参数见 [部署文档](tencent-cloud-deployment.md)。
 
