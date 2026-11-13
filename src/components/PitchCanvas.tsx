@@ -900,6 +900,7 @@ function PitchCanvas(props: Props) {
         padding: P,
         fieldWidth: fw,
         fieldHeight: fh,
+        goalDepth: pitchGeometry.goalDepth,
       });
       const deadZoneX = fw * (cameraMoment === 'wide' ? 0.1 : 0.045);
       const deadZoneY = fh * (cameraMoment === 'wide' ? 0.12 : 0.06);
@@ -914,6 +915,11 @@ function PitchCanvas(props: Props) {
       cameraRef.current.focusX = lerp(cameraRef.current.focusX, desiredFocusX, cameraTarget.settle * 0.72);
       cameraRef.current.focusY = lerp(cameraRef.current.focusY, desiredFocusY, cameraTarget.settle * 0.72);
       cameraRef.current.zoom = lerp(cameraRef.current.zoom, cameraTarget.zoom, cameraTarget.settle);
+      // Not eased: the frame is where the ball and its goal are *right now*,
+      // and a pan that lags behind it is exactly the bug this replaces. The pan
+      // is still clamped rather than snapped, so a non-binding frame leaves the
+      // drift untouched.
+      cameraRef.current.frame = cameraTarget.frame;
 
       // Broadcast camera and restrained impact shake share one transform so
       // the pitch never receives competing scale/translation operations.

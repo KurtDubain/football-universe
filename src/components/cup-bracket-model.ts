@@ -33,6 +33,17 @@ export interface MergedTie {
   awayGoals2?: number;
 }
 
+/**
+ * Which leg of a tie a bracket click came from. Two-legged ties expose one
+ * entry per leg, so the detail modal can label the leg it actually opened.
+ */
+export interface TieLegClickContext {
+  /** 1 = 首回合, 2 = 次回合. Absent for single-match ties. */
+  leg?: 1 | 2;
+}
+
+export type TieClickHandler = (fixture: CupFixture, context?: TieLegClickContext) => void;
+
 function cnRound(name: string): string {
   return roundNameCN[name] ?? name;
 }

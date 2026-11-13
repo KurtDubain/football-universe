@@ -14,6 +14,7 @@ import worldCupArtwork from '../assets/visual/match-opener-world-v1.webp';
 import TournamentMusicControl, { type TournamentMusicTone } from '../components/TournamentMusicControl';
 import type { AmbientMusicScene } from '../feedback/ambient-music';
 import { BracketView, CupTeamTag as TeamTag } from '../components/CupBracket';
+import type { TieClickHandler, TieLegClickContext } from '../components/cup-bracket-model';
 
 interface CupThemeConfig {
   scene: AmbientMusicScene;
@@ -40,7 +41,9 @@ export default function Cup() {
 
   const isContinental = type === 'mainland_cup' || type === 'southern_cup' || type === 'eastern_cup';
 
-  const handleClick = (fix: CupFixture, compName: string) => {
+  // Each leg carries its own fixture id, so the calendar lookup below already
+  // resolves the clicked leg; the leg marker only labels it in the modal.
+  const handleClick = (fix: CupFixture, compName: string, context?: TieLegClickContext) => {
     const ct: MatchFixture['competitionType'] =
       type === 'world_cup' ? 'world_cup'
       : type === 'super_cup' ? 'super_cup'
@@ -50,6 +53,7 @@ export default function Cup() {
       id: fix.id, homeTeamId: fix.homeTeamId, awayTeamId: fix.awayTeamId,
       competitionType: ct,
       competitionName: compName, roundLabel: fix.roundName,
+      ...(context?.leg ? { leg: context.leg } : {}),
       ...(fix.tournamentHostTeamId ? { tournamentHostTeamId: fix.tournamentHostTeamId } : {}),
     });
     setSelectedFixture(mf);
@@ -82,14 +86,14 @@ export default function Cup() {
 
   return (
     <PageShell width="wide" className="competition-page tabular-nums" data-competition={type ?? 'unknown'}>
-      {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '联赛杯')} />}
-      {type === 'super_cup' && <SuperCupView cup={world.superCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '超级杯')} />}
+      {type === 'league_cup' && <LeagueCupView cup={world.leagueCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={(f, ctx) => handleClick(f, '联赛杯', ctx)} />}
+      {type === 'super_cup' && <SuperCupView cup={world.superCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={(f, ctx) => handleClick(f, '超级杯', ctx)} />}
       {type === 'world_cup' && (world.worldCup
-        ? <WorldCupView cup={world.worldCup} editions={world.worldCupEditions ?? []} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, '环球冠军杯')} />
+        ? <WorldCupView cup={world.worldCup} editions={world.worldCupEditions ?? []} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={(f, ctx) => handleClick(f, '环球冠军杯', ctx)} />
         : <WorldCupInactive editions={world.worldCupEditions ?? []} seasonNumber={world.seasonState.seasonNumber} musicEnabled={!selectedFixture} tb={tb} />
       )}
       {isContinental && (continentalCup
-        ? <ContinentalCupView cup={continentalCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={f => handleClick(f, continentalCup.name)} />
+        ? <ContinentalCupView cup={continentalCup} seasonNumber={world.seasonState.seasonNumber} tb={tb} ts={ts} musicEnabled={!selectedFixture} onClick={(f, ctx) => handleClick(f, continentalCup.name, ctx)} />
         : <InactiveCup type={type as CompetitionIdentityKey} title={type === 'mainland_cup' ? '大陆杯' : type === 'southern_cup' ? '南洲杯' : '东洲杯'} description="洲际杯从第5赛季起每六个赛季举行一次，本赛季处于赛事间歇期。" seasonNumber={world.seasonState.seasonNumber} tb={tb} musicEnabled={!selectedFixture} />
       )}
       <MatchDetailModal isOpen={!!selectedFixture} onClose={close} fixture={selectedFixture ?? undefined} result={selectedResult ?? undefined} world={world} />
@@ -101,7 +105,7 @@ export default function Cup() {
 //  League Cup
 // ══════════════════════════════════════════════════════════════
 
-function LeagueCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: CupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: (f: CupFixture) => void }) {
+function LeagueCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: CupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: TieClickHandler }) {
   return (
     <>
       <CupHeader type="league_cup" title={cup.name} description="32 队单场淘汰赛" winnerId={cup.completed ? cup.winnerId : undefined} seasonNumber={seasonNumber} tb={tb} musicEnabled={musicEnabled} />
@@ -120,7 +124,7 @@ function LeagueCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { c
 //  Continental Cup (大陆杯 / 南洲杯 / 东洲杯)
 // ══════════════════════════════════════════════════════════════
 
-function ContinentalCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: ContinentalCupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: (f: CupFixture) => void }) {
+function ContinentalCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: ContinentalCupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: TieClickHandler }) {
   const teamCount = cup.participantIds.length;
   const isLegacySelectiveFormat = cup.region === '大陆' ? teamCount === 8 : teamCount === 4;
   const identityType: CompetitionIdentityKey = cup.type;
@@ -158,7 +162,7 @@ function ContinentalCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }
 //  Super Cup
 // ══════════════════════════════════════════════════════════════
 
-function SuperCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: SuperCupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: (f: CupFixture) => void }) {
+function SuperCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: SuperCupState; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: TieClickHandler }) {
   return (
     <>
       <CupHeader type="super_cup" title="超级杯" description="16 队 · 小组赛与两回合淘汰赛" winnerId={cup.completed ? cup.winnerId : undefined} seasonNumber={seasonNumber} tb={tb} musicEnabled={musicEnabled} />
@@ -187,7 +191,7 @@ function SuperCupView({ cup, seasonNumber, tb, ts, musicEnabled, onClick }: { cu
 //  World Cup
 // ══════════════════════════════════════════════════════════════
 
-function WorldCupView({ cup, editions, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: WorldCupState; editions: WorldCupEdition[]; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: (f: CupFixture) => void }) {
+function WorldCupView({ cup, editions, seasonNumber, tb, ts, musicEnabled, onClick }: { cup: WorldCupState; editions: WorldCupEdition[]; seasonNumber: number; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; musicEnabled: boolean; onClick: TieClickHandler }) {
   const edition = editions.find(item => item.seasonNumber === seasonNumber);
   return (
     <>
@@ -422,7 +426,7 @@ function RulesCard({ lines }: { lines: string[] }) {
 //  Group table
 // ══════════════════════════════════════════════════════════════
 
-function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: (f: CupFixture) => void }) {
+function GroupTable({ group, tb, ts, onClick }: { group: SuperCupGroup; tb: Record<string, TeamBase>; ts: Record<string, TeamState>; onClick: TieClickHandler }) {
   const [showFix, setShowFix] = useState(false);
 
   return (
