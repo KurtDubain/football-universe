@@ -1,25 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { initializeGameWorld } from '../season/season-manager';
+import { initializeGameWorld, type GameWorld } from '../season/season-manager';
 import {
   getCareerPlayerStatRows,
   getCareerTopAssistRows,
   getCareerTopScorerRows,
   getCurrentPlayerClubStatRows,
+  getCurrentDisciplineRows,
   getCurrentOverallRows,
   getCurrentCreatorRows,
   getCurrentDefenderRows,
+  getCurrentForwardRows,
   getCurrentGoalkeeperRows,
   getCurrentPlayerStatRows,
+  getCurrentTopAssistRows,
   getCurrentTopScorerRows,
   getPlayerClubStatRow,
   getPlayerClubStatRowMap,
   getPlayerRowPerformance,
   getSeasonOverallRows,
   getSeasonTopScorerRows,
+  meetsTableMinutes,
+  minimumTableMinutes,
+  type PlayerStatRow,
 } from './player-stat-selectors';
+import { computePlayerPerformance } from './player-performance';
 import { executeSearch } from '../search/query-engine';
 import { playerTeamStatKey } from './stats';
-import type { PlayerSeasonStatsHistoryEntry } from '../../types/player';
+import type {
+  PlayerPosition,
+  PlayerSeasonStats,
+  PlayerSeasonStatsHistoryEntry,
+} from '../../types/player';
+
+/**
+ * Patches player-wide totals AND the matching `(playerId, teamId)` segment:
+ * `getPlayerRowPerformance` reads segments whenever they exist, so a totals-only
+ * patch would leave the ranked quality computed from empty segments.
+ */
+function withStats(
+  world: GameWorld,
+  patches: Record<string, Partial<PlayerSeasonStats>>,
+): GameWorld {
+  const playerStats = { ...world.playerStats };
+  const playerStatSegments = { ...world.playerStatSegments };
+  for (const [playerId, patch] of Object.entries(patches)) {
+    const next = { ...world.playerStats[playerId], ...patch };
+    playerStats[playerId] = next;
+    const key = playerTeamStatKey(playerId, next.teamId);
+    const segment = playerStatSegments[key];
+    if (segment) playerStatSegments[key] = { ...segment, ...patch };
+  }
+  return { ...world, playerStats, playerStatSegments };
+}
 
 describe('player stat selectors', () => {
   it('resolves current player rows with active identity and shared search stats', () => {
@@ -35,6 +67,8 @@ describe('player stat selectors', () => {
           goals: 12,
           assists: 4,
           appearances: 18,
+          minutesPlayed: 1500,
+          teamMatchesAllCompetitions: 18,
           bigChances: 12,
           keyPasses: 4,
         },
@@ -303,6 +337,8 @@ describe('player stat selectors', () => {
         [creator.uuid]: {
           ...world.playerStats[creator.uuid],
           appearances: 12,
+          minutesPlayed: 1080,
+          teamMatchesAllCompetitions: 12,
           assists: 5,
           keyPasses: 14,
         },
@@ -420,5 +456,190 @@ describe('player stat selectors', () => {
     expect(newClubRow.goals).toBe(0);
     expect(newClubRow.assists).toBe(0);
     expect(newClubRow.appearances).toBe(0);
+  });
+
+  it('ranks a forward-only board by the FW position quality', () => {
+    const world = initializeGameWorld(2024);
+    const squad = Object.values(world.squads).flat();
+    const [topForward, quietForward] = squad.filter((player) => player.position === 'FW');
+    const midfielder = squad.find((player) => player.position === 'MF')!;
+    const base = {
+      appearances: 20,
+      starts: 20,
+      minutesPlayed: 1700,
+      teamMatchesAllCompetitions: 20,
+    };
+    // Moderate rates on purpose: a saturating line clamps both the FW and MF
+    // branches to 100 and would make the two indistinguishable.
+    const patched = withStats(world, {
+      [topForward.uuid]: { ...base, goals: 6, assists: 2, bigChances: 9, keyPasses: 6 },
+      [quietForward.uuid]: { ...base, goals: 2, assists: 0, bigChances: 3, keyPasses: 1 },
+      // Better raw numbers than either forward, and still not on this board.
+      [midfielder.uuid]: { ...base, goals: 30, assists: 20, bigChances: 44, keyPasses: 40 },
+    });
+
+    const rows = getCurrentForwardRows(patched, 20);
+    expect(rows.every((row) => row.identity.position === 'FW')).toBe(true);
+    expect(rows.map((row) => row.playerId)).not.toContain(midfielder.uuid);
+    expect(rows[0].playerId).toBe(topForward.uuid);
+
+    const qualities = rows.map((row) => getPlayerRowPerformance(patched, row).positionQuality);
+    expect(qualities).toEqual([...qualities].sort((a, b) => b - a));
+    // The board reads the FW branch of computePositionQuality, not the MF one.
+    expect(qualities[0]).toBe(computePlayerPerformance('FW', rows[0]).positionQuality);
+    expect(qualities[0]).not.toBe(computePlayerPerformance('MF', rows[0]).positionQuality);
+  });
+
+  it('keeps players below the display minutes floor out of every current board', () => {
+    const world = initializeGameWorld(2024);
+    const squad = Object.values(world.squads).flat();
+    const pairOf = (position: PlayerPosition) =>
+      squad.filter((player) => player.position === position).slice(0, 2);
+    const [lowFw, highFw] = pairOf('FW');
+    const [lowMf, highMf] = pairOf('MF');
+    const [lowDf, highDf] = pairOf('DF');
+    const [lowGk, highGk] = pairOf('GK');
+
+    // 40 team matches => floor is a quarter of 3600 available minutes = 900.
+    const statLine = {
+      appearances: 40,
+      starts: 40,
+      teamMatchesAllCompetitions: 40,
+      goals: 30,
+      assists: 25,
+      yellowCards: 12,
+      redCards: 2,
+      bigChances: 44,
+      keyPasses: 40,
+      interceptions: 90,
+      clearances: 90,
+      keyBlocks: 18,
+      saves: 90,
+      routineSaves: 90,
+      shotsOnTargetFaced: 130,
+      cleanSheets: 20,
+      cleanSheetMinutes: 1600,
+      goalsConcededWhileOnPitch: 6,
+    };
+    const below = { ...statLine, minutesPlayed: 800 };
+    const above = { ...statLine, minutesPlayed: 1800 };
+
+    const patched = withStats(world, {
+      [lowFw.uuid]: below,
+      [highFw.uuid]: above,
+      [lowMf.uuid]: below,
+      [highMf.uuid]: above,
+      [lowDf.uuid]: below,
+      [highDf.uuid]: above,
+      [lowGk.uuid]: below,
+      [highGk.uuid]: above,
+    });
+
+    const lowRow = getCurrentPlayerStatRows(patched).find((row) => row.playerId === lowFw.uuid)!;
+    expect(minimumTableMinutes(lowRow)).toBe(900);
+    expect(meetsTableMinutes(lowRow)).toBe(false);
+
+    const belowIds = [lowFw, lowMf, lowDf, lowGk].map((player) => player.uuid);
+    const boards: PlayerStatRow[][] = [
+      getCurrentOverallRows(patched, 50),
+      getCurrentTopScorerRows(patched, 50),
+      getCurrentTopAssistRows(patched, 50),
+      getCurrentDisciplineRows(patched, 50),
+      getCurrentCreatorRows(patched, 50),
+      getCurrentForwardRows(patched, 50),
+      getCurrentDefenderRows(patched, 50),
+      getCurrentGoalkeeperRows(patched, 50),
+    ];
+
+    for (const board of boards) {
+      expect(board.length).toBeGreaterThan(0);
+      for (const row of board) {
+        expect(meetsTableMinutes(row)).toBe(true);
+        expect(belowIds).not.toContain(row.playerId);
+      }
+    }
+
+    // Qualified peers still reach the board their position belongs to.
+    const idsOf = (board: PlayerStatRow[]) => board.map((row) => row.playerId);
+    expect(idsOf(getCurrentForwardRows(patched, 50))).toContain(highFw.uuid);
+    expect(idsOf(getCurrentDefenderRows(patched, 50))).toContain(highDf.uuid);
+    expect(idsOf(getCurrentGoalkeeperRows(patched, 50))).toContain(highGk.uuid);
+    expect(idsOf(getCurrentCreatorRows(patched, 50)))
+      .toEqual(expect.arrayContaining([highMf.uuid, highFw.uuid]));
+  });
+
+  it('falls back to a 45-minute floor when teamMatchesAllCompetitions is missing', () => {
+    const world = initializeGameWorld(2024);
+    const [justUnder, exactlyAt] = Object.values(world.squads).flat()
+      .filter((player) => player.position === 'FW');
+    const patched = withStats(world, {
+      [justUnder.uuid]: {
+        appearances: 1,
+        minutesPlayed: 44,
+        teamMatchesAllCompetitions: undefined,
+        goals: 9,
+        bigChances: 9,
+        keyPasses: 4,
+      },
+      [exactlyAt.uuid]: {
+        appearances: 1,
+        minutesPlayed: 45,
+        teamMatchesAllCompetitions: undefined,
+        goals: 8,
+        bigChances: 8,
+        keyPasses: 4,
+      },
+    });
+
+    const rows = getCurrentPlayerStatRows(patched);
+    const underRow = rows.find((row) => row.playerId === justUnder.uuid)!;
+    const atRow = rows.find((row) => row.playerId === exactlyAt.uuid)!;
+    expect(underRow.teamMatchesAllCompetitions).toBeUndefined();
+    expect(minimumTableMinutes(underRow)).toBe(45);
+    expect(meetsTableMinutes(underRow)).toBe(false);
+    expect(meetsTableMinutes(atRow)).toBe(true);
+
+    const scorers = getCurrentTopScorerRows(patched, 50).map((row) => row.playerId);
+    expect(scorers).not.toContain(justUnder.uuid);
+    expect(scorers).toContain(exactlyAt.uuid);
+  });
+
+  it('narrows mixed boards to a single position', () => {
+    const world = initializeGameWorld(2024);
+    const squad = Object.values(world.squads).flat();
+    const keeper = squad.find((player) => player.position === 'GK')!;
+    const forward = squad.find((player) => player.position === 'FW')!;
+    const midfielder = squad.find((player) => player.position === 'MF')!;
+    const statLine = {
+      appearances: 20,
+      starts: 20,
+      minutesPlayed: 1800,
+      teamMatchesAllCompetitions: 20,
+      goals: 25,
+      assists: 18,
+      yellowCards: 9,
+      redCards: 1,
+      bigChances: 30,
+      keyPasses: 25,
+    };
+    const patched = withStats(world, {
+      [keeper.uuid]: statLine,
+      [forward.uuid]: statLine,
+      [midfielder.uuid]: statLine,
+    });
+
+    const positionsOf = (board: PlayerStatRow[]) => board.map((row) => row.identity.position);
+    expect(positionsOf(getCurrentOverallRows(patched, 30, { position: 'GK' }))).toEqual(['GK']);
+    expect(positionsOf(getCurrentTopScorerRows(patched, 30, { position: 'GK' }))).toEqual(['GK']);
+    expect(positionsOf(getCurrentTopAssistRows(patched, 30, { position: 'GK' }))).toEqual(['GK']);
+    expect(positionsOf(getCurrentDisciplineRows(patched, 30, { position: 'GK' }))).toEqual(['GK']);
+
+    // The creator candidate set is MF/FW, so the filter intersects it.
+    expect(positionsOf(getCurrentCreatorRows(patched, 30, { position: 'FW' }))).toEqual(['FW']);
+    expect(positionsOf(getCurrentCreatorRows(patched, 30, { position: 'MF' }))).toEqual(['MF']);
+    expect(getCurrentCreatorRows(patched, 30, { position: 'GK' })).toHaveLength(0);
+
+    // Unfiltered stays mixed.
+    expect(positionsOf(getCurrentOverallRows(patched, 30)).sort()).toEqual(['FW', 'GK', 'MF']);
   });
 });

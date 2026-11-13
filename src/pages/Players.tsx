@@ -10,12 +10,14 @@ import {
   getCurrentCreatorRows,
   getCurrentDefenderRows,
   getCurrentDisciplineRows,
+  getCurrentForwardRows,
   getCurrentGoalkeeperRows,
   getCurrentTopAssistRows,
   getCurrentTopScorerRows,
   getCurrentPlayerStatRow,
   getPlayerRowPerformance,
   type PlayerStatRow,
+  type PlayerTableOptions,
 } from '../engine/players/player-stat-selectors';
 import type { PlayerPosition } from '../types/player';
 import { PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
@@ -28,9 +30,27 @@ import {
   selectStarObservations,
   type StarObservationEntry,
 } from '../engine/players/star-presence';
+import {
+  isRankingGroup,
+  isRankingTab,
+  MINUTES_THRESHOLD_NOTE,
+  MIXED_POSITION_TABS,
+  POSITION_FILTER_OPTIONS,
+  RANKING_GROUP_OPTIONS,
+  RANKING_SCOPE_NOTES,
+  TABS_BY_GROUP,
+  type PositionFilter,
+  type RankingGroup,
+  type RankingTab,
+} from './players-ranking-copy';
+import {
+  DEFAULT_AWARD_FILTERS,
+  normalizeAwardFilters,
+  type AwardFilters,
+  type AwardView,
+} from './players-awards-model';
+import PlayersAwardsPanel from './players-awards';
 
-type Tab = 'overall' | 'scorers' | 'assists' | 'careerScorers' | 'careerAssists' | 'creation' | 'defense' | 'keepers' | 'discipline';
-type RankingGroup = 'season' | 'position' | 'career';
 type StarView = 'world' | 'rising' | 'following';
 
 const positionLabel: Record<PlayerPosition, string> = {
@@ -59,23 +79,44 @@ export default function Players() {
   const favoritePlayerIds = useGameStore((s) => s.favoritePlayerIds);
   const toggleFavoritePlayer = useGameStore((s) => s.toggleFavoritePlayer);
   const navigate = useNavigate();
-  const [tab, setTab] = useUiSessionState<Tab>('ui.players.tab', 'overall');
-  const [rankingGroup, setRankingGroup] = useUiSessionState<RankingGroup>('ui.players.ranking-group', 'season');
+  const [storedTab, setTab] = useUiSessionState<string>('ui.players.tab', 'overall');
+  const [storedGroup, setRankingGroup] = useUiSessionState<string>('ui.players.ranking-group', 'season');
   const [starView, setStarView] = useUiSessionState<StarView>('ui.players.star-view', 'world');
+  const [positionFilter, setPositionFilter] = useUiSessionState<PositionFilter>('ui.players.position-filter', 'all');
+  const [awardView, setAwardView] = useUiSessionState<AwardView>('ui.players.award-view', 'records');
+  const [storedAwardFilters, setAwardFilters] = useUiSessionState<AwardFilters>(
+    'ui.players.award-filters',
+    DEFAULT_AWARD_FILTERS,
+  );
   const [showAllFocus, setShowAllFocus] = useState(false);
 
+  // A saved session can carry the removed 'position' group, or a tab that
+  // belongs to a different group; both fall back instead of rendering nothing.
+  const rankingGroup: RankingGroup = isRankingGroup(storedGroup) ? storedGroup : 'season';
+  const tableGroup = rankingGroup === 'awards' ? null : rankingGroup;
+  const tab: RankingTab = tableGroup && isRankingTab(storedTab, tableGroup)
+    ? storedTab
+    : tableGroup
+      ? TABS_BY_GROUP[tableGroup][0].key
+      : 'overall';
+
+  const tableOptions = useMemo<PlayerTableOptions | undefined>(
+    () => (positionFilter === 'all' ? undefined : { position: positionFilter }),
+    [positionFilter],
+  );
+
   const topOverall = useMemo(
-    () => (world ? getCurrentOverallRows(world, 30) : []),
-    [world],
+    () => (world ? getCurrentOverallRows(world, 30, tableOptions) : []),
+    [world, tableOptions],
   );
 
   const topScorers = useMemo(
-    () => (world ? getCurrentTopScorerRows(world, 20) : []),
-    [world],
+    () => (world ? getCurrentTopScorerRows(world, 20, tableOptions) : []),
+    [world, tableOptions],
   );
   const topAssists = useMemo(
-    () => (world ? getCurrentTopAssistRows(world, 20) : []),
-    [world],
+    () => (world ? getCurrentTopAssistRows(world, 20, tableOptions) : []),
+    [world, tableOptions],
   );
   const careerScorers = useMemo(
     () => (world ? getCareerTopScorerRows(world, 20) : []),
@@ -86,10 +127,14 @@ export default function Players() {
     [world],
   );
   const topDiscipline = useMemo(() => {
-    return world ? getCurrentDisciplineRows(world, 20) : [];
-  }, [world]);
+    return world ? getCurrentDisciplineRows(world, 20, tableOptions) : [];
+  }, [world, tableOptions]);
   const topCreators = useMemo(
-    () => (world ? getCurrentCreatorRows(world, 20) : []),
+    () => (world ? getCurrentCreatorRows(world, 20, tableOptions) : []),
+    [world, tableOptions],
+  );
+  const topForwards = useMemo(
+    () => (world ? getCurrentForwardRows(world, 20) : []),
     [world],
   );
   const topDefenders = useMemo(
@@ -134,24 +179,11 @@ export default function Players() {
   const seasonNumber = world.seasonState.seasonNumber;
   const hasCompletedMatches = world.seasonState.calendar.some((window) => window.completed);
 
-  const tabsByGroup: Record<RankingGroup, { key: Tab; label: string }[]> = {
-    season: [
-      { key: 'overall', label: '综合榜' },
-      { key: 'scorers', label: '射手榜' },
-      { key: 'assists', label: '助攻榜' },
-      { key: 'discipline', label: '纪律' },
-    ],
-    position: [
-      { key: 'creation', label: '创造力' },
-      { key: 'defense', label: '防守榜' },
-      { key: 'keepers', label: '门将榜' },
-    ],
-    career: [
-      { key: 'careerScorers', label: '生涯射手' },
-      { key: 'careerAssists', label: '生涯助攻' },
-    ],
-  };
-  const tabs = tabsByGroup[rankingGroup];
+  const tabs = tableGroup ? TABS_BY_GROUP[tableGroup] : [];
+  const awardFilters = normalizeAwardFilters(
+    storedAwardFilters,
+    new Set(Object.keys(world.teamBases ?? {})),
+  );
 
   const followedActive = favoritePlayerIds
     .map(playerId => activePlayerMap.get(playerId))
@@ -221,7 +253,7 @@ export default function Players() {
   const renderRow = (
     stat: PlayerStatRow,
     index: number,
-    mode: Tab,
+    mode: RankingTab,
   ) => {
     const identity = stat.identity;
     const teamBase = world.teamBases[identity.teamId];
@@ -370,6 +402,16 @@ export default function Players() {
               {((performance?.metrics.savePercentage ?? 0) * 100).toFixed(1)}%/{performance?.metrics.goalsConcededPer90.toFixed(2)}
             </td>
           </>
+        ) : mode === 'forwards' ? (
+          <>
+            <td className="px-2 py-2 text-center">
+              <span className="text-sm text-red-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
+            </td>
+            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.goals}/{stat.bigChances}</td>
+            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+              {stat.keyPasses}/{stat.assists}
+            </td>
+          </>
         ) : mode === 'creation' ? (
           <>
             <td className="px-2 py-2 text-center">
@@ -413,32 +455,34 @@ export default function Players() {
     );
   };
 
-  const currentData =
-    tab === 'overall'
-      ? topOverall
-      : tab === 'scorers'
-      ? topScorers
-      : tab === 'assists'
-        ? topAssists
-        : tab === 'careerScorers'
-          ? careerScorers
-          : tab === 'careerAssists'
-            ? careerAssists
-            : tab === 'creation'
-              ? topCreators
-              : tab === 'defense'
-                ? topDefenders
-                : tab === 'keepers'
-                  ? topKeepers
-                  : topDiscipline;
+  const dataByTab: Record<RankingTab, PlayerStatRow[]> = {
+    overall: topOverall,
+    scorers: topScorers,
+    assists: topAssists,
+    creation: topCreators,
+    forwards: topForwards,
+    defense: topDefenders,
+    keepers: topKeepers,
+    discipline: topDiscipline,
+    careerScorers: careerScorers,
+    careerAssists: careerAssists,
+  };
+  const currentData = dataByTab[tab];
+  const isSeasonBoard = rankingGroup === 'season';
+  // A table thinned to a couple of rows by the minutes floor reads as broken
+  // data, so say what happened instead of rendering a near-empty grid.
+  const belowRowFloor = isSeasonBoard && currentData.length < 5;
+  const showPositionFilter = isSeasonBoard && MIXED_POSITION_TABS.includes(tab);
 
   return (
     <PageShell width="standard" className="tabular-nums">
       <PageHeader
         title="球员中心"
-        meta={tab === 'careerScorers' || tab === 'careerAssists'
-          ? '生涯总计'
-          : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
+        meta={rankingGroup === 'awards'
+          ? `第 ${seasonNumber} 赛季 · 奖项档案保留最近 50 季`
+          : rankingGroup === 'career'
+            ? '生涯总计'
+            : `第 ${seasonNumber} 赛季 · 当前赛季全赛事总计`}
       />
 
       <AwardBuzzPanel world={world} recentForms={recentForms} />
@@ -524,27 +568,59 @@ export default function Players() {
           value={rankingGroup}
           onChange={(group) => {
             setRankingGroup(group);
-            setTab(tabsByGroup[group][0].key);
+            if (group !== 'awards') setTab(TABS_BY_GROUP[group][0].key);
           }}
           ariaLabel="榜单分组"
-          options={[
-            { value: 'season', label: '本季' },
-            { value: 'position', label: '位置' },
-            { value: 'career', label: '生涯' },
-          ]}
+          options={RANKING_GROUP_OPTIONS}
           stretch
         />
-      <SegmentedControl
-        value={tab}
-        onChange={setTab}
-        ariaLabel="球员榜单"
-        options={tabs.map(t => ({ value: t.key, label: t.label }))}
-        stretch
-        scrollable
-      />
+        {tableGroup && (
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            ariaLabel="球员榜单"
+            options={tabs.map(t => ({ value: t.key, label: t.label }))}
+            stretch
+            scrollable
+          />
+        )}
       </div>
 
-      {/* Table */}
+      {rankingGroup === 'awards' ? (
+        <PlayersAwardsPanel
+          world={world}
+          view={awardView}
+          onViewChange={setAwardView}
+          filters={awardFilters}
+          onFiltersChange={setAwardFilters}
+        />
+      ) : (
+        <>
+          {showPositionFilter && (
+            <SegmentedControl
+              value={positionFilter}
+              onChange={setPositionFilter}
+              ariaLabel="位置筛选"
+              options={POSITION_FILTER_OPTIONS}
+              stretch
+              scrollable
+            />
+          )}
+
+          <p className="text-xs leading-relaxed text-slate-500">
+            {RANKING_SCOPE_NOTES[tab]}
+            {isSeasonBoard ? ` ${MINUTES_THRESHOLD_NOTE}` : ''}
+          </p>
+
+          {belowRowFloor ? (
+            <Panel className="overflow-hidden">
+              <div className="py-10 text-center text-sm text-slate-500">
+                {hasCompletedMatches
+                  ? '本季尚无达到出场门槛的球员'
+                  : '赛季尚未开始，完成首场比赛后生成当前赛季数据'}
+              </div>
+            </Panel>
+          ) : (
       <Panel padded={false} className="overflow-hidden tabular-nums">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -582,6 +658,12 @@ export default function Players() {
                     <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
                     <th className="px-2 py-2.5 text-center" title="普通扑救/关键扑救，两者不重复">扑救 普/关键</th>
                     <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="扑救率/在场失球每90分钟">扑救率/失球90</th>
+                  </>
+                ) : tab === 'forwards' ? (
+                  <>
+                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-center" title="全赛事进球/大机会（进球 + 被封堵的必进球机会）">进球/大机会</th>
+                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="关键传球/助攻">关键传球/助攻</th>
                   </>
                 ) : tab === 'creation' ? (
                   <>
@@ -641,6 +723,9 @@ export default function Players() {
           </table>
         </div>
       </Panel>
+          )}
+        </>
+      )}
     </PageShell>
   );
 }

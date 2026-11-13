@@ -448,13 +448,73 @@ export function sortRowsByCreation(rows: PlayerStatRow[], world?: GameWorld): Pl
   );
 }
 
-export function getCurrentTopScorerRows(world: GameWorld, limit = 20): PlayerStatRow[] {
-  return sortRowsByGoals(getCurrentPlayerStatRows(world).filter((row) => row.goals > 0)).slice(0, limit);
+export function sortRowsByForward(rows: PlayerStatRow[], world?: GameWorld): PlayerStatRow[] {
+  return [...rows].sort(
+    (a, b) =>
+      (world ? getPlayerRowPerformance(world, b).positionQuality : computePlayerPerformance('FW', b).positionQuality)
+      - (world ? getPlayerRowPerformance(world, a).positionQuality : computePlayerPerformance('FW', a).positionQuality) ||
+      (b.minutesPlayed ?? 0) - (a.minutesPlayed ?? 0) ||
+      (b.identity.rating ?? 0) - (a.identity.rating ?? 0),
+  );
 }
 
-export function getCurrentOverallRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+/**
+ * Display-layer minutes floor for current-season tables: a quarter of the
+ * team's all-competitions minutes, never below 45.
+ *
+ * This is a presentation filter only. `player-performance.ts` keeps its own
+ * `eligible` rule and `PLAYER_RANKING_MINUTES`, so award candidates and stored
+ * season scores are untouched by it.
+ */
+export const PLAYER_TABLE_MIN_MINUTES = 45;
+export const PLAYER_TABLE_MINUTES_SHARE = 0.25;
+
+export function minimumTableMinutes(
+  row: Pick<PlayerSeasonStats, 'teamMatchesAllCompetitions'>,
+): number {
+  const teamMatches = row.teamMatchesAllCompetitions ?? 0;
+  // Legacy saves predate the field; a fixed floor keeps them rankable.
+  if (!(teamMatches > 0)) return PLAYER_TABLE_MIN_MINUTES;
+  return Math.max(
+    PLAYER_TABLE_MIN_MINUTES,
+    Math.floor(teamMatches * 90 * PLAYER_TABLE_MINUTES_SHARE),
+  );
+}
+
+export function meetsTableMinutes(
+  row: Pick<PlayerSeasonStats, 'minutesPlayed' | 'teamMatchesAllCompetitions'>,
+): boolean {
+  return (row.minutesPlayed ?? 0) >= minimumTableMinutes(row);
+}
+
+/** Optional narrowing layered on top of a table's own candidate rule. */
+export interface PlayerTableOptions {
+  /** Mixed-position tables only; single-position tables already fix it. */
+  position?: PlayerPosition;
+}
+
+function currentTableRows(world: GameWorld, options?: PlayerTableOptions): PlayerStatRow[] {
+  const position = options?.position;
+  return getCurrentPlayerStatRows(world).filter(row =>
+    meetsTableMinutes(row) && (position === undefined || row.identity.position === position),
+  );
+}
+
+export function getCurrentTopScorerRows(
+  world: GameWorld,
+  limit = 20,
+  options?: PlayerTableOptions,
+): PlayerStatRow[] {
+  return sortRowsByGoals(currentTableRows(world, options).filter((row) => row.goals > 0)).slice(0, limit);
+}
+
+export function getCurrentOverallRows(
+  world: GameWorld,
+  limit = 20,
+  options?: PlayerTableOptions,
+): PlayerStatRow[] {
   return sortRowsByOverall(
-    getCurrentPlayerStatRows(world).filter(row => getPlayerRowPerformance(world, row).eligible),
+    currentTableRows(world, options).filter(row => getPlayerRowPerformance(world, row).eligible),
     world,
   ).slice(0, limit);
 }
@@ -468,13 +528,21 @@ export function getSeasonOverallRows(world: GameWorld, seasonNumber: number, lim
   ).slice(0, limit);
 }
 
-export function getCurrentTopAssistRows(world: GameWorld, limit = 20): PlayerStatRow[] {
-  return sortRowsByAssists(getCurrentPlayerStatRows(world).filter((row) => row.assists > 0)).slice(0, limit);
+export function getCurrentTopAssistRows(
+  world: GameWorld,
+  limit = 20,
+  options?: PlayerTableOptions,
+): PlayerStatRow[] {
+  return sortRowsByAssists(currentTableRows(world, options).filter((row) => row.assists > 0)).slice(0, limit);
 }
 
-export function getCurrentDisciplineRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+export function getCurrentDisciplineRows(
+  world: GameWorld,
+  limit = 20,
+  options?: PlayerTableOptions,
+): PlayerStatRow[] {
   return sortRowsByDiscipline(
-    getCurrentPlayerStatRows(world).filter((row) => row.yellowCards + row.redCards > 0),
+    currentTableRows(world, options).filter((row) => row.yellowCards + row.redCards > 0),
   ).slice(0, limit);
 }
 
@@ -482,6 +550,7 @@ export function getCurrentDefenderRows(world: GameWorld, limit = 20): PlayerStat
   return sortRowsByDefense(
     getCurrentPlayerStatRows(world).filter((row) =>
       row.identity.position === 'DF'
+      && meetsTableMinutes(row)
       && computePlayerPerformance('DF', row, world.seasonStartLevels?.[row.teamId]).eligible
     ),
     world,
@@ -492,15 +561,31 @@ export function getCurrentGoalkeeperRows(world: GameWorld, limit = 20): PlayerSt
   return sortRowsByGoalkeeping(
     getCurrentPlayerStatRows(world).filter((row) =>
       row.identity.position === 'GK'
+      && meetsTableMinutes(row)
       && computePlayerPerformance('GK', row, world.seasonStartLevels?.[row.teamId]).eligible
     ),
     world,
   ).slice(0, limit);
 }
 
-export function getCurrentCreatorRows(world: GameWorld, limit = 20): PlayerStatRow[] {
-  return sortRowsByCreation(
+export function getCurrentForwardRows(world: GameWorld, limit = 20): PlayerStatRow[] {
+  return sortRowsByForward(
     getCurrentPlayerStatRows(world).filter((row) =>
+      row.identity.position === 'FW'
+      && meetsTableMinutes(row)
+      && computePlayerPerformance('FW', row, world.seasonStartLevels?.[row.teamId]).eligible
+    ),
+    world,
+  ).slice(0, limit);
+}
+
+export function getCurrentCreatorRows(
+  world: GameWorld,
+  limit = 20,
+  options?: PlayerTableOptions,
+): PlayerStatRow[] {
+  return sortRowsByCreation(
+    currentTableRows(world, options).filter((row) =>
       (row.identity.position === 'MF' || row.identity.position === 'FW')
       && (row.keyPasses > 0 || row.assists > 0)
     ),
