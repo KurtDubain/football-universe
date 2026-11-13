@@ -5,11 +5,19 @@ import { formatLeagueTransition, getTeamName, getTeamShortName, getCoachName } f
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
 import { SegmentedControl } from '../components/ui';
+import SeasonAwardsBlock from '../components/SeasonAwardsBlock';
 import {
   countTopFlightChampionTitles,
   formatSeasonCompetitionStats,
   selectSeasonCompetitionStats,
 } from '../engine/history/season-summary-selectors';
+import {
+  buildAwardLeaderboard,
+  buildAwardNarrativeClause,
+  seasonAwardState,
+  selectSeasonTopScorer,
+  type AwardLeaderboardRow,
+} from './chronicle-awards';
 
 type SeasonRow = SeasonRecord & { teamId: string };
 
@@ -103,6 +111,11 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
   const totalCoachChanges = honors.reduce((s, h) => s + h.coachChanges.length, 0);
   const totalPromotions = honors.reduce((s, h) => s + h.promoted.length, 0);
 
+  // Individual honours — only what the retained playerAwardsHistory window still holds
+  const ballonDorBoard = buildAwardLeaderboard(world.playerAwardsHistory, 'mvp');
+  const goldenBootBoard = buildAwardLeaderboard(world.playerAwardsHistory, 'golden_boot');
+  const hasPlayerHonors = ballonDorBoard.length > 0 || goldenBootBoard.length > 0;
+
   return (
     <div className="max-w-4xl space-y-5">
       <h2 className="text-xl font-bold text-slate-100">编年史</h2>
@@ -140,6 +153,20 @@ function OverallChronicle({ world, onSelectSeason }: { world: GameWorld; onSelec
                 <span className="text-slate-500">S{d.from}-S{d.to}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Individual Honours */}
+      {hasPlayerHonors && (
+        <div className="bg-[var(--surface-panel)] rounded-lg border border-slate-700 p-4">
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">个人荣誉</h3>
+            <span className="text-[10px] text-slate-600">仅统计保留窗口内的记录</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <HonorBoard title="🏅 金球奖" rows={ballonDorBoard} />
+            <HonorBoard title="👟 金靴奖" rows={goldenBootBoard} />
           </div>
         </div>
       )}
@@ -289,6 +316,11 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
     ? (world.seasonBuffs ?? [])
     : ((world.seasonBuffsHistory ?? []).find(h => h.season === seasonNumber)?.buffs ?? []);
 
+  // Player awards for this season. Awards older than the storage cap are gone
+  // for good, so the block distinguishes "archived" from "nothing was handed out".
+  const awardState = seasonAwardState(world.playerAwardsHistory, seasonNumber);
+  const topScorer = selectSeasonTopScorer(world, seasonNumber);
+
   // Build narrative — multiple paragraphs
   const paragraphs: string[] = [];
 
@@ -299,6 +331,10 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
   } else {
     paragraphs.push(`第${seasonNumber}赛季，${champ}凭借稳定的发挥以${champRec?.leaguePoints}分拿下联赛冠军，本赛季打入${champRec?.leagueGF}球。`);
   }
+
+  // Player headline — built straight from playerAwardsHistory, skipped when archived
+  const awardClause = buildAwardNarrativeClause(world.playerAwardsHistory, seasonNumber);
+  if (awardClause) paragraphs.push(`${awardClause}。`);
 
   // Buff-driven narrative
   if (buffs.length > 0) {
@@ -393,6 +429,13 @@ function SeasonDetail({ world, seasonNumber, onBack }: { world: GameWorld; seaso
         <ChampCard label="超级杯" team={honor.superCupWinner} tb={tb} color="purple" />
         {honor.worldCupWinner && <ChampCard label="环球冠军杯" team={honor.worldCupWinner} tb={tb} color="sky" />}
       </div>
+
+      {/* Player awards + season top scorer */}
+      <SeasonAwardsBlock
+        awards={awardState.kind === 'awards' ? awardState.awards : []}
+        archived={awardState.kind === 'archived'}
+        topScorer={topScorer}
+      />
 
       {/* Awards Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -577,6 +620,9 @@ function AllSeasonsNarrative({ world, onSelectSeason }: { world: GameWorld; onSe
       sentences.push(`${champ}以${l1[0]?.leaguePoints}分加冕王座`);
     }
 
+    const awardClause = buildAwardNarrativeClause(world.playerAwardsHistory, seasonNumber);
+    if (awardClause) sentences.push(awardClause);
+
     // Buff influence
     const champBuff = buffs.find(b => b.teamId === honor.league1Champion);
     if (champBuff) {
@@ -720,6 +766,31 @@ function ChampCard({ label, team, runnerUp, tb, color }: { label: string; team: 
           <span className="whitespace-nowrap" title={getTeamName(runnerUp, tb)}>{getTeamShortName(runnerUp, tb)}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function HonorBoard({ title, rows }: { title: string; rows: AwardLeaderboardRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <div className="text-[10px] text-slate-500 mb-1.5">{title}</div>
+      <div className="space-y-1">
+        {rows.map((row, i) => (
+          <div key={row.playerId} className="flex items-center gap-2 text-xs">
+            <span className="w-4 text-center font-bold text-slate-500 shrink-0">{i + 1}</span>
+            <Link
+              to={`/player/${row.playerId}`}
+              className="text-slate-200 hover:text-blue-400 font-medium truncate"
+              title={row.playerName}
+            >
+              {row.playerName}
+            </Link>
+            <span className="text-[10px] text-slate-500 truncate" title={row.teamName}>{row.teamName}</span>
+            <span className="ml-auto text-amber-400 font-bold shrink-0">{row.count}次</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
