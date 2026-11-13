@@ -11,11 +11,14 @@ import {
   buildMergedRounds,
   type MergedRound,
   type MergedTie,
+  type TieClickHandler,
 } from './cup-bracket-model';
 
 const VIEW_STORAGE_KEY = editionStorageKey('football-universe:cup-bracket-view-v1');
 const BRACKET_CARD_WIDTH = 172;
 const BRACKET_CARD_HEIGHT = 82;
+/** Two-legged cards print one scoreline per leg, so they need a taller body. */
+const BRACKET_TWO_LEG_CARD_HEIGHT = 150;
 const BRACKET_COLUMN_STEP = 224;
 const BRACKET_HEADER_HEIGHT = 48;
 const BRACKET_ROW_PITCH = 92;
@@ -69,7 +72,7 @@ export function BracketView({ rounds, tb, ts, onClick }: {
   rounds: CupRound[];
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
-  onClick: (fixture: CupFixture) => void;
+  onClick: TieClickHandler;
 }) {
   const [mode, setMode] = useState<BracketMode>(readBracketMode);
   const merged = useMemo(() => buildMergedRounds(rounds), [rounds]);
@@ -120,10 +123,15 @@ export function BracketView({ rounds, tb, ts, onClick }: {
   );
 }
 
+/** Two-legged cards are taller; single-match cards keep the original 82px. */
+function tieCardHeight(round: MergedRound): number {
+  return round.twoLegged ? BRACKET_TWO_LEG_CARD_HEIGHT : BRACKET_CARD_HEIGHT;
+}
+
 function ClassicBracket({ merged, tb, onClick }: {
   merged: MergedRound[];
   tb: Record<string, TeamBase>;
-  onClick: (fixture: CupFixture) => void;
+  onClick: TieClickHandler;
 }) {
   const displayRounds = useMemo(() => buildDisplayRounds(merged), [merged]);
   const championId = merged.at(-1)?.ties[0]?.winnerId;
@@ -135,13 +143,18 @@ function ClassicBracket({ merged, tb, onClick }: {
   const [visibleColumn, setVisibleColumn] = useState(focusColumn);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const firstRoundTieCount = Math.max(1, displayRounds[0]?.ties.length ?? 1);
-  const stageHeight = Math.max(244, BRACKET_HEADER_HEIGHT + firstRoundTieCount * BRACKET_ROW_PITCH);
+  const maxCardHeight = displayRounds.reduce(
+    (tallest, round) => Math.max(tallest, tieCardHeight(round)),
+    BRACKET_CARD_HEIGHT,
+  );
+  const rowPitch = Math.max(BRACKET_ROW_PITCH, maxCardHeight + 10);
+  const stageHeight = Math.max(244, BRACKET_HEADER_HEIGHT + firstRoundTieCount * rowPitch);
   const stageWidth = displayRounds.length * BRACKET_COLUMN_STEP + BRACKET_CARD_WIDTH;
 
   const tieCenter = (roundIndex: number, tieIndex: number): number => {
     const tieCount = Math.max(1, displayRounds[roundIndex]?.ties.length ?? 1);
     return BRACKET_HEADER_HEIGHT
-      + BRACKET_ROW_PITCH * (tieIndex + 0.5) * (firstRoundTieCount / tieCount);
+      + rowPitch * (tieIndex + 0.5) * (firstRoundTieCount / tieCount);
   };
 
   const scrollToColumn = useCallback((index: number, smooth: boolean) => {
@@ -152,7 +165,7 @@ function ClassicBracket({ merged, tb, onClick }: {
     const targetRoundIndex = Math.min(index, displayRounds.length - 1);
     const targetTieCount = Math.max(1, displayRounds[targetRoundIndex]?.ties.length ?? 1);
     const targetCenter = BRACKET_HEADER_HEIGHT
-      + BRACKET_ROW_PITCH * 0.5 * (firstRoundTieCount / targetTieCount);
+      + rowPitch * 0.5 * (firstRoundTieCount / targetTieCount);
     const top = scroller.scrollHeight > scroller.clientHeight + 1
       ? Math.max(0, targetCenter - Math.min(148, scroller.clientHeight / 2))
       : scroller.scrollTop;
@@ -165,7 +178,7 @@ function ClassicBracket({ merged, tb, onClick }: {
       scroller.scrollTop = top;
     }
     setVisibleColumn(index);
-  }, [displayRounds, firstRoundTieCount]);
+  }, [displayRounds, firstRoundTieCount, rowPitch]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => scrollToColumn(focusColumn, false));
@@ -252,9 +265,9 @@ function ClassicBracket({ merged, tb, onClick }: {
                   onClick={onClick}
                   style={{
                     left: roundIndex * BRACKET_COLUMN_STEP,
-                    top: tieCenter(roundIndex, tieIndex) - BRACKET_CARD_HEIGHT / 2,
+                    top: tieCenter(roundIndex, tieIndex) - tieCardHeight(round) / 2,
                     width: BRACKET_CARD_WIDTH,
-                    height: BRACKET_CARD_HEIGHT,
+                    height: tieCardHeight(round),
                   }}
                 />
               ))}
@@ -334,15 +347,33 @@ function BracketConnectors({ rounds, championId, width, height, tieCenter }: {
   );
 }
 
+/**
+ * Marks which leg a team hosted. Derived from the leg fixtures themselves so
+ * the marker can never drift from the pairing the engine actually built.
+ */
+function venueTagFor(tie: MergedTie, teamId: string): string | undefined {
+  if (!teamId) return undefined;
+  if (tie.leg1?.homeTeamId === teamId) return '首回合主场';
+  if (tie.leg2?.homeTeamId === teamId) return '次回合主场';
+  return undefined;
+}
+
+function VenueTag({ tag }: { tag: string }) {
+  return (
+    <span data-testid="cup-venue-tag" className="shrink-0 text-[10px] font-medium text-sky-300" title={tag}>
+      ({tag})
+    </span>
+  );
+}
+
 function ClassicTie({ tie, round, tb, active, onClick, style }: {
   tie: MergedTie;
   round: MergedRound;
   tb: Record<string, TeamBase>;
   active: boolean;
-  onClick: (fixture: CupFixture) => void;
+  onClick: TieClickHandler;
   style: CSSProperties;
 }) {
-  const clickTarget = tie.leg2 ?? tie.leg1;
   const hasResult = tie.agg1 !== undefined && tie.agg2 !== undefined;
   const status = getTieStatus(tie, round);
   const team1 = tb[tie.team1Id];
@@ -351,7 +382,48 @@ function ClassicTie({ tie, round, tb, active, onClick, style }: {
     ? getDerbyName(tie.team1Id, tie.team2Id, tb)
     : null;
   const accessibleName = `${round.label}，${team1?.name ?? '待定'} 对 ${team2?.name ?? '待定'}，${status}`;
+  const teamRows = (
+    <>
+      <BracketTeamRow
+        teamId={tie.team1Id}
+        score={tie.agg1}
+        winnerId={tie.winnerId}
+        tb={tb}
+        venueTag={round.twoLegged ? venueTagFor(tie, tie.team1Id) : undefined}
+      />
+      <BracketTeamRow
+        teamId={tie.team2Id}
+        score={tie.agg2}
+        winnerId={tie.winnerId}
+        tb={tb}
+        venueTag={round.twoLegged ? venueTagFor(tie, tie.team2Id) : undefined}
+      />
+    </>
+  );
 
+  // A two-legged card carries one clickable entry per leg, so it cannot stay a
+  // single <button>. The fixed grid rows from index.css are re-pointed at the
+  // leg panel through an inline override.
+  if (round.twoLegged) {
+    return (
+      <div
+        className="cup-bracket-tie"
+        style={{ ...style, gridTemplateRows: '29px 29px 1fr' }}
+        role="group"
+        data-active={active && !hasResult}
+        data-completed={Boolean(tie.winnerId)}
+        data-two-legged="true"
+        data-tie-id={tie.leg1?.id ?? ''}
+        aria-label={accessibleName}
+        title={derbyName ?? accessibleName}
+      >
+        {teamRows}
+        <TieLegPanel tie={tie} round={round} tb={tb} derbyName={derbyName} density="bracket" onClick={onClick} />
+      </div>
+    );
+  }
+
+  const clickTarget = tie.leg2 ?? tie.leg1;
   return (
     <button
       type="button"
@@ -360,12 +432,12 @@ function ClassicTie({ tie, round, tb, active, onClick, style }: {
       disabled={!clickTarget}
       data-active={active && !hasResult}
       data-completed={Boolean(tie.winnerId)}
+      data-tie-id={tie.leg1?.id ?? ''}
       aria-label={accessibleName}
       title={derbyName ?? accessibleName}
-      onClick={() => clickTarget && onClick(clickTarget)}
+      onClick={() => clickTarget && onClick(clickTarget, {})}
     >
-      <BracketTeamRow teamId={tie.team1Id} score={tie.agg1} winnerId={tie.winnerId} tb={tb} />
-      <BracketTeamRow teamId={tie.team2Id} score={tie.agg2} winnerId={tie.winnerId} tb={tb} />
+      {teamRows}
       <div className="cup-bracket-tie-meta" data-special={status.startsWith('点球') || status === '加时'}>
         {derbyName ? <span className="truncate text-orange-300">{derbyName}</span> : <span>{status}</span>}
       </div>
@@ -373,11 +445,12 @@ function ClassicTie({ tie, round, tb, active, onClick, style }: {
   );
 }
 
-function BracketTeamRow({ teamId, score, winnerId, tb }: {
+function BracketTeamRow({ teamId, score, winnerId, tb, venueTag }: {
   teamId: string;
   score?: number;
   winnerId?: string;
   tb: Record<string, TeamBase>;
+  venueTag?: string;
 }) {
   const team = tb[teamId];
   const winner = Boolean(teamId) && winnerId === teamId;
@@ -393,9 +466,135 @@ function BracketTeamRow({ teamId, score, winnerId, tb }: {
       <span className="cup-bracket-team-name" title={team?.name}>
         {team ? getTeamShortName(teamId, tb) : '待定'}
       </span>
+      {venueTag && <VenueTag tag={venueTag} />}
       {score !== undefined && <strong>{score}</strong>}
       {winner && <Icon name="check" size={12} className="cup-bracket-winner-check" />}
     </span>
+  );
+}
+
+/** Per-leg scorelines plus the aggregate, shared by both bracket views. */
+function TieLegPanel({ tie, round, tb, derbyName, density, onClick }: {
+  tie: MergedTie;
+  round: MergedRound;
+  tb: Record<string, TeamBase>;
+  derbyName?: string | null;
+  density: 'bracket' | 'list';
+  onClick: TieClickHandler;
+}) {
+  const compact = density === 'bracket';
+  return (
+    <div className={`flex min-w-0 flex-col gap-0.5 border-t border-slate-700/40 bg-slate-700/10 px-1 ${compact ? 'py-1' : 'py-1.5'}`}>
+      {derbyName && <span className="truncate text-[10px] font-medium text-orange-300">{derbyName}</span>}
+      <TieLegButton fixture={tie.leg1} leg={1} label="首回合" round={round} tb={tb} compact={compact} onClick={onClick} />
+      <TieLegButton fixture={tie.leg2} leg={2} label="次回合" round={round} tb={tb} compact={compact} onClick={onClick} />
+      <TieAggregateLine tie={tie} tb={tb} compact={compact} />
+    </div>
+  );
+}
+
+function TieLegButton({ fixture, leg, label, round, tb, compact, onClick }: {
+  fixture: CupFixture | null;
+  leg: 1 | 2;
+  label: string;
+  round: MergedRound;
+  tb: Record<string, TeamBase>;
+  compact: boolean;
+  onClick: TieClickHandler;
+}) {
+  const size = compact ? 'text-[10px]' : 'text-[11px]';
+
+  if (!fixture) {
+    return (
+      <div
+        data-testid={`cup-tie-leg-${leg}`}
+        data-leg={leg}
+        data-pending="true"
+        className={`flex items-baseline gap-1 px-1 leading-tight text-slate-600 ${size}`}
+      >
+        <span className="shrink-0 font-semibold">{label}</span>
+        <span>对手待定</span>
+      </div>
+    );
+  }
+
+  const home = fixture.homeTeamId ? getTeamShortName(fixture.homeTeamId, tb) : '待定';
+  const away = fixture.awayTeamId ? getTeamShortName(fixture.awayTeamId, tb) : '待定';
+  const result = fixture.result;
+  // Both names are printed in this leg's own home-away order, so the reader
+  // never has to infer the venue from the card's row order.
+  const scoreText = result
+    ? `${home} ${result.home}-${result.away} ${away}`
+    : `${home} vs ${away} 待赛`;
+  const penaltyText = result?.penalties
+    ? `点球(${label}后) ${home} ${result.penHome ?? 0}-${result.penAway ?? 0} ${away}`
+    : null;
+
+  return (
+    <button
+      type="button"
+      data-testid={`cup-tie-leg-${leg}`}
+      data-leg={leg}
+      className={`flex w-full min-w-0 flex-wrap items-baseline gap-x-1 rounded px-1 text-left leading-tight text-slate-300 transition-colors hover:bg-slate-600/30 ${size} ${compact ? 'py-0.5' : 'py-1.5'}`}
+      aria-label={`${round.label}${label}：${home} 对 ${away}${result ? `，${result.home}比${result.away}` : '，待赛'}`}
+      onClick={() => onClick(fixture, { leg })}
+    >
+      <span className="shrink-0 font-semibold text-slate-400">{label}</span>
+      <span data-testid={`cup-tie-leg-${leg}-score`} className="min-w-0 font-medium text-slate-200">
+        {scoreText}
+      </span>
+      {result?.extraTime && (
+        <span data-testid={`cup-tie-leg-${leg}-extra-time`} className="shrink-0 font-medium text-amber-400">
+          含加时
+        </span>
+      )}
+      {penaltyText && (
+        <span data-testid={`cup-tie-leg-${leg}-pens`} className="w-full font-medium text-amber-400">
+          {penaltyText}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function TieAggregateLine({ tie, tb, compact }: {
+  tie: MergedTie;
+  tb: Record<string, TeamBase>;
+  compact: boolean;
+}) {
+  const bothLegsPlayed = Boolean(tie.leg1?.result && tie.leg2?.result);
+  const decidedOnPenalties = Boolean(tie.leg2?.result?.penalties);
+  const parts: string[] = [];
+
+  if (tie.agg1 !== undefined && tie.agg2 !== undefined) {
+    parts.push(`总比分 ${tie.agg1}-${tie.agg2}`);
+    // A shootout only happens once away goals failed to settle the tie.
+    if (
+      bothLegsPlayed
+      && !decidedOnPenalties
+      && tie.agg1 === tie.agg2
+      && tie.awayGoals1 !== undefined
+      && tie.awayGoals2 !== undefined
+      && tie.awayGoals1 !== tie.awayGoals2
+    ) {
+      parts.push('客场进球');
+    }
+  }
+  if (tie.winnerId) parts.push(`${getTeamShortName(tie.winnerId, tb)}晋级`);
+  else if (bothLegsPlayed) parts.push('晋级待定');
+  else if (tie.leg1?.result) parts.push('次回合待赛');
+  else parts.push('两回合待赛');
+
+  return (
+    <div
+      data-testid="cup-tie-aggregate"
+      data-winner={tie.winnerId ?? ''}
+      className={`truncate px-1 font-medium leading-tight ${compact ? 'text-[10px]' : 'text-[11px]'} ${
+        tie.winnerId ? 'text-emerald-300' : 'text-slate-500'
+      }`}
+    >
+      {parts.join(' · ')}
+    </div>
   );
 }
 
@@ -428,7 +627,7 @@ export function RoundList({ merged, tb, ts, onClick }: {
   merged: MergedRound[];
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
-  onClick: (fixture: CupFixture) => void;
+  onClick: TieClickHandler;
 }) {
   const defaultRound = merged.find(round => !round.completed)?.label ?? merged.at(-1)?.label ?? '';
   const [selectedLabel, setSelectedLabel] = useState(defaultRound);
@@ -485,7 +684,7 @@ function ListTieCell({ tie, round, tb, ts, onClick }: {
   round: MergedRound;
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
-  onClick: (fixture: CupFixture) => void;
+  onClick: TieClickHandler;
 }) {
   const team1 = tb[tie.team1Id];
   const team2 = tb[tie.team2Id];
@@ -493,56 +692,78 @@ function ListTieCell({ tie, round, tb, ts, onClick }: {
   const winner2 = tie.winnerId === tie.team2Id;
   const hasResult = tie.agg1 !== undefined;
   const derbyName = isDerby(tie.team1Id, tie.team2Id, tb) ? getDerbyName(tie.team1Id, tie.team2Id, tb) : null;
-  const clickTarget = tie.leg2 ?? tie.leg1;
+  const teamRows = (
+    <>
+      <ListTeamRow
+        teamId={tie.team1Id}
+        score={tie.agg1}
+        winner={winner1}
+        team={team1}
+        tb={tb}
+        ts={ts}
+        venueTag={round.twoLegged ? venueTagFor(tie, tie.team1Id) : undefined}
+      />
+      <div className="border-t border-slate-700/60" />
+      <ListTeamRow
+        teamId={tie.team2Id}
+        score={tie.agg2}
+        winner={winner2}
+        team={team2}
+        tb={tb}
+        ts={ts}
+        venueTag={round.twoLegged ? venueTagFor(tie, tie.team2Id) : undefined}
+      />
+    </>
+  );
 
+  // One clickable entry per leg, so the two-legged cell is a container rather
+  // than a button (a button cannot nest buttons).
+  if (round.twoLegged) {
+    return (
+      <div
+        data-two-legged="true"
+        data-tie-id={tie.leg1?.id ?? ''}
+        className={`min-h-11 w-full min-w-0 overflow-hidden rounded-lg border bg-slate-800 text-left ${
+          derbyName ? 'border-orange-600/40' : 'border-slate-700'
+        }`}
+      >
+        {derbyName && <div className="bg-orange-900/20 py-0.5 text-center text-[11px] font-medium text-orange-300">{derbyName}</div>}
+        {teamRows}
+        <TieLegPanel tie={tie} round={round} tb={tb} density="list" onClick={onClick} />
+      </div>
+    );
+  }
+
+  const clickTarget = tie.leg2 ?? tie.leg1;
   return (
     <button
-      onClick={() => clickTarget && onClick(clickTarget)}
+      onClick={() => clickTarget && onClick(clickTarget, {})}
       type="button"
+      data-tie-id={tie.leg1?.id ?? ''}
       className={`min-h-11 w-full min-w-0 rounded-lg border bg-slate-800 text-left transition-colors hover:border-slate-500 ${
         derbyName ? 'border-orange-600/40' : 'border-slate-700'
       }`}
     >
       {derbyName && <div className="rounded-t-lg bg-orange-900/20 py-0.5 text-center text-[11px] font-medium text-orange-300">{derbyName}</div>}
-      <ListTeamRow teamId={tie.team1Id} score={tie.agg1} winner={winner1} team={team1} tb={tb} ts={ts} />
-      <div className="border-t border-slate-700/60" />
-      <ListTeamRow teamId={tie.team2Id} score={tie.agg2} winner={winner2} team={team2} tb={tb} ts={ts} />
-      {round.twoLegged && (
-        <div className="rounded-b-lg border-t border-slate-700/40 bg-slate-700/10 px-2 py-1 text-[11px] text-slate-500">
-          {tie.leg1?.result && tie.leg2?.result ? (
-            <span>
-              首 {tie.leg1.result.home}-{tie.leg1.result.away}
-              <span className="mx-1 text-slate-700">|</span>
-              次 {tie.leg2.result.home}-{tie.leg2.result.away}
-              {tie.agg1 === tie.agg2 && tie.awayGoals1 !== undefined && tie.awayGoals2 !== undefined && tie.awayGoals1 !== tie.awayGoals2 && (
-                <span className="ml-1 text-amber-500">客场进球</span>
-              )}
-              {tie.leg2.result.penalties && <span className="ml-1 text-amber-400">点球 {tie.leg2.result.penHome}-{tie.leg2.result.penAway}</span>}
-            </span>
-          ) : tie.leg1?.result ? (
-            <span>首 {tie.leg1.result.home}-{tie.leg1.result.away}<span className="mx-1 text-slate-700">|</span>次回合待赛</span>
-          ) : (
-            <span className="text-slate-600">两回合待赛</span>
-          )}
-        </div>
-      )}
-      {!round.twoLegged && tie.leg1?.result && (tie.leg1.result.penalties || tie.leg1.result.extraTime) && (
+      {teamRows}
+      {tie.leg1?.result && (tie.leg1.result.penalties || tie.leg1.result.extraTime) && (
         <div className="pb-1 text-center text-[11px] text-amber-400">
           {tie.leg1.result.penalties ? `点球 ${tie.leg1.result.penHome}-${tie.leg1.result.penAway}` : '加时'}
         </div>
       )}
-      {!hasResult && !round.twoLegged && <span className="sr-only">待赛</span>}
+      {!hasResult && <span className="sr-only">待赛</span>}
     </button>
   );
 }
 
-function ListTeamRow({ teamId, score, winner, team, tb, ts }: {
+function ListTeamRow({ teamId, score, winner, team, tb, ts, venueTag }: {
   teamId: string;
   score?: number;
   winner: boolean;
   team?: TeamBase;
   tb: Record<string, TeamBase>;
   ts: Record<string, TeamState>;
+  venueTag?: string;
 }) {
   return (
     <div className={`flex items-center gap-1 px-2 py-1.5 text-xs ${winner ? 'bg-green-900/20' : ''}`}>
@@ -551,6 +772,7 @@ function ListTeamRow({ teamId, score, winner, team, tb, ts }: {
       <span className={`min-w-0 flex-1 truncate ${winner ? 'font-bold text-green-400' : 'text-slate-200'}`} title={team?.name}>
         {team ? <><span className="sm:hidden">{getTeamShortName(teamId, tb)}</span><span className="cup-team-full-name hidden sm:inline" data-team-name={getTeamName(teamId, tb)} aria-label={getTeamName(teamId, tb)} /></> : '待定'}
       </span>
+      {venueTag && <VenueTag tag={venueTag} />}
       {score !== undefined && <span className={`font-bold tabular-nums ${winner ? 'text-green-400' : 'text-slate-500'}`}>{score}</span>}
     </div>
   );

@@ -229,6 +229,11 @@ function PreMatchView({
             <div className="text-xs text-slate-600 mt-0.5">
               {fixture.competitionName} - {cnRoundLabel(fixture.roundLabel)}
             </div>
+            {fixture.leg && (
+              <div data-testid="match-leg-badge" className="mt-0.5 text-[10px] font-semibold text-sky-300">
+                {fixture.leg === 1 ? '首回合' : '次回合'}
+              </div>
+            )}
             {fixture.isNeutralVenue && (
               <div className="mt-0.5 text-[10px] font-medium text-amber-400">中立场</div>
             )}
@@ -525,6 +530,7 @@ function PostMatchView({
   const homeWon = totalHome > totalAway;
   const awayWon = totalAway > totalHome;
   const isDraw = totalHome === totalAway;
+  const neutralVenue = fixture.isNeutralVenue ?? result.isNeutralVenue ?? false;
 
   // For penalties, determine winner
   const penaltyHomeWon = result.penalties && (result.penaltyHome ?? 0) > (result.penaltyAway ?? 0);
@@ -570,6 +576,9 @@ function PostMatchView({
             >
               {homeTeam.name}
             </Link>
+            {!neutralVenue && (
+              <span data-testid="match-venue-home" className="ml-1.5 text-xs text-green-400">(主)</span>
+            )}
           </div>
 
           {/* Score */}
@@ -594,6 +603,12 @@ function PostMatchView({
             {/* ET / Penalty indicator */}
             <div className="text-xs text-slate-500 mt-1 space-x-2">
               <span>{result.competitionName} - {cnRoundLabel(result.roundLabel)}</span>
+              {fixture.leg && (
+                <span data-testid="match-leg-badge" className="font-semibold text-sky-300">
+                  {fixture.leg === 1 ? '首回合' : '次回合'}
+                </span>
+              )}
+              {neutralVenue && <span className="font-medium text-amber-400">中立场</span>}
               {result.extraTime && (
                 <span className="text-amber-400">
                   加时 {result.etHomeGoals ?? 0}-{result.etAwayGoals ?? 0}
@@ -605,6 +620,9 @@ function PostMatchView({
 
           {/* Away team name */}
           <div className="flex-1 min-w-0 text-right">
+            {!neutralVenue && (
+              <span data-testid="match-venue-away" className="mr-1.5 text-xs text-slate-500">(客)</span>
+            )}
             <Link
               to={`/team/${fixture.awayTeamId}`}
               className={`text-lg font-bold transition-colors ${
