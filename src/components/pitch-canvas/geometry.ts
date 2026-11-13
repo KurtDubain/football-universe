@@ -7,6 +7,8 @@ export const PLAYER_BODY_RADIUS = 5.7;
 
 export const STANDARD_PITCH_LENGTH_METERS = 105;
 export const STANDARD_PITCH_WIDTH_METERS = 68;
+/** Penalty area depth. Shared with the camera, which frames the goal off it. */
+export const PENALTY_AREA_DEPTH_METERS = 16.5;
 export const NORMALIZED_PITCH_SCREEN_ASPECT = STANDARD_PITCH_WIDTH_METERS / STANDARD_PITCH_LENGTH_METERS;
 
 /**
@@ -96,7 +98,7 @@ export function createPitchGeometry(
     yScale,
     centerCircleRadiusX: 9.15 * xScale,
     centerCircleRadiusY: 9.15 * yScale,
-    penaltyAreaDepth: 16.5 * xScale,
+    penaltyAreaDepth: PENALTY_AREA_DEPTH_METERS * xScale,
     penaltyAreaSpan: 40.32 * yScale,
     goalAreaDepth: 5.5 * xScale,
     goalAreaSpan: 18.32 * yScale,

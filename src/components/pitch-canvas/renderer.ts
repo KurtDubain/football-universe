@@ -9,7 +9,17 @@ import { clamp, hexToRgbStr } from './math';
 import type { ShotOutcome } from './event-scene';
 import type { PlayerState } from './types';
 import { createPitchGeometry, type PitchOrientation } from './geometry';
-import { MAX_BROADCAST_ZOOM, broadcastCameraPan } from './camera';
+import { MAX_BROADCAST_ZOOM, broadcastCameraPan, type BroadcastCameraFrame } from './camera';
+
+/**
+ * The dark ring `drawPitch` paints outside the touchlines.
+ *
+ * The canvas is filled with it before the camera transform so that a pan past
+ * the edge of the cached pitch bitmap — which `CAMERA_FRAME_BLEED` now allows,
+ * so the goal can sit inside the frame instead of outside it — reveals more of
+ * the same colour rather than a transparent seam.
+ */
+export const PITCH_SURROUND_COLOR = '#091b11';
 
 // Mutable {current: number} shape — matches React.MutableRefObject<number>
 // without importing React, so this module stays UI-framework neutral.
@@ -24,6 +34,8 @@ export interface BroadcastCameraState {
   focusX: number;
   focusY: number;
   zoom: number;
+  /** World-space span the pan must keep on screen. See `broadcastCameraPan`. */
+  frame?: BroadcastCameraFrame;
 }
 
 export interface BroadcastCameraTransform {
@@ -95,7 +107,7 @@ export function drawPitch(
 
   // Dark surround gives the nets physical depth and separates the field from
   // the modal chrome without spending pixels on decorative stadium scenery.
-  ctx.fillStyle = '#091b11';
+  ctx.fillStyle = PITCH_SURROUND_COLOR;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fillRect(P - 3, P - 3, fw + 6, fh + 6);
@@ -741,7 +753,8 @@ export function applyCameraShake(
     shakeRef.current--;
   }
   ctx.save();
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = PITCH_SURROUND_COLOR;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
   if (orientation === 'portrait') {
     // Quarter turn so the 520 x 344 drawing space fills a portrait canvas.
     // Everything downstream — pitch bitmap, players, ball, particles, camera —
@@ -752,7 +765,7 @@ export function applyCameraShake(
     ctx.rotate(-Math.PI / 2);
   }
   const zoom = clamp(camera.zoom, 1, MAX_BROADCAST_ZOOM);
-  const { panX, panY } = broadcastCameraPan(camera.focusX, camera.focusY, zoom, W, H);
+  const { panX, panY } = broadcastCameraPan(camera.focusX, camera.focusY, zoom, W, H, camera.frame);
   ctx.translate(W / 2 + panX + offX, H / 2 + panY + offY);
   ctx.scale(zoom, zoom);
   ctx.translate(-W / 2, -H / 2);

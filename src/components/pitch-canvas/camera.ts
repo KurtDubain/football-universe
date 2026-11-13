@@ -1,4 +1,5 @@
 import type { PlaybackMode } from '../match-live/playback-mode';
+import { PENALTY_AREA_DEPTH_METERS, STANDARD_PITCH_LENGTH_METERS } from './geometry';
 import { clamp, lerp } from './math';
 import type { RenderQuality } from './render-budget';
 
@@ -16,6 +17,25 @@ export interface BroadcastCameraTargetInput {
   padding: number;
   fieldWidth: number;
   fieldHeight: number;
+  /** How far the goal is drawn past its goal line, from `createPitchGeometry`. */
+  goalDepth: number;
+}
+
+/**
+ * The world-space span the shot exists to show.
+ *
+ * The pan used to be bounded so the *focus point* stayed on screen. That
+ * point is by construction somewhere between the centre and the ball, so the
+ * floor protected a spot that is never the subject: measured at the tightest
+ * framing with the ball on the goal line, the focus rode the right edge of
+ * frame while the ball and the goal sat 132px outside it. Framing an explicit
+ * span instead makes the floor mean what it was always meant to mean.
+ */
+export interface BroadcastCameraFrame {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
 }
 
 export interface BroadcastCameraTarget {
@@ -23,6 +43,7 @@ export interface BroadcastCameraTarget {
   focusY: number;
   zoom: number;
   settle: number;
+  frame: BroadcastCameraFrame;
 }
 
 /**
@@ -37,6 +58,36 @@ export interface BroadcastCameraTarget {
  */
 export const MAX_BROADCAST_ZOOM = 1.8;
 export const MAX_COMPACT_BROADCAST_ZOOM = 1.56;
+
+/**
+ * Screen-space gap kept between the framed subject and the edge of the canvas.
+ * Small on purpose: the goal is drawn only 2 logical units from the end of the
+ * pitch bitmap, so the margin is what the camera has to pan past it for.
+ */
+export const CAMERA_FRAME_MARGIN = 5;
+
+/**
+ * How far past the drawn pitch the camera may slide, in logical units.
+ *
+ * The overscan clamp exists so panning never reveals unpainted canvas. But the
+ * goal occupies 510..518 of a 520-wide drawing, which leaves the frame
+ * constraint and the overscan clamp with no overlap at all above ~1.1x: keeping
+ * the goal 5px off the edge needs pan -188.8 while the overscan bound is -186.2.
+ * Allowing a small reveal resolves it, and the exposed strip is painted with the
+ * same colour `drawPitch` uses for its outer surround, so the seam is invisible
+ * and the strip reads as the ground behind the goal.
+ */
+export const CAMERA_FRAME_BLEED = 24;
+
+/**
+ * The frame constraint only applies once the camera has actually pushed in.
+ *
+ * At `wide` (1.004) and `build` (1.034) the viewport already covers the whole
+ * pitch, so framing the subject is free — and enforcing it would drag the
+ * resting shot off centre to satisfy a margin nobody can see. Above this slack
+ * the viewport is narrower than the pitch and the constraint starts to matter.
+ */
+export const CAMERA_FRAME_MIN_ZOOM_SLACK = 0.06;
 
 /**
  * Framing per moment.
@@ -112,6 +163,12 @@ const SETTLE: Record<BroadcastCameraMoment, number> = {
  *
  * `overscan` is how far the scaled pitch may slide before its own edge would
  * enter the canvas, so the pan never reveals past what has been drawn.
+ *
+ * When `frame` is supplied the floor switches from "keep the focus point on
+ * screen" to "keep the whole subject span on screen, with `CAMERA_FRAME_MARGIN`
+ * to spare", and the overscan bound is relaxed by `CAMERA_FRAME_BLEED` so that
+ * span is reachable. Without `frame` the result is byte-identical to the
+ * formula this replaced, which is what the wide framings still use.
  */
 export function broadcastCameraPan(
   focusX: number,
@@ -119,23 +176,59 @@ export function broadcastCameraPan(
   zoom: number,
   canvasWidth: number,
   canvasHeight: number,
+  frame?: BroadcastCameraFrame,
 ): { panX: number; panY: number } {
-  const overscanX = Math.max(0, (zoom - 1) * canvasWidth / 2 - 1);
-  const overscanY = Math.max(0, (zoom - 1) * canvasHeight / 2 - 1);
-  // The focus point lands at (focus - size / 2) * zoom + size / 2 + pan, so
-  // keeping it inside [0, size] bounds pan by keep ± size / 2.
+  const framed = frame !== undefined && zoom - 1 >= CAMERA_FRAME_MIN_ZOOM_SLACK;
+  const bleed = framed ? CAMERA_FRAME_BLEED : 0;
+  const overscanX = Math.max(0, (zoom - 1) * canvasWidth / 2 - 1) + bleed;
+  const overscanY = Math.max(0, (zoom - 1) * canvasHeight / 2 - 1) + bleed;
+  // A world point lands at (point - size / 2) * zoom + size / 2 + pan, so
+  // keeping that point inside [0, size] bounds pan by keep ± size / 2.
   const keepX = (canvasWidth / 2 - focusX) * zoom;
   const keepY = (canvasHeight / 2 - focusY) * zoom;
+
+  /**
+   * Pan bounds for one axis.
+   *
+   * `focusLo`/`focusHi` are the legacy focus-point floor; `lo`/`hi` are what the
+   * subject span needs. Both are intersected with the overscan clamp, and if
+   * the span cannot be satisfied at this zoom the focus floor takes over — a
+   * clipped goal beats a strip of unpainted canvas.
+   */
+  const bound = (
+    drift: number,
+    keep: number,
+    size: number,
+    overscan: number,
+    min: number,
+    max: number,
+  ): number => {
+    const focusLo = Math.max(-overscan, keep - size / 2);
+    const focusHi = Math.min(overscan, keep + size / 2);
+    if (!framed) return clamp(drift, focusLo, focusHi);
+    // screen(min) >= margin bounds pan from below, screen(max) <= size - margin
+    // from above — so the lower bound reads `min` and the upper bound reads `max`.
+    const lo = Math.max(focusLo, (size / 2 - min) * zoom - size / 2 + CAMERA_FRAME_MARGIN);
+    const hi = Math.min(focusHi, (size / 2 - max) * zoom + size / 2 - CAMERA_FRAME_MARGIN);
+    return lo > hi ? clamp(drift, focusLo, focusHi) : clamp(drift, lo, hi);
+  };
+
   return {
-    panX: clamp(
+    panX: bound(
       (canvasWidth / 2 - focusX) * 0.22,
-      Math.max(-overscanX, keepX - canvasWidth / 2),
-      Math.min(overscanX, keepX + canvasWidth / 2),
+      keepX,
+      canvasWidth,
+      overscanX,
+      frame ? frame.minX : focusX,
+      frame ? frame.maxX : focusX,
     ),
-    panY: clamp(
+    panY: bound(
       (canvasHeight / 2 - focusY) * 0.18,
-      Math.max(-overscanY, keepY - canvasHeight / 2),
-      Math.min(overscanY, keepY + canvasHeight / 2),
+      keepY,
+      canvasHeight,
+      overscanY,
+      frame ? frame.minY : focusY,
+      frame ? frame.maxY : focusY,
     ),
   };
 }
@@ -153,9 +246,32 @@ export function broadcastCameraTarget(input: BroadcastCameraTargetInput): Broadc
     padding,
     fieldWidth,
     fieldHeight,
+    goalDepth,
   } = input;
+
+  /**
+   * What the shot owes the viewer.
+   *
+   * The ball always. Plus the goal it is attacking, once the ball is close
+   * enough that the goal is the point of the frame — the penalty area is the
+   * same 16.5 m the pitch geometry draws its box from. Outside that the goal
+   * is scenery the wide shot already shows, and dragging it into frame would
+   * only pull the camera off the ball.
+   */
+  const attackingRight = ballX >= canvasWidth / 2;
+  const goalLine = attackingRight ? padding + fieldWidth : padding;
+  const goalBack = attackingRight ? goalLine + goalDepth : goalLine - goalDepth;
+  const penaltyDepth = fieldWidth * (PENALTY_AREA_DEPTH_METERS / STANDARD_PITCH_LENGTH_METERS);
+  const goalInFrame = Math.abs(ballX - goalLine) <= penaltyDepth;
+  const frame: BroadcastCameraFrame = {
+    minX: goalInFrame ? Math.min(ballX, goalBack) : ballX,
+    maxX: goalInFrame ? Math.max(ballX, goalBack) : ballX,
+    minY: ballY,
+    maxY: ballY,
+  };
+
   if (reducedMotion) {
-    return { focusX: canvasWidth / 2, focusY: canvasHeight / 2, zoom: 1, settle: 1 };
+    return { focusX: canvasWidth / 2, focusY: canvasHeight / 2, zoom: 1, settle: 1, frame };
   }
 
   const compact = quality !== 'full';
@@ -176,5 +292,6 @@ export function broadcastCameraTarget(input: BroadcastCameraTargetInput): Broadc
     focusY: lerp(canvasHeight / 2, safeBallY, focusWeight),
     zoom: clamp(zoomTable[moment] * immersiveLift, 1, maxZoom),
     settle: SETTLE[moment],
+    frame,
   };
 }
