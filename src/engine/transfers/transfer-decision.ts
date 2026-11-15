@@ -1,4 +1,5 @@
 import type { CoachStyle } from '../../types/coach';
+import type { ClubDoctrine } from '../clubs/doctrine';
 import type { Player, PlayerPosition, PlayerSeasonStats } from '../../types/player';
 import type { TeamBase } from '../../types/team';
 import { computeInitialMarketValue } from '../economy/market-value';
@@ -28,7 +29,34 @@ export interface PositionNeed {
 export type SquadNeeds = Record<PlayerPosition, PositionNeed>;
 export type RecruitmentProfile = 'youth' | 'star' | 'value' | 'balanced';
 
-export function deriveRecruitmentProfile(teamId: string): RecruitmentProfile {
+/**
+ * Recruitment identity for a club.
+ *
+ * This used to be a pure FNV hash of the teamId, which meant a club kept one
+ * personality for its entire existence — the transfer market could never tell the
+ * story of a board changing its mind. It now reads the club's doctrine, which
+ * drifts every season, so the same club can be a star-chaser in one decade and a
+ * bargain-hunter in the next.
+ *
+ * `doctrine` is optional so legacy saves (and callers that only have a teamId)
+ * keep working: without it the old hash is used, which is exactly the behaviour
+ * an un-migrated save had.
+ */
+export function deriveRecruitmentProfile(teamId: string, doctrine?: ClubDoctrine): RecruitmentProfile {
+  if (doctrine) {
+    // Each profile is a blend rather than a single axis, so no club is defined by
+    // one number and the four profiles stay reachable across the whole space.
+    const youth = doctrine.academy * 0.6 + doctrine.patience * 0.4;
+    const star = doctrine.spending * 0.7 + (1 - doctrine.patience) * 0.3;
+    const value = (1 - doctrine.spending) * 0.7 + doctrine.selling * 0.3;
+    const best = Math.max(youth, star, value);
+    // Below this the club has no pronounced identity, which is a real state and
+    // not a fallback: most clubs most of the time are simply unremarkable.
+    if (best < 0.52) return 'balanced';
+    if (best === youth) return 'youth';
+    if (best === star) return 'star';
+    return 'value';
+  }
   let hash = 2166136261;
   for (let index = 0; index < teamId.length; index++) {
     hash ^= teamId.charCodeAt(index);
@@ -117,6 +145,8 @@ export function scoreTransferFit(params: {
   expectedFee?: number;
   needs?: SquadNeeds;
   requireUpgrade?: boolean;
+  /** Club operating doctrine; drives the recruitment profile. Omitted on legacy saves. */
+  doctrine?: ClubDoctrine;
 }): TransferFit {
   const { player, buyerSquad, buyer, seller, coachStyle } = params;
   const needs = params.needs ?? assessSquadNeeds(buyerSquad);
@@ -139,7 +169,7 @@ export function scoreTransferFit(params: {
   const reputationReach = seller
     ? clamp((buyer.reputation - seller.reputation + 20) / 40)
     : 0.6;
-  const profile = deriveRecruitmentProfile(buyer.id);
+  const profile = deriveRecruitmentProfile(buyer.id, params.doctrine);
   const valueBenchmark = Math.max(5, (player.rating - 55) * 1.5);
   const profileScore = profile === 'youth'
     ? clamp(ageScore * 0.55 + potentialScore * 0.45)

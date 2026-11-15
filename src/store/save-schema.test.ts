@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { executeCurrentWindow, initializeGameWorld, initializeNewSeason } from '../engine/season/season-manager';
+import type { GameWorld } from '../engine/season/season-manager';
 import type { NarrativeMemoryEntry } from '../engine/observation/narrative-types';
 import { retainPlayerArchives } from '../engine/players/retirement-archive';
 import { __flushCompressedStorageForTests, compressedStorage } from './compressed-storage';
@@ -231,6 +232,37 @@ describe('current schema hydration boundary', () => {
     expect(getSaveRecoveryMessage()).toBeNull();
   });
 
+  it('loads a save written before club doctrine existed and round-trips one that has it', () => {
+    // B2 is additive: a v26 save with no clubDoctrines record must still load,
+    // and the engine derives a deterministic starting doctrine on read rather
+    // than the save needing a migration.
+    const legacy = makeSave();
+    delete (legacy.state.world as Partial<GameWorld>).clubDoctrines;
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(legacy));
+    __flushCompressedStorageForTests();
+    const loadedLegacy = currentSaveStorage.getItem(SAVE_STORAGE_KEY);
+    expect(loadedLegacy).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+    expect(parseCurrentSave(loadedLegacy as string).state.world.clubDoctrines).toBeUndefined();
+
+    __flushCompressedStorageForTests();
+    localStorage.clear();
+
+    const modern = makeSave();
+    const teamId = Object.keys(modern.state.world.teamBases)[0];
+    modern.state.world.clubDoctrines = {
+      [teamId]: { academy: 0.8, spending: 0.2, selling: 0.3, patience: 0.7 },
+    };
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(modern));
+    __flushCompressedStorageForTests();
+    const loaded = currentSaveStorage.getItem(SAVE_STORAGE_KEY);
+    expect(loaded).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+    const world = parseCurrentSave(loaded as string).state.world;
+    expect(world.clubDoctrines?.[teamId]?.academy).toBe(0.8);
+    expect(world.clubDoctrines?.[teamId]?.patience).toBe(0.7);
+  });
+
   it('accepts bounded presentation memory and defaults older saves to an empty list', async () => {
     const save = makeSave();
     save.state.narrativeMemory = [{
@@ -392,6 +424,21 @@ describe('current schema hydration boundary', () => {
     ['continental group fixture using an illegal fourth round', (() => {
       const save = makeSeasonFiveSave();
       save.state.world.continentalCups.mainland_cup!.groups[0].fixtures[0].round = 4;
+      return JSON.stringify(save);
+    })()],
+    ['club doctrine naming a club that does not exist', (() => {
+      const save = makeSave();
+      save.state.world.clubDoctrines = {
+        ghost_club: { academy: 0.5, spending: 0.5, selling: 0.5, patience: 0.5 },
+      };
+      return JSON.stringify(save);
+    })()],
+    ['club doctrine axis outside [0, 1]', (() => {
+      const save = makeSave();
+      const teamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.clubDoctrines = {
+        [teamId]: { academy: 1.4, spending: 0.5, selling: 0.5, patience: 0.5 },
+      };
       return JSON.stringify(save);
     })()],
     ['invalid World Cup host archive result', (() => {

@@ -14,6 +14,14 @@ import {
   derivePreferredFormation,
 } from '../engine/coaches/tactics';
 import { formatMoney } from '../engine/economy/finance';
+import {
+  DOCTRINE_AXES,
+  deriveDoctrineTags,
+  deriveInitialDoctrine,
+  type ClubDoctrine,
+  type DoctrineAxis,
+  type DoctrineTag,
+} from '../engine/clubs/doctrine';
 import { computePlayerBoostReport } from '../engine/players/player-boosts';
 import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
 import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '../engine/season/team-story';
@@ -48,6 +56,10 @@ export default function TeamDetail() {
   // Coach is derived from coachStates (single source of truth post-v7).
   const coachId = getTeamCoachId(world.coachStates, id);
   const currentCoach = coachId ? world.coachBases[coachId] : undefined;
+  // B2 — operating doctrine. A save written before B2 carries no record, so fall
+  // back to the same deterministic starting doctrine the engine derives.
+  const doctrine = world.clubDoctrines?.[id] ?? deriveInitialDoctrine(base);
+  const doctrineTags = deriveDoctrineTags(doctrine);
 
   return (
     <PageShell width="standard" className="tabular-nums">
@@ -61,6 +73,17 @@ export default function TeamDetail() {
               <span>{getLeagueName(state.leagueLevel)}</span>
               <span className="text-slate-600">/</span>
               <span aria-label={`俱乐部期望等级 ${base.expectation}`}>期望 {'★'.repeat(base.expectation)}</span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5" aria-label="俱乐部经营路线">
+              {doctrineTags.map((tag) => (
+                <span
+                  key={tag.key}
+                  data-testid={`doctrine-tag-${tag.key}`}
+                  className="rounded-full border border-slate-600/70 bg-slate-800/70 px-2 py-0.5 text-[11px] text-slate-200"
+                >
+                  {tag.label}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -129,6 +152,8 @@ export default function TeamDetail() {
               </section>
             </div>
           </Panel>
+
+          <DoctrinePanel doctrine={doctrine} tags={doctrineTags} />
 
           {/* Coach */}
           <Panel>
@@ -609,6 +634,52 @@ function cupResultStyle(label: string, championColor: 'amber' | 'purple' | 'sky'
   if (label === '未参加') return 'text-slate-600';
   if (label === '参赛中') return 'bg-blue-900/40 text-blue-300';
   return 'text-slate-500';
+}
+
+// ── Club doctrine (B2) ─────────────────────────────────────
+
+const DOCTRINE_AXIS_META: Record<DoctrineAxis, { label: string; hint: string; color: string }> = {
+  academy: { label: '青训', hint: '往自家青训投钱的意愿', color: 'bg-emerald-500' },
+  spending: { label: '投入', hint: '在转会市场溢价买人的意愿', color: 'bg-amber-500' },
+  selling: { label: '出售', hint: '把自家球员摆上货架的意愿', color: 'bg-rose-500' },
+  patience: { label: '耐心', hint: '容忍一个糟糕赛季的程度', color: 'bg-sky-500' },
+};
+
+function DoctrinePanel({ doctrine, tags }: { doctrine: ClubDoctrine; tags: DoctrineTag[] }) {
+  return (
+    <Panel>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold text-slate-200">经营路线</h2>
+        {tags.map((tag) => (
+          <span
+            key={tag.key}
+            className="rounded-full border border-slate-600/70 bg-slate-800/70 px-2 py-0.5 text-[11px] text-slate-200"
+          >
+            {tag.label}
+          </span>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {DOCTRINE_AXES.map((axis) => {
+          const meta = DOCTRINE_AXIS_META[axis];
+          const value = Math.round(doctrine[axis] * 100);
+          return (
+            <div key={axis} className="flex items-center gap-2" title={meta.hint}>
+              <span className="w-8 text-right text-xs text-slate-400">{meta.label}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-700">
+                <div className={`h-full rounded-full ${meta.color}`} style={{ width: `${value}%` }} />
+              </div>
+              <span className="w-7 text-right font-mono text-xs text-slate-300">{value}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        四条轴每赛季都会按球队真实的成绩、财政和青训产出重新漂移，也会随教练更替而变化。
+        标签是从轴上读出来的，不是另一份状态——所以一支球队可以在十几年里从「金元足球」慢慢走成「青训为本」。
+      </p>
+    </Panel>
+  );
 }
 
 // ── Attribute bar ──────────────────────────────────────────

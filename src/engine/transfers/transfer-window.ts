@@ -629,6 +629,7 @@ export function processTransferWindow(
           availableCash: availableCash(teamId),
           expectedFee: askingValue,
           needs: needsByTeam[teamId],
+          doctrine: world.clubDoctrines?.[teamId],
         });
         const buyerValuation = estimateBuyerValuation({ askingValue, fit, player: incomingPlayer });
         const minimumPlausibleOffer = Math.min(askingValue, buyerValuation) * 0.86;
@@ -819,6 +820,7 @@ export function processTransferWindow(
             availableCash: availableCash(favId),
             expectedFee: askingValue,
             needs: needsByTeam[favId],
+            doctrine: world.clubDoctrines?.[favId],
           });
           if (fit.weight <= 0 || availableCash(favId) < askingValue * 0.7) return null;
           return {
@@ -906,6 +908,7 @@ export function processTransferWindow(
             expectedFee: signingCost,
             needs: needsByTeam[recipient],
             requireUpgrade: false,
+            doctrine: world.clubDoctrines?.[recipient],
           }),
         };
       })

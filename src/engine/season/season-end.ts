@@ -6,6 +6,16 @@ import { StandingEntry } from '../../types/league';
 import { CupRound } from '../../types/cup';
 import { PlayerSeasonStats } from '../../types/player';
 import { SeededRNG } from '../match/rng';
+import {
+  coachAcademyBias,
+  DOCTRINE_AXES,
+  deriveConfirmedDoctrineTags,
+  deriveInitialDoctrine,
+  driftDoctrine,
+  type ClubDoctrine,
+  type DoctrineEvents,
+} from '../clubs/doctrine';
+import { computeSalary } from '../economy/finance';
 import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
 import { checkAchievements } from '../achievements';
@@ -148,6 +158,17 @@ const REP_R5_SPAN = 16;            // (rep - 92) / 16 → 44% at 99
 const REP_GAIN_HEADROOM = 30;
 const REP_GAIN_MIN_FACTOR = 0.08;
 const REP_CEILING = 99;
+
+/**
+ * B2 — how many doctrine shifts get a headline per season.
+ *
+ * The axes jitter every season, so several clubs cross a tag threshold in any
+ * given year. The team page badge always shows the live tags, so nothing is
+ * hidden by this cap; it only decides how many of the season's shifts are worth
+ * a line in the feed. The largest movements are picked, deterministically, so a
+ * seed always produces the same feed.
+ */
+const DOCTRINE_NEWS_PER_SEASON = 4;
 /** Gain is scaled by the division the club actually played in.
  *
  *  Reputation is partly a function of exposure: a third-tier champion cannot buy
@@ -1324,6 +1345,121 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     levelMeanLines.set(level, sum / ids.length);
   }
 
+  // ── B2: club doctrine ─────────────────────────────────────────────
+  // Best academy graduate this season, per club. Built from the post-retirement
+  // squads rather than the post-transfer ones, so a graduate who was sold in the
+  // same window still counts for the club that raised him.
+  const youthPeakByTeam: Record<string, number> = {};
+  {
+    const existing = new Set<string>();
+    for (const squad of Object.values(preRetirementSquads)) {
+      for (const entry of squad) existing.add(entry.uuid);
+    }
+    const graduateSource = retirementResult.retirements.length > 0
+      ? retirementResult.squads
+      : preRetirementSquads;
+    for (const [teamId, squad] of Object.entries(graduateSource)) {
+      for (const entry of squad) {
+        if (existing.has(entry.uuid)) continue;
+        const peak = entry.peakRating ?? entry.rating;
+        if (youthPeakByTeam[teamId] === undefined || peak > youthPeakByTeam[teamId]) {
+          youthPeakByTeam[teamId] = peak;
+        }
+      }
+    }
+  }
+  let coachBiasMean = 0;
+  const squadValueByTeam: Record<string, number> = {};
+  for (const [teamId, squad] of Object.entries(squads)) {
+    let total = 0;
+    for (const entry of squad) total += entry.marketValue ?? 0;
+    squadValueByTeam[teamId] = total;
+  }
+
+  // ── B2: league-relative inputs ────────────────────────────────────────
+  //
+  // Both of the quantities below were first written as absolute per-club
+  // scores, and both of them locked the doctrine system solid. The lesson is
+  // the same one B1 learned about reputation bands: an absolute threshold
+  // silently changes meaning as the world drifts underneath it.
+  //
+  // Money. `cash < 3 seasons of wages` looked reasonable. Measured over 50
+  // seasons the median club climbs from 3.2 to 15.6 seasons of wages in cash
+  // — the economy accumulates cash without bound — so cashTight fired for 43%
+  // of club-seasons in the first decade and 2% by S50, while cashFlush went
+  // 20% -> 88%. Every club became a buyer and none became a seller: spending
+  // pinned at 0.94, selling at 0.05. Ranking inside the league cannot fail
+  // that way — a third of the clubs are tight and a third are flush in every
+  // season whatever the absolute level — and the two pushes are exact
+  // mirrors, so neither money axis has a net lean.
+  const cashRatioByTeam: Record<string, number> = {};
+  for (const teamId of Object.keys(squads)) {
+    const wage = computeSalary(squadValueByTeam[teamId] ?? 0, teamStates[teamId]?.leagueLevel ?? 3);
+    const cash = teamFinances[teamId]?.cash ?? 0;
+    cashRatioByTeam[teamId] = wage > 0 ? cash / wage : Number.POSITIVE_INFINITY;
+  }
+  const cashRatioOrder = Object.keys(cashRatioByTeam)
+    .sort((a, b) => (cashRatioByTeam[a] - cashRatioByTeam[b]) || a.localeCompare(b));
+  const cashTightShare = Math.floor(cashRatioOrder.length / 3);
+  const cashTightTeamIds = new Set(cashRatioOrder.slice(0, cashTightShare));
+  const cashFlushTeamIds = new Set(cashRatioOrder.slice(cashRatioOrder.length - cashTightShare));
+
+  // Coach bias. coachAcademyBias is a raw opinion score and is NOT mean-zero:
+  // stabilityBuff runs -5..+10, so its term alone averages about +0.075. Applied
+  // uncentred that is +0.019 per season on the academy axis, which walked the
+  // league average from 0.54 to 0.81 over 150 seasons. Subtracting the mean
+  // over the clubs currently in the league keeps every coach individually as
+  // opinionated as before — a coach change still moves a club, which is the
+  // point — while making the league as a whole go nowhere.
+  const coachBiasByTeam: Record<string, number> = {};
+  {
+    const ids = Object.keys(teamBases);
+    let sum = 0;
+    for (const teamId of ids) {
+      const coachId = getTeamCoachId(coachStates, teamId);
+      const bias = coachId ? coachAcademyBias(coachBases[coachId]) : 0;
+      coachBiasByTeam[teamId] = bias;
+      sum += bias;
+    }
+    coachBiasMean = ids.length > 0 ? sum / ids.length : 0;
+  }
+  // Peak of every player actually poached this window. Built once from the
+  // post-transfer squads; only fee-bearing moves count, which excludes the
+  // zero-sum elite swaps and keeps the path about losing a marquee name. Shared
+  // by R4 (reputation) and the B2 doctrine `lostCorePlayer` event, so it is
+  // built before either consumer.
+  const poachedPeakByUuid = new Map<string, number>();
+  {
+    const peakByUuid = new Map<string, number>();
+    for (const squad of Object.values(squads)) {
+      for (const player of squad) peakByUuid.set(player.uuid, player.peakRating ?? player.rating);
+    }
+    for (const record of transferResult.transfers) {
+      if (record.type !== 'transfer' || !record.fee || record.fee <= 0) continue;
+      const peak = peakByUuid.get(record.playerId);
+      if (peak !== undefined) poachedPeakByUuid.set(record.playerId, peak);
+    }
+  }
+
+  /** Clubs that lost a peak-85 player to a paid transfer this window. */
+  const lostCoreTeamIds = new Set<string>();
+  for (const record of transferResult.transfers) {
+    if (record.type !== 'transfer' || !record.fee || record.fee <= 0) continue;
+    if ((poachedPeakByUuid.get(record.playerId) ?? 0) >= REP_R4_PEAK) {
+      lostCoreTeamIds.add(record.fromTeamId);
+    }
+  }
+  const titleTeamIds = new Set(
+    [league1Champion, leagueCupWinner, superCupWinner].filter(Boolean),
+  );
+  const clubDoctrines: Record<string, ClubDoctrine> = { ...(world.clubDoctrines ?? {}) };
+  // `movement` is how far the four axes travelled this season. Tag changes are
+  // frequent by design — the axes jitter every season, so a club sitting near a
+  // threshold crosses it now and then — and the news feed only reports the
+  // biggest shifts. Nothing is hidden by this: the team page badge always shows
+  // the current tags, so the cap only decides what gets a headline.
+  const doctrineTagChanges: { teamId: string; before: string[]; after: string[]; movement: number }[] = [];
+
   // R1 reads its bands against the whole league, so the global rank of a club is
   // its division offset plus its finishing position. Both the total and the
   // offsets are league-wide constants for this season, so they are computed once
@@ -1337,22 +1473,6 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     for (const lv of [1, 2, 3]) {
       levelRankOffset[lv] = acc;
       acc += allStandings[lv]?.length ?? 0;
-    }
-  }
-
-  // R4 needs the peak of every player actually poached this window. Built once
-  // from the post-transfer squads; only fee-bearing moves count, which excludes
-  // the zero-sum elite swaps and keeps the path about losing a marquee name.
-  const poachedPeakByUuid = new Map<string, number>();
-  {
-    const peakByUuid = new Map<string, number>();
-    for (const squad of Object.values(squads)) {
-      for (const player of squad) peakByUuid.set(player.uuid, player.peakRating ?? player.rating);
-    }
-    for (const record of transferResult.transfers) {
-      if (record.type !== 'transfer' || !record.fee || record.fee <= 0) continue;
-      const peak = peakByUuid.get(record.playerId);
-      if (peak !== undefined) poachedPeakByUuid.set(record.playerId, peak);
     }
   }
 
@@ -1614,6 +1734,69 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     );
     base.reputation = Math.max(levelFloor, Math.min(REP_CEILING, Math.round(base.reputation)));
 
+    // ── B2: doctrine drift ──────────────────────────────────────────────
+    // Same band arithmetic as R1, read globally: a club that finished inside the
+    // band its reputation claims has met expectations, outside it has missed them.
+    // Whether the board concludes its approach is working.
+    //
+    // Read against the club's OWN division, not its reputation band. The R1
+    // bands are deliberately permissive below REP_R1_MIN (R1 uses a band of 1
+    // there so a small club is never charged), and reusing them here made
+    // metExpectation fire for 94% of club-seasons against 6% for
+    // missedExpectation. That is a net outward push on all four axes every
+    // season, and it drove every axis into its hard bound within twenty
+    // seasons — the exact lock-up this system exists to avoid.
+    //
+    // Top 60% of your own division is balanced across the population by
+    // construction, so reinforcement and reversal cancel in aggregate and only
+    // a club's own results decide which way it leans. The two magnitudes are
+    // deliberately unequal (0.03 up, 0.045 down) and the split is deliberately
+    // uneven (60/40) so that the products match: 0.6 x 0.03 = 0.4 x 0.045. A
+    // single failed season still moves a board further than a single good one
+    // confirms it, without biasing the league as a whole.
+    const doctrineDivisionSize = allStandings[growthLevel]?.length ?? 0;
+    const doctrineMetExpectation = doctrineDivisionSize > 0
+      ? position <= Math.ceil(doctrineDivisionSize * 0.6)
+      : true;
+    const doctrineEvents: DoctrineEvents = {
+      metExpectation: doctrineMetExpectation,
+      missedExpectation: !doctrineMetExpectation,
+      cashTight: cashTightTeamIds.has(teamId),
+      cashFlush: cashFlushTeamIds.has(teamId),
+      youthBreakthrough: (youthPeakByTeam[teamId] ?? 0) >= 88,
+      lostCorePlayer: lostCoreTeamIds.has(teamId),
+      wonTitle: titleTeamIds.has(teamId),
+      relegated: state.leagueLevel > startLevel,
+    };
+    const doctrineBefore = clubDoctrines[teamId] ?? deriveInitialDoctrine(base);
+    const doctrineAfter = driftDoctrine(
+      doctrineBefore,
+      doctrineEvents,
+      (coachBiasByTeam[teamId] ?? 0) - coachBiasMean,
+      rng,
+    );
+    clubDoctrines[teamId] = doctrineAfter;
+    // News reads the CONFIRMED tag set, not the plain one. The plain set moves
+    // every three to five seasons per club because the axes jitter across the
+    // thresholds; reporting that would be reporting noise. The badge on the team
+    // page still shows the plain set as a live readout.
+    const tagsBefore = deriveConfirmedDoctrineTags(doctrineBefore);
+    const tagsAfter = deriveConfirmedDoctrineTags(doctrineAfter);
+    const beforeKeys = tagsBefore.map((tag) => tag.key);
+    const afterKeys = tagsAfter.map((tag) => tag.key);
+    if (afterKeys.length !== beforeKeys.length || afterKeys.some((key) => !beforeKeys.includes(key))) {
+      let movement = 0;
+      for (const axis of DOCTRINE_AXES) {
+        movement += Math.abs(doctrineAfter[axis] - doctrineBefore[axis]);
+      }
+      doctrineTagChanges.push({
+        teamId,
+        before: tagsBefore.map((tag) => tag.label),
+        after: tagsAfter.map((tag) => tag.label),
+        movement,
+      });
+    }
+
     // OVR 不再独立漂移：从三条线 + 教练 + 球员重算，让它始终等于比赛真正
     // 使用的强度。上面九条路径现在直接改三条线（applyDrift），完全不经过
     // base.overall —— 它只是这三条线加上教练与球员加成之后的读数。
@@ -1628,6 +1811,26 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     );
 
     teamBases[teamId] = base;
+  }
+
+  // ── B2: doctrine shift headlines ────────────────────────────────────────
+  // Only the largest few shifts of the season are headlined; see the cap note
+  // where doctrineTagChanges is declared. Sorted rather than sampled so the
+  // same seed always produces the same feed.
+  const headlineShifts = [...doctrineTagChanges]
+    .sort((a, b) => (b.movement - a.movement) || a.teamId.localeCompare(b.teamId))
+    .slice(0, DOCTRINE_NEWS_PER_SEASON);
+  for (const shift of headlineShifts) {
+    const teamName = teamBases[shift.teamId]?.name ?? shift.teamId;
+    news.push({
+      id: createNewsId(seasonNumber, windowIndex, `doctrine-${shift.teamId}`),
+      seasonNumber, windowIndex, type: 'storyline', importance: 'minor',
+      title: `${teamName} 经营路线转向「${shift.after.join('、')}」`,
+      description: shift.before.length > 0
+        ? `从「${shift.before.join('、')}」一路走来，${teamName}在这个夏天换了建队思路。`
+        : `${teamName}的建队思路在这个夏天逐渐清晰起来。`,
+      subject: { teamIds: [shift.teamId] },
+    });
   }
 
   // Update season state awards
@@ -1807,6 +2010,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     nextCoachIdCounter,
     nextPlayerUuidCounter,
     teamFinances,
+    /** B2 — four drifting operating axes per club. Absent on pre-B2 saves. */
+    clubDoctrines,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

@@ -35,7 +35,19 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // formula per award, applied exactly once — so it became a shared chunk
     // rather than being inlined into season-manager. Measured precache bytes
     // are 1,957,575 against the 2,150,000 cap, so only the entry count moved.
-    entries: 88,
+    //
+    // 88 → 89 for the club doctrine system (B2). src/engine/clubs/doctrine is
+    // imported from both sides of the route boundary: the engine graph
+    // (season-end, season-manager, transfer-decision) and the TeamDetail route
+    // chunk that renders the badge row. Rolldown extracts a module reachable
+    // from two chunk graphs as a shared chunk rather than inlining it twice, so
+    // this is doctrine-Tep_-RRg.js at 2,001 bytes / 1,028 gzipped. Inlining it
+    // into one side would mean either the engine importing a UI module or the
+    // team page re-deriving the axes with its own copy of the thresholds — the
+    // second is how a badge ends up disagreeing with the simulation. Measured
+    // precache bytes are 1,995,795 against the 2,150,000 cap and initial JS
+    // gzip is 158,464 against 160,000, so only the entry count moved.
+    entries: 89,
     bytes: 2_150_000,
   },
 } as const;

@@ -934,6 +934,21 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     throw new Error('非洲际杯赛季包含空洲际杯窗口');
   }
 
+  // B2 — club doctrine is additive and optional. A save written before it
+  // existed carries no record at all and the engine derives a deterministic
+  // starting doctrine on read, so SAVE_SCHEMA_VERSION does not move for it.
+  if (world.clubDoctrines !== undefined) {
+    const doctrines = requireRecord(world, 'clubDoctrines');
+    for (const [teamId, value] of Object.entries(doctrines)) {
+      if (!teamIds.has(teamId)) throw new Error(`存档经营路线球队无效：${teamId}`);
+      if (!isRecord(value)) throw new Error(`存档经营路线无效：${teamId}`);
+      for (const axis of ['academy', 'spending', 'selling', 'patience'] as const) {
+        const axisValue = requireFiniteNumber(value, axis, '经营路线 ');
+        if (axisValue < 0 || axisValue > 1) throw new Error(`存档经营路线数值越界：${teamId}.${axis}`);
+      }
+    }
+  }
+
   normalizeLegacyTeamPresentation(world);
   return repairLeagueHonors(world as unknown as GameWorld);
 }

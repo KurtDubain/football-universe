@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Player } from '../../types/player';
 import type { TeamBase } from '../../types/team';
+import type { ClubDoctrine } from '../clubs/doctrine';
 import { SeededRNG } from '../match/rng';
 import {
   assessSquadNeeds,
@@ -57,10 +58,29 @@ const balancedSquad = [
 ];
 
 describe('transfer decision model', () => {
-  it('gives each club a stable lightweight recruitment identity', () => {
+  it('keeps the legacy hash identity for saves that carry no doctrine', () => {
+    // Pre-B2 saves have no clubDoctrines record, so the engine must not change
+    // their transfer behaviour just because the doctrine system now exists.
     expect(deriveRecruitmentProfile('gz_hengda')).toBe(deriveRecruitmentProfile('gz_hengda'));
-    const profiles = new Set(['gz_hengda', 'shimazu', 'xibei_wolf', 'liaoning', 'osaka'].map(deriveRecruitmentProfile));
+    const profiles = new Set(
+      ['gz_hengda', 'shimazu', 'xibei_wolf', 'liaoning', 'osaka']
+        .map((teamId) => deriveRecruitmentProfile(teamId)),
+    );
     expect(profiles.size).toBeGreaterThan(1);
+  });
+
+  it('reads the recruitment identity from doctrine, so one club can change its mind', () => {
+    // The point of B2: the same club id yields different identities in different
+    // eras. Under the old hash this was impossible by construction.
+    const academyFirst: ClubDoctrine = { academy: 0.9, spending: 0.2, selling: 0.2, patience: 0.85 };
+    const starChaser: ClubDoctrine = { academy: 0.15, spending: 0.9, selling: 0.2, patience: 0.15 };
+    const sellingClub: ClubDoctrine = { academy: 0.2, spending: 0.15, selling: 0.9, patience: 0.5 };
+    const unremarkable: ClubDoctrine = { academy: 0.5, spending: 0.5, selling: 0.5, patience: 0.5 };
+
+    expect(deriveRecruitmentProfile('gz_hengda', academyFirst)).toBe('youth');
+    expect(deriveRecruitmentProfile('gz_hengda', starChaser)).toBe('star');
+    expect(deriveRecruitmentProfile('gz_hengda', sellingClub)).toBe('value');
+    expect(deriveRecruitmentProfile('gz_hengda', unremarkable)).toBe('balanced');
   });
 
   it('raises positional need for a genuine squad shortage', () => {

@@ -38,6 +38,7 @@ import { getGameModeConfig, type GameMode } from '../../types/game-mode';
 import { parseCustomTeams } from '../validation/custom-teams';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
+import { deriveInitialDoctrine } from '../clubs/doctrine';
 import { handleSeasonEnd } from './season-end';
 import { autoResolveRemaining } from '../transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../players/stats';
@@ -260,6 +261,17 @@ export interface GameWorld {
   playerAwardsHistory: import('../../types/award').PlayerAward[];
   transferHistory: import('../../types/transfer').TransferRecord[];
   memorableMatches: import('../../types/memorable').MemorableMatchEntry[];
+  /**
+   * Per-club operating doctrine (B2): four drifting axes describing how a club
+   * runs itself, independent of how good it is.
+   *
+   * Optional and additive, so no `SAVE_SCHEMA_VERSION` bump: a v26 save written
+   * before this field existed simply has none, and every reader falls back to
+   * `deriveInitialDoctrine(team)` — which is deterministic, so an old save gets a
+   * stable doctrine rather than a random one. `validateCurrentWorld` checks the
+   * shape only when the field is present.
+   */
+  clubDoctrines?: Record<string, import('../clubs/doctrine').ClubDoctrine>;
   gameMode?: import('../../types/game-mode').GameMode;
   /**
    * Phase G — monotonic counter of how many *match-bearing* calendar windows
@@ -516,6 +528,10 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     seasonState: undefined!,
     teamBases,
     teamStates,
+    /** B2 — starting operating doctrine per club; drifts at every season-end. */
+    clubDoctrines: Object.fromEntries(
+      Object.values(teamBases).map((team) => [team.id, deriveInitialDoctrine(team)]),
+    ),
     coachBases,
     coachStates,
     coachCareers,
