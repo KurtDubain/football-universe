@@ -78,6 +78,120 @@ function findTeamEliminationRound(rounds: CupRound[], teamId: string): string | 
 /** Paid/asking ratio at or above which a transfer is reported as a premium deal. */
 const PREMIUM_NEWS_THRESHOLD = 1.35;
 
+// ── Reputation drift (B1) ──────────────────────────────────────────────
+// Reputation had exactly one write site and no decline branch. A club that
+// out-performed its expectation gained +2..+5 forever, while the three highest
+// expectation clubs were frozen outright by the formula itself: expectation 5
+// yields expectedPos 0, so `position < expectedPos - 3` can never fire for them.
+// Measured over 300 seasons the consequence is not a slow climb but a lock —
+// the distribution stops moving at S150, 11-12 of 32 clubs sit pinned at the
+// hard ceiling 99, and the three-tier reputation spread collapses from 44.5
+// to 16.9.
+//
+// Each path carries its own strength constant so verification can zero one at
+// a time instead of reverting code. See docs/reputation-and-money-design.md.
+/** R1 — sustained underperformance against what the reputation claims. */
+const REP_R1_STRENGTH = 1;
+const REP_R1_MIN = 72;             // below this a club claims nothing to miss
+const REP_R1_BAND_TOP = 0.25;      // rep >= 90 must finish in the global top 25%
+const REP_R1_BAND_MID = 0.45;      // rep 80-89 → global top 45%
+const REP_R1_BAND_LOW = 0.65;      // rep 72-79 → global top 65%
+const REP_R1_WINDOW = 3;           // seasons examined
+const REP_R1_MISSES = 2;           // misses inside the window that trigger
+/** R2 — relegation. Ability already pays -3..-5; reputation paying nothing was
+ *  the loudest asymmetry in the whole drift model.
+ *
+ *  Flat points punished a small club as hard as a giant. Each club is relegated
+ *  roughly 47 times per 300 seasons, so -3..-5 per event is 160+ points of
+ *  cumulative decline, and the path showed up in 297 of 302 severe-drop news
+ *  items. Charging a share of standing keeps a giant's fall dramatic while no
+ *  longer draining a rep-45 club for the same event. */
+const REP_R2_STRENGTH = 1;
+const REP_R2_SHARE_L1 = 0.03;      // dropping out of the top flight
+const REP_R2_SHARE_L2 = 0.02;      // dropping out of the second tier
+const REP_R2_MIN = 1;              // any relegation still costs something
+/** R3 — financial distress. Connects money to standing: a club in the red is
+ *  worth less to sponsors and speaks softer in the market.
+ *
+ *  Measured as dead over 300 seasons x 4 seeds: cash never went negative, because
+ *  the economy force-sells before it gets there. Kept as a guard rather than
+ *  deleted — it costs nothing while the economy holds, and it is the only path
+ *  that would catch a future change to the finance model. */
+const REP_R3_STRENGTH = 1;
+/** R4 — a marquee player was poached and the season did not cover for it. */
+const REP_R4_STRENGTH = 1;
+const REP_R4_MIN = 75;
+const REP_R4_PEAK = 85;            // peak rating that counts as marquee
+/** R4 keeps the DIVISION ratio while R1 uses the global one, and that is not an
+ *  oversight. R1 asks whether a club's reputation matches its standing across the
+ *  whole league, so it has to be read globally. R4 asks a narrower question: did
+ *  this club cover for the marquee player it lost *within its own competition*? A
+ *  second-tier club dropping to 6th there genuinely failed to cover, even though
+ *  its global rank is only 18th of 32.
+ *
+ *  Still a rare path — 1-2 hits per 300 seasons per seed — because the clubs that
+ *  lose a peak-85 player are usually the elite sellers, and elite sellers tend to
+ *  finish in the top 40% anyway. It reads as a story beat, not a balance lever. */
+const REP_R4_RATIO = 0.4;          // must also have finished outside the division top 40%
+/** R5 — soft ceiling. Highest leverage path: it is the only one that cannot
+ *  reach mid-table clubs, and 11-12 clubs pinned at 99 is the loudest symptom. */
+const REP_R5_STRENGTH = 1;
+const REP_R5_FLOOR = 92;
+const REP_R5_SPAN = 16;            // (rep - 92) / 16 → 44% at 99
+/** Gains converge as the ceiling approaches. Headroom form rather than a
+ *  division so growth stays normal at 70 and all but stops at 99.
+ *
+ *  Note the direction: factor = (99 - rep) / headroom, so a SMALLER headroom
+ *  raises the factor and makes clubs grow FASTER. Shrinking it to 18 was tried
+ *  and is the wrong lever for lowering the mean. Raising it widens the decay
+ *  band downwards, which is what actually slows the climb. */
+const REP_GAIN_HEADROOM = 30;
+const REP_GAIN_MIN_FACTOR = 0.08;
+const REP_CEILING = 99;
+/** Gain is scaled by the division the club actually played in.
+ *
+ *  Reputation is partly a function of exposure: a third-tier champion cannot buy
+ *  the standing of a top-flight champion in one season. Without this the tiers
+ *  converge no matter how the mean is tuned — at gain floor 2 the spread was 25
+ *  with the mean stuck at 70.7, and at floor 4 the mean reached a healthy 79.4
+ *  but the spread collapsed to 16.9 with only 2 clubs left under 65. Opening the
+ *  gain path lifts every division at once, so the ladder has to be priced in
+ *  separately.
+ *
+ *  Promotion restores the full factor, so the route up is to win promotion
+ *  rather than to accumulate reputation in the basement. */
+const REP_GAIN_LEVEL_FACTOR: Record<number, number> = { 1: 1, 2: 0.65, 3: 0.25 };
+/** Rank a club must finish at or above for the season to count as having exceeded
+ *  expectations. Lower divisions demand a better finish, because reputation is
+ *  priced against the whole league: a third-tier club finishing 5th of 8 has
+ *  out-performed nobody. A flat bar made all three divisions compete for the same
+ *  top-three slot and held the top flight down at 82.3. Promotion widens the bar,
+ *  so the ladder remains the way up.
+ *
+ *  The divisions are 16 / 8 / 8, not the evenly-split 11/11/11 the design doc
+ *  assumed. The third tier is the delicate one: rank 1 left it at 46.6 and rank 2
+ *  at 62.5, straddling the ~55 the mean and spread targets jointly require, so
+ *  rank 2 is paired with a much smaller level factor to land between them.
+ *
+ *  The top flight uses 8 because that is exactly where R1 stops charging: a club
+ *  at reputation 90 or above is left alone while it finishes in the global top
+ *  25%, which over 32 clubs is the top 8 — all of them in the first division.
+ *  Aligning the two means the ladder reads cleanly: the top 8 gain and are not
+ *  penalised, ranks 9-16 gain nothing and can be pulled down. Rank 6 was measured
+ *  first and left the mean 1.0 short at 73.0 while the >= 85 band sat at 7.7. */
+const REP_GAIN_RANK_BY_LEVEL: Record<number, number> = { 1: 8, 2: 3, 3: 2 };
+/** An expectation shave for the low-expectation clubs was tried alongside this
+ *  and had to be removed. Letting expectation 1-2 finish 6th or 7th in the top
+ *  flight and still gain inflated the whole league: the >= 65 band thinned to a
+ *  single club, the >= 50 band emptied, and the third tier rose from 57.5 to 67.3
+ *  because the extra reputation bought better academies everywhere at once. The
+ *  division already prices the difficulty; expectation does not need a second
+ *  discount on top. */
+/** Floors prevent a collapse — the v2 "底蕴" attempt drove reputation to 27 by
+ *  declining unconditionally. They never push a club up. */
+const REP_FLOOR_BY_LEVEL: Record<number, number> = { 1: 52, 2: 38, 3: 26 };
+const REP_ABSOLUTE_FLOOR = 24;
+
 export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: string[]; favoritePlayerIds?: string[] }): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
@@ -1210,6 +1324,38 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     levelMeanLines.set(level, sum / ids.length);
   }
 
+  // R1 reads its bands against the whole league, so the global rank of a club is
+  // its division offset plus its finishing position. Both the total and the
+  // offsets are league-wide constants for this season, so they are computed once
+  // here instead of per club per season-record inside the drift loop.
+  const globalTeamCount = (allStandings[1]?.length ?? 0)
+    + (allStandings[2]?.length ?? 0)
+    + (allStandings[3]?.length ?? 0);
+  const levelRankOffset: Record<number, number> = {};
+  {
+    let acc = 0;
+    for (const lv of [1, 2, 3]) {
+      levelRankOffset[lv] = acc;
+      acc += allStandings[lv]?.length ?? 0;
+    }
+  }
+
+  // R4 needs the peak of every player actually poached this window. Built once
+  // from the post-transfer squads; only fee-bearing moves count, which excludes
+  // the zero-sum elite swaps and keeps the path about losing a marquee name.
+  const poachedPeakByUuid = new Map<string, number>();
+  {
+    const peakByUuid = new Map<string, number>();
+    for (const squad of Object.values(squads)) {
+      for (const player of squad) peakByUuid.set(player.uuid, player.peakRating ?? player.rating);
+    }
+    for (const record of transferResult.transfers) {
+      if (record.type !== 'transfer' || !record.fee || record.fee <= 0) continue;
+      const peak = peakByUuid.get(record.playerId);
+      if (peak !== undefined) poachedPeakByUuid.set(record.playerId, peak);
+    }
+  }
+
   for (const teamId of getAllTeamIds(teamStates)) {
     const base = { ...teamBases[teamId] };
     const state = teamStates[teamId];
@@ -1351,12 +1497,122 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       });
     }
 
-    // Underperformance bonus
-    const expectedPos = Math.round(total * (1 - (base.expectation - 1) / 4));
-    if (position < expectedPos - 3 && ratio <= 0.4) {
+    // Overperformance bonus — the label said "underperformance", but the
+    // condition (finishing well ahead of expectedPos) is the opposite. Reputation
+    // is the only thing this ever moved, and it only ever moved up.
+    // The old form was `position < expectedPos - 3 && ratio <= 0.4`, both read
+    // inside the club's own division. Two defects came out of that. expectation 4
+    // and 5 evaluate to expectedPos 3 and 0, so `expectedPos - 3` was never
+    // positive and those clubs could never gain reputation at all — frozen by
+    // arithmetic rather than by results. And `ratio <= 0.4` asked a third-tier
+    // leader for the same top-40% finish as a top-flight contender, so all three
+    // divisions competed for one identical bar and the ladder could not separate.
+    //
+    // The bar is now a rank that widens with the division, plus a shave for clubs
+    // that were never expected to be here. `ratio` stays in use elsewhere in this
+    // loop; it no longer gates reputation growth.
+    const gainRank = REP_GAIN_RANK_BY_LEVEL[growthLevel] ?? 4;
+    if (position <= gainRank) {
       applyDrift(rng.nextInt(1, 3));
-      base.reputation = Math.min(99, base.reputation + rng.nextInt(2, 5));
+      // Headroom convergence replaces the hard min(99): growth stays normal at 70,
+      // halves around 85, and all but stops at 99. Without this a club at 99 can
+      // be pulled down by R5 and climb straight back in the same breath.
+      const gainFactor = Math.max(
+        REP_GAIN_MIN_FACTOR,
+        Math.min(1, (REP_CEILING - base.reputation) / REP_GAIN_HEADROOM),
+      ) * (REP_GAIN_LEVEL_FACTOR[growthLevel] ?? 1);
+      base.reputation = Math.min(REP_CEILING, base.reputation + rng.nextInt(2, 5) * gainFactor);
     }
+
+    // ── Reputation: decline paths ───────────────────────────────
+    // Every path is conditional on a real failure. An unconditional decay is what
+    // drove the v2 "底蕴" attempt down to 27.
+    let reputationDelta = 0;
+    const declinePaths: string[] = [];
+
+    // R1 — sustained underperformance against what the reputation claims. Read
+    // from the season-record history rather than new persisted state, so the
+    // streak survives a save/load with no schema change.
+    if (REP_R1_STRENGTH > 0 && base.reputation >= REP_R1_MIN) {
+      const band = base.reputation >= 90
+        ? REP_R1_BAND_TOP
+        : base.reputation >= 80 ? REP_R1_BAND_MID : REP_R1_BAND_LOW;
+      const recent = (teamSeasonRecords[teamId] ?? []).slice(-REP_R1_WINDOW);
+      if (recent.length >= REP_R1_WINDOW) {
+        let misses = 0;
+        // Bands are read against the whole league, not the club's own division.
+        // Reading `leaguePosition / divisionSize` made a third-tier champion score
+        // 9% and a mid-table top-flight club score 60%, so R1 punished exactly the
+        // wrong clubs: the top flight settled at 81.6 while the second tier reached
+        // 75.5, and no amount of gain tuning could fix an inverted ladder.
+        for (const record of recent) {
+          if (globalTeamCount <= 0) continue;
+          const globalRank = (levelRankOffset[record.leagueLevel] ?? 0) + record.leaguePosition;
+          if (globalRank / globalTeamCount > band) misses++;
+        }
+        if (misses >= REP_R1_MISSES) {
+          const magnitude = misses >= REP_R1_WINDOW ? rng.nextInt(1, 2) : 1;
+          reputationDelta -= magnitude * REP_R1_STRENGTH;
+          declinePaths.push('长期未达声望预期');
+        }
+      }
+    }
+
+    // R2 — relegation, charged as a share of standing rather than a flat number.
+    if (REP_R2_STRENGTH > 0 && state.leagueLevel > startLevel) {
+      const share = startLevel === 1 ? REP_R2_SHARE_L1 : REP_R2_SHARE_L2;
+      const loss = Math.max(REP_R2_MIN, Math.round(base.reputation * share * REP_R2_STRENGTH));
+      reputationDelta -= loss;
+      declinePaths.push('降级');
+    }
+
+    // R3 — financial distress.
+    if (REP_R3_STRENGTH > 0 && (teamFinances[teamId]?.cash ?? 0) < 0) {
+      reputationDelta -= Math.round(rng.nextInt(3, 6) * REP_R3_STRENGTH);
+      declinePaths.push('财政危机');
+    }
+
+    // R4 — a marquee player was poached and the season did not cover for it.
+    if (REP_R4_STRENGTH > 0 && base.reputation >= REP_R4_MIN && ratio > REP_R4_RATIO) {
+      const lostMarquee = transferResult.transfers.some(record =>
+        record.type === 'transfer'
+        && !!record.fee && record.fee > 0
+        && record.fromTeamId === teamId
+        && (poachedPeakByUuid.get(record.playerId) ?? 0) >= REP_R4_PEAK);
+      if (lostMarquee) {
+        reputationDelta -= Math.round(rng.nextInt(1, 2) * REP_R4_STRENGTH);
+        declinePaths.push('当家球星被挖');
+      }
+    }
+
+    // R5 — soft ceiling.
+    if (REP_R5_STRENGTH > 0 && base.reputation >= REP_R5_FLOOR) {
+      const chance = (base.reputation - REP_R5_FLOOR) / REP_R5_SPAN;
+      if (rng.next() < chance) {
+        reputationDelta -= Math.round(rng.nextInt(1, 2) * REP_R5_STRENGTH);
+        declinePaths.push('顶格自然回落');
+      }
+    }
+
+    if (reputationDelta !== 0) {
+      const before = base.reputation;
+      base.reputation = before + reputationDelta;
+      if (before - base.reputation >= 4) {
+        news.push({
+          id: createNewsId(seasonNumber, windowIndex, `repdrop-${teamId}`),
+          seasonNumber, windowIndex, type: 'coach_fired', importance: 'minor',
+          title: `${base.name} 声望下滑${Math.round(before - base.reputation)}点`,
+          description: `${declinePaths.join('、')}，${base.name}的业界评价随之下降。`,
+        });
+      }
+    }
+
+    // Floors only stop a collapse; they never lift a club that is already above them.
+    const levelFloor = Math.max(
+      REP_ABSOLUTE_FLOOR,
+      REP_FLOOR_BY_LEVEL[state.leagueLevel] ?? REP_ABSOLUTE_FLOOR,
+    );
+    base.reputation = Math.max(levelFloor, Math.min(REP_CEILING, Math.round(base.reputation)));
 
     // OVR 不再独立漂移：从三条线 + 教练 + 球员重算，让它始终等于比赛真正
     // 使用的强度。上面九条路径现在直接改三条线（applyDrift），完全不经过
