@@ -17,6 +17,7 @@ import {
 import { computeCurrentRating } from '../players/development';
 import { computePlayerCareerTotals } from '../players/career-totals';
 import {
+  STARTER_TARGETS,
   assessSquadNeeds,
   createOpeningOffer,
   estimateBuyerValuation,
@@ -66,11 +67,36 @@ import {
  */
 
 const POACH_PROBABILITY = 0.30;
-const ELITE_OVERALL_THRESHOLD = 82;
-const NON_ELITE_OVERALL_THRESHOLD = 80;  // candidates can be from teams below this
+// Hard floors. The rank shares below decide how many clubs a window wants to
+// involve; these keep the "elite buys, non-elite sells" semantics intact, so a
+// league with no genuinely strong club still produces no transfers at all.
+const ELITE_OVERALL_FLOOR = 82;
+const NON_ELITE_OVERALL_CEILING = 80;
+// Market tiers resolve as live rank shares, not fixed overall cut-offs. A long
+// save drifts the whole league downward (mean OVR ~75 → ~71), which used to
+// starve the market: absolute thresholds stopped matching the population they
+// were written for, and the window slowly died on mature saves.
+const BUYER_RANK_SHARE = 0.38;        // buyers ≈ top 38% of the live OVR table
+const CANDIDATE_RANK_SHARE = 0.52;    // sellers ≈ bottom 52%
+const RANK_SHARE_SWING = 0.045;       // per-window jitter so the tiers breathe
+// Per-window market temperature. Real windows alternate between frenzied and
+// quiet summers; a fixed activity rate reads as a metronome over 300 seasons.
+const MARKET_HEAT_MIN = 0.62;
+const MARKET_HEAT_MAX = 1.48;
 const FW_GOALS_MIN = 6;
 const MF_CONTRIB_MIN = 6;                 // goals + assists
 const DF_GK_APPEARANCES_MIN = 20;
+// Potential lane — wonderkids who have not banked a headline season yet.
+const POTENTIAL_PEAK_MIN = 84;
+const POTENTIAL_AGE_MAX = 24;
+const POTENTIAL_LANE_LIMIT: Record<PlayerPosition, number> = { FW: 2, MF: 2, DF: 2, GK: 1 };
+// Elite-to-elite swaps. Zero-sum by construction — both sides surrender a
+// surplus player — so this reshuffles the top of the table without ever
+// concentrating talent the way one-way poaching does.
+const ELITE_SWAP_MAX = 2;
+const ELITE_SWAP_ATTEMPT_CHANCE = 0.55;
+const ELITE_SWAP_MIN_NEED = 0.24;
+const ELITE_SWAP_VALUE_TOLERANCE = 0.35;
 // Concentration caps — one of the v2 pain points was "the same 3-4 weak
 // teams keep losing stars every season because they always produce the
 // most candidates". Caps here force variety: each team is in/out at most
@@ -98,14 +124,20 @@ type Candidate = {
   rating: number;
   // metric used for tier-internal sort (higher is better):
   // FW: goals; MF: goals + assists; DF/GK: appearances × rating
+  // potential lane: ceiling × 2 − age
   sortKey: number;
+  lane: 'form' | 'potential';
 };
 
-function buildCandidates(world: GameWorld): Candidate[] {
+function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRNG): Candidate[] {
   const allCands: Candidate[] = [];
+  // The potential-lane gates wander a little each window so the same wonderkid
+  // is not permanently "too raw" — or permanently the obvious target.
+  const peakGate = Math.round(rng.nextFloat(POTENTIAL_PEAK_MIN, POTENTIAL_PEAK_MIN + 2));
+  const ageGate = Math.round(rng.nextFloat(POTENTIAL_AGE_MAX - 1, POTENTIAL_AGE_MAX + 1));
   for (const stat of Object.values(world.playerStats)) {
     const team = world.teamBases[stat.teamId];
-    if (!team || team.overall >= NON_ELITE_OVERALL_THRESHOLD) continue;
+    if (!team || !sellerIds.has(stat.teamId)) continue;
     // Find the player object for rating + position
     const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === stat.playerId);
     if (!player) continue;
@@ -134,18 +166,197 @@ function buildCandidates(world: GameWorld): Candidate[] {
         }
         break;
     }
-    if (!passes) continue;
-    allCands.push({ playerUuid: stat.playerId, teamId: stat.teamId, position: pos, rating, sortKey });
+    if (passes) {
+      allCands.push({ playerUuid: stat.playerId, teamId: stat.teamId, position: pos, rating, sortKey, lane: 'form' });
+      continue;
+    }
+
+    // Potential lane — a high-ceiling youngster is a target whether or not he
+    // has banked a headline season yet. Without this the market only ever sees
+    // players who already produced, which strands wonderkids on weak clubs for
+    // their entire career.
+    if ((player.peakRating ?? 0) >= peakGate && player.age <= ageGate && player.tag !== 'loyal') {
+      allCands.push({
+        playerUuid: stat.playerId,
+        teamId: stat.teamId,
+        position: pos,
+        rating,
+        sortKey: (player.peakRating ?? rating) * 2 - player.age,
+        lane: 'potential',
+      });
+    }
   }
   // Cap per position to keep poaching counts roughly consistent across seasons.
-  // Sort by sortKey desc within position, take top N.
+  // The two lanes get separate budgets so a wave of in-form veterans can never
+  // crowd the wonderkid lane out entirely.
   const byPos: Record<PlayerPosition, Candidate[]> = { FW: [], MF: [], DF: [], GK: [] };
   for (const c of allCands) byPos[c.position].push(c);
+  const picked: Candidate[] = [];
   for (const pos of ['FW', 'MF', 'DF', 'GK'] as PlayerPosition[]) {
-    byPos[pos].sort((a, b) => b.sortKey - a.sortKey);
-    byPos[pos] = byPos[pos].slice(0, PER_POSITION_LIMIT[pos]);
+    const bucket = byPos[pos];
+    const form = bucket.filter(c => c.lane === 'form')
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .slice(0, PER_POSITION_LIMIT[pos]);
+    const potential = bucket.filter(c => c.lane === 'potential')
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .slice(0, POTENTIAL_LANE_LIMIT[pos]);
+    picked.push(...form, ...potential);
   }
-  return [...byPos.FW, ...byPos.MF, ...byPos.DF, ...byPos.GK];
+  return picked;
+}
+
+/**
+ * Resolve who can buy and who can sell this window from the live OVR table.
+ * Both cuts jitter a few points per window so the market never settles into a
+ * frozen buyer/seller caste across a long save.
+ */
+function resolveMarketTiers(world: GameWorld, rng: SeededRNG): { buyerIds: string[]; sellerIds: Set<string> } {
+  const sorted = Object.values(world.teamBases).slice().sort((a, b) => b.overall - a.overall);
+  const n = sorted.length;
+  const buyerShare = BUYER_RANK_SHARE + rng.nextFloat(-RANK_SHARE_SWING, RANK_SHARE_SWING);
+  const sellerShare = CANDIDATE_RANK_SHARE + rng.nextFloat(-RANK_SHARE_SWING, RANK_SHARE_SWING);
+  const buyerCount = Math.max(1, Math.min(n - 1, Math.round(n * buyerShare)));
+  const sellerFloor = Math.max(buyerCount, Math.min(n - 1, n - Math.max(1, Math.round(n * sellerShare))));
+  return {
+    buyerIds: sorted.slice(0, buyerCount).filter(t => t.overall >= ELITE_OVERALL_FLOOR).map(t => t.id),
+    sellerIds: new Set(sorted.slice(sellerFloor).filter(t => t.overall < NON_ELITE_OVERALL_CEILING).map(t => t.id)),
+  };
+}
+
+/**
+ * Elite-to-elite swaps.
+ *
+ * The candidate pool structurally excludes elite squads, so before this the top
+ * of the table had literally zero player movement — every elite club was a
+ * permanent buyer and never a seller. Both sides here surrender a surplus
+ * (non-starter, over target depth) player, so roster sizes and the league-wide
+ * talent distribution are unchanged: this reshuffles, it never concentrates.
+ *
+ * Recorded without a fee on purpose — season-end skips cash booking for
+ * fee-less transfers, which keeps a swap deal out of the finance ledger and
+ * guarantees it cannot perturb club cash or the wage cap.
+ */
+function attemptEliteSwaps(params: {
+  world: GameWorld;
+  squads: Record<string, Player[]>;
+  playerStats: Record<string, PlayerSeasonStats>;
+  buyerIds: string[];
+  rng: SeededRNG;
+  seasonNumber: number;
+  windowIndex: number;
+  needsByTeam: Record<string, ReturnType<typeof assessSquadNeeds>>;
+}): { squads: Record<string, Player[]>; playerStats: Record<string, PlayerSeasonStats>; transfers: TransferRecord[] } {
+  const { world, rng, seasonNumber, windowIndex } = params;
+  let squads = params.squads;
+  let playerStats = params.playerStats;
+  const transfers: TransferRecord[] = [];
+  if (params.buyerIds.length < 2) return { squads, playerStats, transfers };
+
+  const positions: PlayerPosition[] = ['FW', 'MF', 'DF', 'GK'];
+  const spent = new Set<string>();
+  const attempts = rng.next() < 0.35 ? 0 : rng.next() < 0.7 ? 1 : ELITE_SWAP_MAX;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (rng.next() >= ELITE_SWAP_ATTEMPT_CHANCE) continue;
+
+    // Precompute per club: surplus list, weakest player per position, and each
+    // surplus player's valuation. The obvious shape of this search re-ran
+    // filter/sort and estimateTransferValue in the innermost loop, which is
+    // O(clubs² × surplus²) valuations every season — harmless in a unit test,
+    // painful when a player clicks "finish season" deep into a long save.
+    const surplusByTeam = new Map<string, Player[]>();
+    const weakestByTeam = new Map<string, Partial<Record<PlayerPosition, Player>>>();
+    const valueByUuid = new Map<string, number>();
+    for (const teamId of params.buyerIds) {
+      const squad = squads[teamId] ?? [];
+      const surplus: Player[] = [];
+      const weakest: Partial<Record<PlayerPosition, Player>> = {};
+      for (const position of positions) {
+        const peers = squad.filter(p => p.position === position).sort((a, b) => b.rating - a.rating);
+        weakest[position] = peers[peers.length - 1];
+        // Surplus = anything past the starting XI for that position. Requiring
+        // the unit to also exceed its full target headcount looked correct on
+        // paper but almost never fired: most squads sit at 18-22 players, so a
+        // club rarely carries a position group larger than its target.
+        for (const candidate of peers.slice(STARTER_TARGETS[position])) {
+          if (candidate.tag === 'loyal' || spent.has(candidate.uuid)) continue;
+          surplus.push(candidate);
+          valueByUuid.set(candidate.uuid, estimateTransferValue({
+            player: candidate,
+            sellerSquad: squad,
+            sellerCash: world.teamFinances[teamId]?.cash,
+          }));
+        }
+      }
+      weakestByTeam.set(teamId, weakest);
+      if (surplus.length > 0) surplusByTeam.set(teamId, surplus);
+    }
+    if (surplusByTeam.size < 2) continue;
+
+    // Enumerate every viable pair once, then take one at random. Behaviourally
+    // identical to a shuffled walk that stops at the first hit, but each
+    // candidate pair is now visited exactly once.
+    type SwapPair = { teamA: string; teamB: string; playerA: Player; playerB: Player };
+    const pairs: SwapPair[] = [];
+    const teamIds = [...surplusByTeam.keys()];
+    for (const teamA of teamIds) {
+      const weakestA = weakestByTeam.get(teamA) ?? {};
+      for (const teamB of teamIds) {
+        if (teamA === teamB) continue;
+        const weakestB = weakestByTeam.get(teamB) ?? {};
+        for (const playerA of surplusByTeam.get(teamA) ?? []) {
+          const needB = params.needsByTeam[teamB]?.[playerA.position];
+          const floorB = weakestB[playerA.position];
+          if (!needB || !floorB) continue;
+          if (needB.needScore < ELITE_SWAP_MIN_NEED || playerA.rating <= floorB.rating) continue;
+          const valueA = valueByUuid.get(playerA.uuid) ?? 0;
+          for (const playerB of surplusByTeam.get(teamB) ?? []) {
+            if (playerB.position === playerA.position) continue;
+            const needA = params.needsByTeam[teamA]?.[playerB.position];
+            const floorA = weakestA[playerB.position];
+            if (!needA || !floorA) continue;
+            if (needA.needScore < ELITE_SWAP_MIN_NEED || playerB.rating <= floorA.rating) continue;
+            const valueB = valueByUuid.get(playerB.uuid) ?? 0;
+            if (Math.abs(valueA - valueB) > Math.max(valueA, valueB) * ELITE_SWAP_VALUE_TOLERANCE) continue;
+            pairs.push({ teamA, teamB, playerA, playerB });
+          }
+        }
+      }
+    }
+    if (pairs.length === 0) continue;
+
+    const chosen = pairs[Math.min(pairs.length - 1, Math.floor(rng.next() * pairs.length))];
+    const applied = applyTransferMove({
+      squads,
+      playerStats,
+      player: chosen.playerA,
+      fromTeamId: chosen.teamA,
+      toTeamId: chosen.teamB,
+      displacedPlayerId: chosen.playerB.uuid,
+      displacedToTeamId: chosen.teamA,
+    });
+    if (!applied || !applied.displacedPlayer) continue;
+    squads = applied.squads;
+    playerStats = applied.playerStats;
+    spent.add(chosen.playerA.uuid);
+    spent.add(chosen.playerB.uuid);
+    const teamBName = world.teamBases[chosen.teamB]?.name ?? chosen.teamB;
+    const outgoingName = applied.displacedPlayer.name ?? applied.displacedPlayer.number + '号';
+    transfers.push(createTransferRecord({
+      season: seasonNumber,
+      windowIndex,
+      player: applied.movedPlayer,
+      fromTeamId: chosen.teamA,
+      fromTeamName: world.teamBases[chosen.teamA]?.name ?? chosen.teamA,
+      toTeamId: chosen.teamB,
+      toTeamName: teamBName,
+      type: 'transfer',
+      reason: teamBName + '以' + outgoingName + '交换补强',
+    }));
+    params.needsByTeam[chosen.teamA] = assessSquadNeeds(squads[chosen.teamA]);
+    params.needsByTeam[chosen.teamB] = assessSquadNeeds(squads[chosen.teamB]);
+  }
+  return { squads, playerStats, transfers };
 }
 
 export function processTransferWindow(
@@ -195,16 +406,16 @@ export function processTransferWindow(
       : Math.max(0, cash - (financeReserveByTeam[teamId] ?? 0) - (plannedSpending[teamId] ?? 0));
   };
 
-  const eliteTeamIds = Object.values(world.teamBases)
-    .filter(t => t.overall >= ELITE_OVERALL_THRESHOLD)
-    .map(t => t.id);
+  const marketTiers = resolveMarketTiers(world, rng);
+  const eliteTeamIds = marketTiers.buyerIds;
   if (eliteTeamIds.length === 0) {
     return { squads, transfers, playerStats: world.playerStats, freeAgentRetirees: [], freeAgentPool: world.freeAgentPool ?? [], pendingOffers: [], pendingTargets: [] };
   }
 
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
-  const candidates = buildCandidates(world);
+  const marketHeat = rng.nextFloat(MARKET_HEAT_MIN, MARKET_HEAT_MAX);
+  const candidates = buildCandidates(world, marketTiers.sellerIds, rng);
   // Shuffle so iteration order doesn't bias toward FW (which appear first
   // in the per-position concat). Different position/team gets a fair shot
   // each season; combined with the per-seller cap below this makes the
@@ -264,7 +475,7 @@ export function processTransferWindow(
 
     const strongestDemand = Math.max(...buyerOptions.map((option) => option.fit.needScore));
     const personalityBoost = incomingPlayer.tag === 'ambitious' ? 0.12 : 0;
-    const activityChance = Math.min(0.65, POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost);
+    const activityChance = Math.min(0.72, (POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost) * marketHeat);
     if (rng.next() >= activityChance) continue;
     const selectedBuyer = weightedPick(buyerOptions, option => option.fit.weight, rng);
     if (!selectedBuyer) continue;
@@ -348,6 +559,21 @@ export function processTransferWindow(
     needsByTeam[buyerId] = assessSquadNeeds(squads[buyerId]);
     needsByTeam[cand.teamId] = assessSquadNeeds(squads[cand.teamId]);
   }
+
+  // ── Step 1.1: Elite-to-elite swaps ────────────────────────────
+  const swapResult = attemptEliteSwaps({
+    world,
+    squads,
+    playerStats,
+    buyerIds: eliteTeamIds,
+    rng,
+    seasonNumber,
+    windowIndex,
+    needsByTeam,
+  });
+  squads = swapResult.squads;
+  playerStats = swapResult.playerStats;
+  transfers.push(...swapResult.transfers);
 
   // ── Step 1.5: Merge persistent pool into the in-flight pool ────
   // v17 — players released in previous seasons that no team picked up

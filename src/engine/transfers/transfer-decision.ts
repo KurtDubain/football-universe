@@ -5,7 +5,7 @@ import { computeInitialMarketValue } from '../economy/market-value';
 import type { SeededRNG } from '../match/rng';
 
 export const POSITION_TARGETS: Record<PlayerPosition, number> = { GK: 3, DF: 7, MF: 7, FW: 5 };
-const STARTER_TARGETS: Record<PlayerPosition, number> = { GK: 1, DF: 4, MF: 3, FW: 3 };
+export const STARTER_TARGETS: Record<PlayerPosition, number> = { GK: 1, DF: 4, MF: 3, FW: 3 };
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, value));
