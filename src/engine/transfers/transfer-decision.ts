@@ -253,6 +253,24 @@ export function createOpeningOffer(params: {
   return Math.max(1, Math.round(Math.min(raw, cashCap) * 10) / 10);
 }
 
+/**
+ * Bid for a club whose own budget — not the seller's asking price — sets the
+ * ceiling. `createOpeningOffer` deliberately clamps to asking value, which is
+ * correct for a normal window but leaves a cash-rich club unable to outbid
+ * anyone no matter how much money it is sitting on.
+ */
+export function createPremiumOffer(params: {
+  maxWilling: number;
+  availableCash?: number;
+  rng: SeededRNG;
+}): number {
+  const raw = params.maxWilling * params.rng.nextFloat(0.88, 1.0);
+  const cashCap = Number.isFinite(params.availableCash)
+    ? Math.max(0, params.availableCash ?? 0)
+    : Number.POSITIVE_INFINITY;
+  return Math.max(1, Math.round(Math.min(raw, cashCap) * 10) / 10);
+}
+
 export function weightedPick<T>(
   items: T[],
   getWeight: (item: T) => number,

@@ -920,6 +920,12 @@ export function attemptFireSale(
       toTeamName: buyerName,
       type: 'transfer',
       fee: price,
+      // Distress sales are priced at a fixed markup, so the ratio is known exactly.
+      // Recording it keeps the premium-transfer news from sorting the most
+      // dramatic deal of the window down among the fee-less swaps.
+      premiumRatio: (seller.player.marketValue ?? 0) > 0
+        ? Math.round((price / (seller.player.marketValue ?? 1)) * 100) / 100
+        : FIRE_SALE_PREMIUM,
       reason: '财政告急 — 200% 高溢价转会',
     });
     transfers.push({

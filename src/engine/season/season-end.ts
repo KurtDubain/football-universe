@@ -75,6 +75,9 @@ function findTeamEliminationRound(rounds: CupRound[], teamId: string): string | 
  * Never write `world.X = ...`; write to the local with the same name and put
  * it on the patch object.
  */
+/** Paid/asking ratio at or above which a transfer is reported as a premium deal. */
+const PREMIUM_NEWS_THRESHOLD = 1.35;
+
 export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: string[]; favoritePlayerIds?: string[] }): GameWorld {
   const seasonNumber = world.seasonState.seasonNumber;
   const rng = new SeededRNG(world.rngState);
@@ -723,14 +726,20 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
 
     // Top 3 transfers as news
-    const topTransfers = transferResult.transfers
-      .filter((t) => t.type === 'transfer')
+    // Premium deals lead the window: a club paying twice a player's valuation is
+    // the story of the summer, not whichever transfer happened to be processed
+    // first. Sorted by premium first, then by raw fee as the tiebreak.
+    const topTransfers = [...transferResult.transfers
+      .filter((t) => t.type === 'transfer')]
+      .sort((a, b) => (b.premiumRatio ?? 0) - (a.premiumRatio ?? 0) || (b.fee ?? 0) - (a.fee ?? 0))
       .slice(0, 3);
     for (const t of topTransfers) {
       news.push({
         id: createNewsId(seasonNumber, windowIndex, `transfer-${t.playerId}`),
         seasonNumber, windowIndex, type: 'trophy', importance: 'minor',
-        title: `🔄 转会: ${t.playerName} 加盟 ${t.toTeamName}`,
+        title: (t.premiumRatio ?? 1) >= PREMIUM_NEWS_THRESHOLD
+          ? `💰 天价转会: ${t.playerName} 以 ${t.premiumRatio!.toFixed(1)} 倍身价加盟 ${t.toTeamName}`
+          : `🔄 转会: ${t.playerName} 加盟 ${t.toTeamName}`,
         description: `${t.playerName}从${t.fromTeamName}转会至${t.toTeamName}${t.fee ? `，转会费约€${t.fee}M` : ''}。${t.reason}。`,
       });
     }

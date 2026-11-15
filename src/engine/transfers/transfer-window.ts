@@ -15,11 +15,12 @@ import {
   computePresentMarketValue,
 } from '../economy/market-value';
 import { computeCurrentRating } from '../players/development';
+import { computeSalary } from '../economy/finance';
 import { computePlayerCareerTotals } from '../players/career-totals';
 import {
   STARTER_TARGETS,
   assessSquadNeeds,
-  createOpeningOffer,
+  createPremiumOffer,
   estimateBuyerValuation,
   estimateFreeAgentSigningCost,
   estimateTransferValue,
@@ -90,6 +91,11 @@ const DF_GK_APPEARANCES_MIN = 20;
 const POTENTIAL_PEAK_MIN = 84;
 const POTENTIAL_AGE_MAX = 24;
 const POTENTIAL_LANE_LIMIT: Record<PlayerPosition, number> = { FW: 2, MF: 2, DF: 2, GK: 1 };
+// Blockbuster lane — players exposed by an elite club that opened as a seller.
+// Its own budget is what keeps the giants from being strip-mined: without it,
+// weak-club stat leaders fill every per-position slot first and "rich club raids
+// rich club" stays a rounding error.
+const BLOCKBUSTER_LANE_LIMIT: Record<PlayerPosition, number> = { FW: 2, MF: 2, DF: 2, GK: 1 };
 // Elite-to-elite swaps. Zero-sum by construction — both sides surrender a
 // surplus player — so this reshuffles the top of the table without ever
 // concentrating talent the way one-way poaching does.
@@ -97,6 +103,51 @@ const ELITE_SWAP_MAX = 2;
 const ELITE_SWAP_ATTEMPT_CHANCE = 0.55;
 const ELITE_SWAP_MIN_NEED = 0.24;
 const ELITE_SWAP_VALUE_TOLERANCE = 0.35;
+// ── Premium bidding ──────────────────────────────────────────
+// A long save accumulates cash with almost no outlet: measured at S150 the
+// league held €54.3bn, not one club was in the red across 150 seasons, and
+// the richest clubs spent €0-€3.4M per season on transfers against €34-€64M
+// of annual profit. Bidding was capped at 1.02x valuation, so no amount of
+// money could buy a player the seller valued highly.
+//
+// These constants let cash actually convert into talent, bounded by a
+// solvency floor rather than by an arbitrary valuation ceiling.
+const PREMIUM_CEILING_MAX = 3.0;      // hard cap on paid / asking value
+// Cash RANK, not cash balance. Measuring "years of income in the bank" looked
+// right at S150 (median club ~21 years) and collapsed by S300: cash has no
+// outlet, so every balance sheet inflates together, the whole league passed 40
+// years of income, and the markup stopped being a markup — 37% of deals landed
+// above 1.8x. Ranking against the league keeps the premium attached to the
+// handful of clubs that are genuinely richer than their peers.
+const PREMIUM_CASH_RANK_FLOOR = 0.72;  // below the 72nd percentile: bid at value
+const PREMIUM_CASH_RANK_SPAN = 0.28;   // richest club in the league: full ceiling
+// A markup on a squad-filler is noise, not a statement — without this a club with
+// a hole at the back paid 3.0x for a 62-rated reserve and the window headlined it
+// as a record deal.
+const PREMIUM_RATING_FLOOR = 66;
+const PREMIUM_RATING_SPAN = 18;
+// Raiding a giant is what costs real money; farming a minnow's standout gets a
+// fraction of the ceiling. This keeps the premium rare instead of universal.
+const WEAK_SELLER_PREMIUM_SHARE = 0.5;
+// Safety floor: never let a window leave a club unable to cover wages.
+// Squad value is deliberately NOT part of it — cash spent on a transfer converts
+// into squad assets, so it is not a solvency input. Wages are.
+const SAFETY_WAGE_SEASONS = 2;
+const SAFETY_ABSOLUTE_FLOOR = 25;
+// …but the floor may never exceed this share of the balance, or early seasons
+// freeze outright: a club starts on €20-150M against a real wage bill, so a hard
+// two-season floor left most of the league with a budget of zero and the market
+// never opened at all.
+const SAFETY_MAX_FLOOR_SHARE = 0.5;
+// Elite clubs are usually permanent buyers and never sellers. Opening a
+// random subset each window is what makes "rich club raids rich club"
+// possible at all — otherwise the only tradeable players are the ones the
+// candidate pool already exposes from weak clubs.
+const ELITE_SELLER_CHANCE = 0.6;
+const ELITE_SELLER_MAX = 3;
+// Key players are normally untouchable. A small per-candidate chance keeps
+// the occasional blockbuster possible without making squads unstable.
+const CORE_CANDIDATE_CHANCE = 0.15;
 // Concentration caps — one of the v2 pain points was "the same 3-4 weak
 // teams keep losing stars every season because they always produce the
 // most candidates". Caps here force variety: each team is in/out at most
@@ -126,10 +177,17 @@ type Candidate = {
   // FW: goals; MF: goals + assists; DF/GK: appearances × rating
   // potential lane: ceiling × 2 − age
   sortKey: number;
-  lane: 'form' | 'potential';
+  lane: 'form' | 'potential' | 'blockbuster';
+  /** Seller was opened from the elite tier — the player is a statement signing. */
+  sellerIsElite: boolean;
 };
 
-function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRNG): Candidate[] {
+function buildCandidates(
+  world: GameWorld,
+  sellerIds: Set<string>,
+  rng: SeededRNG,
+  coreProtectedTeamIds: Set<string>,
+): Candidate[] {
   const allCands: Candidate[] = [];
   // The potential-lane gates wander a little each window so the same wonderkid
   // is not permanently "too raw" — or permanently the obvious target.
@@ -139,10 +197,35 @@ function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRN
     const team = world.teamBases[stat.teamId];
     if (!team || !sellerIds.has(stat.teamId)) continue;
     // Find the player object for rating + position
-    const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === stat.playerId);
+    const squad = world.squads[stat.teamId] ?? [];
+    const player = squad.find(p => p.uuid === stat.playerId);
     if (!player) continue;
     const rating = player.rating;
     const pos = player.position;
+    const sellerIsElite = coreProtectedTeamIds.has(stat.teamId);
+
+    // Blockbuster lane — an elite club that opened as a seller. Its squad is
+    // strong by definition, so a headline season is not the entry ticket: the
+    // club deciding to sell is the story. Core players still need the roll, which
+    // is what stops a giant's spine from walking out every single window.
+    if (sellerIsElite) {
+      if (isKeySquadPlayer(squad, player) && rng.next() >= CORE_CANDIDATE_CHANCE) continue;
+      allCands.push({
+        playerUuid: stat.playerId,
+        teamId: stat.teamId,
+        position: pos,
+        rating,
+        sortKey: rating * 2 + (player.peakRating ?? rating) - player.age * 0.5,
+        lane: 'blockbuster',
+        sellerIsElite: true,
+      });
+      continue;
+    }
+
+    // Weak sellers carry no core-player gate on purpose: a weak club's top
+    // scorer is almost by definition one of its own starters, so a blanket gate
+    // strips ~85% of the pool and the window starves. The key-player penalty in
+    // sellerAcceptanceProbability already makes them expensive to buy.
     let passes = false;
     let sortKey = 0;
     switch (pos) {
@@ -167,7 +250,7 @@ function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRN
         break;
     }
     if (passes) {
-      allCands.push({ playerUuid: stat.playerId, teamId: stat.teamId, position: pos, rating, sortKey, lane: 'form' });
+      allCands.push({ playerUuid: stat.playerId, teamId: stat.teamId, position: pos, rating, sortKey, lane: 'form', sellerIsElite: false });
       continue;
     }
 
@@ -183,12 +266,16 @@ function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRN
         rating,
         sortKey: (player.peakRating ?? rating) * 2 - player.age,
         lane: 'potential',
+        sellerIsElite: false,
       });
     }
   }
   // Cap per position to keep poaching counts roughly consistent across seasons.
-  // The two lanes get separate budgets so a wave of in-form veterans can never
-  // crowd the wonderkid lane out entirely.
+  // The lanes get separate budgets so a wave of in-form veterans can never crowd
+  // the wonderkid lane out — and, more importantly, so weak-club stat leaders
+  // cannot crowd the elite-seller lane out. Without a dedicated blockbuster
+  // budget the giants never surface, because their bench does not out-score a
+  // minnow's striker.
   const byPos: Record<PlayerPosition, Candidate[]> = { FW: [], MF: [], DF: [], GK: [] };
   for (const c of allCands) byPos[c.position].push(c);
   const picked: Candidate[] = [];
@@ -200,7 +287,10 @@ function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRN
     const potential = bucket.filter(c => c.lane === 'potential')
       .sort((a, b) => b.sortKey - a.sortKey)
       .slice(0, POTENTIAL_LANE_LIMIT[pos]);
-    picked.push(...form, ...potential);
+    const blockbuster = bucket.filter(c => c.lane === 'blockbuster')
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .slice(0, BLOCKBUSTER_LANE_LIMIT[pos]);
+    picked.push(...form, ...potential, ...blockbuster);
   }
   return picked;
 }
@@ -210,17 +300,80 @@ function buildCandidates(world: GameWorld, sellerIds: Set<string>, rng: SeededRN
  * Both cuts jitter a few points per window so the market never settles into a
  * frozen buyer/seller caste across a long save.
  */
-function resolveMarketTiers(world: GameWorld, rng: SeededRNG): { buyerIds: string[]; sellerIds: Set<string> } {
+function resolveMarketTiers(world: GameWorld, rng: SeededRNG): {
+  buyerIds: string[];
+  sellerIds: Set<string>;
+  coreProtectedTeamIds: Set<string>;
+} {
   const sorted = Object.values(world.teamBases).slice().sort((a, b) => b.overall - a.overall);
   const n = sorted.length;
   const buyerShare = BUYER_RANK_SHARE + rng.nextFloat(-RANK_SHARE_SWING, RANK_SHARE_SWING);
   const sellerShare = CANDIDATE_RANK_SHARE + rng.nextFloat(-RANK_SHARE_SWING, RANK_SHARE_SWING);
   const buyerCount = Math.max(1, Math.min(n - 1, Math.round(n * buyerShare)));
   const sellerFloor = Math.max(buyerCount, Math.min(n - 1, n - Math.max(1, Math.round(n * sellerShare))));
-  return {
-    buyerIds: sorted.slice(0, buyerCount).filter(t => t.overall >= ELITE_OVERALL_FLOOR).map(t => t.id),
-    sellerIds: new Set(sorted.slice(sellerFloor).filter(t => t.overall < NON_ELITE_OVERALL_CEILING).map(t => t.id)),
-  };
+  const buyerIds = sorted.slice(0, buyerCount).filter(t => t.overall >= ELITE_OVERALL_FLOOR).map(t => t.id);
+  const sellerIds = new Set(sorted.slice(sellerFloor).filter(t => t.overall < NON_ELITE_OVERALL_CEILING).map(t => t.id));
+
+  // Open a random slice of the elite tier as sellers. Without this an elite
+  // club is structurally a permanent buyer, so the only players money can buy
+  // are weak-club stat leaders and "rich club raids rich club" never happens.
+  const coreProtectedTeamIds = new Set<string>();
+  if (rng.next() < ELITE_SELLER_CHANCE) {
+    const buyerSet = new Set(buyerIds);
+    const eliteSellers = sorted.filter(t => t.overall >= ELITE_OVERALL_FLOOR && !buyerSet.has(t.id));
+    const picks = rng.shuffle(eliteSellers).slice(0, Math.round(rng.nextFloat(1, ELITE_SELLER_MAX)));
+    for (const t of picks) {
+      sellerIds.add(t.id);
+      coreProtectedTeamIds.add(t.id);
+    }
+  }
+  return { buyerIds, sellerIds, coreProtectedTeamIds };
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * How far above asking value a buyer is willing to go.
+ *
+ * Three gates, all of which must open together: the club has to be near the top
+ * of the league's cash table, it has to actually want the player, and the player
+ * has to be worth a public fight. A club with a normal balance sheet bids at
+ * valuation exactly like before; only the richest few, chasing a genuine
+ * difference-maker, ever reach PREMIUM_CEILING_MAX.
+ */
+function premiumCeilingFor(params: {
+  cashRank: number;
+  needScore: number;
+  upgradeScore: number;
+  playerRating: number;
+  sellerIsElite: boolean;
+}): number {
+  const purchasingPower = clamp01((params.cashRank - PREMIUM_CASH_RANK_FLOOR) / PREMIUM_CASH_RANK_SPAN);
+  const quality = clamp01((params.playerRating - PREMIUM_RATING_FLOOR) / PREMIUM_RATING_SPAN);
+  const desire = clamp01(params.needScore * 1.2 + params.upgradeScore * 0.8);
+  // Quality gates desire rather than adding to it: a squad-filler can be a huge
+  // relative upgrade for a club with a hole and still not be worth a markup.
+  const drive = clamp01(desire * (0.45 + quality * 0.55));
+  const stature = params.sellerIsElite ? 1 : WEAK_SELLER_PREMIUM_SHARE;
+  return 1 + purchasingPower * drive * stature * (PREMIUM_CEILING_MAX - 1);
+}
+
+/**
+ * Cash a club may spend this window without endangering its wage bill.
+ *
+ * There is no bankruptcy mechanic by design, so without a floor a rich club
+ * could empty itself in a single window and then bleed for years. This keeps two
+ * seasons of wages on the books — capped at half the balance so that a club whose
+ * starting cash cannot cover a full wage bill is still allowed to trade rather
+ * than being frozen out of its own market.
+ */
+function spendableBudget(params: { cash: number; squadValue: number; level: 1 | 2 | 3 }): number {
+  const wage = computeSalary(params.squadValue, params.level);
+  const wageFloor = Math.max(wage * SAFETY_WAGE_SEASONS, SAFETY_ABSOLUTE_FLOOR);
+  const floor = Math.min(wageFloor, params.cash * SAFETY_MAX_FLOOR_SHARE);
+  return Math.max(0, params.cash - floor);
 }
 
 /**
@@ -390,20 +543,32 @@ export function processTransferWindow(
       .filter(([, state]) => state.currentTeamId)
       .map(([coachId, state]) => [state.currentTeamId!, world.coachBases[coachId]?.style]),
   );
-  const financeReserveByTeam = Object.fromEntries(
-    Object.entries(squads).map(([teamId, squad]) => {
-      const cash = world.teamFinances[teamId]?.cash;
-      if (cash === undefined || cash <= 0) return [teamId, 0];
-      const squadValue = squad.reduce((sum, player) => sum + (player.marketValue ?? 0), 0);
-      return [teamId, Math.min(cash * 0.25, Math.max(5, squadValue * 0.03))];
-    }),
-  );
+  // League-relative cash rank, 0 = poorest … 1 = richest, recomputed from live
+  // balances each window. This is the premium's purchasing-power input: it tracks
+  // who is flush right now rather than who was rich a decade ago, and it does not
+  // inflate just because every club in the league got richer at the same time.
+  const cashRankByTeam: Record<string, number> = {};
+  {
+    const ranked = Object.keys(squads)
+      .map(teamId => ({ teamId, cash: world.teamFinances[teamId]?.cash ?? 0 }))
+      .sort((a, b) => a.cash - b.cash);
+    const span = Math.max(1, ranked.length - 1);
+    ranked.forEach((entry, index) => { cashRankByTeam[entry.teamId] = index / span; });
+  }
   const plannedSpending: Record<string, number> = {};
+  // Solvency floor instead of the old flat reserve, which kept only 3% of squad
+  // value — about €15M for a rich club, i.e. no constraint at all. A club may
+  // now spend down to two seasons of wages plus a share of squad value and never
+  // past it. There is no bankruptcy mechanic, so this floor is the only thing
+  // between a premium window and a club that cannot make payroll.
   const availableCash = (teamId: string): number => {
     const cash = world.teamFinances[teamId]?.cash;
-    return cash === undefined
-      ? Number.POSITIVE_INFINITY
-      : Math.max(0, cash - (financeReserveByTeam[teamId] ?? 0) - (plannedSpending[teamId] ?? 0));
+    if (cash === undefined) return Number.POSITIVE_INFINITY;
+    const squad = squads[teamId] ?? [];
+    const squadValue = squad.reduce((sum, player) => sum + (player.marketValue ?? 0), 0);
+    const level = (world.teamStates?.[teamId]?.leagueLevel ?? 1) as 1 | 2 | 3;
+    const budget = spendableBudget({ cash, squadValue, level });
+    return Math.max(0, budget - (plannedSpending[teamId] ?? 0));
   };
 
   const marketTiers = resolveMarketTiers(world, rng);
@@ -415,7 +580,7 @@ export function processTransferWindow(
   const seasonNumber = world.seasonState.seasonNumber;
   const windowIndex = world.seasonState.currentWindowIndex;
   const marketHeat = rng.nextFloat(MARKET_HEAT_MIN, MARKET_HEAT_MAX);
-  const candidates = buildCandidates(world, marketTiers.sellerIds, rng);
+  const candidates = buildCandidates(world, marketTiers.sellerIds, rng, marketTiers.coreProtectedTeamIds);
   // Shuffle so iteration order doesn't bias toward FW (which appear first
   // in the per-position concat). Different position/team gets a fair shot
   // each season; combined with the per-seller cap below this makes the
@@ -468,7 +633,20 @@ export function processTransferWindow(
         const buyerValuation = estimateBuyerValuation({ askingValue, fit, player: incomingPlayer });
         const minimumPlausibleOffer = Math.min(askingValue, buyerValuation) * 0.86;
         if (fit.weight <= 0 || availableCash(teamId) < minimumPlausibleOffer) return null;
-        return { teamId, buyer, buyerSquad, released, fit, buyerValuation };
+        // A club that values him below three quarters of the asking price is not
+        // a bidder, it is a tourist. Without this a premium ceiling measured off
+        // the asking price would drag reluctant clubs into auctions they lose.
+        if (buyerValuation < askingValue * 0.75) return null;
+        // Cash-rich clubs may bid well past valuation. The ceiling scales with how
+        // many seasons of income they are hoarding and how badly they want him.
+        const ceiling = premiumCeilingFor({
+          cashRank: cashRankByTeam[teamId] ?? 0,
+          needScore: fit.needScore,
+          upgradeScore: fit.upgradeScore,
+          playerRating: incomingPlayer.rating,
+          sellerIsElite: cand.sellerIsElite,
+        });
+        return { teamId, buyer, buyerSquad, released, fit, buyerValuation, ceiling };
       })
       .filter((option): option is NonNullable<typeof option> => option !== null);
     if (buyerOptions.length === 0) continue;
@@ -477,17 +655,33 @@ export function processTransferWindow(
     const personalityBoost = incomingPlayer.tag === 'ambitious' ? 0.12 : 0;
     const activityChance = Math.min(0.72, (POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost) * marketHeat);
     if (rng.next() >= activityChance) continue;
-    const selectedBuyer = weightedPick(buyerOptions, option => option.fit.weight, rng);
+
+    // Competitive bidding: every interested club prices the player against its
+    // own budget and the highest bid wins. This is what turns "a club is rich"
+    // into "two clubs fight over a player and the fee runs away" — the premium is
+    // an emergent result of competition, not a scripted markup.
+    const bids = buyerOptions.map((option) => ({
+      ...option,
+      // Ceiling is measured against the seller's asking price, not the buyer's
+      // own valuation — otherwise a buyer who already rates him at 1.34x asking
+      // turns a 3.0x cap into 4.0x and the stated limit stops meaning anything.
+      bid: createPremiumOffer({
+        maxWilling: askingValue * option.ceiling,
+        availableCash: availableCash(option.teamId),
+        rng,
+      }),
+    }));
+    const topBid = Math.max(...bids.map((entry) => entry.bid));
+    const contenders = bids.filter((entry) => entry.bid >= topBid - 0.05);
+    const selectedBuyer = contenders.length === 1
+      ? contenders[0]
+      : weightedPick(contenders, (option) => option.fit.weight, rng);
     if (!selectedBuyer) continue;
     const buyerId = selectedBuyer.teamId;
     const released = selectedBuyer.released;
     const toTeam = selectedBuyer.buyer;
-    const fee = createOpeningOffer({
-      askingValue,
-      buyerValuation: selectedBuyer.buyerValuation,
-      availableCash: availableCash(buyerId),
-      rng,
-    });
+    const fee = selectedBuyer.bid;
+    const premiumRatio = Math.round((fee / Math.max(1, askingValue)) * 100) / 100;
 
     // v20 — if seller is a favorite team, DON'T execute. Stage as an
     // IncomingOffer for the UI to resolve. (Free agent pool still gets
@@ -548,7 +742,12 @@ export function processTransferWindow(
       toTeamName: toTeam?.name ?? buyerId,
       type: 'transfer',
       fee: fee > 0 ? fee : undefined,
-      reason: `${cand.sortKey | 0}${cand.position === 'FW' ? '球' : cand.position === 'MF' ? '贡献' : '场'}身价飙升`,
+      premiumRatio,
+      reason: cand.lane === 'blockbuster'
+        ? `${fromTeam?.name ?? cand.teamId}套现主力`
+        : cand.lane === 'potential'
+          ? `上限${incomingPlayer.peakRating ?? incomingPlayer.rating}的潜力股`
+          : `${cand.sortKey | 0}${cand.position === 'FW' ? '球' : cand.position === 'MF' ? '贡献' : '场'}身价飙升`,
     }));
 
     freeAgentPool.push({ player: applied.displacedPlayer, releasedFromTeamId: buyerId });

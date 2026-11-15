@@ -122,6 +122,7 @@ export function createTransferRecord(params: {
   toTeamName: string;
   type: TransferType;
   fee?: number;
+  premiumRatio?: number;
   reason: string;
 }): TransferRecord {
   const { player } = params;
@@ -138,6 +139,7 @@ export function createTransferRecord(params: {
     toTeamName: params.toTeamName,
     type: params.type,
     fee: params.fee,
+    premiumRatio: params.premiumRatio,
     reason: params.reason,
   };
 }

@@ -40,6 +40,12 @@ export interface TransferRecord {
   toTeamName: string;
   type: TransferType;
   fee?: number;        // in millions, optional
+  /**
+   * Paid fee divided by the seller's asking value. Absent on older saves and
+   * on fee-less moves (free agents, swaps). Drives the premium-transfer news
+   * and lets the UI surface "paid 2.1x asking" without re-deriving it.
+   */
+  premiumRatio?: number;
   reason: string;      // human-readable e.g. "强援加盟", "自由转会"
   /** Optional presentation snapshot for an explicit observer transfer action. */
   observerInitiated?: boolean;
