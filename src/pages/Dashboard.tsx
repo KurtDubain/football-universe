@@ -32,7 +32,11 @@ import {
   getWindowTypeLabel,
   cnRoundLabel,
 } from '../utils/format';
-import { formatMoney } from '../engine/economy/finance';
+import {
+  formatMoney,
+  FIRE_SALE_PRICE_MAX,
+  FIRE_SALE_PRICE_MIN,
+} from '../engine/economy/finance';
 import { curateNewsFeed, getNewsTier } from '../engine/season/news-feed';
 import TeamBadge from '../components/TeamBadge';
 import ObservationThemePanel from '../components/ObservationThemePanel';
@@ -61,6 +65,13 @@ const ObservationPanel = lazy(() => import('../components/ObservationPanel'));
 const ObservationSettlementSummary = lazy(() => import('../components/ObservationSettlementSummary'));
 const loadWorldResponseSummary = () => import('../components/WorldResponseSummary');
 const WorldResponseSummary = lazy(loadWorldResponseSummary);
+
+/**
+ * Distress-sale warning copy. The price is rolled per sale and can land on
+ * either side of market value, so the warning quotes the band as a share of
+ * market value instead of promising a fixed 三成 that is no longer true.
+ */
+const FIRE_SALE_PRICE_LABEL = `${Math.round(FIRE_SALE_PRICE_MIN * 100)}%–${Math.round(FIRE_SALE_PRICE_MAX * 100)}%`;
 
 /**
  * Compact money formatter for chip display.
@@ -373,7 +384,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
                     </span>
                   );
                 })}
-                {' '}—— 赛季结束时将以低于市价三成的价格被迫甩卖 €30M+ 球员（若有顶级买家），现金只能部分缓解。
+                {' '}—— 赛季结束时将以市价 {FIRE_SALE_PRICE_LABEL} 的随机价格被迫甩卖 €30M+ 球员（若有顶级买家），现金只能部分缓解。
               </div>
             </div>
           </div>

@@ -28,7 +28,9 @@ import {
   MAINLAND_CUP_TIERS,
   SMALL_CONTINENTAL_CUP_TIERS,
   TV_SPONSOR_BY_TIER,
-  FIRE_SALE_DISCOUNT,
+  FIRE_SALE_PRICE_MAX,
+  FIRE_SALE_PRICE_MIN,
+  rollFireSalePriceRatio,
   FIRE_SALE_MIN_VALUE,
   FIRE_SALE_BUYER_MIN_REP,
   rankFireSaleCandidates,
@@ -319,19 +321,26 @@ describe('attemptFireSale — emergency discount sale to elite buyer', () => {
     const t = r.transfers[0];
     expect(t.fromTeamId).toBe('POOR');
     expect(['ELITE', 'ELITE2']).toContain(t.toTeamId);
-    // A distress sale must never be a premium: the side that needs the deal has
-    // no leverage. Fee asserted as a literal because the float product
-    // 50 × FIRE_SALE_DISCOUNT is 34.999999999999996, while the price formula
-    // rounds to one decimal.
-    expect(FIRE_SALE_DISCOUNT).toBeLessThan(1);
-    expect(t.fee).toBe(35);
-    expect(t.premiumRatio).toBeLessThan(1);
-    // The seller is still in the red afterwards — a discount sale relieves
-    // pressure, it does not rescue the club. Buyer cash drops by the fee.
-    expect(r.teamFinances.POOR.cash).toBe(-50 + 35);
-    expect(r.teamFinances.POOR.totalIncome).toBe(35);
-    expect(r.teamFinances[t.toTeamId].cash).toBe(200 - 35);
-    expect(r.teamFinances[t.toTeamId].totalExpense).toBe(35);
+    // The ratio is rolled per sale, so the BAND is the invariant — not any one
+    // number. Two properties the band is picked to hold:
+    //   - the mean stays under market, so a crisis relieves pressure without
+    //     becoming an exit (a048285's intent);
+    //   - the ceiling stays under PREMIUM_NEWS_THRESHOLD, so a fire sale is
+    //     never reported as a 天价转会.
+    expect((FIRE_SALE_PRICE_MIN + FIRE_SALE_PRICE_MAX) / 2).toBeLessThan(1);
+    expect(FIRE_SALE_PRICE_MAX).toBeLessThan(1.35);
+    const fee = t.fee!;
+    const ratio = fee / 50;
+    expect(ratio).toBeGreaterThanOrEqual(FIRE_SALE_PRICE_MIN - 0.01);
+    expect(ratio).toBeLessThanOrEqual(FIRE_SALE_PRICE_MAX + 0.01);
+    // A sale may now clear market value — that IS the spread — but never far
+    // enough to read as a premium deal.
+    expect(t.premiumRatio).toBeLessThan(1.35);
+    // Cash math is unchanged: the seller banks the fee, the buyer pays it.
+    expect(r.teamFinances.POOR.cash).toBe(-50 + fee);
+    expect(r.teamFinances.POOR.totalIncome).toBe(fee);
+    expect(r.teamFinances[t.toTeamId].cash).toBe(200 - fee);
+    expect(r.teamFinances[t.toTeamId].totalExpense).toBe(fee);
     // Squad arrays are reshuffled
     expect(r.squads.POOR).toHaveLength(1);
     expect(r.squads[t.toTeamId]).toHaveLength(1);
@@ -343,6 +352,46 @@ describe('attemptFireSale — emergency discount sale to elite buyer', () => {
     // News
     expect(r.news).toHaveLength(1);
     expect(r.news[0].type).toBe('fire_sale');
+  });
+
+  it('rolls a fresh price per sale — never fixed, never a 天价转会', () => {
+    const ratios: number[] = [];
+    for (let seed = 1; seed <= 200; seed++) {
+      ratios.push(rollFireSalePriceRatio(new SeededRNG(seed)));
+    }
+    const min = Math.min(...ratios);
+    const max = Math.max(...ratios);
+    const mean = ratios.reduce((sum, x) => sum + x, 0) / ratios.length;
+
+    // The whole point of the change: the price is not knowable in advance.
+    expect(new Set(ratios).size).toBeGreaterThan(150);
+    expect(max - min).toBeGreaterThan(0.4);
+    // Band respected at both ends. The ratio is rounded to three decimals, so
+    // the ceiling is reachable exactly.
+    expect(min).toBeGreaterThanOrEqual(FIRE_SALE_PRICE_MIN);
+    expect(max).toBeLessThanOrEqual(FIRE_SALE_PRICE_MAX);
+    // Mean under market: a crisis relieves pressure, it is not an exit.
+    expect(mean).toBeGreaterThan(0.92);
+    expect(mean).toBeLessThan(0.98);
+    // Never premium enough to be reported as a 天价转会.
+    for (const ratio of ratios) expect(ratio).toBeLessThan(1.35);
+  });
+
+  it('quotes the rolled price against market instead of a fixed 三成', () => {
+    const { teamBases, teamFinances, squads } = buildScenario();
+    const rng = new SeededRNG(23);
+    const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, rng);
+    const description = r.news[0].description ?? '';
+    expect(description).not.toContain('三成');
+    // The copy must state which side of market value the roll landed on.
+    const match = /(低于|高于)市价 (\d+)%/.exec(description);
+    expect(match).not.toBeNull();
+    const pct = Number(match![2]);
+    expect(pct).toBeGreaterThanOrEqual(0);
+    expect(pct).toBeLessThanOrEqual(Math.round((1 - FIRE_SALE_PRICE_MIN) * 100) + 1);
+    // Direction must agree with the recorded ratio.
+    const ratio = r.transfers[0].premiumRatio!;
+    expect(match![1]).toBe(ratio > 1 ? '高于' : '低于');
   });
 
   it('does NOT fire if no team has cash < 0', () => {

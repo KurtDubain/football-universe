@@ -13,7 +13,11 @@ import {
   derivePreferredApproach,
   derivePreferredFormation,
 } from '../engine/coaches/tactics';
-import { formatMoney } from '../engine/economy/finance';
+import {
+  formatMoney,
+  FIRE_SALE_PRICE_MAX,
+  FIRE_SALE_PRICE_MIN,
+} from '../engine/economy/finance';
 import {
   DOCTRINE_AXES,
   deriveDoctrineTags,
@@ -37,6 +41,13 @@ import { OutcomeMark, TrophyMark, type CompetitionIdentityKey } from '../compone
 import { PageShell, Panel, SegmentedControl } from '../components/ui';
 import NarrativeThread from '../components/NarrativeThread';
 import { buildTeamNarrativeThread } from '../engine/observation/narrative-threads';
+
+/**
+ * Distress-sale warning copy. The price is rolled per sale and can land on
+ * either side of market value, so the warning quotes the band as a share of
+ * market value instead of promising a fixed 三成 that is no longer true.
+ */
+const FIRE_SALE_PRICE_LABEL = `${Math.round(FIRE_SALE_PRICE_MIN * 100)}%–${Math.round(FIRE_SALE_PRICE_MAX * 100)}%`;
 
 type TeamSection = 'overview' | 'squad' | 'history';
 
@@ -1266,7 +1277,7 @@ function FinancePanel({ teamId }: { teamId: string }) {
       </div>
       {fin.cash < 0 && (
         <div className="px-4 py-2 text-[11px] text-red-300 bg-red-950/30 border-b border-red-900/40">
-          ⚠ 财政告急 — 赛季结束时将以低于市价三成的价格被迫甩卖一名身价 €30M+ 球员（若有顶级买家），现金只能部分缓解。
+          ⚠ 财政告急 — 赛季结束时将以市价 {FIRE_SALE_PRICE_LABEL} 的随机价格被迫甩卖一名身价 €30M+ 球员（若有顶级买家），现金只能部分缓解。
         </div>
       )}
       {/* Current season running totals */}

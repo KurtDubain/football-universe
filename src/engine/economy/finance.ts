@@ -258,15 +258,46 @@ export function computeSalary(squadValue: number, level: 1 | 2 | 3 = 1): number 
  * This used to be `FIRE_SALE_PREMIUM = 2.0` — a club in the red sold its piece at
  * 200% of market value and came out of the crisis with more cash than it went
  * in with. Distress sales are the exact opposite: the side that needs the deal
- * has no leverage. 0.7 keeps the seller in trouble often enough that the crisis
- * is a punishment rather than an exit, which is what the R3 reputation penalty
- * in season-end.ts already assumes when it fires on the same `cash < 0`.
+ * has no leverage.
  *
- * Only the price direction changed. The seller-side trigger (negative cash plus
- * a €30M+ piece) and the buyer gate (rep >= 85, cash > price x 1.5, one buy per
+ * `a048285` then pinned the discount at a flat 0.7. That fixed the direction but
+ * overshot on rigidity: every distress sale in every world landed on exactly
+ * 70%, so the price was knowable before the window even opened. Real forced
+ * sales spread out — a club with one motivated buyer gets robbed, a club whose
+ * phone rings off the hook gets close to market. Each sale now rolls its own
+ * ratio from the world RNG.
+ *
+ * The band is [0.7, 1.2]:
+ *   - Floor 0.7 — the old flat discount, kept as the worst case. Going lower
+ *     stops relieving anything: the club is better off keeping the player.
+ *   - Ceiling 1.2 — a desperate seller occasionally lands ABOVE market when
+ *     buyers compete. Capped so two properties hold:
+ *       (a) the mean is 0.95, under market, so a crisis is still a punishment
+ *           rather than an exit — `a048285`'s intent survives;
+ *       (b) `premiumRatio` stays under `PREMIUM_NEWS_THRESHOLD` (1.35) in
+ *           season-end.ts, so a fire sale is never reported as a 天价转会 —
+ *           the absurd reading under the old 2.0 markup.
+ *     A wider ceiling breaks both. 1.5 was considered and rejected: its mean
+ *     lands at 1.1, so 62.5% of distress sales would clear market value, and
+ *     ~19% would cross the premium-news threshold.
+ *
+ * Only the price changed. The seller-side trigger (negative cash plus a
+ * €30M+ piece) and the buyer gate (rep >= 85, cash > price x 1.5, one buy per
  * buyer per season) are untouched.
  */
-export const FIRE_SALE_DISCOUNT = 0.7;
+export const FIRE_SALE_PRICE_MIN = 0.7;
+export const FIRE_SALE_PRICE_MAX = 1.2;
+
+/**
+ * Roll one fire sale's price ratio from the world RNG.
+ *
+ * Rounded to three decimals so the ratio the news copy quotes is the same
+ * number the fee was actually computed from, and so tests can assert on it
+ * without float dust.
+ */
+export function rollFireSalePriceRatio(rng: SeededRNG): number {
+  return Math.round(rng.nextFloat(FIRE_SALE_PRICE_MIN, FIRE_SALE_PRICE_MAX) * 1000) / 1000;
+}
 
 /** Min market value (€M) for a player to be eligible as fire-sale piece. */
 export const FIRE_SALE_MIN_VALUE = 30;
@@ -832,7 +863,8 @@ export function rankFireSaleCandidates(squad: Player[]): Player[] {
  * Per spec:
  *   - Eligible seller: cash < 0 AND has player with marketValue >= €30M
  *   - Eligible buyer: reputation >= 85 AND cash > price × 1.5
- *   - Sells ONE player per team per season at FIRE_SALE_DISCOUNT x marketValue
+ *   - Sells ONE player per team per season at a rolled ratio in
+ *     [FIRE_SALE_PRICE_MIN, FIRE_SALE_PRICE_MAX] x marketValue
  *   - The piece is the LEAST DAMAGING eligible player (see
  *     `rankFireSaleCandidates`), not simply the most valuable one
  *
@@ -883,7 +915,10 @@ export function attemptFireSale(
   // For each seller, find an eligible buyer
   const usedBuyers = new Set<string>();
   for (const seller of sellers) {
-    const price = Math.round((seller.player.marketValue ?? 0) * FIRE_SALE_DISCOUNT * 10) / 10;
+    // Each sale negotiates its own discount. Rolled BEFORE the buyer search,
+    // because the buyer's cash gate is priced off the actual fee.
+    const priceRatio = rollFireSalePriceRatio(rng);
+    const price = Math.round((seller.player.marketValue ?? 0) * priceRatio * 10) / 10;
     // Eligible buyers: reputation >= 85, cash > price × 1.5, NOT this seller,
     // NOT already used as a buyer this pass (one fire-sale buy per buyer per
     // season — keeps things spread).
@@ -921,6 +956,13 @@ export function attemptFireSale(
     const sellerName = teamBases[seller.teamId]?.name ?? seller.teamId;
     const buyerName = teamBases[buyer.id]?.name ?? buyer.id;
     const playerName = seller.player.name ?? `${seller.player.number}号`;
+    // The rolled ratio can land on either side of market value, so the copy has
+    // to say which. Rounded against the ratio, not the fee, so the headline and
+    // `premiumRatio` never disagree about direction.
+    const priceDiffPct = Math.round(Math.abs(1 - priceRatio) * 100);
+    const pricePhrase = priceDiffPct === 0
+      ? '与市价持平'
+      : `${priceRatio > 1 ? '高于' : '低于'}市价 ${priceDiffPct}%`;
 
     transfers.push({
       season, windowIndex,
@@ -934,14 +976,14 @@ export function attemptFireSale(
       toTeamName: buyerName,
       type: 'transfer',
       fee: price,
-      // Distress sales are priced at a fixed discount, so the ratio is known
-      // exactly. It stays well below PREMIUM_NEWS_THRESHOLD (1.35), so a fire
+      // The ceiling is capped under PREMIUM_NEWS_THRESHOLD (1.35), so a fire
       // sale can never be reported as a 天价转会 — which would have been the
-      // absurd reading under the old 2.0 markup.
+      // absurd reading under the old 2.0 markup. It CAN now exceed 1.0: a
+      // desperate seller with competing buyers occasionally beats market.
       premiumRatio: (seller.player.marketValue ?? 0) > 0
         ? Math.round((price / (seller.player.marketValue ?? 1)) * 100) / 100
-        : FIRE_SALE_DISCOUNT,
-      reason: '财政告急 — 折价甩卖',
+        : priceRatio,
+      reason: '财政告急 — 紧急甩卖',
     });
     transfers.push({
       season, windowIndex,
@@ -962,7 +1004,7 @@ export function attemptFireSale(
       id: createNewsId(season, windowIndex, `firesale-${seller.player.uuid}`),
       seasonNumber: season, windowIndex, type: 'fire_sale',
       title: `${sellerName} 财政紧急甩卖 ${playerName} → ${buyerName}`,
-      description: `${sellerName}财政告急，以低于市价三成的 ${formatMoney(price)} 价格将 ${playerName} 卖给 ${buyerName}，部分缓解资金压力。`,
+      description: `${sellerName}财政告急，以 ${formatMoney(price)}（${pricePhrase}）的价格将 ${playerName} 卖给 ${buyerName}，部分缓解资金压力。`,
     });
   }
 
