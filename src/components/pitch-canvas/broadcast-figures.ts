@@ -93,6 +93,15 @@ export interface BroadcastPlayerOptions {
   highlighted: boolean;
   featured: boolean;
   teamSide: 'home' | 'away';
+  /**
+   * Kit pattern: 0 plain, 1 vertical stripes, 2 hoops, 3 sash.
+   *
+   * Two clubs in the same division routinely share a colour, and at a wide
+   * framing colour is the only thing telling them apart — so the shirt has to
+   * carry a pattern as well. Skipped on figures under nine pixels, where a
+   * stripe is just noise.
+   */
+  kitPattern?: number;
   label?: string;
   labelPlacement?: 'above' | 'below';
   action?: BroadcastPlayerAction;
@@ -242,14 +251,57 @@ export function drawBroadcastPlayer(
   ctx.fillStyle = shorts;
   ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(gx + lean - shoulderHalf, shoulderY);
-  ctx.lineTo(gx + lean + shoulderHalf, shoulderY);
-  ctx.lineTo(gx + hipHalf, hipY - height * 0.08);
-  ctx.lineTo(gx - hipHalf, hipY - height * 0.08);
-  ctx.closePath();
+  const traceTorso = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(gx + lean - shoulderHalf, shoulderY);
+    ctx.lineTo(gx + lean + shoulderHalf, shoulderY);
+    ctx.lineTo(gx + hipHalf, hipY - height * 0.08);
+    ctx.lineTo(gx - hipHalf, hipY - height * 0.08);
+    ctx.closePath();
+  };
+
+  traceTorso();
   ctx.fillStyle = color;
   ctx.fill();
+
+  const kit = options.kitPattern ?? 0;
+  if (kit > 0 && height >= 9) {
+    ctx.save();
+    traceTorso();
+    ctx.clip();
+    ctx.fillStyle = shadeColor(color, kit === 2 ? -0.36 : 0.32);
+    if (kit === 1) {
+      const stripeWidth = Math.max(0.6, shoulderHalf * 0.4);
+      for (let index = -2; index <= 2; index += 1) {
+        ctx.fillRect(
+          gx + lean + index * stripeWidth * 1.75 - stripeWidth / 2,
+          shoulderY,
+          stripeWidth,
+          height,
+        );
+      }
+    } else if (kit === 2) {
+      const bandHeight = Math.max(0.6, height * 0.095);
+      for (let index = 0; index < 4; index += 1) {
+        ctx.fillRect(
+          gx - shoulderHalf * 1.8,
+          shoulderY + index * bandHeight * 2.1,
+          shoulderHalf * 3.6,
+          bandHeight,
+        );
+      }
+    } else {
+      ctx.translate(gx, (shoulderY + hipY) / 2);
+      ctx.rotate(-0.52);
+      const bandWidth = Math.max(0.7, shoulderHalf * 0.52);
+      for (let index = -2; index <= 2; index += 1) {
+        ctx.fillRect(index * bandWidth * 1.9 - bandWidth / 2, -height, bandWidth, height * 2);
+      }
+    }
+    ctx.restore();
+  }
+
+  traceTorso();
   ctx.strokeStyle = outline;
   ctx.lineWidth = Math.max(0.35, height * 0.016);
   ctx.stroke();

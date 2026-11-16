@@ -17,6 +17,8 @@ import {
 } from './pitch-canvas/broadcast-view';
 import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
 import { drawBroadcastStadium } from './pitch-canvas/broadcast-stadium';
+import { scoreAtMinute } from './pitch-canvas/live-score';
+import { teamBadgeParts } from './team-badge-geometry';
 import {
   drawBroadcastPlayer,
   drawBroadcastBall,
@@ -137,6 +139,9 @@ interface Props {
   homeColor: string;
   awayColor: string;
   homeTeamId: string;
+  awayTeamId: string;
+  homeShortName: string;
+  awayShortName: string;
   flashEvent: MatchEvent | null;
   allEvents: MatchEvent[];
   homeMatchday?: MatchdaySnapshot;
@@ -279,7 +284,8 @@ const FIXED_FRAME_MS = 1000 / 60;
 
 function PitchCanvas(props: Props) {
   const {
-    minute, maxMinute, homeColor, awayColor, homeTeamId, flashEvent, allEvents,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, awayTeamId, flashEvent, allEvents,
+    homeShortName, awayShortName,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
     possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
@@ -292,6 +298,29 @@ function PitchCanvas(props: Props) {
     away: getTacticalFormationSlots(awayFormation, awayApproach),
   }), [awayApproach, awayFormation, homeApproach, homeFormation]);
   const featuredPlayerIdSet = useMemo(() => new Set(featuredPlayerIds), [featuredPlayerIds]);
+
+  // The kit borrows the crest's background pattern, so a club's shirt and its
+  // badge always agree, and two clubs that share a colour still read apart.
+  const homeKitPattern = useMemo(
+    () => teamBadgeParts(homeTeamId, homeShortName).patternIndex,
+    [homeShortName, homeTeamId],
+  );
+  const awayKitPattern = useMemo(
+    () => teamBadgeParts(awayTeamId, awayShortName).patternIndex,
+    [awayShortName, awayTeamId],
+  );
+  const homeCrest = useMemo(
+    () => ({ teamId: homeTeamId, shortName: homeShortName, color: homeColor }),
+    [homeColor, homeShortName, homeTeamId],
+  );
+  const awayCrest = useMemo(
+    () => ({ teamId: awayTeamId, shortName: awayShortName, color: awayColor }),
+    [awayColor, awayShortName, awayTeamId],
+  );
+  const liveScore = useMemo(
+    () => scoreAtMinute(allEvents, homeTeamId, minute),
+    [allEvents, homeTeamId, minute],
+  );
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -419,6 +448,7 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
+    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   });
   useEffect(() => {
@@ -426,6 +456,7 @@ function PitchCanvas(props: Props) {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
       homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
+      homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
       onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
@@ -433,6 +464,7 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
+    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   ]);
 
@@ -827,6 +859,7 @@ function PitchCanvas(props: Props) {
         possession: livePossession, homeFormation: liveHomeFormation, awayFormation: liveAwayFormation,
         homeApproach: liveHomeApproach, awayApproach: liveAwayApproach,
         formationLayouts: liveFormationLayouts, featuredPlayerIdSet: liveFeaturedPlayerIds,
+        homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
       } = live;
       const homePossessionShare = livePossession[0] / 100;
 
@@ -991,10 +1024,18 @@ function PitchCanvas(props: Props) {
         homeColor,
         density: renderBudget.quality === 'full' ? 1 : 0.55,
         excitement: lastAtmosphereRef.current.danger,
+        crest: homeCrest,
+        scoreboard: {
+          minute,
+          homeScore: liveScore.home,
+          awayScore: liveScore.away,
+          home: homeCrest,
+          away: awayCrest,
+        },
         frame: f,
         seed: 20260722,
       });
-      drawBroadcastPitch(ctx, view, { flagColor: homeColor });
+      drawBroadcastPitch(ctx, view, { flagColor: homeColor, crest: homeCrest });
 
       if (halftime) {
         drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel, orientationRef.current);
@@ -1599,6 +1640,7 @@ function PitchCanvas(props: Props) {
             highlighted,
             featured: liveFeaturedPlayerIds.has(player.playerId),
             teamSide,
+            kitPattern: teamSide === 'home' ? homeKitPattern : awayKitPattern,
             label: isEventPlayer ? player.playerName : undefined,
             labelPlacement,
             action,

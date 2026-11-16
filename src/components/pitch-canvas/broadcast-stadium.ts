@@ -21,6 +21,7 @@
 // not re-render several thousand seats, and it does not have to.
 
 import { BROADCAST_SURROUND_COLOR, type BroadcastView } from './broadcast-view';
+import { drawTeamCrest } from './team-crest';
 
 /** How far past the corners the stand reaches, relative to the far touchline. */
 const STAND_WIDTH_FACTOR = 1.36;
@@ -59,6 +60,20 @@ const BOARD_COLORS = [
   '#16307a', '#0d4f4a', '#7a1a1a', '#6b4a12', '#25303d', '#4a1a68',
 ];
 
+export interface StadiumCrest {
+  teamId?: string;
+  shortName: string;
+  color: string;
+}
+
+export interface StadiumScoreboard {
+  minute: number;
+  homeScore: number;
+  awayScore: number;
+  home: StadiumCrest;
+  away: StadiumCrest;
+}
+
 export interface StadiumOptions {
   /** Home club colour: the lower tier leans toward it. */
   homeColor?: string;
@@ -66,6 +81,10 @@ export interface StadiumOptions {
   density?: number;
   /** 0..1 how loud it is right now. Drives the light wash over the stand. */
   excitement?: number;
+  /** Home crest, unfurled as a tifo over one block of the stand. */
+  crest?: StadiumCrest;
+  /** Scoreline and clock for the big screen. Omitted means no screen. */
+  scoreboard?: StadiumScoreboard;
   frame?: number;
   seed?: number;
 }
@@ -135,6 +154,7 @@ function standKey(view: BroadcastView, options: StadiumOptions): string {
     view.width,
     view.height,
     options.homeColor ?? '',
+    options.crest ? (options.crest.teamId ?? options.crest.shortName) : '',
     (options.density ?? 1).toFixed(2),
     options.seed ?? 0,
   ].join('|');
@@ -201,6 +221,43 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
     }
   }
 
+  // Tifo: one run of the stand under a banner. A club that fills its ground
+  // does this, and it is the loudest home-colour signal anywhere in the frame.
+  // Drawn over the seats rather than instead of them, because that is what a
+  // banner is: a sheet held above people.
+  const crest = options.crest;
+  if (crest && canvas.width > 60) {
+    // Kept clear of the middle of the tier, which is where the big screen
+    // hangs: a banner behind a scoreboard is a banner nobody sees.
+    const onLeft = seatNoise(3, 7, seed) < 0.5;
+    const jitter = seatNoise(4, 11, seed) * 0.14;
+    const tifoWidth = (canvas.width / SEAT_BLOCKS) * 1.7;
+    const tifoLeft = canvas.width * (onLeft ? 0.04 + jitter : 0.64 + jitter);
+    const tifoTop = roofBottom + usable * 0.08;
+    const tifoHeight = usable * 0.54;
+    ctx.fillStyle = shade(crest.color, 0.72);
+    ctx.fillRect(tifoLeft, tifoTop, tifoWidth, tifoHeight);
+    // A banner is cloth: it hangs in folds and it is darker along the top.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(tifoLeft, tifoTop, tifoWidth, tifoHeight * 0.16);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for (let fold = 1; fold < 4; fold += 1) {
+      ctx.fillRect(tifoLeft + (fold * tifoWidth) / 4, tifoTop, tifoWidth * 0.04, tifoHeight);
+    }
+    drawTeamCrest(ctx, {
+      cx: tifoLeft + tifoWidth / 2,
+      cy: tifoTop + tifoHeight * 0.55,
+      size: Math.min(tifoWidth * 0.84, tifoHeight * 0.94),
+      teamId: crest.teamId,
+      shortName: crest.shortName,
+      // Dark on a bright banner. A white crest on the club's own colour has no
+      // contrast left to draw its pattern with, so it reads as a blank disc.
+      color: shade(crest.color, 0.24),
+      alpha: 0.94,
+      nameplate: false,
+    });
+  }
+
   // Walkway at the front, then the roof, then the light that falls on both.
   ctx.fillStyle = CONCOURSE_COLOR;
   ctx.fillRect(0, concourseTop, canvas.width, concourseHeight);
@@ -238,6 +295,64 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   return { key, canvas, height: canvas.height };
 }
 
+/** Below this the scoreline is a smudge, so the screen is left out entirely. */
+const MIN_SCREEN_WIDTH = 34;
+const MIN_SCREEN_HEIGHT = 12;
+
+interface BigScreenGeometry {
+  centerX: number;
+  top: number;
+  standHeight: number;
+  viewWidth: number;
+  board: StadiumScoreboard;
+}
+
+/**
+ * The scoreboard hanging over the middle of the stand.
+ *
+ * Sized off the stand height, not its width: on the tight camera the stand is
+ * nearly twice the canvas wide, and a width-based screen swallows the tier it
+ * is supposed to hang above. The horizontal position is then clamped into the
+ * frame, because a scoreboard sliced by the edge of the picture reads as a bug
+ * rather than as a building.
+ */
+function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometry): void {
+  const height = geometry.standHeight * 0.38;
+  const width = Math.min(height * 2.6, geometry.viewWidth * 0.24);
+  if (width < MIN_SCREEN_WIDTH || height < MIN_SCREEN_HEIGHT) return;
+  const x = Math.max(
+    4,
+    Math.min(geometry.centerX - width / 2, geometry.viewWidth - width - 4),
+  );
+  const y = geometry.top;
+  const board = geometry.board;
+
+  ctx.fillStyle = '#04070a';
+  ctx.fillRect(x - 2, y - 2, width + 4, height + 4);
+  const panel = ctx.createLinearGradient(x, y, x, y + height);
+  panel.addColorStop(0, '#121c27');
+  panel.addColorStop(1, '#070c12');
+  ctx.fillStyle = panel;
+  ctx.fillRect(x, y, width, height);
+
+  const barWidth = Math.max(2, width * 0.085);
+  ctx.fillStyle = board.home.color;
+  ctx.fillRect(x, y, barWidth, height);
+  ctx.fillStyle = board.away.color;
+  ctx.fillRect(x + width - barWidth, y, barWidth, height);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const scoreSize = height * 0.52;
+  ctx.font = '800 ' + scoreSize.toFixed(1) + 'px Inter, Arial, sans-serif';
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText(board.homeScore + ' - ' + board.awayScore, x + width / 2, y + height * 0.42);
+
+  const clockSize = Math.max(5, height * 0.24);
+  ctx.font = '600 ' + clockSize.toFixed(1) + 'px Inter, Arial, sans-serif';
+  ctx.fillStyle = 'rgba(226,232,240,0.7)';
+  ctx.fillText(board.minute + "'", x + width / 2, y + height * 0.8);
+}
 /**
  * Draw the whole surround for one camera.
  *
@@ -301,6 +416,18 @@ export function drawBroadcastStadium(
   }
   ctx.restore();
 
+  // The big screen. Not baked into the stand, because the scoreline changes
+  // every few seconds and the seat map does not.
+  if (options.scoreboard) {
+    drawBigScreen(ctx, {
+      centerX: frontCenter,
+      top: standHeight * ROOF_FRACTION + standHeight * 0.04,
+      standHeight,
+      viewWidth: view.width,
+      board: options.scoreboard,
+    });
+  }
+
   // Advertising boards, right behind the far touchline.
   const boardHeight = Math.max(5, H * 0.026);
   const boardLeft = frontCenter - touchlineSpan * 0.56;
@@ -309,8 +436,23 @@ export function drawBroadcastStadium(
   const panels = Math.ceil((boardRight - boardLeft) / panelWidth);
   for (let index = 0; index < panels; index++) {
     const x = boardLeft + index * panelWidth;
+    const panelSpan = panelWidth - 1;
     ctx.fillStyle = BOARD_COLORS[index % BOARD_COLORS.length];
-    ctx.fillRect(x, farY - boardHeight, panelWidth - 1, boardHeight);
+    ctx.fillRect(x, farY - boardHeight, panelSpan, boardHeight);
+    // Two light bars stand in for lettering. A flat colour panel reads as a
+    // row of building blocks; a panel with something written on it reads as
+    // an advertising board, and at this distance that is the whole difference.
+    const textWidth = panelSpan * 0.58;
+    const textX = x + (panelSpan - textWidth) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillRect(textX, farY - boardHeight * 0.64, textWidth, Math.max(1, boardHeight * 0.2));
+    ctx.fillStyle = 'rgba(255,255,255,0.26)';
+    ctx.fillRect(
+      textX + textWidth * 0.2,
+      farY - boardHeight * 0.34,
+      textWidth * 0.6,
+      Math.max(0.8, boardHeight * 0.12),
+    );
   }
   ctx.fillStyle = 'rgba(255,255,255,0.14)';
   ctx.fillRect(boardLeft, farY - boardHeight, boardRight - boardLeft, 1);

@@ -12,6 +12,9 @@ import {
   tracePitchLine,
   type ProjectedPoint,
 } from './projection';
+import { STANDARD_PITCH_LENGTH_METERS, STANDARD_PITCH_WIDTH_METERS } from './geometry';
+import { drawTeamCrest } from './team-crest';
+import { badgeShade } from '../team-badge-geometry';
 import type { BroadcastView } from './broadcast-view';
 
 const STRIPE_COUNT = 10;
@@ -266,6 +269,57 @@ function drawGoal(ctx: CanvasRenderingContext2D, view: BroadcastView, end: 0 | 1
 export interface BroadcastPitchOptions {
   /** Corner flag colour, normally the home club's. */
   flagColor?: string;
+  /** Home crest painted into the centre circle. */
+  crest?: PaintedCrest;
+}
+
+export interface PaintedCrest {
+  teamId?: string;
+  shortName: string;
+  color: string;
+}
+
+const CENTER_CIRCLE_RADIUS_METERS = 9.15;
+/** How much of the centre circle the painted crest fills. */
+const CENTER_CREST_FILL = 0.68;
+/** Painted on grass, so it has to sit under the markings, not over them. */
+const CENTER_CREST_ALPHA = 0.32;
+
+/**
+ * The home crest mown into the centre circle.
+ *
+ * The circle projects to an ellipse, so the crest is squashed by the ratio of
+ * the two projected radii rather than drawn square: a square crest on a
+ * foreshortened pitch reads as a sticker floating above the turf.
+ */
+function drawCenterCrest(
+  ctx: CanvasRenderingContext2D,
+  view: BroadcastView,
+  crest: PaintedCrest,
+): void {
+  const alongU = CENTER_CIRCLE_RADIUS_METERS / STANDARD_PITCH_LENGTH_METERS;
+  const alongV = CENTER_CIRCLE_RADIUS_METERS / STANDARD_PITCH_WIDTH_METERS;
+  const center = view.at(0.5, 0.5);
+  const left = view.at(0.5 - alongU, 0.5);
+  const right = view.at(0.5 + alongU, 0.5);
+  const near = view.at(0.5, 0.5 + alongV);
+  const far = view.at(0.5, 0.5 - alongV);
+  const width = Math.abs(right.x - left.x) * CENTER_CREST_FILL;
+  const height = Math.abs(near.y - far.y) * CENTER_CREST_FILL;
+  if (width < 6 || height < 3) return;
+  drawTeamCrest(ctx, {
+    cx: center.x,
+    cy: center.y,
+    size: width,
+    flatten: height / width,
+    teamId: crest.teamId,
+    shortName: crest.shortName,
+    // Washed toward white: a crest mown or sprayed into turf is a pale mark on
+    // grass, not a saturated sticker sitting on top of it.
+    color: badgeShade(crest.color, 0.5),
+    alpha: CENTER_CREST_ALPHA,
+    nameplate: false,
+  });
 }
 
 /**
@@ -292,6 +346,9 @@ export function drawBroadcastPitch(
 
   drawStripes(ctx, view);
   drawWear(ctx, view);
+
+  // Under the light and under the markings: paint on grass, not a decal on top.
+  if (options.crest) drawCenterCrest(ctx, view, options.crest);
 
   // Light falls off toward the far side and the corners.
   const shade = ctx.createLinearGradient(0, corners[3].y, 0, corners[0].y);
