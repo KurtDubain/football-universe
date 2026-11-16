@@ -635,7 +635,9 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // `retirementHistory`, `coachCandidatePool`,
   // `nextPlayerUuidCounter` — never to `world.X`.
   const preRetirementSquads = squads;
-  const retirementResult = processRetirements({ ...world, squads: preRetirementSquads }, rng);
+  const retirementResult = processRetirements(
+    { ...world, squads: preRetirementSquads }, rng, leagueClimate.talentEra,
+  );
   if (retirementResult.retirements.length > 0) {
     squads = retirementResult.squads;
     nextPlayerUuidCounter = retirementResult.nextPlayerUuidCounter;
@@ -870,6 +872,7 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
         retirees: transferResult.freeAgentRetirees.filter(fa => !fa.overflow),
         teamBases: world.teamBases,
         academyLevels: world.academyLevels,
+        talentEra: leagueClimate.talentEra,
         rng,
         nextPlayerUuidCounter,
       });

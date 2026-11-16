@@ -10,6 +10,7 @@ import { computeInitialMarketValue } from '../economy/market-value';
 import { formatPlayerUuid } from './generator';
 import { computePlayerCareerTotals } from './career-totals';
 import { ACADEMY_LEVEL_DEFAULT } from '../clubs/academy';
+import { TALENT_ERA_MAX, TALENT_ERA_MIN } from '../clubs/league-climate';
 
 /**
  * Per-team retirement cap. If more than this many players on the same team
@@ -20,6 +21,24 @@ import { ACADEMY_LEVEL_DEFAULT } from '../clubs/academy';
 export const MAX_RETIREMENTS_PER_TEAM = 4;
 
 export type YouthTalentTier = 'regular' | 'prospect' | 'elite';
+
+/**
+ * Talent-era weights on the two academy bands.
+ *
+ * `talentEra` is league-scoped and drifts on its own (see `league-climate`), so
+ * these move the SHAPE of the graduate distribution without moving where a club
+ * sits inside it — a golden generation is thicker at every club, not a rich-club
+ * bonus. At the ±5 bounds the elite band scales ×1.63 / ×0.38 and the prospect
+ * band ×1.30 / ×0.70.
+ *
+ * The elite band carries the larger weight because it is the band that decides
+ * whether an era has a tail at all: the league's ≥90 population is almost
+ * entirely elite-tier graduates, and a multiplier that only moved the median
+ * would produce a generation that is broadly decent with no stars — which is not
+ * what a golden generation means.
+ */
+export const TALENT_ERA_ELITE_WEIGHT = 0.125;
+export const TALENT_ERA_PROSPECT_WEIGHT = 0.06;
 
 /**
  * A bounded mixture keeps most academy graduates ordinary while preserving
@@ -39,25 +58,41 @@ export type YouthTalentTier = 'regular' | 'prospect' | 'elite';
  *
  * Across the full spans the academy level (15..95) moves eliteChance by 0.67pp
  * against reputation (34..98) 0.38pp — the academy is the 1.8x lever.
+ *
+ * `talentEra` is the third, league-scoped term. B3 made the academy system
+ * deliberately conservative — the league mean is pinned near 50, so with only
+ * club-level inputs there is nothing that can move the LEAGUE's talent
+ * distribution at all. Measured over 100 seasons, the mean rating fell from
+ * 61.1 to 55 in the first 15 seasons and then sat within ±0.9 of 56 for 80 more.
  */
 export function youthTalentTierChances(
   reputation: number,
   academyLevel: number,
+  talentEra: number = 0,
 ): { eliteChance: number; prospectChance: number } {
   const normalizedReputation = Math.max(0, Math.min(100, reputation)) / 100;
   const normalizedLevel = Math.max(0, Math.min(100, academyLevel)) / 100;
-  return {
-    eliteChance: 0.012 + normalizedReputation * 0.006 + normalizedLevel * 0.0084,
-    prospectChance: 0.13 + normalizedReputation * 0.025 + normalizedLevel * 0.035,
-  };
+  const era = Math.max(TALENT_ERA_MIN, Math.min(TALENT_ERA_MAX, talentEra));
+  const eliteChance = (0.012 + normalizedReputation * 0.006 + normalizedLevel * 0.0084)
+    * (1 + era * TALENT_ERA_ELITE_WEIGHT);
+  const prospectChance = (0.13 + normalizedReputation * 0.025 + normalizedLevel * 0.035)
+    * (1 + era * TALENT_ERA_PROSPECT_WEIGHT);
+  // `rollYouthTalentTier` tests one roll against `elite` and then
+  // `elite + prospect`, so the two must not sum past 1. At the current weights
+  // they cannot even with every input maxed; this guards a future weight change
+  // from silently making the elite tier unreachable.
+  const total = eliteChance + prospectChance;
+  if (total <= 1) return { eliteChance, prospectChance };
+  return { eliteChance: eliteChance / total, prospectChance: prospectChance / total };
 }
 
 export function rollYouthTalentTier(
   reputation: number,
   academyLevel: number,
   rng: SeededRNG,
+  talentEra: number = 0,
 ): YouthTalentTier {
-  const { eliteChance, prospectChance } = youthTalentTierChances(reputation, academyLevel);
+  const { eliteChance, prospectChance } = youthTalentTierChances(reputation, academyLevel, talentEra);
   const roll = rng.next();
   if (roll < eliteChance) return 'elite';
   if (roll < eliteChance + prospectChance) return 'prospect';
@@ -208,6 +243,13 @@ export function generateYouthReplacement(
    * unit tests keep the exact behaviour they had before the rewire.
    */
   academyLevel: number = ACADEMY_LEVEL_DEFAULT,
+  /**
+   * League talent-era index, -5..+5. Moves the regular-tier median via
+   * `basePeak` and the tier odds via `rollYouthTalentTier`. Defaults to the
+   * neutral point so pre-climate saves and focused unit tests keep the exact
+   * distribution they had before this existed.
+   */
+  talentEra: number = 0,
 ): Player {
   // Age 18-22, weighted slightly toward 19-20 via two integer rolls and a
   // min — produces a triangular-ish distribution without an explicit table.
@@ -218,7 +260,7 @@ export function generateYouthReplacement(
   const uuid = formatPlayerUuid(nextUuid.value++);
   const tag = rollTagForUuid(uuid);
   const talentRng = rng.fork();
-  const talentTier = rollYouthTalentTier(team.reputation ?? 50, academyLevel, talentRng);
+  const talentTier = rollYouthTalentTier(team.reputation ?? 50, academyLevel, talentRng, talentEra);
   const peakAge = tag === 'late_bloomer'
     ? talentRng.nextInt(28, 32)
     : talentTier === 'elite'
@@ -228,7 +270,12 @@ export function generateYouthReplacement(
   // The regular population retains the existing club-strength model. A
   // bounded prospect band and a rare elite band restore the long-term tail
   // without lifting the median or guaranteeing elite academies a superstar.
-  const basePeak = 45 + (team.overall - 65) * 0.4;
+  // The regular band is the median mover: ~83% of graduates land here, so the
+  // league's mean rating tracks this term almost one-for-one once a cohort has
+  // aged in. The elite and prospect bands use fixed ranges and are moved only
+  // through their FREQUENCY, which is what keeps an era's tail and its median
+  // from being the same dial.
+  const basePeak = 45 + (team.overall - 65) * 0.4 + talentEra;
   let peak: number;
   if (talentTier === 'elite') {
     peak = talentRng.nextInt(89, 96);
@@ -340,10 +387,12 @@ export function applyFreeAgentReplacements(params: {
   retirees: ReadonlyArray<{ position: PlayerPosition; releasedFromTeamId: string }>;
   teamBases: Record<string, TeamBase>;
   academyLevels?: Record<string, { level: number }>;
+  /** League talent-era index for the graduates; see `generateYouthReplacement`. */
+  talentEra?: number;
   rng: SeededRNG;
   nextPlayerUuidCounter: number;
 }): { squads: Record<string, Player[]>; nextPlayerUuidCounter: number } {
-  const { retirees, teamBases, academyLevels, rng } = params;
+  const { retirees, teamBases, academyLevels, rng, talentEra = 0 } = params;
   if (retirees.length === 0) {
     return { squads: params.squads, nextPlayerUuidCounter: params.nextPlayerUuidCounter };
   }
@@ -380,6 +429,7 @@ export function applyFreeAgentReplacements(params: {
       rng,
       nextUuid,
       academyLevels?.[teamId]?.level ?? ACADEMY_LEVEL_DEFAULT,
+      talentEra,
     );
     next = {
       ...next,
@@ -426,6 +476,14 @@ type RetirementCandidate = {
 export function processRetirements(
   world: GameWorld,
   rng: SeededRNG,
+  /**
+   * League talent-era index for this pass's graduates. Passed in rather than read
+   * off `world` because season-end advances the climate at the top of the pass and
+   * every consumer downstream of it — the squad top-up included — uses the
+   * advanced value; reading `world.leagueClimate` here would make graduates and
+   * the top-up disagree about which era it is.
+   */
+  talentEra: number = 0,
 ): {
   squads: Record<string, Player[]>;
   retirements: PlayerRetirement[];
@@ -565,6 +623,7 @@ export function processRetirements(
       const youth = generateYouthReplacement(
         team, p.position, p.number, usedNumbers, usedNames, rng, nextUuid,
         world.academyLevels?.[teamId]?.level ?? ACADEMY_LEVEL_DEFAULT,
+        talentEra,
       );
       newPlayers.push(youth);
     }

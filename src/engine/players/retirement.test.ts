@@ -12,6 +12,7 @@ import {
   youthTalentTierChances,
 } from './retirement';
 import type { GameWorld } from '../season/season-manager';
+import { TALENT_ERA_MAX, TALENT_ERA_MIN } from '../clubs/league-climate';
 import type { Player, PlayerPosition } from '../../types/player';
 import type { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
@@ -480,6 +481,108 @@ describe('generateYouthReplacement — reputation + academy tier (B3)', () => {
     const levelLow = youthTalentTierChances(70, 15).eliteChance;
     const levelHigh = youthTalentTierChances(70, 95).eliteChance;
     expect(levelHigh - levelLow).toBeGreaterThan(repHigh - repLow);
+  });
+});
+
+describe('talent era (league climate)', () => {
+  function samplePeaks(talentEra: number, n: number, seed: number): number[] {
+    const team = makeTeam('t', { overall: 70, reputation: 60, region: '大陆+其他' });
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const rng = new SeededRNG(seed + i);
+      const nextUuid = { value: 1 };
+      out.push(generateYouthReplacement(
+        team, 'MF', 9, new Set(), new Set(), rng, nextUuid, 50, talentEra,
+      ).peakRating);
+    }
+    return out;
+  }
+
+  const avg = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it('conserves the pre-climate odds exactly at the neutral point', () => {
+    // Saves written before the climate existed, and every caller that omits the
+    // argument, must get the identical distribution they got before.
+    const omitted = youthTalentTierChances(70, 50);
+    const neutral = youthTalentTierChances(70, 50, 0);
+    expect(neutral.eliteChance).toBe(omitted.eliteChance);
+    expect(neutral.prospectChance).toBe(omitted.prospectChance);
+  });
+
+  it('scales the elite band harder than the prospect band', () => {
+    const base = youthTalentTierChances(70, 50, 0);
+    const golden = youthTalentTierChances(70, 50, TALENT_ERA_MAX);
+    const barren = youthTalentTierChances(70, 50, TALENT_ERA_MIN);
+    const eliteScale = golden.eliteChance / base.eliteChance;
+    const prospectScale = golden.prospectChance / base.prospectChance;
+    // Both bands thicken in a golden generation, but the tail is the point of one.
+    expect(eliteScale).toBeGreaterThan(prospectScale);
+    expect(prospectScale).toBeGreaterThan(1);
+    expect(barren.eliteChance).toBeLessThan(base.eliteChance);
+    expect(barren.prospectChance).toBeLessThan(base.prospectChance);
+  });
+
+  it('stays a valid distribution across the whole input space', () => {
+    for (const talentEra of [TALENT_ERA_MIN - 10, TALENT_ERA_MIN, 0, TALENT_ERA_MAX, TALENT_ERA_MAX + 10]) {
+      for (const reputation of [0, 50, 100]) {
+        for (const academyLevel of [0, 50, 100]) {
+          const { eliteChance, prospectChance } = youthTalentTierChances(reputation, academyLevel, talentEra);
+          expect(eliteChance).toBeGreaterThan(0);
+          expect(prospectChance).toBeGreaterThan(0);
+          // `rollYouthTalentTier` tests one roll against elite then elite+prospect.
+          expect(eliteChance + prospectChance).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it('clamps an out-of-range era instead of producing impossible odds', () => {
+    const beyond = youthTalentTierChances(70, 50, TALENT_ERA_MAX + 25);
+    const atBound = youthTalentTierChances(70, 50, TALENT_ERA_MAX);
+    expect(beyond.eliteChance).toBe(atBound.eliteChance);
+    expect(beyond.prospectChance).toBe(atBound.prospectChance);
+  });
+
+  it('rolls a visibly thicker elite tier in a golden generation', () => {
+    const countElite = (talentEra: number): number => {
+      const rng = new SeededRNG(20261103);
+      let elite = 0;
+      for (let i = 0; i < 20_000; i++) {
+        if (rollYouthTalentTier(50, 50, rng, talentEra) === 'elite') elite++;
+      }
+      return elite;
+    };
+    const golden = countElite(TALENT_ERA_MAX);
+    const neutral = countElite(0);
+    const barren = countElite(TALENT_ERA_MIN);
+    expect(golden).toBeGreaterThan(neutral * 1.4);
+    expect(neutral).toBeGreaterThan(barren * 1.4);
+  });
+
+  it('moves the graduate peak average in both directions', () => {
+    const golden = avg(samplePeaks(TALENT_ERA_MAX, 400, 90000));
+    const neutral = avg(samplePeaks(0, 400, 90000));
+    const barren = avg(samplePeaks(TALENT_ERA_MIN, 400, 90000));
+    // The down direction is the one that was missing before: a barren era has to
+    // produce visibly worse graduates, not just fewer great ones.
+    expect(golden - neutral).toBeGreaterThan(3);
+    expect(neutral - barren).toBeGreaterThan(3);
+  });
+
+  it('leaves the per-tier peak bands alone, moving only their frequency', () => {
+    const team = makeTeam('t', { overall: 70, reputation: 60, region: '大陆+其他' });
+    for (const talentEra of [TALENT_ERA_MIN, 0, TALENT_ERA_MAX]) {
+      for (let i = 0; i < 300; i++) {
+        const rng = new SeededRNG(310000 + i);
+        const y = generateYouthReplacement(
+          team, 'MF', 9, new Set(), new Set(), rng, { value: 1 }, 50, talentEra,
+        );
+        // Only the rare elite tier may cross 89, in every era. If the era widened
+        // the bands instead of their odds, this is where it would show up.
+        expect(y.peakRating).toBeLessThanOrEqual(98);
+        expect(y.peakRating).toBeGreaterThanOrEqual(35);
+      }
+    }
   });
 });
 

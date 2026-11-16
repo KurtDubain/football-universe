@@ -449,6 +449,7 @@ export function topUpSquads(params: TopUpParams): TopUpResult {
         team, position, pickReplacementNumber(usedNumbers, position),
         usedNumbers, usedNames, rng, nextUuid,
         academyLevels?.[buyerId]?.level ?? ACADEMY_LEVEL_DEFAULT,
+        climate.talentEra,
       );
       squads = {
         ...squads,
