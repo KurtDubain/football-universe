@@ -7,7 +7,21 @@ import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence'
 import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
 import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
-import { broadcastCameraTarget, type BroadcastCameraMoment } from './pitch-canvas/camera';
+import type { BroadcastCameraMoment } from './pitch-canvas/camera';
+import { rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
+import {
+  createBroadcastView,
+  rigFollowCenterX,
+  RIG_SETTLE,
+  type BroadcastView,
+} from './pitch-canvas/broadcast-view';
+import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
+import {
+  drawBroadcastPlayer,
+  drawBroadcastBall,
+  drawBroadcastGoalCelebration,
+  drawBroadcastShotOutcome,
+} from './pitch-canvas/broadcast-figures';
 import {
   canvasAspectRatio,
   canvasLogicalSize,
@@ -24,8 +38,7 @@ import {
 } from './pitch-canvas/particles';
 import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, computeReceptionTouchOffset, getBaseSlot, computeBallPosition, resolvePhasePoints, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
 import {
-  drawPitch, drawHalftime, drawPlayer, drawBall,
-  drawGoalCelebration, drawShotOutcome, drawShotOutcomeLabel,
+  drawHalftime, drawShotOutcomeLabel,
   applyCameraShake, applyWhiteFlash, cameraPointToScreen,
   GOAL_CELEB_MAX_FRAMES, FLASH_MAX_FRAMES, CAMERA_SHAKE_MAX_FRAMES, SHOT_OUTCOME_MAX_FRAMES,
   type BroadcastCameraState,
@@ -109,12 +122,11 @@ const LABEL_SCREEN_TOP_MARGIN = 20;
  * pitch puts the attacking goal, making the scorer's name the first casualty.
  */
 function resolveLabelPlacement(
-  player: PlayerState,
-  P: number, fw: number, fh: number,
+  ground: { x: number; y: number },
   W: number, H: number,
   transform: ReturnType<typeof applyCameraShake>,
 ): 'above' | 'below' {
-  const screen = cameraPointToScreen(P + player.x * fw, P + player.y * fh, W, H, transform);
+  const screen = cameraPointToScreen(ground.x, ground.y, W, H, transform);
   return screen.y < LABEL_SCREEN_TOP_MARGIN ? 'below' : 'above';
 }
 
@@ -283,13 +295,19 @@ function PitchCanvas(props: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const ballPos = useRef({ x: 0.5, y: 0.5 });
-  const ballHistory = useRef<{ x: number; y: number }[]>([]);
+  const ballHistory = useRef<{ x: number; y: number; size: number }[]>([]);
   const postShotRestingBallRef = useRef<{ x: number; y: number } | null>(null);
   const cameraRef = useRef<BroadcastCameraState>({
     focusX: LOGICAL_PITCH_WIDTH / 2,
     focusY: LOGICAL_PITCH_HEIGHT / 2,
     zoom: 1,
   });
+  // Broadcast rig state. The rig id is what the cut keys off; the eased centre
+  // is the only part of the camera that moves continuously.
+  const viewRigIdRef = useRef<CameraRigId>('tactical');
+  const viewCenterXRef = useRef(0.5);
+  const attackingRightRef = useRef(true);
+  const viewRef = useRef<BroadcastView | null>(null);
   const goalCelebFrame = useRef(0);
   const goalCelebColor = useRef('#facc15'); // team color of most recent goal — for ring tinting
   const goalCelebRightSide = useRef(true); // which goal mouth the celebration is anchored to
@@ -472,8 +490,6 @@ function PitchCanvas(props: Props) {
     const P = PITCH_PADDING;
     const pitchGeometry = createPitchGeometry(W, H, P);
     const fw = pitchGeometry.fieldWidth, fh = pitchGeometry.fieldHeight;
-    const pitchLayer = document.createElement('canvas');
-    const pitchLayerContext = pitchLayer.getContext('2d')!;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
     const renderEnvironment: RenderEnvironment = {
@@ -526,18 +542,6 @@ function PitchCanvas(props: Props) {
         canvas.width = nextWidth;
         canvas.height = nextHeight;
       }
-      // The cached pitch bitmap always stays in landscape drawing space; the
-      // quarter turn happens once, in the camera transform. The canvas aspect
-      // is locked to the pitch, so one uniform scale covers both axes.
-      const drawingScale = nextWidth / canvasSize.width;
-      const layerWidth = Math.round(W * drawingScale);
-      const layerHeight = Math.round(H * drawingScale);
-      if (pitchLayer.width !== layerWidth || pitchLayer.height !== layerHeight) {
-        pitchLayer.width = layerWidth;
-        pitchLayer.height = layerHeight;
-        pitchLayerContext.setTransform(drawingScale, 0, 0, drawingScale, 0, 0);
-        drawPitch(pitchLayerContext, W, H, P);
-      }
       ctx.setTransform(
         nextWidth / canvasSize.width,
         0,
@@ -552,6 +556,45 @@ function PitchCanvas(props: Props) {
     resizeCanvas();
     const resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(canvas.parentElement ?? canvas);
+
+    /**
+     * Project a flat drawing coordinate through the camera that is live right
+     * now. Particle spawns fire from a few places outside the render frame,
+     * and they still have to land on the pitch the viewer is looking at.
+     */
+    function projectDrawingPoint(x: number, y: number): { x: number; y: number } {
+      const view = viewRef.current;
+      if (!view) return { x, y };
+      const point = view.fromDrawing(x, y);
+      return { x: point.x, y: point.y };
+    }
+
+    /** Same, for a direction: rotated by the camera, magnitude preserved. */
+    function projectDrawingVector(
+      x: number, y: number, dx: number, dy: number,
+    ): { dx: number; dy: number } {
+      const length = Math.hypot(dx, dy);
+      if (length < 1e-6) return { dx: 0, dy: 0 };
+      const from = projectDrawingPoint(x, y);
+      const to = projectDrawingPoint(x + dx, y + dy);
+      const projectedLength = Math.hypot(to.x - from.x, to.y - from.y);
+      if (projectedLength < 1e-6) return { dx, dy };
+      const k = length / projectedLength;
+      return { dx: (to.x - from.x) * k, dy: (to.y - from.y) * k };
+    }
+
+    /** Record one trail sample, already projected so it tracks the camera. */
+    function pushBallTrail(bx: number, by: number, arcLift: number): void {
+      const view = viewRef.current;
+      const ground = view ? view.fromDrawing(bx, by) : { x: bx, y: by, scale: 1 };
+      const lift = view ? view.liftPixels(arcLift, ground.scale) : arcLift;
+      ballHistory.current.push({
+        x: ground.x,
+        y: ground.y - lift,
+        size: clamp(ground.scale * 1.5, 0.55, 2.2),
+      });
+      if (ballHistory.current.length > 10) ballHistory.current.shift();
+    }
 
     function addParticles(spawned: Particle[]): void {
       const density = Math.min(1, renderBudget.particleCap / 350);
@@ -718,9 +761,10 @@ function PitchCanvas(props: Props) {
         goalCelebColor.current = goalColor;
         goalCelebRightSide.current = scene.attackingHome;
         const portraitBurst = orientationRef.current === 'portrait';
+        const burstAt = projectDrawingPoint(targetX, targetY);
         addParticles(spawnGoalBurst(
-          targetX,
-          targetY,
+          burstAt.x,
+          burstAt.y,
           goalColor,
           portraitBurst ? P : H - P,
           scene.seed,
@@ -735,7 +779,8 @@ function PitchCanvas(props: Props) {
       shotOutcomeAttackingHomeRef.current = scene.attackingHome;
       shotOutcomeSeedRef.current = scene.seed;
       if (scene.outcome === 'save' || scene.outcome === 'block') {
-        addParticles(spawnTackleSparks(targetX, targetY, scene.seed + 17));
+        const impactAt = projectDrawingPoint(targetX, targetY);
+        addParticles(spawnTackleSparks(impactAt.x, impactAt.y, scene.seed + 17));
       }
     }
 
@@ -891,38 +936,37 @@ function PitchCanvas(props: Props) {
                 : livePhase?.stage === 'build'
                   ? 'build'
                   : 'wide';
-      const cameraTarget = broadcastCameraTarget({
-        moment: cameraMoment,
-        quality: renderBudget.quality,
-        playbackMode: livePlaybackMode,
-        reducedMotion,
-        ballX: ballPos.current.x,
-        ballY: ballPos.current.y,
-        canvasWidth: W,
-        canvasHeight: H,
-        padding: P,
-        fieldWidth: fw,
-        fieldHeight: fh,
-        goalDepth: pitchGeometry.goalDepth,
-      });
-      const deadZoneX = fw * (cameraMoment === 'wide' ? 0.1 : 0.045);
-      const deadZoneY = fh * (cameraMoment === 'wide' ? 0.12 : 0.06);
-      const focusDeltaX = cameraTarget.focusX - cameraRef.current.focusX;
-      const focusDeltaY = cameraTarget.focusY - cameraRef.current.focusY;
-      const desiredFocusX = Math.abs(focusDeltaX) > deadZoneX
-        ? cameraTarget.focusX - Math.sign(focusDeltaX) * deadZoneX
-        : cameraRef.current.focusX;
-      const desiredFocusY = Math.abs(focusDeltaY) > deadZoneY
-        ? cameraTarget.focusY - Math.sign(focusDeltaY) * deadZoneY
-        : cameraRef.current.focusY;
-      cameraRef.current.focusX = lerp(cameraRef.current.focusX, desiredFocusX, cameraTarget.settle * 0.72);
-      cameraRef.current.focusY = lerp(cameraRef.current.focusY, desiredFocusY, cameraTarget.settle * 0.72);
-      cameraRef.current.zoom = lerp(cameraRef.current.zoom, cameraTarget.zoom, cameraTarget.settle);
-      // Not eased: the frame is where the ball and its goal are *right now*,
-      // and a pan that lags behind it is exactly the bug this replaces. The pan
-      // is still clamped rather than snapped, so a non-binding frame leaves the
-      // drift untouched.
-      cameraRef.current.frame = cameraTarget.frame;
+      // Which camera this moment is shot on.
+      //
+      // A broadcast cuts between a fixed set of positions rather than flying
+      // between them, so the rig is a lookup and the only continuous motion is
+      // the operator tracking the ball sideways inside the shot they picked.
+      const attackingRight = livePhase?.attackingHome
+        ?? sequenceSceneRef.current?.attackingHome
+        ?? attackingRightRef.current;
+      attackingRightRef.current = attackingRight;
+      const ballLengthFraction = clamp((ballPos.current.x - P) / fw, 0, 1);
+      const baseRig = rigForMoment(cameraMoment, attackingRight, ballLengthFraction);
+      const followTargetX = rigFollowCenterX(baseRig, ballLengthFraction);
+      if (viewRigIdRef.current !== baseRig.id) {
+        // Hard cut. Easing across a lens change would smear the pitch through
+        // every intermediate framing, which is the one thing a real cut never
+        // does — and the one thing that would make this read as a slow zoom.
+        viewRigIdRef.current = baseRig.id;
+        viewCenterXRef.current = followTargetX;
+      } else {
+        viewCenterXRef.current += (followTargetX - viewCenterXRef.current) * RIG_SETTLE[baseRig.id];
+      }
+      const rig: CameraRig = { ...baseRig, centerX: viewCenterXRef.current };
+      const view = createBroadcastView(rig, W, H, orientationRef.current);
+      viewRef.current = view;
+
+      // The rig owns the framing now, so the legacy pan and zoom stay parked
+      // and only the impact shake moves the drawing space.
+      cameraRef.current.focusX = W / 2;
+      cameraRef.current.focusY = H / 2;
+      cameraRef.current.zoom = 1;
+      cameraRef.current.frame = undefined;
 
       // Broadcast camera and restrained impact shake share one transform so
       // the pitch never receives competing scale/translation operations.
@@ -942,7 +986,7 @@ function PitchCanvas(props: Props) {
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
-      ctx.drawImage(pitchLayer, 0, 0, pitchLayer.width, pitchLayer.height, 0, 0, W, H);
+      drawBroadcastPitch(ctx, view, { flagColor: homeColor });
 
       if (halftime) {
         drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel, orientationRef.current);
@@ -1059,9 +1103,10 @@ function PitchCanvas(props: Props) {
           let turnoverLoaded = false;
           if (phase.kind === 'pass' && phase.intercepted && phaseFrameRef.current >= phase.duration * 0.55 && !interceptedRef.current) {
             interceptedRef.current = true;
+            const interceptionAt = projectDrawingPoint(ballPos.current.x, ballPos.current.y);
             addParticles(spawnTackleSparks(
-              ballPos.current.x,
-              ballPos.current.y,
+              interceptionAt.x,
+              interceptionAt.y,
               sequenceSeedRef.current * 31 + phaseIdxRef.current,
             ));
             const turnoverHome = !phase.attackingHome;
@@ -1100,11 +1145,13 @@ function PitchCanvas(props: Props) {
             phaseStateRef.current = 'holding';
             phaseFrameRef.current = 0;
             // Ball arrival = grass kick effect
+            const arrivalAt = projectDrawingPoint(ballPos.current.x, ballPos.current.y);
+            const arrivalDir = projectDrawingVector(ballPos.current.x, ballPos.current.y, 0, 24);
             addParticles(spawnGrassKick(
-              ballPos.current.x,
-              ballPos.current.y,
-              0,
-              1,
+              arrivalAt.x,
+              arrivalAt.y,
+              arrivalDir.dx,
+              arrivalDir.dy,
               sequenceSeedRef.current * 37 + phaseIdxRef.current,
             ));
           }
@@ -1145,11 +1192,18 @@ function PitchCanvas(props: Props) {
               const sourceNX = (source.x - P) / fw;
               const sourceNY = (source.y - P) / fh;
               // Grass kick on pass start
-              addParticles(spawnGrassKick(
+              const kickAt = projectDrawingPoint(source.x, source.y);
+              const kickDir = projectDrawingVector(
                 source.x,
                 source.y,
-                destination.x - sourceNX,
-                destination.y - sourceNY,
+                (destination.x - sourceNX) * fw,
+                (destination.y - sourceNY) * fh,
+              );
+              addParticles(spawnGrassKick(
+                kickAt.x,
+                kickAt.y,
+                kickDir.dx,
+                kickDir.dy,
                 sequenceSeedRef.current * 41 + phaseIdxRef.current,
               ));
             }
@@ -1308,11 +1362,9 @@ function PitchCanvas(props: Props) {
 
       // Ball trail (motion blur)
       if (phaseStateRef.current !== 'holding' && f % 2 === 0) {
-        ballHistory.current.push({ x: displayBx, y: displayBy - displayArcLift });
-        if (ballHistory.current.length > 10) ballHistory.current.shift();
+        pushBallTrail(displayBx, displayBy, displayArcLift);
       } else if (shotOutcomeFrameRef.current > 0 && f % 3 === 0) {
-        ballHistory.current.push({ x: displayBx, y: displayBy - displayArcLift });
-        if (ballHistory.current.length > 10) ballHistory.current.shift();
+        pushBallTrail(displayBx, displayBy, displayArcLift);
       } else if (ballHistory.current.length > 0 && f % 3 === 0) {
         ballHistory.current.shift();
       }
@@ -1443,78 +1495,130 @@ function PitchCanvas(props: Props) {
       visualBallScale += (targetVisualScale.ball - visualBallScale) * VISUAL_SCALE_EASE;
       const playerVisualScale = visualPlayerScale;
       const ballVisualScale = visualBallScale;
-      for (const player of visibleHome) {
-        const hasBall = isAttHome && player.playerId === ballHolderId;
-        const isEventPlayer = directedActors.attackerId === player.playerId || directedActors.defenderId === player.playerId;
+      // Everything that stands on the pitch goes into one list and is drawn
+      // from the far touchline forward. The ball belongs in that list: a
+      // defender standing in front of it is the strongest depth cue a flat
+      // pitch cannot give, and it is free once the sort exists.
+      const drawables: { depth: number; draw: () => void }[] = [];
+
+      const ballGround = view.fromDrawing(displayBx, displayBy);
+      drawables.push({
+        depth: clamp((displayBy - P) / fh, 0, 1),
+        draw: () => drawBroadcastBall(ctx, {
+          view,
+          ground: ballGround,
+          arcLift: displayArcLift,
+          spin: ballSpinRef.current,
+          visualScale: ballVisualScale,
+          orientation: orientationRef.current,
+        }),
+      });
+
+      const pushPlayer = (
+        player: PitchRosterPlayer,
+        stateIndex: number,
+        color: string,
+        teamSide: 'home' | 'away',
+        hasBall: boolean,
+      ): void => {
+        const playerState = playerPosRef.current[stateIndex];
+        const isEventPlayer = directedActors.attackerId === player.playerId
+          || directedActors.defenderId === player.playerId;
         const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
         const isAttacker = directedActors.attackerId === player.playerId;
         const isDefender = directedActors.defenderId === player.playerId;
         const receivingTouch = hasBall && currentPhase.kind === 'pass'
           && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
-        const playerState = playerPosRef.current[player.slotIndex];
-        const labelPlacement = resolveLabelPlacement(playerState, P, fw, fh, W, H, cameraTransform);
-        drawPlayer(
-          ctx, playerState, homeColor, player.playerNumber,
-          hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
-          isAttacker
-            ? { x: finalTargetX, y: finalTargetY }
-            : isDefender
-              ? { x: bx, y: by }
-              : receivingTouch ? ballSourceRef.current : undefined,
-          receivingTouch
-            ? 'receive'
-            : isAttacker && currentPhase.kind === 'shot'
-            ? 'shot'
+        const ground = view.fromDrawing(P + playerState.x * fw, P + playerState.y * fh);
+
+        // Facing is resolved in screen space, not drawing space. Under a
+        // camera those are not the same direction, and a player running at the
+        // lens has to present a narrow silhouette rather than a wide one.
+        let dirX = 0;
+        let dirY = 0;
+        const facingTarget = isAttacker
+          ? { x: finalTargetX, y: finalTargetY }
+          : isDefender
+            ? { x: bx, y: by }
+            : receivingTouch
+              ? ballSourceRef.current
+              : null;
+        if (facingTarget) {
+          const facingGround = view.fromDrawing(facingTarget.x, facingTarget.y);
+          dirX = facingGround.x - ground.x;
+          dirY = facingGround.y - ground.y;
+        } else if (Math.hypot(playerState.vx, playerState.vy) > 1e-6) {
+          const ahead = view.fromDrawing(
+            P + (playerState.x + playerState.vx * 30) * fw,
+            P + (playerState.y + playerState.vy * 30) * fh,
+          );
+          dirX = ahead.x - ground.x;
+          dirY = ahead.y - ground.y;
+        } else {
+          // Standing still: look at the goal this player is attacking.
+          const attacksRight = teamSide === 'home' ? isAttHome : !isAttHome;
+          const goalGround = view.fromDrawing(
+            attacksRight ? W - P : P,
+            P + playerState.y * fh,
+          );
+          dirX = goalGround.x - ground.x;
+          dirY = goalGround.y - ground.y;
+        }
+
+        const action = receivingTouch
+          ? 'receive' as const
+          : isAttacker && currentPhase.kind === 'shot'
+            ? 'shot' as const
             : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
               ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
-                ? 'catch'
+                ? 'catch' as const
                 : directedShotScene.outcome
-              : undefined,
-          receivingTouch
-            ? phaseFrameRef.current / receptionFrames
-            : isAttacker ? attackerActionProgress : phaseProgress,
-          playerVisualScale,
-          liveFeaturedPlayerIds.has(player.playerId),
+              : undefined;
+        const labelPlacement = resolveLabelPlacement(ground, W, H, cameraTransform);
+        drawables.push({
+          depth: clamp(playerState.y, 0, 1),
+          draw: () => drawBroadcastPlayer(ctx, {
+            view,
+            ground,
+            dirX,
+            dirY,
+            color,
+            number: player.playerNumber,
+            seed: stateIndex,
+            frame: f,
+            speed: Math.hypot(playerState.vx, playerState.vy),
+            hasBall,
+            highlighted,
+            featured: liveFeaturedPlayerIds.has(player.playerId),
+            teamSide,
+            label: isEventPlayer ? player.playerName : undefined,
+            labelPlacement,
+            action,
+            actionProgress: receivingTouch
+              ? phaseFrameRef.current / receptionFrames
+              : isAttacker ? attackerActionProgress : phaseProgress,
+            visualScale: playerVisualScale,
+            orientation: orientationRef.current,
+          }),
+        });
+      };
+
+      for (const player of visibleHome) {
+        pushPlayer(
+          player,
+          player.slotIndex,
+          homeColor,
           'home',
-          orientationRef.current,
-          labelPlacement,
+          isAttHome && player.playerId === ballHolderId,
         );
       }
       for (const player of visibleAway) {
-        const hasBall = !isAttHome && player.playerId === ballHolderId;
-        const isEventPlayer = directedActors.attackerId === player.playerId || directedActors.defenderId === player.playerId;
-        const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
-        const isAttacker = directedActors.attackerId === player.playerId;
-        const isDefender = directedActors.defenderId === player.playerId;
-        const receivingTouch = hasBall && currentPhase.kind === 'pass'
-          && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
-        const playerState = playerPosRef.current[11 + player.slotIndex];
-        const labelPlacement = resolveLabelPlacement(playerState, P, fw, fh, W, H, cameraTransform);
-        drawPlayer(
-          ctx, playerState, awayColor, player.playerNumber,
-          hasBall, P, fw, fh, f, highlighted, isEventPlayer ? player.playerName : undefined,
-          isAttacker
-            ? { x: finalTargetX, y: finalTargetY }
-            : isDefender
-              ? { x: bx, y: by }
-              : receivingTouch ? ballSourceRef.current : undefined,
-          receivingTouch
-            ? 'receive'
-            : isAttacker && currentPhase.kind === 'shot'
-            ? 'shot'
-            : isDefender && (directedShotScene?.outcome === 'save' || directedShotScene?.outcome === 'block')
-              ? directedShotScene.outcome === 'save' && directedShotScene.event.type === 'save'
-                ? 'catch'
-                : directedShotScene.outcome
-              : undefined,
-          receivingTouch
-            ? phaseFrameRef.current / receptionFrames
-            : isAttacker ? attackerActionProgress : phaseProgress,
-          playerVisualScale,
-          liveFeaturedPlayerIds.has(player.playerId),
+        pushPlayer(
+          player,
+          11 + player.slotIndex,
+          awayColor,
           'away',
-          orientationRef.current,
-          labelPlacement,
+          !isAttHome && player.playerId === ballHolderId,
         );
       }
 
@@ -1585,6 +1689,19 @@ function PitchCanvas(props: Props) {
         rendering: debugStateRef.current.rendering,
       };
 
+      // ── Ball trail, under everything that stands on the pitch ──
+      const bHist = ballHistory.current;
+      for (let i = 0; i < bHist.length - 1; i++) {
+        const a = (i / bHist.length) * 0.35;
+        const r = (1 + (i / bHist.length) * 1.8) * bHist[i].size;
+        ctx.beginPath(); ctx.arc(bHist[i].x, bHist[i].y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fill();
+      }
+
+      // ── Depth-sorted figures and ball ──
+      drawables.sort((left, right) => left.depth - right.depth);
+      for (const drawable of drawables) drawable.draw();
+
       // ── Particles update + draw ──
       particlesRef.current = updateAndCullParticles(
         particlesRef.current,
@@ -1594,36 +1711,22 @@ function PitchCanvas(props: Props) {
       );
       renderParticles(ctx, particlesRef.current);
 
-      // ── Ball trail ──
-      const bHist = ballHistory.current;
-      for (let i = 0; i < bHist.length - 1; i++) {
-        const a = (i / bHist.length) * 0.35;
-        const r = 1 + (i / bHist.length) * 1.8;
-        ctx.beginPath(); ctx.arc(bHist[i].x, bHist[i].y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fill();
-      }
-
-      // ── Goal celebration ring + net ripple (tinted with team color) ──
+      // ── Goal celebration, anchored to the projected goal mouth ──
       if (goalCelebFrame.current > 0) {
         goalCelebFrame.current--;
-        // Position ring at the goal mouth, not where the ball is now.
-        // Use the snapshotted side from when the goal fired — `nearEvent` may
-        // become undefined mid-celebration (window outlasts ±1min event lookup).
-        const isRightGoal = goalCelebRightSide.current;
-        const ringX = isRightGoal ? W - P - 4 : P + 4;
-        const ringY = H / 2;
-        const gH = pitchGeometry.goalMouthSpan;
-        const gY = (H - gH) / 2;
-        drawGoalCelebration(
-          ctx, goalCelebFrame.current,
-          ringX, ringY,
-          goalCelebColor.current,
-          gY, gH,
-          isRightGoal,
-          W, P,
-          bx, by,
-          f,
-        );
+        // The side is snapshotted when the goal fires: `nearEvent` can become
+        // undefined mid-celebration, because the window outlasts the ±1min
+        // event lookup the rest of the frame relies on.
+        drawBroadcastGoalCelebration(ctx, {
+          view,
+          celebFrame: goalCelebFrame.current,
+          goalEnd: goalCelebRightSide.current ? 1 : 0,
+          teamColor: goalCelebColor.current,
+          ballGround: view.fromDrawing(bx, by),
+          ballArcLift: ballArcLiftRef.current,
+          animFrame: f,
+          orientation: orientationRef.current,
+        });
       }
 
       let outcomeLabel: {
@@ -1634,17 +1737,22 @@ function PitchCanvas(props: Props) {
       } | null = null;
       if (shotOutcomeFrameRef.current > 0) {
         const remainingFrames = shotOutcomeFrameRef.current;
-        drawShotOutcome(
+        const outcomeGround = view.fromDrawing(
+          shotOutcomeTargetRef.current.x,
+          shotOutcomeTargetRef.current.y,
+        );
+        drawBroadcastShotOutcome(
           ctx,
           remainingFrames,
           shotOutcomeRef.current,
-          shotOutcomeTargetRef.current.x,
-          shotOutcomeTargetRef.current.y,
+          outcomeGround,
+          view.unitsPerMeter * outcomeGround.scale,
           shotOutcomeAttackingHomeRef.current,
+          orientationRef.current,
         );
         const screenTarget = cameraPointToScreen(
-          shotOutcomeTargetRef.current.x,
-          shotOutcomeTargetRef.current.y,
+          outcomeGround.x,
+          outcomeGround.y,
           W,
           H,
           cameraTransform,
@@ -1657,8 +1765,6 @@ function PitchCanvas(props: Props) {
         };
         shotOutcomeFrameRef.current--;
       }
-
-      drawBall(ctx, displayBx, displayBy, displayArcLift, ballSpinRef.current, ballVisualScale, orientationRef.current);
 
       ctx.restore();
 
