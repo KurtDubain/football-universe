@@ -370,7 +370,7 @@ function premiumCeilingFor(params: {
  * starting cash cannot cover a full wage bill is still allowed to trade rather
  * than being frozen out of its own market.
  */
-function spendableBudget(params: { cash: number; squadValue: number; level: 1 | 2 | 3 }): number {
+export function spendableBudget(params: { cash: number; squadValue: number; level: 1 | 2 | 3 }): number {
   const wage = computeSalary(params.squadValue, params.level);
   const wageFloor = Math.max(wage * SAFETY_WAGE_SEASONS, SAFETY_ABSOLUTE_FLOOR);
   const floor = Math.min(wageFloor, params.cash * SAFETY_MAX_FLOOR_SHARE);
@@ -528,7 +528,7 @@ export function processTransferWindow(
    * youth goes back to that club, so this path stops leaking players out of
    * the universe (see the season-end call site for the measured numbers).
    */
-  freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }>;
+  freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number; overflow: boolean }>;
   /** v17 — new persistent free agent pool state (after this window). */
   freeAgentPool: Player[];
   /** v20 — staged offers/targets for favorite teams (UI handles). */
@@ -1068,7 +1068,11 @@ export function processTransferWindow(
     };
   });
   // Age-out retirees (anyone > FREE_AGENT_MAX_AGE — no team would sign)
-  const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }> = [];
+  // `overflow` separates the two ways a pooled player leaves. Age-out is a club
+  // having released a veteran to make room, and the caller puts a graduate back.
+  // Overflow is the league holding more players than it can absorb, and the
+  // caller must NOT put one back — see the season-end call site.
+  const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number; overflow: boolean }> = [];
   const stillInPool: Player[] = [];
   for (const player of remainingPlayers) {
     if ((player.age ?? 28) > FREE_AGENT_MAX_AGE) {
@@ -1086,6 +1090,7 @@ export function processTransferWindow(
         peakRating: player.peakRating ?? player.rating,
         age: player.age ?? 28,
         careerGoals: career.goals,
+        overflow: false,
       });
     } else {
       stillInPool.push(player);
@@ -1106,6 +1111,7 @@ export function processTransferWindow(
       peakRating: oldest.peakRating ?? oldest.rating,
       age: oldest.age ?? 28,
       careerGoals: career.goals,
+      overflow: true,
     });
   }
   const newFreeAgentPool = stillInPool;

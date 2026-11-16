@@ -287,6 +287,19 @@ export interface GameWorld {
    * `validateCurrentWorld` checks the shape only when the field is present.
    */
   academyLevels?: Record<string, import('../clubs/academy').AcademyState>;
+  /**
+   * League-wide climate: the arms-race and talent-era indices.
+   *
+   * The only two drifting states in the engine that are not club-scoped. Squad
+   * size and the rating distribution both need a league-level driver — see the
+   * LeagueClimate doc comment for why nothing club-scoped can do that job.
+   *
+   * Optional and additive, so no `SAVE_SCHEMA_VERSION` bump: a v26 save written
+   * before this field existed has none, and every reader falls back to
+   * `NEUTRAL_CLIMATE` (both axes 0), which leaves squad targets and graduate
+   * quality exactly as they were before this landed.
+   */
+  leagueClimate?: import('../clubs/league-climate').LeagueClimate;
   gameMode?: import('../../types/game-mode').GameMode;
   /**
    * Phase G — monotonic counter of how many *match-bearing* calendar windows
@@ -551,6 +564,8 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     academyLevels: Object.fromEntries(
       Object.values(teamBases).map((team) => [team.id, deriveInitialAcademyState()]),
     ),
+    /** League climate starts neutral on both axes and drifts from season one. */
+    leagueClimate: { armsRace: 0, talentEra: 0 },
     coachBases,
     coachStates,
     coachCareers,

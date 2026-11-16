@@ -305,7 +305,7 @@ export function generateYouthReplacement(
  * module: retirement is upstream of transfers in the season-end pipeline and
  * must not acquire a dependency on it.
  */
-function pickReplacementNumber(used: Set<number>, position: PlayerPosition): number {
+export function pickReplacementNumber(used: Set<number>, position: PlayerPosition): number {
   if (position === 'GK' && !used.has(1)) return 1;
   for (let number = 2; number <= 99; number++) {
     if (!used.has(number)) return number;

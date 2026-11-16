@@ -45,7 +45,9 @@ import {
 import type { LeagueTier } from '../awards/award-weights';
 import { leagueGoalsOf } from '../players/player-stat-fields';
 import { processTransferWindow } from '../transfers/transfer-window';
+import { topUpSquads } from '../transfers/squad-topup';
 import { applyFreeAgentReplacements, processRetirements } from '../players/retirement';
+import { driftClimate, NEUTRAL_CLIMATE } from '../clubs/league-climate';
 import { cloneSquadsForMutation } from '../players/injuries';
 import { syncPlayerStatSegments, syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
@@ -268,6 +270,10 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   let freeAgentPool = world.freeAgentPool ?? [];
   let coachCandidatePool = world.coachCandidatePool ?? [];
   let nextPlayerUuidCounter = world.nextPlayerUuidCounter ?? 0;
+  // League climate advances once per season, ahead of everything that reads it.
+  // Both axes are league-scoped, so they are advanced here rather than inside
+  // any of the per-club passes below.
+  const leagueClimate = driftClimate(world.leagueClimate ?? NEUTRAL_CLIMATE, rng);
   // ── Phase B coach lifecycle locals (introduced in v12) ──
   // Coach retirement history mirrors the player retirement-history shape;
   // capped at 200 entries (FIFO). nextCoachIdCounter is used by the
@@ -847,12 +853,21 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       const merged = [...retirementHistory, ...newRetirements];
       retirementHistory = merged;
 
-      // Full-chain 1:1. This path used to be the one retirement route with no
-      // youth replacement behind it, which leaked players out of the universe —
-      // see `applyFreeAgentReplacements` for the measured numbers.
+      // 1:1 for the age-out path only. That path used to be the one retirement
+      // route with no youth replacement behind it, which leaked players out of the
+      // universe — see `applyFreeAgentReplacements` for the measured numbers.
+      //
+      // Overflow is deliberately excluded, and excluding it is what makes the
+      // league able to shrink. Replacing those too closes the universe: total
+      // player count can then only ever rise, which puts a hard floor under the
+      // squad mean's down-swing — it can fall by at most the pool's 40-player
+      // parking capacity (~1.25 players per club) before every extra body bounces
+      // straight back into a squad. Measured with the replacement in place, seed
+      // 20260722's `armsRace` fell from +0.52 to -1.43 over 80 seasons and the
+      // squad mean moved 0.09.
       const replacement = applyFreeAgentReplacements({
         squads,
-        retirees: transferResult.freeAgentRetirees,
+        retirees: transferResult.freeAgentRetirees.filter(fa => !fa.overflow),
         teamBases: world.teamBases,
         academyLevels: world.academyLevels,
         rng,
@@ -984,6 +999,67 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     news.push(...fireSaleResult.news);
   }
 
+  // ── Squad top-up: enforce the squad-size target ────────────────
+  // Runs after the fire sale, so a club that just had to sell is measured on
+  // the squad it actually finished with, and before the annual revaluation so
+  // promoted graduates age on the same pass as everyone else.
+  //
+  // Doctrine is read from `world`, not from the local `clubDoctrines`, because
+  // that local is created further down when the board reacts to the season it
+  // just had. The target should reflect the stance the club held while playing
+  // it, which is what `world.clubDoctrines` still holds here.
+  {
+    const cashByTeam: Record<string, number> = {};
+    const levelByTeam: Record<string, 1 | 2 | 3> = {};
+    for (const teamId of Object.keys(squads)) {
+      cashByTeam[teamId] = teamFinances[teamId]?.cash ?? 0;
+      levelByTeam[teamId] = (teamStates[teamId]?.leagueLevel ?? 1) as 1 | 2 | 3;
+    }
+    const topUp = topUpSquads({
+      squads,
+      teamBases: world.teamBases,
+      playerStats,
+      cashByTeam,
+      levelByTeam,
+      doctrines: world.clubDoctrines,
+      academyLevels: world.academyLevels,
+      freeAgentPool,
+      climate: leagueClimate,
+      rng,
+      nextPlayerUuidCounter,
+      seasonNumber,
+      windowIndex,
+    });
+    squads = topUp.squads;
+    freeAgentPool = topUp.freeAgentPool;
+    playerStats = topUp.playerStats;
+    nextPlayerUuidCounter = topUp.nextPlayerUuidCounter;
+    if (topUp.transfers.length > 0) {
+      transferHistory = [...(transferHistory ?? []), ...topUp.transfers];
+      const nextFinances = { ...teamFinances };
+      for (const [teamId, amount] of Object.entries(topUp.incomeByTeam)) {
+        const fin = nextFinances[teamId];
+        if (!fin || amount <= 0) continue;
+        nextFinances[teamId] = {
+          ...fin, cash: fin.cash + amount, totalIncome: fin.totalIncome + amount,
+        };
+      }
+      for (const [teamId, amount] of Object.entries(topUp.expenseByTeam)) {
+        const fin = nextFinances[teamId];
+        if (!fin || amount <= 0) continue;
+        nextFinances[teamId] = {
+          ...fin, cash: fin.cash - amount, totalExpense: fin.totalExpense + amount,
+        };
+      }
+      teamFinances = nextFinances;
+      for (const t of topUp.transfers) {
+        if (!t.fee) continue;
+        if (financeBreakdown[t.fromTeamId]) financeBreakdown[t.fromTeamId].transferIncome += t.fee;
+        if (financeBreakdown[t.toTeamId]) financeBreakdown[t.toTeamId].transferExpense += t.fee;
+      }
+      playerStats = syncPlayerStatsTeamIds(playerStats, squads);
+    }
+  }
 
   // ── Annual market value revaluation ──────────────────────────
   // Mutates squad in place (also bumps each player's age). `squads` has been
@@ -2135,6 +2211,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     clubDoctrines,
     /** B3 — per-club academy level. Absent on pre-B3 saves. */
     academyLevels,
+    /** League-wide arms-race and talent-era indices. Absent on older saves. */
+    leagueClimate,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

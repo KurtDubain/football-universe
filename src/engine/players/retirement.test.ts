@@ -718,15 +718,21 @@ describe('handleSeasonEnd integration', () => {
     expect(result.retirementHistory.length).toBeGreaterThanOrEqual(1);
     const retired = result.retirementHistory.find((r) => r.uuid === 'p-veteran');
     expect(retired).toBeDefined();
-    // Replacement exists, same position, same team
+    // The veteran is gone and a fresh FW took his place on the same team.
+    //
+    // Squad size is deliberately NOT asserted here. A 2-player squad sits far
+    // below any club's target, so the top-up pass fills it after the
+    // replacement lands; asserting a total would be asserting two mechanisms at
+    // once. The top-up pass has its own coverage in squad-topup.test.ts.
     const newSquad = result.squads['t1'];
-    expect(newSquad).toHaveLength(2);
+    expect(newSquad.some((p) => p.uuid === 'p-veteran')).toBe(false);
+    expect(newSquad.some((p) => p.uuid === 'p-young')).toBe(true);
     const fws = newSquad.filter((p) => p.position === 'FW');
-    expect(fws).toHaveLength(1);
-    expect(fws[0].uuid).not.toBe('p-veteran');
+    expect(fws.length).toBeGreaterThanOrEqual(1);
+    expect(fws.every((p) => p.uuid !== 'p-veteran')).toBe(true);
   });
 
-  it('preserves squad count across season-end', () => {
+  it('never shrinks a squad across season-end', () => {
     const squad: Player[] = [];
     // 11 starters, mix of ages
     const positions: PlayerPosition[] = ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'];
@@ -740,7 +746,11 @@ describe('handleSeasonEnd integration', () => {
     }
     const world = buildSeasonWorld(squad);
     const result = handleSeasonEnd(world);
-    expect(result.squads['t1']).toHaveLength(positions.length);
+    // Retirement is strictly 1:1 and the top-up pass only ever adds, so the
+    // count can grow but never fall. Equality stopped being the right
+    // assertion when the top-up landed: this squad is well under target and
+    // gets filled, which is the behaviour that ended the 18-player freeze.
+    expect(result.squads['t1'].length).toBeGreaterThanOrEqual(positions.length);
   });
 
   it('records career goals from finished history plus the current retiring season', () => {
