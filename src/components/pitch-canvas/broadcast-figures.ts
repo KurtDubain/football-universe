@@ -163,7 +163,9 @@ export function drawBroadcastPlayer(
   const hair = HAIR_TONES[Math.abs(seed * 7 + 3) % HAIR_TONES.length];
   const shorts = shadeColor(color, -0.55);
   const socks = shadeColor(color, -0.2);
-  const outline = teamSide === 'home' ? 'rgba(255,255,255,0.5)' : 'rgba(147,197,253,0.55)';
+  // A shirt that matches the grass is a real problem in football and a worse
+  // one on a screen, so the outline carries the separation, not the colour.
+  const outline = teamSide === 'home' ? 'rgba(255,255,255,0.58)' : 'rgba(191,219,254,0.74)';
 
   const shoulderHalf = height * (0.135 + 0.115 * profile);
   const hipHalf = height * (0.105 + 0.065 * profile);
@@ -303,7 +305,7 @@ export function drawBroadcastPlayer(
 
   traceTorso();
   ctx.strokeStyle = outline;
-  ctx.lineWidth = Math.max(0.35, height * 0.016);
+  ctx.lineWidth = Math.max(0.4, height * 0.023);
   ctx.stroke();
 
   drawLeg(1, legSwing, socks);
@@ -354,15 +356,18 @@ export function drawBroadcastPlayer(
   ctx.fillStyle = shadeColor(skin, -0.35);
   ctx.fill();
 
-  if (height >= 13) {
-    const fontSize = Math.max(6, Math.round(height * 0.2));
+  // The squad number is printed on the shirt, not stuck on as a label: it
+  // has to be legible enough to tell two players apart and quiet enough that
+  // the eye still goes to the ball first.
+  if (height >= 15) {
+    const fontSize = Math.max(5, Math.round(height * 0.17));
     ctx.font = 'bold ' + fontSize + 'px sans-serif';
     ctx.textAlign = 'center';
-    const numberY = shoulderY + height * 0.21;
-    ctx.strokeStyle = 'rgba(2,6,23,0.85)';
-    ctx.lineWidth = Math.max(0.7, height * 0.035);
+    const numberY = shoulderY + height * 0.2;
+    ctx.strokeStyle = 'rgba(2,6,23,0.42)';
+    ctx.lineWidth = Math.max(0.5, height * 0.026);
     ctx.strokeText(String(number), gx + lean * 0.6, numberY);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = 'rgba(255,255,255,0.72)';
     ctx.fillText(String(number), gx + lean * 0.6, numberY);
   }
 
