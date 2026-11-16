@@ -49,6 +49,21 @@ export interface Player {
    * the plateau (full peak); decline begins at peakAge + 3.
    */
   peakAge: number;
+  /**
+   * The last club the player actually played for, preserved when they are
+   * released to the free market.
+   *
+   * `teamId` becomes `FREE_MARKET_TEAM_ID` on release, so a pooled player is
+   * never read as an active member of their old club. That rewrite used to be
+   * skipped entirely, which left every pooled player pointing at their old club
+   * and filed each "no offers, retired" record under that club's name instead of
+   * the market's. The signing fee still has to reach the club that released
+   * them, so the original id is kept here rather than discarded.
+   *
+   * Optional — absent on players who have never been released, and on saves
+   * written before this field existed (readers fall back to `teamId`).
+   */
+  releasedFromTeamId?: string;
   // ── Phase G: 伤病 / 停赛 ──────────────────────────────────────────
   /**
    * Global window index (cumulative across seasons via

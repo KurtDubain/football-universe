@@ -45,7 +45,7 @@ import {
 import type { LeagueTier } from '../awards/award-weights';
 import { leagueGoalsOf } from '../players/player-stat-fields';
 import { processTransferWindow } from '../transfers/transfer-window';
-import { processRetirements } from '../players/retirement';
+import { applyFreeAgentReplacements, processRetirements } from '../players/retirement';
 import { cloneSquadsForMutation } from '../players/injuries';
 import { syncPlayerStatSegments, syncPlayerStatsTeamIds } from '../players/stats';
 import { processCoachRetirements, COACH_RETIREMENT_HISTORY_CAP } from '../coaches/coach-retirement';
@@ -846,6 +846,21 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
       }));
       const merged = [...retirementHistory, ...newRetirements];
       retirementHistory = merged;
+
+      // Full-chain 1:1. This path used to be the one retirement route with no
+      // youth replacement behind it, which leaked players out of the universe —
+      // see `applyFreeAgentReplacements` for the measured numbers.
+      const replacement = applyFreeAgentReplacements({
+        squads,
+        retirees: transferResult.freeAgentRetirees,
+        teamBases: world.teamBases,
+        academyLevels: world.academyLevels,
+        rng,
+        nextPlayerUuidCounter,
+      });
+      squads = replacement.squads;
+      nextPlayerUuidCounter = replacement.nextPlayerUuidCounter;
+
       // News for elite released players who weren't picked up
       for (const fa of transferResult.freeAgentRetirees) {
         if (fa.peakRating >= 80) {

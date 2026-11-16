@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  applyFreeAgentReplacements,
   computeRetirementChance,
   generateYouthReplacement,
   processRetirements,
@@ -826,3 +827,109 @@ describe('handleSeasonEnd integration', () => {
     expect(result.retirementHistory.some((r) => r.uuid === 'old-0')).toBe(false);
   });
 });
+
+describe('applyFreeAgentReplacements', () => {
+  const buildSquads = () => ({
+    t1: [
+      makePlayer('a1', 't1', { position: 'FW', number: 9, age: 30 }),
+      makePlayer('a2', 't1', { position: 'MF', number: 8, age: 28 }),
+    ],
+    t2: [
+      makePlayer('b1', 't2', { position: 'DF', number: 4, age: 27 }),
+    ],
+  });
+
+  const teamBases = { t1: makeTeam('t1'), t2: makeTeam('t2') };
+
+  it('adds exactly one replacement per retiree, preserving position', () => {
+    const squads = buildSquads();
+    const result = applyFreeAgentReplacements({
+      squads,
+      retirees: [
+        { position: 'FW', releasedFromTeamId: 't1' },
+        { position: 'GK', releasedFromTeamId: 't1' },
+      ],
+      teamBases,
+      rng: new SeededRNG(1234),
+      nextPlayerUuidCounter: 500,
+    });
+    expect(result.squads.t1).toHaveLength(4);
+    expect(result.squads.t2).toHaveLength(1);
+    expect(result.nextPlayerUuidCounter).toBe(502);
+    const positions = result.squads.t1.map(p => p.position).sort();
+    expect(positions.filter(p => p === 'FW')).toHaveLength(2);
+    expect(positions.filter(p => p === 'GK')).toHaveLength(1);
+  });
+
+  it('sends the replacement back to the club that released the player', () => {
+    const squads = buildSquads();
+    const result = applyFreeAgentReplacements({
+      squads,
+      retirees: [{ position: 'DF', releasedFromTeamId: 't2' }],
+      teamBases,
+      rng: new SeededRNG(77),
+      nextPlayerUuidCounter: 10,
+    });
+    expect(result.squads.t2).toHaveLength(2);
+    expect(result.squads.t1).toHaveLength(2);
+    const youth = result.squads.t2.find(p => !['b1'].includes(p.uuid));
+    expect(youth?.teamId).toBe('t2');
+    expect(youth?.position).toBe('DF');
+  });
+
+  it('falls back to the shortest squad when the releasing club cannot be resolved', () => {
+    const squads = buildSquads();
+    const result = applyFreeAgentReplacements({
+      squads,
+      // Market sentinel: what pre-fix saves carry, and what a retired player's
+      // record holds once teamId is rewritten on release.
+      retirees: [{ position: 'MF', releasedFromTeamId: '__free_market__' }],
+      teamBases,
+      rng: new SeededRNG(5),
+      nextPlayerUuidCounter: 20,
+    });
+    expect(result.squads.t2).toHaveLength(2);
+    expect(result.squads.t1).toHaveLength(2);
+  });
+
+  it('never hands out a shirt number already taken on the receiving squad', () => {
+    const squads = buildSquads();
+    const result = applyFreeAgentReplacements({
+      squads,
+      retirees: [
+        { position: 'FW', releasedFromTeamId: 't1' },
+        { position: 'FW', releasedFromTeamId: 't1' },
+      ],
+      teamBases,
+      rng: new SeededRNG(9),
+      nextPlayerUuidCounter: 30,
+    });
+    const numbers = result.squads.t1.map(p => p.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
+  });
+
+  it('does not mutate the input squads and passes an empty retiree list straight through', () => {
+    const squads = buildSquads();
+    const snapshot = JSON.stringify(squads);
+    const applied = applyFreeAgentReplacements({
+      squads,
+      retirees: [{ position: 'FW', releasedFromTeamId: 't1' }],
+      teamBases,
+      rng: new SeededRNG(1),
+      nextPlayerUuidCounter: 40,
+    });
+    expect(JSON.stringify(squads)).toBe(snapshot);
+    expect(applied.squads.t1).not.toBe(squads.t1);
+
+    const empty = applyFreeAgentReplacements({
+      squads,
+      retirees: [],
+      teamBases,
+      rng: new SeededRNG(1),
+      nextPlayerUuidCounter: 40,
+    });
+    expect(empty.squads).toBe(squads);
+    expect(empty.nextPlayerUuidCounter).toBe(40);
+  });
+});
+

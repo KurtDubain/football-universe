@@ -122,3 +122,52 @@ describe('shared transfer application pipeline', () => {
     });
   });
 });
+
+describe('releasing a player to the free market', () => {
+  it('moves teamId to the market sentinel and preserves the releasing club', () => {
+    const player = makePlayer('released', 'seller', 9, 70);
+    const result = applyTransferMove({
+      squads: { seller: [player, makePlayer('kept', 'seller', 10, 65)] },
+      playerStats: { released: makeStat('released', 'seller') },
+      player,
+      fromTeamId: 'seller',
+      toTeamId: FREE_MARKET_TEAM_ID,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.movedPlayer.teamId).toBe(FREE_MARKET_TEAM_ID);
+    expect(result!.movedPlayer.releasedFromTeamId).toBe('seller');
+    expect(result!.squads.seller.map(p => p.uuid)).toEqual(['kept']);
+  });
+
+  it('leaves the input player untouched', () => {
+    const player = makePlayer('released', 'seller', 9, 70);
+    applyTransferMove({
+      squads: { seller: [player] },
+      playerStats: { released: makeStat('released', 'seller') },
+      player,
+      fromTeamId: 'seller',
+      toTeamId: FREE_MARKET_TEAM_ID,
+    });
+
+    expect(player.teamId).toBe('seller');
+    expect(player.releasedFromTeamId).toBeUndefined();
+  });
+
+  it('keeps releasedFromTeamId pointing at the club that actually released them', () => {
+    const pooled = makePlayer('pooled', FREE_MARKET_TEAM_ID, 9, 70);
+    pooled.releasedFromTeamId = 'first_club';
+    const result = applyTransferMove({
+      squads: { buyer: [makePlayer('b1', 'buyer', 3, 60)] },
+      playerStats: {},
+      player: pooled,
+      fromTeamId: FREE_MARKET_TEAM_ID,
+      toTeamId: 'buyer',
+    });
+
+    expect(result!.movedPlayer.teamId).toBe('buyer');
+    // Signing must not rewrite where the signing fee is owed.
+    expect(result!.movedPlayer.releasedFromTeamId).toBe('first_club');
+  });
+});
+

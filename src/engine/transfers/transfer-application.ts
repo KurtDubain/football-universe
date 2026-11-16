@@ -3,6 +3,8 @@ import type { TransferRecord, TransferType } from '../../types/transfer';
 import { syncPlayerStatsTeamIds } from '../players/stats';
 
 export const FREE_MARKET_TEAM_ID = '__free_market__';
+/** Display name for the market pseudo-club, used in retirement records and news. */
+export const FREE_MARKET_DISPLAY_NAME = '自由市场';
 
 export function pickFreeSquadNumber(used: Set<number>, preferred: number): number {
   if (!used.has(preferred)) return preferred;
@@ -92,6 +94,18 @@ export function applyTransferMove(params: {
     );
     movedPlayer = { ...player, teamId: toTeamId, number };
     squads[toTeamId] = [...destinationWithoutDisplaced, movedPlayer];
+  } else {
+    // Released to the market. `teamId` MUST move to the market sentinel so a
+    // pooled player is never read as an active member of their old club — the
+    // "no offers, retired" records used to be filed under that club's name,
+    // which made an unsigned free agent look like a squad retirement. The
+    // releasing club is preserved on `releasedFromTeamId` because the signing
+    // fee still flows to it.
+    movedPlayer = {
+      ...player,
+      teamId: FREE_MARKET_TEAM_ID,
+      releasedFromTeamId: player.teamId,
+    };
   }
 
   if (displacedPlayer && displacedToTeamId && displacedToTeamId !== FREE_MARKET_TEAM_ID) {

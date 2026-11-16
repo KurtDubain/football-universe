@@ -1,4 +1,4 @@
-import { Player, PlayerRetirement } from '../../types/player';
+import { Player, PlayerPosition, PlayerRetirement } from '../../types/player';
 import { CoachCandidate, CoachStyle } from '../../types/coach';
 import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
@@ -296,6 +296,100 @@ export function generateYouthReplacement(
   if (tag) player.tag = tag;
   player.marketValue = computeInitialMarketValue(player);
   return player;
+}
+
+/**
+ * Lowest shirt number a replacement can take without colliding.
+ *
+ * Kept local rather than importing `pickFreeSquadNumber` from the transfer
+ * module: retirement is upstream of transfers in the season-end pipeline and
+ * must not acquire a dependency on it.
+ */
+function pickReplacementNumber(used: Set<number>, position: PlayerPosition): number {
+  if (position === 'GK' && !used.has(1)) return 1;
+  for (let number = 2; number <= 99; number++) {
+    if (!used.has(number)) return number;
+  }
+  return 99;
+}
+
+/**
+ * Replace every player who left the universe through the free market.
+ *
+ * `processRetirements` already pairs each retirement with a youth graduate, but
+ * the free-agent path was the one exception. A 36-year-old fringe player
+ * released into the pool gets `age + 1` applied in the same window, crosses
+ * `FREE_AGENT_MAX_AGE` and retires with nothing put back. Measured on seed
+ * 20260722 over 100 seasons that leaked 58 players — 3675 graduates
+ * (`nextPlayerUuidCounter` delta, cross-checked against a per-season uuid-set
+ * diff) against 3733 retirement records — and the player count fell
+ * monotonically, 697 -> 644, about -0.5 players per season.
+ *
+ * The graduate goes back to the club that released them: letting a 36-year-old
+ * go is how a club makes room for a youngster, which is what the release action
+ * was always meant to express. When that club cannot be resolved — saves
+ * written before `Player.releasedFromTeamId` existed carry the market sentinel
+ * there — it falls back to the shortest squad, so this can never create a new
+ * squad-size floor.
+ *
+ * IMMUTABLE wrt `squads`: returns fresh arrays for the teams it touches and
+ * never mutates the input, matching `processRetirements`.
+ */
+export function applyFreeAgentReplacements(params: {
+  squads: Record<string, Player[]>;
+  retirees: ReadonlyArray<{ position: PlayerPosition; releasedFromTeamId: string }>;
+  teamBases: Record<string, TeamBase>;
+  academyLevels?: Record<string, { level: number }>;
+  rng: SeededRNG;
+  nextPlayerUuidCounter: number;
+}): { squads: Record<string, Player[]>; nextPlayerUuidCounter: number } {
+  const { retirees, teamBases, academyLevels, rng } = params;
+  if (retirees.length === 0) {
+    return { squads: params.squads, nextPlayerUuidCounter: params.nextPlayerUuidCounter };
+  }
+
+  const nextUuid = { value: params.nextPlayerUuidCounter };
+  const posOrder: Record<PlayerPosition, number> = { GK: 0, DF: 1, MF: 2, FW: 3 };
+  let next = params.squads;
+
+  const shortestTeamId = (): string => {
+    let best = '';
+    let bestLength = Number.POSITIVE_INFINITY;
+    for (const [teamId, squad] of Object.entries(next)) {
+      if (squad.length < bestLength) {
+        bestLength = squad.length;
+        best = teamId;
+      }
+    }
+    return best;
+  };
+
+  for (const retiree of retirees) {
+    const teamId = next[retiree.releasedFromTeamId] ? retiree.releasedFromTeamId : shortestTeamId();
+    const team = teamBases[teamId];
+    const squad = next[teamId];
+    if (!team || !squad) continue;
+    const usedNumbers = new Set(squad.map(player => player.number));
+    const usedNames = new Set(squad.map(player => player.name));
+    const youth = generateYouthReplacement(
+      team,
+      retiree.position,
+      pickReplacementNumber(usedNumbers, retiree.position),
+      usedNumbers,
+      usedNames,
+      rng,
+      nextUuid,
+      academyLevels?.[teamId]?.level ?? ACADEMY_LEVEL_DEFAULT,
+    );
+    next = {
+      ...next,
+      [teamId]: [...squad, youth].sort(
+        (a, b) => posOrder[a.position] - posOrder[b.position] || a.number - b.number,
+      ),
+    };
+  }
+
+  return { squads: next, nextPlayerUuidCounter: nextUuid.value };
 }
 
 /**

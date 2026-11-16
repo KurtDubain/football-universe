@@ -5,6 +5,7 @@ import { SeededRNG } from '../match/rng';
 import {
   applyTransferMove,
   createTransferRecord,
+  FREE_MARKET_DISPLAY_NAME,
   FREE_MARKET_TEAM_ID,
   pickTransferReleaseCandidate,
 } from './transfer-application';
@@ -520,8 +521,14 @@ export function processTransferWindow(
   squads: Record<string, Player[]>;
   transfers: TransferRecord[];
   playerStats: Record<string, PlayerSeasonStats>;
-  /** Players released to the free agent pool and never re-signed — retired. */
-  freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }>;
+  /**
+   * Players released to the free agent pool and never re-signed — retired.
+   *
+   * `releasedFromTeamId` is the last club they played for. The replacement
+   * youth goes back to that club, so this path stops leaking players out of
+   * the universe (see the season-end call site for the measured numbers).
+   */
+  freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }>;
   /** v17 — new persistent free agent pool state (after this window). */
   freeAgentPool: Player[];
   /** v20 — staged offers/targets for favorite teams (UI handles). */
@@ -781,7 +788,16 @@ export function processTransferWindow(
   // with a sentinel `releasedFromTeamId` (last team they played for) so
   // free_agent records still have a `fromTeamId` for cash flow purposes.
   for (const carryOver of (world.freeAgentPool ?? [])) {
-    freeAgentPool.push({ player: carryOver, releasedFromTeamId: carryOver.teamId });
+    // `carryOver.teamId` is the market sentinel for anyone released since the
+    // teamId fix landed, so the releasing club has to come off the preserved
+    // field — otherwise every signing fee would be booked to the market and
+    // drain out of the universe. Saves written before that fix carry no such
+    // field and still hold the old club on `teamId`, which is the value we
+    // want in that case.
+    freeAgentPool.push({
+      player: carryOver,
+      releasedFromTeamId: carryOver.releasedFromTeamId ?? carryOver.teamId,
+    });
   }
 
   // ── Step 1.7: Generate outgoing targets for favorite teams ─────
@@ -1052,7 +1068,7 @@ export function processTransferWindow(
     };
   });
   // Age-out retirees (anyone > FREE_AGENT_MAX_AGE — no team would sign)
-  const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }> = [];
+  const freeAgentRetirees: Array<{ uuid: string; name: string; teamId: string; teamName: string; releasedFromTeamId: string; position: PlayerPosition; peakRating: number; age: number; careerGoals: number }> = [];
   const stillInPool: Player[] = [];
   for (const player of remainingPlayers) {
     if ((player.age ?? 28) > FREE_AGENT_MAX_AGE) {
@@ -1061,7 +1077,11 @@ export function processTransferWindow(
         uuid: player.uuid,
         name: player.name ?? `${player.number}号`,
         teamId: player.teamId,
-        teamName: world.teamBases[player.teamId]?.name ?? player.teamId,
+        // A pooled player's teamId is the market sentinel, so `teamBases` has no
+        // entry for it. Naming the market explicitly is what stops this record
+        // from reading as a retirement from the club that released them.
+        teamName: FREE_MARKET_DISPLAY_NAME,
+        releasedFromTeamId: player.releasedFromTeamId ?? player.teamId,
         position: player.position,
         peakRating: player.peakRating ?? player.rating,
         age: player.age ?? 28,
@@ -1080,7 +1100,8 @@ export function processTransferWindow(
       uuid: oldest.uuid,
       name: oldest.name ?? `${oldest.number}号`,
       teamId: oldest.teamId,
-      teamName: world.teamBases[oldest.teamId]?.name ?? oldest.teamId,
+      teamName: FREE_MARKET_DISPLAY_NAME,
+      releasedFromTeamId: oldest.releasedFromTeamId ?? oldest.teamId,
       position: oldest.position,
       peakRating: oldest.peakRating ?? oldest.rating,
       age: oldest.age ?? 28,
