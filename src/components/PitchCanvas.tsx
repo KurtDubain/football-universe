@@ -674,6 +674,9 @@ function PitchCanvas(props: Props) {
             playerFormation[formIdx].role,
             firstPhase,
             playerFormation,
+            // Scene start: the taker belongs at the back of their run-up, not
+            // already standing on the ball.
+            0,
           );
           if (!target) continue;
           const player = playerPosRef.current[playerIndex];
@@ -1189,6 +1192,17 @@ function PitchCanvas(props: Props) {
         : baseBallTarget;
       const finalTargetX = P + ballTarget.x * fw;
       const finalTargetY = P + ballTarget.y * fh;
+      // Which way the carrier is facing while the ball sits at their feet:
+      // toward the next pass when there is one, otherwise toward the goal they
+      // are attacking. The touch cycle in `computeBallPosition` rolls the ball
+      // along this direction instead of jittering it in place.
+      const nextPhaseForFacing = sequenceRef.current[phaseIdxRef.current + 1];
+      const holdFacingTarget = nextPhaseForFacing?.targetOverride
+        ?? { x: isAttHome ? 0.98 : 0.02, y: ballTarget.y };
+      const holdFacing = {
+        dx: (holdFacingTarget.x - ballTarget.x) * fw,
+        dy: (holdFacingTarget.y - ballTarget.y) * fh,
+      };
       const releaseDelayFrames = releaseDelayFramesFor(currentPhase);
       if (
         directedShotScene
@@ -1239,6 +1253,7 @@ function PitchCanvas(props: Props) {
         flightKind: currentPhase.kind,
         releaseDelayFrames,
         swerve: currentPhase.swerve,
+        holdFacing,
       });
       let bx = ballResult.bx;
       let by = ballResult.by;
@@ -1385,6 +1400,10 @@ function PitchCanvas(props: Props) {
         phaseProgress,
         tacticalAssignmentsRef.current ?? undefined,
         liveFormationLayouts,
+        f,
+        releaseDelayFrames > 0
+          ? clamp(phaseFrameRef.current / releaseDelayFrames, 0, 1)
+          : 1,
       );
       const pinnedPlayerIndices = new Set<number>();
       const holderOffset = isAttHome ? 0 : 11;

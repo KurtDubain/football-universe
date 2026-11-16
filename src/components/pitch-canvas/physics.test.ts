@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
+import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, idleDriftOffset, pursuitSpeed, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
+import { setPiecePlayerTarget } from './set-pieces';
 import { BASE_FORMATION, getFormationSlots, type PassPhase, type PlayerState } from './types';
 import { createPitchGeometry, NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 
@@ -69,7 +70,11 @@ describe('pitch player movement', () => {
     });
 
     expect(groundPass.bx).toBeGreaterThan(50);
-    expect(windingUp.bx).toBe(10);
+    // The ball must not travel toward the target before the kick. It is no
+    // longer pinned to the exact spot, though: a player standing over a dead
+    // ball keeps it moving under their foot, which is what stops the run-up
+    // being the longest frozen stretch in a match.
+    expect(Math.hypot(windingUp.bx - 10, windingUp.by - 20)).toBeLessThan(4);
     expect(windingUp.arcLift).toBe(0);
   });
 
@@ -664,3 +669,91 @@ describe('pitch player movement', () => {
 function distToBall(player: PlayerState, x: number, y: number): number {
   return Math.hypot(player.x - x, player.y - y);
 }
+
+describe('pitch motion liveliness', () => {
+  it('holds pace until the braking distance and then eases in', () => {
+    expect(pursuitSpeed(0, 0.0034, 0.004)).toBe(0);
+    expect(pursuitSpeed(-1, 0.0034, 0.004)).toBe(0);
+    expect(pursuitSpeed(0.02, 0.0034, 0.004)).toBeCloseTo(0.0034);
+    // A quarter of the braking distance is half the speed — a square root,
+    // not the straight line the old proportional controller used.
+    expect(pursuitSpeed(0.001, 0.0034, 0.004)).toBeCloseTo(0.0017);
+  });
+
+  it('drifts a settled player without carrying them off their slot', () => {
+    const early = idleDriftOffset(3, 0);
+    const later = idleDriftOffset(3, 40);
+    expect(Math.hypot(later.x - early.x, later.y - early.y)).toBeGreaterThan(0.001);
+    expect(Math.hypot(early.x, early.y)).toBeLessThan(0.012);
+    expect(Math.hypot(later.x, later.y)).toBeLessThan(0.012);
+  });
+
+  it('gives every player their own drift phase', () => {
+    expect(idleDriftOffset(0, 100)).not.toEqual(idleDriftOffset(1, 100));
+    expect(idleDriftOffset(4, 100)).not.toEqual(idleDriftOffset(9, 100));
+  });
+
+  it('rolls the ball at the carrier\'s feet instead of pinning it', () => {
+    const samples = [0, 5, 11, 17, 23].map(frame => computeBallPosition({
+      passing: false,
+      phaseFrame: 0,
+      duration: 40,
+      arc: 0,
+      source: { x: 0, y: 0 },
+      target: { x: 100, y: 100 },
+      frame,
+      holdFacing: { dx: 1, dy: 0 },
+    }));
+    for (const sample of samples) {
+      expect(Math.hypot(sample.bx - 100, sample.by - 100)).toBeLessThan(4);
+      expect(sample.arcLift).toBe(0);
+    }
+    const spreadX = Math.max(...samples.map(s => s.bx)) - Math.min(...samples.map(s => s.bx));
+    expect(spreadX).toBeGreaterThan(2);
+  });
+
+  it('keeps a dead ball alive for the whole run-up', () => {
+    const source = { x: 480, y: 40 };
+    const samples = [1, 20, 40, 60].map(frame => computeBallPosition({
+      passing: true,
+      phaseFrame: frame,
+      duration: 102,
+      arc: 0.92,
+      source,
+      target: { x: 100, y: 170 },
+      frame,
+      flightKind: 'pass',
+      releaseDelayFrames: 70,
+      holdFacing: { dx: -1, dy: 1 },
+    }));
+    // Not one of those frames may sit exactly on the spot: the run-up used to
+    // be the longest frozen stretch in a match.
+    for (const sample of samples) {
+      expect(Math.hypot(sample.bx - source.x, sample.by - source.y)).toBeGreaterThan(0);
+      expect(Math.hypot(sample.bx - source.x, sample.by - source.y)).toBeLessThan(4);
+    }
+  });
+
+  it('walks a set-piece taker in from behind the ball', () => {
+    const phase: PassPhase = {
+      passerIdx: 6,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'pass',
+      duration: 102,
+      hold: 24,
+      arc: 0.92,
+      intercepted: false,
+      setPiece: 'corner',
+      releaseDelayFrames: 70,
+      sourceOverride: { x: 0.965, y: 0.055 },
+      targetOverride: { x: 0.89, y: 0.46 },
+    };
+    const start = setPiecePlayerTarget(6, true, 'MF', phase, BASE_FORMATION, 0);
+    const settled = setPiecePlayerTarget(6, true, 'MF', phase, BASE_FORMATION, 1);
+    expect(settled).toEqual({ x: 0.965, y: 0.055 });
+    expect(start).toBeDefined();
+    expect(Math.hypot(start!.x - settled!.x, start!.y - settled!.y)).toBeGreaterThan(0.02);
+  });
+});
+

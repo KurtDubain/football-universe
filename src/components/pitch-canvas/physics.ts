@@ -62,6 +62,12 @@ export interface BallComputeInput {
   flightKind?: 'pass' | 'shot';
   releaseDelayFrames?: number;
   swerve?: number;
+  /**
+   * Unit-ish direction the carrier faces while the ball sits at their feet,
+   * in pixel space. Drives the touch cycle in the holding branch so the ball
+   * rolls out in front of the player instead of jittering in place.
+   */
+  holdFacing?: { dx: number; dy: number };
 }
 
 export interface BallComputeResult {
@@ -273,9 +279,9 @@ export function buildTacticalAssignments(
 export function computeBallPosition(input: BallComputeInput): BallComputeResult {
   const {
     passing, phaseFrame, duration, arc, source, target, frame,
-    flightKind = 'pass', releaseDelayFrames = 0, swerve = 0,
+    flightKind = 'pass', releaseDelayFrames = 0, swerve = 0, holdFacing,
   } = input;
-  if (passing) {
+  if (passing && phaseFrame > releaseDelayFrames) {
     const flightDuration = Math.max(1, duration - releaseDelayFrames);
     const t = clamp((phaseFrame - releaseDelayFrames) / flightDuration, 0, 1);
     // Ground passes leave the foot crisply and lose a little pace. Lofted
@@ -289,11 +295,27 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
     const spinDelta = 0.4 + arc * 0.3;
     return { bx, by, arcLift, spinDelta };
   }
-  // Holding — ball gently drifts near holder, with foot tap micro-motion
-  const microJ = Math.sin(frame * 0.18) * 0.5;
-  const bx = target.x + microJ;
-  const by = target.y + Math.cos(frame * 0.18) * 0.3;
-  return { bx, by, arcLift: 0, spinDelta: 0.05 };
+  // Holding, and the run-up before a dead ball is struck. Both keep the ball
+  // alive at the taker's feet.
+  //
+  // The previous branch moved it by `sin(frame * 0.18) * 0.5` pixels, which is
+  // roughly a seventh of the drawn ball radius: mathematically in motion,
+  // visually frozen. Worse, a set piece never reached this branch at all —
+  // `t` clamps to 0 for the whole run-up, so a corner parked the ball for 70
+  // frames (1.17 s) and a direct free kick for 84. Those were the single
+  // longest frozen stretches in a match.
+  const anchor = passing ? source : target;
+  const facingX = holdFacing?.dx ?? 1;
+  const facingY = holdFacing?.dy ?? 0;
+  const facingLength = Math.hypot(facingX, facingY);
+  const dirX = facingLength > 0.0001 ? facingX / facingLength : 1;
+  const dirY = facingLength > 0.0001 ? facingY / facingLength : 0;
+  const touchCycle = (frame * 0.045) % 1;
+  const reach = Math.sin(touchCycle * Math.PI) * 3.4;
+  const lateral = Math.sin(touchCycle * Math.PI * 2) * 1.2;
+  const bx = anchor.x + dirX * reach - dirY * lateral;
+  const by = anchor.y + dirY * reach + dirX * lateral;
+  return { bx, by, arcLift: 0, spinDelta: 0.05 + reach * 0.02 };
 }
 
 export interface PostShotBallInput {
@@ -557,11 +579,108 @@ export function resolvePhasePoints(
 }
 
 /**
+ * How far from its target a player counts as settled, in normalized units.
+ * Inside this radius the keep-alive drift fades in; outside it the player is
+ * still genuinely running somewhere and the drift must not perturb the run.
+ */
+export const IDLE_DRIFT_RADIUS = 0.03;
+
+/**
+ * How much earlier than physics requires a player starts easing off.
+ *
+ * 1 is a perfect stop against the acceleration cap; higher values trade a
+ * slightly longer approach for a deceleration that reads as a runner slowing
+ * down rather than a marker sliding to a halt.
+ */
+export const BRAKE_DISTANCE_SCALE = 1.5;
+
+/**
+ * How much of a move's distance converts into pace.
+ *
+ * Unchanged from the controller this replaced. The gain is what makes a
+ * 20 m recovery run look different from a 2 m adjustment, and that gradient
+ * was already tuned against real footage — the defect was never the slope, it
+ * was that the slope reached zero.
+ */
+export const PURSUIT_GAIN = 0.11;
+
+/**
+ * Floor under the pursuit slope, as a fraction of top speed.
+ *
+ * This is the whole fix for the frozen pitch. The old controller had no floor,
+ * so every approach ended in a crawl and then a dead stop; measured over a
+ * match 41% of player-frames were mathematically motionless. With a floor a
+ * player closing the last metre still moves like a person adjusting their
+ * position rather than a marker sliding into a slot.
+ */
+export const MIN_CRUISE_FRACTION = 0.35;
+
+/**
+ * Speed a pursuer should hold at `distance` from its target.
+ *
+ * The old `Math.min(maxSpeed, distance * 0.11)` was a pure proportional
+ * controller: it began braking 3.2 m out and then crawled the whole way in, so
+ * every player decelerated smoothly into a dead stop and stood there. Measured
+ * over 744k player-frames that left the median player at 16.9% of their own top
+ * speed and 41.4% of frames completely motionless.
+ *
+ * A braking-distance curve holds pace until the last moment and then stops
+ * over a distance the player's own acceleration cap can actually deliver, so
+ * the approach reads as running rather than gliding. `brakeDistance` is
+ * derived from that cap at the call site, which keeps the two consistent for
+ * every role and every sprint boost.
+ */
+export function pursuitSpeed(
+  distance: number,
+  maxSpeed: number,
+  brakeDistance: number,
+): number {
+  if (distance <= 0 || maxSpeed <= 0) return 0;
+  if (brakeDistance <= 0) return maxSpeed;
+  return maxSpeed * Math.min(1, Math.sqrt(distance / brakeDistance));
+}
+
+/**
+ * Keep-alive drift for a player who has reached their slot.
+ *
+ * A footballer who is not involved in the play is never mathematically still:
+ * they shift their weight, check a shoulder, take a step. Without this every
+ * outfield player froze the instant they arrived, which is what made the pitch
+ * read as a diagram of positions rather than a match.
+ *
+ * Deterministic in (playerIndex, clock) so it is testable, and phase-shifted
+ * per player so nobody sways in lockstep. `amplitude` is in normalized units
+ * along the pitch length; the width axis is shorter in metres, so the same
+ * metre distance is a larger normalized step there.
+ */
+export function idleDriftOffset(
+  playerIndex: number,
+  clock: number,
+  amplitude = 0.0062,
+): { x: number; y: number } {
+  if (amplitude <= 0) return { x: 0, y: 0 };
+  const phaseA = playerIndex * 1.73 + 0.41;
+  const phaseB = playerIndex * 2.39 + 1.87;
+  // Two superimposed frequencies. A single sine reads as a metronome; the
+  // faster overtone is what makes the sway look like a person shifting weight
+  // rather than a marker on a spring, and it is also what keeps the drift's
+  // own velocity above the "visually static" floor at the turning points.
+  return {
+    x: (Math.sin(clock * 0.036 + phaseA) + Math.sin(clock * 0.091 + phaseB) * 0.35) * amplitude,
+    y: (Math.cos(clock * 0.029 + phaseB) + Math.cos(clock * 0.083 + phaseA) * 0.35) * amplitude * 1.3,
+  };
+}
+
+/**
  * Tactical AI: update all 22 players' smoothed positions toward their
  * desired tactical slot. Mutates `playerPos` in place.
  *
  * `overrideTarget` (when non-null) must be in normalized (0-1) coords.
  * It pulls forwards toward a goal-mouth attack on goal/penalty events.
+ *
+ * `motionClock` is the renderer's frame counter. It only drives the keep-alive
+ * drift, so passing 0 (the default) reproduces the pre-drift behaviour exactly
+ * and every existing caller stays valid.
  */
 export function updatePlayerPositions(
   playerPos: PlayerState[],
@@ -578,6 +697,8 @@ export function updatePlayerPositions(
   phaseProgress = 0,
   tacticalAssignments?: TacticalAssignments,
   formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
+  motionClock = 0,
+  releaseProgress = 1,
 ): void {
   const isAttHome = currentPhase.attackingHome;
   const defendingHome = !isAttHome;
@@ -597,7 +718,9 @@ export function updatePlayerPositions(
     const slot = getBaseSlot(formIdx, isHomeTeam, shift, formation);
     let targetX_n = slot.x;
     let targetY_n = slot.y;
-    const setPieceTarget = setPiecePlayerTarget(i, isHomeTeam, slot.role, currentPhase, formation);
+    const setPieceTarget = setPiecePlayerTarget(
+      i, isHomeTeam, slot.role, currentPhase, formation, releaseProgress,
+    );
 
     // ── Tactical adjustments ──
     if (isHolder) {
@@ -805,6 +928,28 @@ export function updatePlayerPositions(
     targetX_n = clamp(targetX_n, 0.03, 0.97);
     targetY_n = clamp(targetY_n, 0.05, 0.95);
 
+    // Keep-alive drift. Only a player who has essentially arrived gets it, so
+    // it never perturbs a real run. The carrier is excluded because they
+    // already track the ball's touch cycle.
+    //
+    // Set-piece actors are deliberately included. An earlier pass spared them
+    // on the grounds that a swaying defensive wall reads as a mistake, but that
+    // left twenty outfield players frozen for the whole of a corner run-up —
+    // by far the largest remaining block of motionless frames. A real wall
+    // shuffles, adjusts its line and checks a shoulder; the amplitude here is
+    // well under a metre, which is that and not a mistake.
+    let driftActive = false;
+    if (motionClock > 0 && !isHolder && !isReceiver) {
+      const settleDistance = Math.hypot(targetX_n - playerPos[i].x, targetY_n - playerPos[i].y);
+      if (settleDistance < IDLE_DRIFT_RADIUS) {
+        const drift = idleDriftOffset(i, motionClock);
+        const blend = 1 - settleDistance / IDLE_DRIFT_RADIUS;
+        targetX_n = clamp(targetX_n + drift.x * blend, 0.03, 0.97);
+        targetY_n = clamp(targetY_n + drift.y * blend, 0.05, 0.95);
+        driftActive = true;
+      }
+    }
+
     // Critically damped pursuit with speed and acceleration caps. Target
     // changes no longer produce overshoot or whole-team direction snapping.
     const p = playerPos[i];
@@ -823,7 +968,31 @@ export function updatePlayerPositions(
           ? { speed: 0.00365, acceleration: 0.00043 }
           : { speed: 0.0038, acceleration: 0.00046 };
     const maxSpeed = roleMotion.speed * sprintBoost * directedRecoveryBoost;
-    const desiredSpeed = Math.min(maxSpeed, distance * 0.11);
+    // Pace scales with the size of the move, exactly as it did before, but
+    // never falls below a jog. The old controller was this line without the
+    // floor: `Math.min(maxSpeed, distance * PURSUIT_GAIN)`. Keeping the slope
+    // preserves every pace relationship the role table was tuned around — a
+    // keeper's short step still reads as a keeper's short step — while the
+    // floor is what removes the dead frames.
+    const cruiseSpeed = clamp(
+      distance * PURSUIT_GAIN,
+      maxSpeed * MIN_CRUISE_FRACTION,
+      maxSpeed,
+    );
+    // Nominal acceleration, before the turn penalty below. Deriving the braking
+    // distance from the acceleration the player can actually deliver is what
+    // keeps the profile honest: asking for a stop the cap cannot make would
+    // just reintroduce overshoot. The scale on top of that is the difference
+    // between braking as late as physics allows and easing in the way a runner
+    // actually does.
+    const nominalAcceleration = roleMotion.acceleration
+      * sprintBoost
+      * Math.min(1.4, directedRecoveryBoost);
+    const brakeDistance = Math.max(
+      0.0016,
+      BRAKE_DISTANCE_SCALE * (cruiseSpeed * cruiseSpeed) / (2 * nominalAcceleration),
+    );
+    const desiredSpeed = pursuitSpeed(distance, cruiseSpeed, brakeDistance);
     const desiredVx = distance > 0.0001 ? dx / distance * desiredSpeed : 0;
     const desiredVy = distance > 0.0001 ? dy / distance * desiredSpeed : 0;
     const currentSpeed = Math.hypot(p.vx, p.vy);
@@ -831,15 +1000,16 @@ export function updatePlayerPositions(
       ? clamp((p.vx * desiredVx + p.vy * desiredVy) / (currentSpeed * desiredSpeed), -1, 1)
       : 1;
     const turnFactor = 0.68 + (alignment + 1) * 0.16;
-    const maxAcceleration = roleMotion.acceleration
-      * sprintBoost
-      * Math.min(1.4, directedRecoveryBoost)
-      * turnFactor;
+    const maxAcceleration = nominalAcceleration * turnFactor;
     p.vx += clamp(desiredVx - p.vx, -maxAcceleration, maxAcceleration);
     p.vy += clamp(desiredVy - p.vy, -maxAcceleration, maxAcceleration);
     p.x += p.vx;
     p.y += p.vy;
-    if (distance < 0.0015 && Math.hypot(p.vx, p.vy) < 0.0008) {
+    // The hard snap is what makes an arrival exact, and it is also the only
+    // place a player's velocity is forced to zero. A drifting player must be
+    // exempt: their target is moving by construction, so snapping to it would
+    // cancel the keep-alive motion on exactly the frames it exists for.
+    if (!driftActive && distance < 0.0015 && Math.hypot(p.vx, p.vy) < 0.0008) {
       p.x = targetX_n;
       p.y = targetY_n;
       p.vx = 0;

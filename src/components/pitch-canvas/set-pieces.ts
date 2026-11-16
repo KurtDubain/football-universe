@@ -1,4 +1,4 @@
-import { seededRand } from './math';
+import { clamp, lerp, seededRand } from './math';
 import { BASE_FORMATION, type FormationSlot, type PassPhase, type PresentationSetPiece, type Role } from './types';
 
 export interface SetPieceSequenceOptions {
@@ -143,12 +143,40 @@ export function generateSetPieceSequence(
   };
 }
 
+/**
+ * Where the taker stands while the ball is waiting to be struck.
+ *
+ * A dead ball used to teleport the taker onto the ball at scene start and
+ * hold them there for the whole run-up, so the most deliberate moment in
+ * football played as a statue. This walks them in from behind and outside the
+ * ball instead, accelerating into the strike.
+ *
+ * `releaseProgress` is 0 at the start of the run-up and 1 when the ball is
+ * struck. The default of 1 keeps every caller that only needs the settled
+ * position — scene staging, tests — unchanged.
+ */
+function setPieceRunUpTarget(
+  source: { x: number; y: number },
+  attackDirection: number,
+  releaseProgress: number,
+): { x: number; y: number } {
+  if (releaseProgress >= 1) return source;
+  const start = {
+    x: source.x + attackDirection * 0.028,
+    y: source.y + (source.y < 0.5 ? -0.045 : 0.045),
+  };
+  const approach = clamp(releaseProgress / 0.78, 0, 1);
+  const eased = Math.pow(approach, 1.6);
+  return { x: lerp(start.x, source.x, eased), y: lerp(start.y, source.y, eased) };
+}
+
 export function setPiecePlayerTarget(
   playerIndex: number,
   isHomeTeam: boolean,
   role: Role,
   phase: PassPhase,
   formation: FormationSlot[] = BASE_FORMATION,
+  releaseProgress = 1,
 ): { x: number; y: number } | undefined {
   if (!phase.setPiece) return undefined;
   const formIdx = playerIndex % 11;
@@ -162,7 +190,7 @@ export function setPiecePlayerTarget(
 
   if (phase.setPiece === 'penalty') {
     if (attackingTeam) {
-      if (formIdx === phase.passerIdx) return source;
+      if (formIdx === phase.passerIdx) return setPieceRunUpTarget(source, attackDirection, releaseProgress);
       return { x: 0.5 - attackDirection * 0.07, y: formation[formIdx].y };
     }
     if (role === 'GK') return { x: ownGoalX, y: 0.5 };
@@ -171,7 +199,7 @@ export function setPiecePlayerTarget(
 
   if (phase.setPiece === 'direct_free_kick') {
     if (attackingTeam) {
-      if (formIdx === phase.passerIdx) return source;
+      if (formIdx === phase.passerIdx) return setPieceRunUpTarget(source, attackDirection, releaseProgress);
       if (role === 'FW') return { x: source.x - attackDirection * 0.04, y: formation[formIdx].y };
       return undefined;
     }
@@ -187,7 +215,7 @@ export function setPiecePlayerTarget(
   }
 
   if (attackingTeam) {
-    if (formIdx === phase.passerIdx) return source;
+    if (formIdx === phase.passerIdx) return setPieceRunUpTarget(source, attackDirection, releaseProgress);
     if (role === 'GK') return undefined;
     if (role === 'DF') return {
       x: attackGoalX - attackDirection * (0.34 + (formIdx % 2) * 0.05),
