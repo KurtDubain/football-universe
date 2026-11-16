@@ -158,6 +158,42 @@ export interface TopUpResult {
 }
 
 /**
+ * Resolve every club's squad-size target from league-relative inputs.
+ *
+ * Exported because the main transfer window needs the same numbers: its
+ * free-agent lane is an ADDITIVE signing with no squad-size awareness of its own,
+ * and left ungated it outruns the top-up's release pass badly enough to make the
+ * whole target meaningless. Both callers must resolve from the same inputs or
+ * they will disagree about how big a squad should be.
+ */
+export function resolveSquadTargets(params: {
+  teamIds: string[];
+  cashByTeam: Record<string, number>;
+  doctrines?: Record<string, ClubDoctrine>;
+  climate: LeagueClimate;
+}): Record<string, number> {
+  const { teamIds, cashByTeam, doctrines, climate } = params;
+  // League cash rank, 0 = poorest … 1 = richest. Relative by construction, so it
+  // keeps discriminating as the whole league's balances inflate together.
+  const cashRank: Record<string, number> = {};
+  const ranked = teamIds
+    .map(id => ({ id, cash: cashByTeam[id] ?? 0 }))
+    .sort((a, b) => a.cash - b.cash);
+  const span = Math.max(1, ranked.length - 1);
+  ranked.forEach((entry, index) => { cashRank[entry.id] = index / span; });
+
+  const targets: Record<string, number> = {};
+  for (const id of teamIds) {
+    targets[id] = squadTarget({
+      armsRace: climate.armsRace,
+      spendingAxis: doctrines?.[id]?.spending ?? 0.5,
+      cashRank: cashRank[id] ?? 0.5,
+    });
+  }
+  return targets;
+}
+
+/**
  * Run the squad top-up pass.
  *
  * Three channels, in priority order. The ordering is the whole design: a club
@@ -186,7 +222,7 @@ export function topUpSquads(params: TopUpParams): TopUpResult {
   const transfers: TransferRecord[] = [];
   const incomeByTeam: Record<string, number> = {};
   const expenseByTeam: Record<string, number> = {};
-  const targets: Record<string, number> = {};
+  let targets: Record<string, number> = {};
   const nextUuid = { value: params.nextPlayerUuidCounter };
 
   const teamIds = Object.keys(squads);
@@ -198,24 +234,12 @@ export function topUpSquads(params: TopUpParams): TopUpResult {
     };
   }
 
-  // League cash rank, 0 = poorest … 1 = richest. Relative by construction, so it
-  // keeps discriminating as the whole league's balances inflate together.
-  const cashRank: Record<string, number> = {};
-  {
-    const ranked = teamIds
-      .map(id => ({ id, cash: params.cashByTeam[id] ?? 0 }))
-      .sort((a, b) => a.cash - b.cash);
-    const span = Math.max(1, ranked.length - 1);
-    ranked.forEach((entry, index) => { cashRank[entry.id] = index / span; });
-  }
-
-  for (const id of teamIds) {
-    targets[id] = squadTarget({
-      armsRace: climate.armsRace,
-      spendingAxis: doctrines?.[id]?.spending ?? 0.5,
-      cashRank: cashRank[id] ?? 0.5,
-    });
-  }
+  targets = resolveSquadTargets({
+    teamIds,
+    cashByTeam: params.cashByTeam,
+    doctrines,
+    climate,
+  });
 
   const squadSize = (id: string): number => squads[id]?.length ?? 0;
   const deficitOf = (id: string): number => Math.max(0, targets[id] - squadSize(id));

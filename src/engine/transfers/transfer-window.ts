@@ -516,7 +516,15 @@ function attemptEliteSwaps(params: {
 export function processTransferWindow(
   world: GameWorld,
   rng: SeededRNG,
-  options?: { favoriteTeamIds?: Set<string> },
+  options?: {
+    favoriteTeamIds?: Set<string>;
+    /**
+     * Per-club squad-size target from `resolveSquadTargets`. When supplied, a club
+     * already at or above its target does not take a free agent. Omitting it
+     * leaves the lane exactly as it was.
+     */
+    squadTargets?: Record<string, number>;
+  },
 ): {
   squads: Record<string, Player[]>;
   transfers: TransferRecord[];
@@ -536,6 +544,7 @@ export function processTransferWindow(
   pendingTargets: import('../../types/transfer').OutgoingTarget[];
 } {
   const favoriteSet = options?.favoriteTeamIds ?? new Set<string>();
+  const squadTargets = options?.squadTargets;
   const pendingOffers: import('../../types/transfer').IncomingOffer[] = [];
   const pendingTargets: import('../../types/transfer').OutgoingTarget[] = [];
   const transfers: TransferRecord[] = [];
@@ -908,6 +917,16 @@ export function processTransferWindow(
     const recipientSquad = squads[recipient] ?? [];
     const recipientTeam = world.teamBases[recipient];
     if (!recipientTeam) continue;
+    // Squad-size target gate. A free agent is the cheapest body a club can add and
+    // this lane is purely ADDITIVE — it displaces nobody — so without the gate it is
+    // a one-way ratchet against the top-up's release pass. Measured on seed
+    // 877987150 over 300 seasons: the top-up listed 12 surplus players a season
+    // (its flow cap, saturated for 180 straight seasons) while this loop signed 18
+    // a season back out of the pool, and `armsRace` fell 2.9 points while the squad
+    // mean moved 0.1. A club already carrying more players than it wants does not
+    // add free ones.
+    const target = squadTargets?.[recipient];
+    if (target !== undefined && recipientSquad.length >= target) continue;
     const freeAgentOptions = freeAgentPool
       .map((freeAgent, index) => {
         const signingCost = estimateFreeAgentSigningCost(freeAgent.player);

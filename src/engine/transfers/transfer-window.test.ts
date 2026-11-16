@@ -4,6 +4,7 @@ import { GameWorld } from '../season/season-manager';
 import { SeededRNG } from '../match/rng';
 import { Player, PlayerSeasonStats, PlayerPosition } from '../../types/player';
 import { TeamBase } from '../../types/team';
+import { FREE_MARKET_TEAM_ID } from './transfer-application';
 
 // ── Test fixtures ─────────────────────────────────────────────────
 
@@ -466,5 +467,83 @@ describe('processTransferWindow — contextual decisions', () => {
     const result = seedWithTransfer(world);
     const transfer = result.transfers.find(entry => entry.playerId === CANDIDATE_UUID);
     expect(transfer?.fee).toBeGreaterThan(40);
+  });
+});
+
+describe('processTransferWindow — squad-size target gate on free agents', () => {
+  const POOLED_UUID = 'p-pooled';
+
+  /**
+   * One elite club (the window needs a buyer tier to run at all) plus one
+   * non-elite club that is the only possible free-agent recipient, plus exactly one
+   * pooled player. Standings matter here and nowhere else in this file: the
+   * recipient list is built from league standings, so an empty table means the
+   * free-agent lane never runs.
+   */
+  function buildPoolWorld(weakSize: number): GameWorld {
+    const elite = makeTeam('elite', 90);
+    const weak = makeTeam('weak', 65);
+    const eliteSquad: Player[] = [
+      makePlayer('elite', 9, 'FW', 85),
+      makePlayer('elite', 1, 'GK', 88),
+    ];
+    const weakSquad: Player[] = [];
+    for (let i = 0; i < weakSize; i++) {
+      weakSquad.push(makePlayer('weak', i + 2, 'MF', 62 + (i % 7)));
+    }
+    return {
+      ...buildWorld(),
+      teamBases: { elite, weak },
+      squads: { elite: eliteSquad, weak: weakSquad },
+      playerStats: {},
+      league1Standings: [{ teamId: 'weak' }] as never,
+      league2Standings: [],
+      league3Standings: [],
+      teamFinances: {
+        elite: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+        weak: { cash: 300, totalIncome: 0, totalExpense: 0, history: [] },
+      },
+      freeAgentPool: [
+        {
+          ...makePlayer(FREE_MARKET_TEAM_ID, 40, 'FW', 74, POOLED_UUID),
+          releasedFromTeamId: 'weak',
+        },
+      ],
+    };
+  }
+
+  /** Total pooled-player signings across a seed sweep. One seed proves nothing. */
+  function signings(world: GameWorld, squadTargets?: Record<string, number>): number {
+    let count = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const result = processTransferWindow(
+        world, new SeededRNG(seed), squadTargets ? { squadTargets } : undefined,
+      );
+      count += result.transfers.filter(
+        t => t.type === 'free_agent' && t.playerId === POOLED_UUID,
+      ).length;
+    }
+    return count;
+  }
+
+  it('signs the pooled player when the club is below its target', () => {
+    expect(signings(buildPoolWorld(20), { weak: 24 })).toBeGreaterThan(0);
+  });
+
+  it('refuses when the club already sits at its target', () => {
+    // Same world shape, same seed sweep — the target is the only difference. This
+    // lane is purely additive (it displaces nobody), so ungated it is a one-way
+    // ratchet that outruns the top-up's release pass: measured on seed 877987150
+    // over 300 seasons it signed 18 a season against a 12-a-season release cap.
+    expect(signings(buildPoolWorld(24), { weak: 24 })).toBe(0);
+  });
+
+  it('refuses when the club is above its target', () => {
+    expect(signings(buildPoolWorld(26), { weak: 22 })).toBe(0);
+  });
+
+  it('leaves the lane untouched when no targets are supplied', () => {
+    // Callers written before the target existed must get the old behaviour.
+    expect(signings(buildPoolWorld(26))).toBeGreaterThan(0);
   });
 });

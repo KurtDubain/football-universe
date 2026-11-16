@@ -45,7 +45,7 @@ import {
 import type { LeagueTier } from '../awards/award-weights';
 import { leagueGoalsOf } from '../players/player-stat-fields';
 import { processTransferWindow } from '../transfers/transfer-window';
-import { topUpSquads } from '../transfers/squad-topup';
+import { resolveSquadTargets, topUpSquads } from '../transfers/squad-topup';
 import { applyFreeAgentReplacements, processRetirements } from '../players/retirement';
 import { driftClimate, NEUTRAL_CLIMATE } from '../clubs/league-climate';
 import { cloneSquadsForMutation } from '../players/injuries';
@@ -821,7 +821,20 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
   // the retirees). `playerStats` is unchanged at this point — preserved for
   // historical lookups.
   const favoriteSet = new Set(options?.favoriteTeamIds ?? []);
-  const transferResult = processTransferWindow({ ...world, squads, playerStats, freeAgentPool }, rng, { favoriteTeamIds: favoriteSet });
+  // Resolved from the same inputs the top-up pass will use, so the window's
+  // free-agent gate and the top-up cannot disagree about how big a squad should be.
+  const squadTargets = resolveSquadTargets({
+    teamIds: Object.keys(squads),
+    cashByTeam: Object.fromEntries(
+      Object.keys(squads).map(id => [id, world.teamFinances[id]?.cash ?? 0]),
+    ),
+    doctrines: world.clubDoctrines,
+    climate: leagueClimate,
+  });
+  const transferResult = processTransferWindow(
+    { ...world, squads, playerStats, freeAgentPool }, rng,
+    { favoriteTeamIds: favoriteSet, squadTargets },
+  );
   // v17 — always pick up the pool the transfer engine returns (may grow
   // or shrink even when no transfers fire, due to overflow/age-out checks).
   freeAgentPool = transferResult.freeAgentPool;
