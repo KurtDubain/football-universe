@@ -1210,7 +1210,7 @@ function FinancePanel({ teamId }: { teamId: string }) {
       </div>
       {fin.cash < 0 && (
         <div className="px-4 py-2 text-[11px] text-red-300 bg-red-950/30 border-b border-red-900/40">
-          ⚠ 财政告急 — 赛季结束时将以 200% 高溢价被迫甩卖一名身价 €30M+ 球员（若有顶级买家），现金可恢复正值。
+          ⚠ 财政告急 — 赛季结束时将以低于市价三成的价格被迫甩卖一名身价 €30M+ 球员（若有顶级买家），现金只能部分缓解。
         </div>
       )}
       {/* Current season running totals */}

@@ -28,7 +28,7 @@ import {
   MAINLAND_CUP_TIERS,
   SMALL_CONTINENTAL_CUP_TIERS,
   TV_SPONSOR_BY_TIER,
-  FIRE_SALE_PREMIUM,
+  FIRE_SALE_DISCOUNT,
   FIRE_SALE_MIN_VALUE,
   FIRE_SALE_BUYER_MIN_REP,
   rankFireSaleCandidates,
@@ -291,7 +291,7 @@ describe('applyExpense — uses bracketed salary by default (post-v2)', () => {
   });
 });
 
-describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
+describe('attemptFireSale — emergency discount sale to elite buyer', () => {
   function buildScenario() {
     const teamBases: Record<string, TeamBase> = {
       POOR: mkBase({ id: 'POOR', reputation: 60 }),
@@ -311,7 +311,7 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     return { teamBases, teamFinances, squads };
   }
 
-  it('moves the player and books cash flows at 200% market value', () => {
+  it('moves the player and books cash flows below market value', () => {
     const { teamBases, teamFinances, squads } = buildScenario();
     const rng = new SeededRNG(7);
     const r = attemptFireSale(teamFinances, squads, teamBases, 1, 5, rng);
@@ -319,12 +319,19 @@ describe('attemptFireSale — emergency 200% sale to elite buyer', () => {
     const t = r.transfers[0];
     expect(t.fromTeamId).toBe('POOR');
     expect(['ELITE', 'ELITE2']).toContain(t.toTeamId);
-    expect(t.fee).toBe(50 * FIRE_SALE_PREMIUM); // 100
-    // Seller cash recovers, buyer cash drops
-    expect(r.teamFinances.POOR.cash).toBe(-50 + 100);
-    expect(r.teamFinances.POOR.totalIncome).toBe(100);
-    expect(r.teamFinances[t.toTeamId].cash).toBe(200 - 100);
-    expect(r.teamFinances[t.toTeamId].totalExpense).toBe(100);
+    // A distress sale must never be a premium: the side that needs the deal has
+    // no leverage. Fee asserted as a literal because the float product
+    // 50 × FIRE_SALE_DISCOUNT is 34.999999999999996, while the price formula
+    // rounds to one decimal.
+    expect(FIRE_SALE_DISCOUNT).toBeLessThan(1);
+    expect(t.fee).toBe(35);
+    expect(t.premiumRatio).toBeLessThan(1);
+    // The seller is still in the red afterwards — a discount sale relieves
+    // pressure, it does not rescue the club. Buyer cash drops by the fee.
+    expect(r.teamFinances.POOR.cash).toBe(-50 + 35);
+    expect(r.teamFinances.POOR.totalIncome).toBe(35);
+    expect(r.teamFinances[t.toTeamId].cash).toBe(200 - 35);
+    expect(r.teamFinances[t.toTeamId].totalExpense).toBe(35);
     // Squad arrays are reshuffled
     expect(r.squads.POOR).toHaveLength(1);
     expect(r.squads[t.toTeamId]).toHaveLength(1);
