@@ -132,10 +132,25 @@ const REP_R2_MIN = 1;              // any relegation still costs something
 /** R3 — financial distress. Connects money to standing: a club in the red is
  *  worth less to sponsors and speaks softer in the market.
  *
- *  Measured as dead over 300 seasons x 4 seeds: cash never went negative, because
- *  the economy force-sells before it gets there. Kept as a guard rather than
- *  deleted — it costs nothing while the economy holds, and it is the only path
- *  that would catch a future change to the finance model. */
+ *  This path was dead until B3. Measured over 300 seasons x 4 seeds BEFORE the
+ *  academy drain existed: cash never went negative, because the economy
+ *  force-sells before it gets there. It was kept as a guard rather than deleted —
+ *  it costs nothing while the economy holds, and it is the only path that would
+ *  catch a future change to the finance model.
+ *
+ *  B3 drained the league's unbounded cash accumulation and woke it up. Same
+ *  measurement after B3: 10 / 18 / 23 / 0 of 250 seasons carry at least one club
+ *  in the red (4.0% / 7.2% / 9.2% / 0%), and NEVER more than one of 32 clubs at a
+ *  time. That is the intended reading — a club whose academy spending pushes it
+ *  into the red should speak a little softer, which is exactly what this path
+ *  exists for.
+ *
+ *  The knock-on is the league's weighted reputation mean landing at 73.90 against
+ *  a >= 74 target. DO NOT tune that away. The 0.10 shortfall was reviewed and
+ *  accepted deliberately: closing it would mean either weakening the academy
+ *  drain (and with it the pressure valve) or softening this penalty (and with it
+ *  the only feedback running from money to standing). See 8.7.6 of
+ *  docs/reputation-and-money-design.md. */
 const REP_R3_STRENGTH = 1;
 /** R4 — a marquee player was poached and the season did not cover for it. */
 const REP_R4_STRENGTH = 1;
