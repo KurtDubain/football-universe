@@ -98,6 +98,11 @@ export interface FinanceSeasonRecord {
   transferIncome: number; // sales (incl. fire sales)
   salaries: number;       // wage bill
   transferExpense: number;// purchases (incl. fire sale buys)
+  /**
+   * B3 — academy investment. Optional because history records written before B3
+   * carry none; every reader must go through `?? 0`.
+   */
+  academy?: number;
 }
 
 /** Categorized season flows before start/end cash are attached for history. */

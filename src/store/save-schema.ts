@@ -949,6 +949,23 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
     }
   }
 
+  // B3 — academy state is additive and optional on the same terms. A save
+  // written before it existed carries no record and every reader falls back to
+  // the league-average level, so SAVE_SCHEMA_VERSION does not move for it.
+  if (world.academyLevels !== undefined) {
+    const academies = requireRecord(world, 'academyLevels');
+    for (const [teamId, value] of Object.entries(academies)) {
+      if (!teamIds.has(teamId)) throw new Error(`存档青训水平球队无效：${teamId}`);
+      if (!isRecord(value)) throw new Error(`存档青训水平无效：${teamId}`);
+      const level = requireFiniteNumber(value, 'level', '青训水平 ');
+      if (level < 0 || level > 100) throw new Error(`存档青训水平越界：${teamId}.level`);
+      const streak = requireFiniteNumber(value, 'investmentStreak', '青训水平 ');
+      if (streak < 0) throw new Error(`存档青训投入连续季数越界：${teamId}.investmentStreak`);
+      const lastInvested = requireFiniteNumber(value, 'lastInvested', '青训水平 ');
+      if (lastInvested < 0) throw new Error(`存档青训投入额越界：${teamId}.lastInvested`);
+    }
+  }
+
   normalizeLegacyTeamPresentation(world);
   return repairLeagueHonors(world as unknown as GameWorld);
 }

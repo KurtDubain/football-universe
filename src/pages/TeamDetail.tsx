@@ -22,6 +22,11 @@ import {
   type DoctrineAxis,
   type DoctrineTag,
 } from '../engine/clubs/doctrine';
+import {
+  describeAcademyLevel,
+  deriveInitialAcademyState,
+  type AcademyState,
+} from '../engine/clubs/academy';
 import { computePlayerBoostReport } from '../engine/players/player-boosts';
 import { getPlayerClubStatRowMap } from '../engine/players/player-stat-selectors';
 import { buildTeamStory, type TeamStoryMomentKind, type TeamStoryTone } from '../engine/season/team-story';
@@ -60,6 +65,9 @@ export default function TeamDetail() {
   // back to the same deterministic starting doctrine the engine derives.
   const doctrine = world.clubDoctrines?.[id] ?? deriveInitialDoctrine(base);
   const doctrineTags = deriveDoctrineTags(doctrine);
+  // B3 — academy level. Same fallback shape as doctrine: a save written before
+  // B3 carries no record, so read the deterministic starting state instead.
+  const academy = world.academyLevels?.[id] ?? deriveInitialAcademyState();
 
   return (
     <PageShell width="standard" className="tabular-nums">
@@ -153,7 +161,7 @@ export default function TeamDetail() {
             </div>
           </Panel>
 
-          <DoctrinePanel doctrine={doctrine} tags={doctrineTags} />
+          <DoctrinePanel doctrine={doctrine} tags={doctrineTags} academy={academy} />
 
           {/* Coach */}
           <Panel>
@@ -645,7 +653,15 @@ const DOCTRINE_AXIS_META: Record<DoctrineAxis, { label: string; hint: string; co
   patience: { label: '耐心', hint: '容忍一个糟糕赛季的程度', color: 'bg-sky-500' },
 };
 
-function DoctrinePanel({ doctrine, tags }: { doctrine: ClubDoctrine; tags: DoctrineTag[] }) {
+function DoctrinePanel({
+  doctrine,
+  tags,
+  academy,
+}: {
+  doctrine: ClubDoctrine;
+  tags: DoctrineTag[];
+  academy: AcademyState;
+}) {
   return (
     <Panel>
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -674,11 +690,51 @@ function DoctrinePanel({ doctrine, tags }: { doctrine: ClubDoctrine; tags: Doctr
           );
         })}
       </div>
+      <AcademyBlock academy={academy} />
       <p className="mt-3 text-xs leading-relaxed text-slate-500">
         四条轴每赛季都会按球队真实的成绩、财政和青训产出重新漂移，也会随教练更替而变化。
         标签是从轴上读出来的，不是另一份状态——所以一支球队可以在十几年里从「金元足球」慢慢走成「青训为本」。
+        青训水平则是这份意愿一年年累积下来的结果：它比经营路线变得慢得多，也只改变青训出产的原料，不直接兑换成成绩。
       </p>
     </Panel>
+  );
+}
+
+/**
+ * B3 — the academy level, kept visually separate from the four doctrine axes.
+ *
+ * The axes are opinions and move every season; the level is what those opinions
+ * bought and moves over a decade. Rendering them in one list would imply they
+ * are the same kind of quantity.
+ */
+function AcademyBlock({ academy }: { academy: AcademyState }) {
+  const level = Math.round(academy.level);
+  return (
+    <div className="mt-4 border-t border-slate-700/60 pt-3" data-testid="academy-level">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-xs font-semibold text-slate-300">青训水平</h3>
+        <span className="rounded-full border border-teal-700/60 bg-teal-950/40 px-2 py-0.5 text-[11px] text-teal-300">
+          {describeAcademyLevel(academy.level)}
+        </span>
+      </div>
+      <div
+        className="flex items-center gap-2"
+        title="设施、球探网络与青训传统的长期水平（15-95，50 为联赛平均）"
+      >
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-700">
+          <div className="h-full rounded-full bg-teal-500" style={{ width: level + '%' }} />
+        </div>
+        <span className="w-7 text-right font-mono text-xs text-slate-300">{level}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+        <span>
+          {academy.lastInvested > 0
+            ? '上季投入 ' + formatMoney(academy.lastInvested)
+            : '上季未投入青训'}
+        </span>
+        <span>连续重点投入 {academy.investmentStreak} 季</span>
+      </div>
+    </div>
   );
 }
 
@@ -1240,6 +1296,7 @@ function FinancePanel({ teamId }: { teamId: string }) {
                 <th className="px-2 py-1.5 text-right">转入</th>
                 <th className="px-2 py-1.5 text-right">薪资</th>
                 <th className="px-2 py-1.5 text-right">转出</th>
+                <th className="px-2 py-1.5 text-right">青训</th>
                 <th className="px-2 py-1.5 text-right">期末</th>
                 <th className="px-2 py-1.5 text-right">变动</th>
               </tr>
@@ -1258,6 +1315,9 @@ function FinancePanel({ teamId }: { teamId: string }) {
                     <td className="px-2 py-1.5 text-right text-emerald-300">+{formatMoney(rec.transferIncome)}</td>
                     <td className="px-2 py-1.5 text-right text-rose-300">-{formatMoney(rec.salaries)}</td>
                     <td className="px-2 py-1.5 text-right text-red-400">-{formatMoney(rec.transferExpense)}</td>
+                    <td className="px-2 py-1.5 text-right text-teal-300">
+                      {rec.academy ? '-' + formatMoney(rec.academy) : '—'}
+                    </td>
                     <td className={`px-2 py-1.5 text-right font-semibold ${endTone}`}>{formatMoney(rec.endCash)}</td>
                     <td className={`px-2 py-1.5 text-right ${deltaTone}`}>
                       {delta >= 0 ? '+' : ''}{formatMoney(delta)}

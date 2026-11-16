@@ -549,7 +549,7 @@ export function formatMoney(n: number): string {
 }
 
 export function emptyFinanceBreakdown(): FinanceBreakdown {
-  return { prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0 };
+  return { prizeMoney: 0, tvSponsor: 0, transferIncome: 0, salaries: 0, transferExpense: 0, academy: 0 };
 }
 
 export function createFinanceBreakdown(teamIds: Iterable<string>): Record<string, FinanceBreakdown> {
@@ -566,6 +566,7 @@ export function addFinanceBreakdown(
     transferIncome: current.transferIncome + addition.transferIncome,
     salaries: current.salaries + addition.salaries,
     transferExpense: current.transferExpense + addition.transferExpense,
+    academy: (current.academy ?? 0) + (addition.academy ?? 0),
   };
 }
 
@@ -998,6 +999,7 @@ export function archiveSeasonFinance(
       transferIncome: Math.round(bd.transferIncome * 10) / 10,
       salaries: Math.round(bd.salaries * 10) / 10,
       transferExpense: Math.round(bd.transferExpense * 10) / 10,
+      academy: Math.round((bd.academy ?? 0) * 10) / 10,
     };
     const merged = [...fin.history, record];
     next[teamId] = {

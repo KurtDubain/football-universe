@@ -39,6 +39,7 @@ import { parseCustomTeams } from '../validation/custom-teams';
 import { dispatchWindow } from './window-handlers';
 import { runPostMatchProcessing } from './post-match';
 import { deriveInitialDoctrine } from '../clubs/doctrine';
+import { deriveInitialAcademyState } from '../clubs/academy';
 import { handleSeasonEnd } from './season-end';
 import { autoResolveRemaining } from '../transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../players/stats';
@@ -272,6 +273,20 @@ export interface GameWorld {
    * shape only when the field is present.
    */
   clubDoctrines?: Record<string, import('../clubs/doctrine').ClubDoctrine>;
+  /**
+   * Per-club academy state (B3): the slow variable the doctrine axes feed into.
+   *
+   * Doctrine says what a club intends; this records what that intent has
+   * accumulated into. It converges at half doctrine's rate on purpose — see the
+   * AcademyState class comment.
+   *
+   * Optional and additive, so no `SAVE_SCHEMA_VERSION` bump: a v26 save written
+   * before this field existed has none, and every reader falls back to
+   * `ACADEMY_LEVEL_DEFAULT` (the league average), which leaves the graduate
+   * distribution for those saves exactly as it was before B3.
+   * `validateCurrentWorld` checks the shape only when the field is present.
+   */
+  academyLevels?: Record<string, import('../clubs/academy').AcademyState>;
   gameMode?: import('../../types/game-mode').GameMode;
   /**
    * Phase G — monotonic counter of how many *match-bearing* calendar windows
@@ -531,6 +546,10 @@ export function initializeGameWorld(seed: number, options?: { gameMode?: GameMod
     /** B2 — starting operating doctrine per club; drifts at every season-end. */
     clubDoctrines: Object.fromEntries(
       Object.values(teamBases).map((team) => [team.id, deriveInitialDoctrine(team)]),
+    ),
+    /** B3 — every club starts at the league-average academy level. */
+    academyLevels: Object.fromEntries(
+      Object.values(teamBases).map((team) => [team.id, deriveInitialAcademyState()]),
     ),
     coachBases,
     coachStates,

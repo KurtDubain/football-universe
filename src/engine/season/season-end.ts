@@ -15,6 +15,15 @@ import {
   type ClubDoctrine,
   type DoctrineEvents,
 } from '../clubs/doctrine';
+import {
+  computeAcademyInvestment,
+  computeInvestRatio,
+  deriveInitialAcademyState,
+  driftAcademyState,
+  selectSeriousTeams,
+  type AcademySeasonInput,
+  type AcademyState,
+} from '../clubs/academy';
 import { computeSalary } from '../economy/finance';
 import { applySeasonEndReset } from '../state-updater';
 import { createHonorRecord, generateTeamTrophies } from '../honors/honors';
@@ -1958,6 +1967,88 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     }
   }
 
+  // ── B3: Academy investment + level drift ────────────────────────────────
+  //
+  // Placed after the doctrine drift so the budget reflects the club CURRENT
+  // operating stance, and before the finance archive so the spend lands in this
+  // season's history record.
+  //
+  // The doctrine events above (cashTight / cashFlush) deliberately read PRE-drain
+  // cash. Letting the drain feed back into the same season drift would close a
+  // loop inside one season-end — a keen academy spends more, so it looks tighter,
+  // so it turns seller, so next season it spends less — and the two systems would
+  // be impossible to reason about separately. Sequential is also the honest model:
+  // the board reacts to the season it just had, then allocates the surplus.
+  const academyLevels: Record<string, AcademyState> = { ...(world.academyLevels ?? {}) };
+  {
+    // League level from the just-finished standings — same resolution the income
+    // and expense passes use.
+    const academyTeamLevels: Record<string, 1 | 2 | 3> = {};
+    for (const lv of [1, 2, 3] as const) {
+      const arr = lv === 1
+        ? world.league1Standings
+        : lv === 2 ? world.league2Standings : world.league3Standings;
+      for (const s of arr) {
+        if (s.played > 0) academyTeamLevels[s.teamId] = lv;
+      }
+    }
+    for (const tid of Object.keys(squads)) {
+      if (academyTeamLevels[tid] === undefined) {
+        academyTeamLevels[tid] = (world.teamStates[tid]?.leagueLevel ?? 3) as 1 | 2 | 3;
+      }
+    }
+
+    // Investment INTENT, ranked across the league. League-relative for the same
+    // reason B2's cashTight / cashFlush are: an absolute bar silently changes
+    // meaning as the economy drifts underneath it.
+    const intentByTeam: Record<string, number> = {};
+    for (const teamId of Object.keys(squads)) {
+      const doctrine = clubDoctrines[teamId] ?? deriveInitialDoctrine(teamBases[teamId]);
+      intentByTeam[teamId] = computeInvestRatio(
+        doctrine.academy,
+        (coachBiasByTeam[teamId] ?? 0) - coachBiasMean,
+      );
+    }
+    const seriousTeamIds = selectSeriousTeams(intentByTeam);
+
+    for (const teamId of Object.keys(squads)) {
+      const fin = teamFinances[teamId];
+      const bd = financeBreakdown[teamId];
+      if (!fin || !bd) continue;
+      const squad = squads[teamId] ?? [];
+      const squadValue = squad.reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
+      const doctrine = clubDoctrines[teamId] ?? deriveInitialDoctrine(teamBases[teamId]);
+      const coachBias = (coachBiasByTeam[teamId] ?? 0) - coachBiasMean;
+      const input: AcademySeasonInput = {
+        revenue: bd.prizeMoney + bd.tvSponsor + bd.transferIncome,
+        cash: fin.cash,
+        wage: computeSalary(squadValue, academyTeamLevels[teamId] ?? 1),
+        academyAxis: doctrine.academy,
+        coachBias,
+        reputation: teamBases[teamId]?.reputation ?? 50,
+        seriousRank: seriousTeamIds.has(teamId),
+      };
+      const invest = computeAcademyInvestment(input);
+      if (invest > 0) {
+        teamFinances = {
+          ...teamFinances,
+          [teamId]: {
+            ...fin,
+            cash: Math.round((fin.cash - invest) * 10) / 10,
+            totalExpense: fin.totalExpense + invest,
+          },
+        };
+        financeBreakdown[teamId] = { ...bd, academy: (bd.academy ?? 0) + invest };
+      }
+      academyLevels[teamId] = driftAcademyState(
+        academyLevels[teamId] ?? deriveInitialAcademyState(),
+        input,
+        invest,
+        rng,
+      );
+    }
+  }
+
   // ── Phase H: Archive finance — push the season's totals to history ──
   // and reset the running totalIncome / totalExpense counters. Cash carries
   // forward unchanged. We do this LAST so all flows from this season
@@ -2012,6 +2103,8 @@ export function handleSeasonEnd(world: GameWorld, options?: { favoriteTeamIds?: 
     teamFinances,
     /** B2 — four drifting operating axes per club. Absent on pre-B2 saves. */
     clubDoctrines,
+    /** B3 — per-club academy level. Absent on pre-B3 saves. */
+    academyLevels,
     activeEvents: [],
     newsLog: [...world.newsLog, ...news],
     rngState: rng.getState(),

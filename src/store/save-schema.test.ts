@@ -263,6 +263,39 @@ describe('current schema hydration boundary', () => {
     expect(world.clubDoctrines?.[teamId]?.patience).toBe(0.7);
   });
 
+  it('loads a save written before the academy existed and round-trips one that has it', () => {
+    // B3 is additive on exactly the same terms as B2: a v26 save with no
+    // academyLevels record must still load, and every reader falls back to the
+    // league-average level rather than the save needing a migration. This is the
+    // contract that lets SAVE_SCHEMA_VERSION stay at 26.
+    const legacy = makeSave();
+    delete (legacy.state.world as Partial<GameWorld>).academyLevels;
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(legacy));
+    __flushCompressedStorageForTests();
+    const loadedLegacy = currentSaveStorage.getItem(SAVE_STORAGE_KEY);
+    expect(loadedLegacy).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+    expect(parseCurrentSave(loadedLegacy as string).state.world.academyLevels).toBeUndefined();
+
+    __flushCompressedStorageForTests();
+    localStorage.clear();
+
+    const modern = makeSave();
+    const teamId = Object.keys(modern.state.world.teamBases)[0];
+    modern.state.world.academyLevels = {
+      [teamId]: { level: 71.5, investmentStreak: 12, lastInvested: 18.4 },
+    };
+    compressedStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(modern));
+    __flushCompressedStorageForTests();
+    const loaded = currentSaveStorage.getItem(SAVE_STORAGE_KEY);
+    expect(loaded).not.toBeNull();
+    expect(getSaveRecoveryMessage()).toBeNull();
+    const world = parseCurrentSave(loaded as string).state.world;
+    expect(world.academyLevels?.[teamId]?.level).toBe(71.5);
+    expect(world.academyLevels?.[teamId]?.investmentStreak).toBe(12);
+    expect(world.academyLevels?.[teamId]?.lastInvested).toBe(18.4);
+  });
+
   it('accepts bounded presentation memory and defaults older saves to an empty list', async () => {
     const save = makeSave();
     save.state.narrativeMemory = [{
@@ -438,6 +471,37 @@ describe('current schema hydration boundary', () => {
       const teamId = Object.keys(save.state.world.teamBases)[0];
       save.state.world.clubDoctrines = {
         [teamId]: { academy: 1.4, spending: 0.5, selling: 0.5, patience: 0.5 },
+      };
+      return JSON.stringify(save);
+    })()],
+    ['academy level naming a club that does not exist', (() => {
+      const save = makeSave();
+      save.state.world.academyLevels = {
+        ghost_club: { level: 50, investmentStreak: 0, lastInvested: 0 },
+      };
+      return JSON.stringify(save);
+    })()],
+    ['academy level outside [0, 100]', (() => {
+      const save = makeSave();
+      const teamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.academyLevels = {
+        [teamId]: { level: 140, investmentStreak: 0, lastInvested: 0 },
+      };
+      return JSON.stringify(save);
+    })()],
+    ['academy investment streak below zero', (() => {
+      const save = makeSave();
+      const teamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.academyLevels = {
+        [teamId]: { level: 50, investmentStreak: -3, lastInvested: 0 },
+      };
+      return JSON.stringify(save);
+    })()],
+    ['academy spend below zero', (() => {
+      const save = makeSave();
+      const teamId = Object.keys(save.state.world.teamBases)[0];
+      save.state.world.academyLevels = {
+        [teamId]: { level: 50, investmentStreak: 0, lastInvested: -12 },
       };
       return JSON.stringify(save);
     })()],

@@ -9,6 +9,7 @@ import { computeCurrentRating } from './development';
 import { computeInitialMarketValue } from '../economy/market-value';
 import { formatPlayerUuid } from './generator';
 import { computePlayerCareerTotals } from './career-totals';
+import { ACADEMY_LEVEL_DEFAULT } from '../clubs/academy';
 
 /**
  * Per-team retirement cap. If more than this many players on the same team
@@ -22,13 +23,41 @@ export type YouthTalentTier = 'regular' | 'prospect' | 'elite';
 
 /**
  * A bounded mixture keeps most academy graduates ordinary while preserving
- * a genuinely rare elite tail after the initial squads have retired. Club
- * reputation nudges the odds, but even the smallest club can roll an elite.
+ * a genuinely rare elite tail after the initial squads have retired.
+ *
+ * B3 split the single reputation term in two: reputation still nudges the odds,
+ * but the club academy level now carries the larger share of the weight. The
+ * split is calibrated so the reference club — reputation 70, academy level 50 —
+ * gets EXACTLY the probabilities it got before B3:
+ *
+ *   eliteChance    0.012 + 0.7*0.006 + 0.5*0.0084 = 0.0204   (was 0.0204)
+ *   prospectChance 0.13  + 0.7*0.025 + 0.5*0.035  = 0.165    (was 0.165)
+ *
+ * That conserves output at the reference POINT only. Holding the LEAGUE MEAN at
+ * 50 as well is what ACADEMY_TARGET_INTERCEPT is calibrated for; without it the
+ * league as a whole quietly produces more (or fewer) geniuses than before.
+ *
+ * Across the full spans the academy level (15..95) moves eliteChance by 0.67pp
+ * against reputation (34..98) 0.38pp — the academy is the 1.8x lever.
  */
-export function rollYouthTalentTier(reputation: number, rng: SeededRNG): YouthTalentTier {
+export function youthTalentTierChances(
+  reputation: number,
+  academyLevel: number,
+): { eliteChance: number; prospectChance: number } {
   const normalizedReputation = Math.max(0, Math.min(100, reputation)) / 100;
-  const eliteChance = 0.012 + normalizedReputation * 0.012;
-  const prospectChance = 0.13 + normalizedReputation * 0.05;
+  const normalizedLevel = Math.max(0, Math.min(100, academyLevel)) / 100;
+  return {
+    eliteChance: 0.012 + normalizedReputation * 0.006 + normalizedLevel * 0.0084,
+    prospectChance: 0.13 + normalizedReputation * 0.025 + normalizedLevel * 0.035,
+  };
+}
+
+export function rollYouthTalentTier(
+  reputation: number,
+  academyLevel: number,
+  rng: SeededRNG,
+): YouthTalentTier {
+  const { eliteChance, prospectChance } = youthTalentTierChances(reputation, academyLevel);
   const roll = rng.next();
   if (roll < eliteChance) return 'elite';
   if (roll < eliteChance + prospectChance) return 'prospect';
@@ -119,14 +148,24 @@ function applyRegionalFlavor(
 }
 
 /**
- * Reputation-tier bonus on peakRating: gives elite-academy youths a
- * structural edge. Layered on top of regional flavor and the team-overall
- * scaled base.
+ * Reputation-tier plus academy-level bonus on peakRating: gives elite-academy
+ * youths a structural edge. Layered on top of regional flavor and the
+ * team-overall scaled base.
+ *
+ * B3 narrowed the reputation tiers and handed the difference to the academy
+ * level, which can now go NEGATIVE — a club that does not fund its academy
+ * actively drags its own graduates down. That is deliberate: without it, "do
+ * not invest in the academy" is a neutral choice rather than a cost.
+ *
+ *   reputation >= 85 -> +2                    (was +5, and +2 from rep >= 65)
+ *   academy level 15 -> -3, 50 -> 0, 95 -> +4
+ *   combined range: -3 .. +6
  */
-function applyReputationBonus(reputation: number, peak: number): number {
-  if (reputation >= 85) return peak + 5;
-  if (reputation >= 65) return peak + 2;
-  return peak;
+function applyAcademyBonus(reputation: number, academyLevel: number, peak: number): number {
+  const reputationBonus = reputation >= 85 ? 2 : 0;
+  const level = Math.max(0, Math.min(100, academyLevel));
+  const levelBonus = Math.round((level - 50) / 11);
+  return peak + reputationBonus + levelBonus;
 }
 
 /**
@@ -163,6 +202,12 @@ export function generateYouthReplacement(
   usedNames: Set<string>,
   rng: SeededRNG,
   nextUuid: { value: number },
+  /**
+   * B3 — the club academy level, 0..100. Decides the talent-tier odds and the
+   * peak bonus. Defaults to the league average so pre-B3 saves and focused
+   * unit tests keep the exact behaviour they had before the rewire.
+   */
+  academyLevel: number = ACADEMY_LEVEL_DEFAULT,
 ): Player {
   // Age 18-22, weighted slightly toward 19-20 via two integer rolls and a
   // min — produces a triangular-ish distribution without an explicit table.
@@ -173,7 +218,7 @@ export function generateYouthReplacement(
   const uuid = formatPlayerUuid(nextUuid.value++);
   const tag = rollTagForUuid(uuid);
   const talentRng = rng.fork();
-  const talentTier = rollYouthTalentTier(team.reputation ?? 50, talentRng);
+  const talentTier = rollYouthTalentTier(team.reputation ?? 50, academyLevel, talentRng);
   const peakAge = tag === 'late_bloomer'
     ? talentRng.nextInt(28, 32)
     : talentTier === 'elite'
@@ -207,11 +252,11 @@ export function generateYouthReplacement(
   peak = flav.peak;
   goalScoring = Math.max(0, Math.min(100, flav.goalScoring));
 
-  // Reputation tier
-  peak = applyReputationBonus(team.reputation ?? 50, peak);
+  // Reputation tier + academy level
+  peak = applyAcademyBonus(team.reputation ?? 50, academyLevel, peak);
 
-  // Reputation and regional flavor may improve the odds or the shape of a
-  // prospect, but only the rare elite tier is allowed to cross 89.
+  // Reputation, academy level and regional flavor may improve the odds or the
+  // shape of a prospect, but only the rare elite tier is allowed to cross 89.
   peak = capYouthPeakByTalentTier(talentTier, peak);
 
   // Initial rating from curve, plus the regional startBonus (only 东洲 lowers,
@@ -420,9 +465,12 @@ export function processRetirements(
         candidatesAdded.push(cand);
       }
 
-      // Generate replacement
+      // Generate replacement. B3 — the club academy level decides the talent-tier
+      // odds and the peak bonus. Pre-B3 saves carry no record, so the league
+      // average applies and the graduate distribution is unchanged for them.
       const youth = generateYouthReplacement(
         team, p.position, p.number, usedNumbers, usedNames, rng, nextUuid,
+        world.academyLevels?.[teamId]?.level ?? ACADEMY_LEVEL_DEFAULT,
       );
       newPlayers.push(youth);
     }

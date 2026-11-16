@@ -8,6 +8,7 @@ import {
   COACH_POOL_CAP,
   capYouthPeakByTalentTier,
   rollYouthTalentTier,
+  youthTalentTierChances,
 } from './retirement';
 import type { GameWorld } from '../season/season-manager';
 import type { Player, PlayerPosition } from '../../types/player';
@@ -287,7 +288,7 @@ describe('generateYouthReplacement — basic shape', () => {
     const rng = new SeededRNG(20260812);
     const counts = { regular: 0, prospect: 0, elite: 0 };
     for (let index = 0; index < 20_000; index++) {
-      counts[rollYouthTalentTier(50, rng)]++;
+      counts[rollYouthTalentTier(50, 50, rng)]++;
     }
 
     expect(counts.regular / 20_000).toBeGreaterThan(0.78);
@@ -417,46 +418,67 @@ describe('generateYouthReplacement — regional flavor', () => {
   });
 });
 
-describe('generateYouthReplacement — reputation tier', () => {
-  it('reputation >= 85 adds +5 to peakRating average', () => {
+describe('generateYouthReplacement — reputation + academy tier (B3)', () => {
+  function samplePeaks(
+    team: TeamBase,
+    academyLevel: number,
+    n: number,
+    seed: number,
+  ): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const rng = new SeededRNG(seed + i);
+      const nextUuid = { value: 1 };
+      const y = generateYouthReplacement(
+        team, 'MF', 9, new Set(), new Set(), rng, nextUuid, academyLevel,
+      );
+      out.push(y.peakRating);
+    }
+    return out;
+  }
+
+  function avg(xs: number[]): number {
+    return xs.reduce((a, b) => a + b, 0) / xs.length;
+  }
+
+  it('reputation >= 85 still lifts the peak average, but only by +2', () => {
     const elite = makeTeam('elite', { overall: 70, reputation: 90, region: '大陆+其他' });
     const mid = makeTeam('mid', { overall: 70, reputation: 60, region: '大陆+其他' });
-
-    function sample(team: TeamBase, n: number, seed: number): number[] {
-      const out: number[] = [];
-      for (let i = 0; i < n; i++) {
-        const rng = new SeededRNG(seed + i);
-        const nextUuid = { value: 1 };
-        const y = generateYouthReplacement(team, 'MF', 9, new Set(), new Set(), rng, nextUuid);
-        out.push(y.peakRating);
-      }
-      return out;
-    }
-
-    const eAvg = sample(elite, 80, 50000).reduce((a, b) => a + b, 0) / 80;
-    const mAvg = sample(mid, 80, 50000).reduce((a, b) => a + b, 0) / 80;
-    // Difference: elite +5 (>=85 tier), mid +2 (>=65 tier). Net ≈ +3.
-    expect(eAvg - mAvg).toBeGreaterThan(1.5);
+    const eAvg = avg(samplePeaks(elite, 50, 80, 50000));
+    const mAvg = avg(samplePeaks(mid, 50, 80, 50000));
+    // B3 narrowed this from +5-vs-+2 to +2-vs-0: the 65-84 reputation tier no
+    // longer pays a peak bonus at all.
+    expect(eAvg - mAvg).toBeGreaterThan(1.2);
+    expect(eAvg - mAvg).toBeLessThan(3.5);
   });
 
-  it('reputation < 65 gets no bonus', () => {
-    const low = makeTeam('low', { overall: 70, reputation: 50, region: '大陆+其他' });
-    const high = makeTeam('high', { overall: 70, reputation: 70, region: '大陆+其他' });
+  it('academy level moves the peak average in both directions', () => {
+    const team = makeTeam('t', { overall: 70, reputation: 60, region: '大陆+其他' });
+    const strong = avg(samplePeaks(team, 95, 120, 70000));
+    const average = avg(samplePeaks(team, 50, 120, 70000));
+    const weak = avg(samplePeaks(team, 15, 120, 70000));
+    // level 95 -> +4, level 50 -> 0, level 15 -> -3. The negative end is the
+    // point: not funding the academy has to be a cost, not a neutral choice.
+    expect(strong - average).toBeGreaterThan(1.5);
+    expect(average - weak).toBeGreaterThan(1.0);
+  });
 
-    function avgPeak(team: TeamBase, seed: number): number {
-      let sum = 0;
-      for (let i = 0; i < 80; i++) {
-        const rng = new SeededRNG(seed + i);
-        const nextUuid = { value: 1 };
-        const y = generateYouthReplacement(team, 'MF', 9, new Set(), new Set(), rng, nextUuid);
-        sum += y.peakRating;
-      }
-      return sum / 80;
-    }
+  it('conserves the reference club exactly: rep 70 / level 50', () => {
+    const { eliteChance, prospectChance } = youthTalentTierChances(70, 50);
+    // The pre-B3 single-term formulas, inlined. This is the hard constraint:
+    // the reference club must get EXACTLY the odds it got before the rewire.
+    const preB3Elite = 0.012 + (70 / 100) * 0.012;
+    const preB3Prospect = 0.13 + (70 / 100) * 0.05;
+    expect(eliteChance).toBeCloseTo(preB3Elite, 12);
+    expect(prospectChance).toBeCloseTo(preB3Prospect, 12);
+  });
 
-    const lAvg = avgPeak(low, 60000);
-    const hAvg = avgPeak(high, 60000);
-    expect(hAvg - lAvg).toBeGreaterThan(0.8); // +2 bonus shows up on average
+  it('academy level is the larger lever across the full spans', () => {
+    const repLow = youthTalentTierChances(34, 50).eliteChance;
+    const repHigh = youthTalentTierChances(98, 50).eliteChance;
+    const levelLow = youthTalentTierChances(70, 15).eliteChance;
+    const levelHigh = youthTalentTierChances(70, 95).eliteChance;
+    expect(levelHigh - levelLow).toBeGreaterThan(repHigh - repLow);
   });
 });
 
