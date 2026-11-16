@@ -85,6 +85,8 @@ export interface StadiumOptions {
   crest?: StadiumCrest;
   /** Scoreline and clock for the big screen. Omitted means no screen. */
   scoreboard?: StadiumScoreboard;
+  /** 0..1 celebration intensity: phone flashes and a home-colour wash. */
+  flash?: number;
   frame?: number;
   seed?: number;
 }
@@ -135,6 +137,69 @@ function blockSeatColor(
   const source = homeColor && parseHex(homeColor) ? homeColor : FALLBACK_SEAT_BASE;
   const jitter = 0.86 + seatNoise(block, upper ? 5 : 2, seed + 13) * 0.3;
   return shade(source, (upper ? UPPER_TIER_SHADE : LOWER_TIER_SHADE) * jitter);
+}
+
+/** Cached white bloom for the crowd's phone flashes. */
+let flashSprite: HTMLCanvasElement | null = null;
+
+function getFlashSprite(): HTMLCanvasElement | null {
+  if (flashSprite) return flashSprite;
+  if (typeof document === 'undefined') return null;
+  const size = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const spriteCtx = canvas.getContext('2d');
+  if (!spriteCtx) return null;
+  const glow = spriteCtx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  glow.addColorStop(0, 'rgba(255,253,244,0.95)');
+  glow.addColorStop(0.3, 'rgba(255,250,228,0.4)');
+  glow.addColorStop(1, 'rgba(255,250,228,0)');
+  spriteCtx.fillStyle = glow;
+  spriteCtx.fillRect(0, 0, size, size);
+  flashSprite = canvas;
+  return canvas;
+}
+
+function rgbaOf(hex: string, alpha: number): string {
+  const rgb = parseHex(hex);
+  if (!rgb) return 'rgba(255,255,255,' + alpha.toFixed(3) + ')';
+  return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + alpha.toFixed(3) + ')';
+}
+
+/**
+ * Phone flashes going off across the stand.
+ *
+ * The single most recognisable thing a real crowd does. Drawn from a cached
+ * bloom sprite rather than a gradient per flash: a celebration puts up to
+ * sixty of these on screen at once and every one of them has to be cheap.
+ */
+function drawCrowdFlashes(
+  ctx: CanvasRenderingContext2D,
+  standLeft: number,
+  span: number,
+  standHeight: number,
+  flash: number,
+  frame: number,
+  seed: number,
+): void {
+  const sprite = getFlashSprite();
+  if (!sprite || flash <= 0.02) return;
+  const count = Math.round(16 + flash * 46);
+  // The bank of phones re-rolls every few frames. Holding one position for a
+  // whole second is what stops a flash reading as a flash.
+  const phase = Math.floor(frame / 3);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let index = 0; index < count; index += 1) {
+    if (seatNoise(index, phase, seed + 31) > 0.2 + flash * 0.8) continue;
+    const x = standLeft + seatNoise(phase, index, seed + 57) * span;
+    const y = standHeight * (0.2 + seatNoise(index, phase, seed + 91) * 0.66);
+    const radius = 1.5 + seatNoise(index, phase, seed + 13) * 3.2;
+    ctx.globalAlpha = 0.32 + flash * 0.5;
+    ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+  }
+  ctx.restore();
 }
 
 interface StandLayer {
@@ -426,6 +491,26 @@ export function drawBroadcastStadium(
       viewWidth: view.width,
       board: options.scoreboard,
     });
+  }
+
+  // The stand answers a goal: a wash of the home colour up the tier, and a
+  // bank of phone flashes across it.
+  const flash = options.flash ?? 0;
+  if (flash > 0.02) {
+    if (options.homeColor) {
+      const wash = ctx.createLinearGradient(0, standHeight, 0, standHeight * 0.18);
+      wash.addColorStop(0, rgbaOf(options.homeColor, 0.22 * flash));
+      wash.addColorStop(1, rgbaOf(options.homeColor, 0));
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = wash;
+      ctx.fillRect(standLeft, 0, span, standHeight);
+      ctx.restore();
+    }
+    drawCrowdFlashes(
+      ctx, standLeft, span, standHeight, flash,
+      options.frame ?? 0, options.seed ?? 1,
+    );
   }
 
   // Advertising boards, right behind the far touchline.

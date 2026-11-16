@@ -17,6 +17,7 @@ import {
 } from './pitch-canvas/broadcast-view';
 import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
 import { drawBroadcastStadium } from './pitch-canvas/broadcast-stadium';
+import { drawBroadcastGrade } from './pitch-canvas/broadcast-grade';
 import { scoreAtMinute } from './pitch-canvas/live-score';
 import { teamBadgeParts } from './team-badge-geometry';
 import {
@@ -1020,10 +1021,18 @@ function PitchCanvas(props: Props) {
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
+      // How loud the ground is right now. A goal floods it; a dangerous attack
+      // gets a scatter of phones out on its own.
+      const goalFlash = goalCelebFrame.current > 0
+        ? clamp((goalCelebFrame.current / GOAL_CELEB_MAX_FRAMES) * 1.6, 0, 1)
+        : 0;
+      const crowdFlash = Math.max(goalFlash, lastAtmosphereRef.current.danger * 0.2);
+
       drawBroadcastStadium(ctx, view, {
         homeColor,
         density: renderBudget.quality === 'full' ? 1 : 0.55,
         excitement: lastAtmosphereRef.current.danger,
+        flash: crowdFlash,
         crest: homeCrest,
         scoreboard: {
           minute,
@@ -1815,6 +1824,16 @@ function PitchCanvas(props: Props) {
         };
         shotOutcomeFrameRef.current--;
       }
+
+      // Grade last, inside the camera transform, so it covers the celebration
+      // and the shot outcome the way a real lens and a real colourist would.
+      // The nameplate label is drawn after `restore()` and stays ungraded: it
+      // is an overlay, not part of the picture.
+      drawBroadcastGrade(ctx, view, {
+        danger: lastAtmosphereRef.current.danger,
+        flash: goalFlash,
+        homeColor,
+      });
 
       ctx.restore();
 
