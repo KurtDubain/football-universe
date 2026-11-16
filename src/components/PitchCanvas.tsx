@@ -75,6 +75,7 @@ import {
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
 import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
+import { isWaitingForEvent, shouldHoldClock } from './pitch-canvas/playback-gates';
 import {
   createRenderMetricsTracker,
   EMPTY_RENDER_METRICS,
@@ -868,12 +869,14 @@ function PitchCanvas(props: Props) {
         ? sequenceRef.current[phaseIdxRef.current]
         : undefined;
       const resultPresentationBusy = shotOutcomeFrameRef.current > 30 || goalCelebFrame.current > 50;
-      const shouldHoldPlayback = Boolean(
-        live.active
-        && sequenceSceneRef.current
-        && minute >= sequenceSceneRef.current.event.minute
-        && (activeDirectedPhase || resultPresentationBusy),
-      );
+      const shouldHoldPlayback = shouldHoldClock({
+        active: live.active,
+        hasScene: Boolean(sequenceSceneRef.current),
+        eventMinute: sequenceSceneRef.current?.event.minute ?? 0,
+        minute,
+        hasActivePhase: Boolean(activeDirectedPhase),
+        resultBusy: resultPresentationBusy,
+      });
       if (playbackHoldRef.current !== shouldHoldPlayback) {
         playbackHoldRef.current = shouldHoldPlayback;
         live.onPlaybackHoldChange?.(shouldHoldPlayback);
@@ -1216,10 +1219,16 @@ function PitchCanvas(props: Props) {
         } else if (phaseStateRef.current === 'holding' && phaseFrameRef.current >= phase.hold) {
           const newPhase = sequenceRef.current[phaseIdxRef.current + 1];
           const scene = sequenceSceneRef.current;
-          const waitingForEvent = newPhase?.kind === 'shot'
-            && scene
-            && minute <= scene.event.minute
-            && pendingImpactSceneRef.current?.key !== scene.key;
+          const impactFired = scene
+            ? pendingImpactSceneRef.current?.key === scene.key
+            : false;
+          const waitingForEvent = isWaitingForEvent({
+            nextPhaseIsShot: newPhase?.kind === 'shot',
+            hasScene: Boolean(scene),
+            eventMinute: scene?.event.minute ?? 0,
+            minute,
+            impactFired,
+          });
           const waitingForDelivery = scene?.outcome === 'delivery'
             && minute < scene.event.minute;
 
