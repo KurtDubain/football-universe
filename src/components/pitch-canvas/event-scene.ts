@@ -62,7 +62,12 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
     ? 0.5 + (seededRand(seed + 1) > 0.5 ? 1 : -1) * (0.13 + seededRand(seed + 5) * 0.05)
     : outcome === 'block'
       ? 0.46 + seededRand(seed + 2) * 0.08
-      : outcome === 'save' && event.type === 'save'
+      // A saved shot is on target: the keeper reached a ball that was going
+      // in. Keeping it inside the mouth (0.446-0.554) is also what lets the
+      // dive be planned from a set position — a save credited outside the posts
+      // is one no keeper could have got to, and the animation cannot invent a
+      // reach the simulation did not produce.
+      : outcome === 'save'
         ? 0.46 + seededRand(seed + 3) * 0.08
         : 0.4 + seededRand(seed + 3) * 0.2;
 

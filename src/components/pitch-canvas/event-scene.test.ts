@@ -18,14 +18,22 @@ describe('event-directed pitch scenes', () => {
     expect(sceneForEvent(event('df_block', 'AWAY'), 'HOME')?.attackingHome).toBe(true);
   });
 
-  it('keeps routine saves central while allowing key saves to reach the corners', () => {
+  it('keeps every kind of save inside the goal mouth', () => {
+    // A save is a ball that was going in. Anything outside 0.446-0.554 is a
+    // shot the keeper could not have reached, so the drawn dive would have to
+    // invent a save the simulation never produced.
     const routine = sceneForEvent(event('save', 'HOME'), 'HOME');
     const key = sceneForEvent(event('gk_save', 'HOME'), 'HOME');
+    const penalty = sceneForEvent(
+      { ...event('penalty_miss', 'HOME'), shootout: { kickNumber: 1, round: 1, teamKickNumber: 1, suddenDeath: false, outcome: 'saved', goalkeeperId: 'AWAY-1' } },
+      'HOME',
+    );
 
-    expect(routine?.target.y).toBeGreaterThanOrEqual(0.46);
-    expect(routine?.target.y).toBeLessThanOrEqual(0.54);
-    expect(key?.target.y).toBeGreaterThanOrEqual(0.4);
-    expect(key?.target.y).toBeLessThanOrEqual(0.6);
+    for (const scene of [routine, key, penalty]) {
+      expect(scene?.outcome).toBe('save');
+      expect(scene?.target.y).toBeGreaterThanOrEqual(0.446);
+      expect(scene?.target.y).toBeLessThanOrEqual(0.554);
+    }
   });
 
   it('maps structured corner and free-kick events to delivery scenes', () => {

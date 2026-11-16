@@ -4,6 +4,7 @@
 import { clamp, dist, lerp, seededRand } from './math';
 import { NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 import { setPiecePlayerTarget } from './set-pieces';
+import { keeperSetPosition } from './keeper-action';
 import {
   BASE_FORMATION,
   type FormationSlot,
@@ -875,7 +876,16 @@ export function updatePlayerPositions(
           : clamp((phaseProgress - 0.08) / 0.7, 0, 1);
         const actionX = defensiveAction.target.x + (isHomeTeam ? 0.012 : -0.012);
         targetX_n = lerp(targetX_n, actionX, reaction);
-        targetY_n = lerp(targetY_n, defensiveAction.target.y, reaction);
+        if (slot.role === 'GK') {
+          // A keeper does not slide onto the ball. They set themselves across
+          // the goal while it is travelling and dive the rest of the way, and
+          // that dive is drawn from where they are standing. Converging all the
+          // way to the target — which is what the outfield blocker below does,
+          // and rightly — left the drawn save with nothing to cover.
+          targetY_n = keeperSetPosition(playerPos[i].y, defensiveAction.target.y);
+        } else {
+          targetY_n = lerp(targetY_n, defensiveAction.target.y, reaction);
+        }
         playerPos[i].sprintT = Math.max(playerPos[i].sprintT, reaction);
       } else if (currentPhase.kind === 'pass') {
         // Event actors read the attack before the final shot. Outfield

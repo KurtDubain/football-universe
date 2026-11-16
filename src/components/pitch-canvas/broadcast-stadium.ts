@@ -87,6 +87,12 @@ export interface StadiumOptions {
   scoreboard?: StadiumScoreboard;
   /** 0..1 celebration intensity: phone flashes and a home-colour wash. */
   flash?: number;
+  /**
+   * 0..1 how much the moment is worth. Drives how hard the crowd moves and
+   * how violently the tifo is being worked, separately from how loud it is:
+   * a shot in a settled game is loud without being urgent.
+   */
+  tension?: number;
   frame?: number;
   seed?: number;
 }
@@ -202,10 +208,38 @@ function drawCrowdFlashes(
   ctx.restore();
 }
 
+/** Where the banner sits, in the baked stand's own coordinates. */
+export interface TifoRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The banner's footprint.
+ *
+ * Kept clear of the middle of the tier, which is where the big screen hangs:
+ * a banner behind a scoreboard is a banner nobody sees. Shared with the bake
+ * so the animated cloth sits exactly on the painted one — two copies of this
+ * arithmetic is how a ripple ends up floating beside its own banner.
+ */
+function tifoRectFor(canvasWidth: number, roofBottom: number, usable: number, seed: number): TifoRect {
+  const onLeft = seatNoise(3, 7, seed) < 0.5;
+  const jitter = seatNoise(4, 11, seed) * 0.14;
+  return {
+    left: canvasWidth * (onLeft ? 0.04 + jitter : 0.64 + jitter),
+    top: roofBottom + usable * 0.08,
+    width: (canvasWidth / SEAT_BLOCKS) * 1.7,
+    height: usable * 0.54,
+  };
+}
+
 interface StandLayer {
   key: string;
   canvas: HTMLCanvasElement;
   height: number;
+  tifo: TifoRect | null;
 }
 
 let cachedStand: StandLayer | null = null;
@@ -241,7 +275,7 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   canvas.width = Math.max(8, Math.ceil(span));
   canvas.height = Math.ceil(standHeight);
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { key, canvas, height: canvas.height };
+  if (!ctx) return { key, canvas, height: canvas.height, tifo: null };
 
   const roofBottom = canvas.height * ROOF_FRACTION;
   const concourseHeight = canvas.height * CONCOURSE_FRACTION;
@@ -291,15 +325,14 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   // Drawn over the seats rather than instead of them, because that is what a
   // banner is: a sheet held above people.
   const crest = options.crest;
-  if (crest && canvas.width > 60) {
-    // Kept clear of the middle of the tier, which is where the big screen
-    // hangs: a banner behind a scoreboard is a banner nobody sees.
-    const onLeft = seatNoise(3, 7, seed) < 0.5;
-    const jitter = seatNoise(4, 11, seed) * 0.14;
-    const tifoWidth = (canvas.width / SEAT_BLOCKS) * 1.7;
-    const tifoLeft = canvas.width * (onLeft ? 0.04 + jitter : 0.64 + jitter);
-    const tifoTop = roofBottom + usable * 0.08;
-    const tifoHeight = usable * 0.54;
+  const tifo = crest && canvas.width > 60
+    ? tifoRectFor(canvas.width, roofBottom, usable, seed)
+    : null;
+  if (crest && tifo) {
+    const tifoLeft = tifo.left;
+    const tifoTop = tifo.top;
+    const tifoWidth = tifo.width;
+    const tifoHeight = tifo.height;
     ctx.fillStyle = shade(crest.color, 0.72);
     ctx.fillRect(tifoLeft, tifoTop, tifoWidth, tifoHeight);
     // A banner is cloth: it hangs in folds and it is darker along the top.
@@ -357,7 +390,7 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   ctx.fillStyle = STAND_DIM;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  return { key, canvas, height: canvas.height };
+  return { key, canvas, height: canvas.height, tifo };
 }
 
 /** Below this the scoreline is a smudge, so the screen is left out entirely. */
@@ -370,6 +403,8 @@ interface BigScreenGeometry {
   standHeight: number;
   viewWidth: number;
   board: StadiumScoreboard;
+  /** Horizontal span the screen must not cover, in canvas coordinates. */
+  avoid?: { left: number; right: number };
 }
 
 /**
@@ -385,10 +420,23 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometr
   const height = geometry.standHeight * 0.38;
   const width = Math.min(height * 2.6, geometry.viewWidth * 0.24);
   if (width < MIN_SCREEN_WIDTH || height < MIN_SCREEN_HEIGHT) return;
-  const x = Math.max(
+  let x = Math.max(
     4,
     Math.min(geometry.centerX - width / 2, geometry.viewWidth - width - 4),
   );
+  const avoid = geometry.avoid;
+  if (avoid && x < avoid.right && x + width > avoid.left) {
+    // The screen is clamped into the frame, so on a panning camera it lands
+    // squarely on the banner: both live on the stand, and the clamp puts the
+    // screen at whichever edge the pan opened up. A tifo behind the big screen
+    // is a tifo nobody sees, and the banner is the loudest home-colour signal
+    // in the frame. Step around it, into whichever side has room.
+    const roomLeft = avoid.left - 4;
+    const roomRight = geometry.viewWidth - avoid.right - 4;
+    if (roomLeft >= width) x = avoid.left - width - 4;
+    else if (roomRight >= width) x = avoid.right + 4;
+    x = Math.max(4, Math.min(x, geometry.viewWidth - width - 4));
+  }
   const y = geometry.top;
   const board = geometry.board;
 
@@ -418,6 +466,145 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometr
   ctx.fillStyle = 'rgba(226,232,240,0.7)';
   ctx.fillText(board.minute + "'", x + width / 2, y + height * 0.8);
 }
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/**
+ * The crowd on its feet.
+ *
+ * The seats and the heads are baked, because re-rendering several thousand of
+ * them every frame costs more than the effect is worth. What cannot be baked
+ * is the one thing a still crowd can never fake: people standing up. So this
+ * draws a sparse layer of risers over the baked heads, their height driven by
+ * how much the moment is worth, with a wave travelling across the tier so the
+ * surge moves instead of pulsing in place.
+ *
+ * `tension` is read separately from `excitement` on purpose. A shot in a
+ * settled game is loud; a shot in the last ten minutes of a level one is
+ * urgent, and a stand reacts to the second by getting up rather than by
+ * getting brighter.
+ */
+function drawCrowdSurge(
+  ctx: CanvasRenderingContext2D,
+  standLeft: number,
+  span: number,
+  standHeight: number,
+  options: StadiumOptions,
+): void {
+  const energy = Math.max(
+    clamp01(options.excitement ?? 0),
+    clamp01(options.tension ?? 0) * 0.8,
+    clamp01(options.flash ?? 0),
+  );
+  if (energy <= 0.04) return;
+  const frame = options.frame ?? 0;
+  const seed = options.seed ?? 1;
+  const roofBottom = standHeight * ROOF_FRACTION;
+  const concourseTop = standHeight * (1 - CONCOURSE_FRACTION);
+  const usable = Math.max(4, concourseTop - roofBottom);
+  const columns = Math.max(12, Math.round(span / (SEAT_PITCH_PX * 2.4)));
+  const riserWidth = Math.max(1, (span / columns) * 0.62);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let column = 0; column < columns; column += 1) {
+    const t = (column + 0.5) / columns;
+    const jitter = seatNoise(column, 11, seed + 5);
+    // The wave travels: a stand does not heave all at once, it goes around.
+    const wave = Math.sin(frame * 0.055 - t * 7.5 + seatNoise(column, 3, seed) * 2.4);
+    const rise = energy * (0.55 + 0.45 * wave) * (0.6 + jitter * 0.7);
+    if (rise <= 0.05) continue;
+    // Sit the risers on the crowd, on the same rake the bake used.
+    const y = concourseTop - rake(0.18 + jitter * 0.62) * usable;
+    const riserHeight = Math.max(1, riserWidth * (0.9 + rise * 1.5));
+    ctx.fillStyle = 'rgba(255,238,206,' + (0.05 + rise * 0.16).toFixed(3) + ')';
+    ctx.fillRect(
+      standLeft + t * span - riserWidth / 2,
+      y - riserHeight,
+      riserWidth,
+      riserHeight,
+    );
+  }
+  ctx.restore();
+}
+
+/**
+ * Where the banner sits on the canvas, for this camera pan.
+ *
+ * Shared by the cloth animation and the big screen, which has to step around
+ * it: two copies of this arithmetic is how a ripple ends up floating beside
+ * its own banner, and how a scoreboard ends up parked on top of one.
+ */
+function tifoScreenRect(
+  layer: StandLayer,
+  standLeft: number,
+  span: number,
+): { left: number; top: number; width: number; height: number } | null {
+  const rect = layer.tifo;
+  if (!rect) return null;
+  const scaleX = span / layer.canvas.width;
+  const scaleY = layer.height / layer.canvas.height;
+  return {
+    left: standLeft + rect.left * scaleX,
+    top: rect.top * scaleY,
+    width: rect.width * scaleX,
+    height: rect.height * scaleY,
+  };
+}
+
+/**
+ * The banner being worked.
+ *
+ * A tifo is a sheet of cloth held above people, and cloth that never moves
+ * reads as a painted rectangle. The folds drift with the moment and the whole
+ * banner takes a hit of light when the ball goes in.
+ */
+function drawTifoWave(
+  ctx: CanvasRenderingContext2D,
+  layer: StandLayer,
+  standLeft: number,
+  span: number,
+  options: StadiumOptions,
+): void {
+  const screen = tifoScreenRect(layer, standLeft, span);
+  if (!screen) return;
+  const { left, top, width, height } = screen;
+  if (width < 6 || height < 4) return;
+
+  const flash = clamp01(options.flash ?? 0);
+  const energy = clamp01(
+    Math.max(clamp01(options.excitement ?? 0) * 0.7, clamp01(options.tension ?? 0) * 0.8)
+    + flash * 0.5,
+  );
+  const frame = options.frame ?? 0;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const folds = 5;
+  const bandWidth = width / folds;
+  for (let fold = 0; fold < folds; fold += 1) {
+    const phase = frame * (0.04 + energy * 0.055) + fold * 1.15;
+    const drift = Math.sin(phase) * bandWidth * (0.12 + energy * 0.3);
+    ctx.fillStyle = 'rgba(255,246,222,' + (0.04 + energy * 0.13).toFixed(3) + ')';
+    ctx.fillRect(left + fold * bandWidth + drift, top, bandWidth * 0.4, height);
+  }
+  // A billow running the length of the cloth, so it reads as hanging rather
+  // than as a row of lit stripes.
+  const billow = (Math.sin(frame * 0.03) * 0.5 + 0.5) * height * 0.22;
+  const gradient = ctx.createLinearGradient(0, top + billow, 0, top + billow + height * 0.5);
+  gradient.addColorStop(0, 'rgba(255,250,235,0)');
+  gradient.addColorStop(0.5, 'rgba(255,250,235,' + (0.03 + energy * 0.08).toFixed(3) + ')');
+  gradient.addColorStop(1, 'rgba(255,250,235,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(left, top, width, height);
+  if (flash > 0.02) {
+    ctx.fillStyle = 'rgba(255,252,240,' + (flash * 0.3).toFixed(3) + ')';
+    ctx.fillRect(left, top, width, height);
+  }
+  ctx.restore();
+}
+
 /**
  * Draw the whole surround for one camera.
  *
@@ -444,12 +631,19 @@ export function drawBroadcastStadium(
   const farY = rig.farEdgeY * H;
   const standHeight = Math.max(10, farY - 2);
 
+  let tifoOnScreen: { left: number; right: number } | undefined;
   if (typeof document !== 'undefined') {
     const key = standKey(view, options);
     if (!cachedStand || cachedStand.key !== key) {
       cachedStand = buildStand(view, options, span);
     }
     ctx.drawImage(cachedStand.canvas, standLeft, 0, span, cachedStand.height);
+    drawCrowdSurge(ctx, standLeft, span, standHeight, options);
+    drawTifoWave(ctx, cachedStand, standLeft, span, options);
+    const banner = tifoScreenRect(cachedStand, standLeft, span);
+    if (banner && banner.width >= 6) {
+      tifoOnScreen = { left: banner.left, right: banner.left + banner.width };
+    }
   }
 
   // Roof light strips. A modern ground lights the pitch from the roof edge,
@@ -490,6 +684,7 @@ export function drawBroadcastStadium(
       standHeight,
       viewWidth: view.width,
       board: options.scoreboard,
+      avoid: tifoOnScreen,
     });
   }
 

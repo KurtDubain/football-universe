@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, idleDriftOffset, pursuitSpeed, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { setPiecePlayerTarget } from './set-pieces';
+import { keeperCanReach } from './keeper-action';
 import { BASE_FORMATION, getFormationSlots, type PassPhase, type PlayerState } from './types';
 import { createPitchGeometry, NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 
@@ -510,6 +511,36 @@ describe('pitch player movement', () => {
     }
 
     expect(afterRelease[0].x).toBeLessThan(beforeRelease[0].x);
+  });
+
+  it('sets the goalkeeper rather than sliding them onto the ball', () => {
+    const players = initialPlayers();
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: false,
+      kind: 'shot',
+      duration: 20,
+      hold: 10,
+      arc: 0.1,
+      intercepted: false,
+    };
+    const target = { x: 0.015, y: 0.54 };
+    const action = { playerIndex: 0, target };
+
+    for (let frame = 0; frame < 90; frame++) {
+      updatePlayerPositions(
+        players, 0.12, 0.5, 'away', 9, phase, 'shooting', target, 0.04,
+        action, undefined, 0.95,
+      );
+    }
+
+    // The keeper has to still be short of the ball when it arrives: the dive
+    // covers the rest, and a keeper already standing on the target leaves the
+    // drawn save with no distance to travel.
+    const gap = Math.abs(target.y - players[0].y);
+    expect(gap).toBeGreaterThan(0.01);
+    expect(keeperCanReach(target.y, players[0].y)).toBe(true);
   });
 
   it('prepares the credited blocker in the shooting lane before the final shot', () => {

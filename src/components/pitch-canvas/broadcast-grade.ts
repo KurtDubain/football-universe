@@ -11,6 +11,13 @@ import type { BroadcastView } from './broadcast-view';
 export interface BroadcastGradeOptions {
   /** 0..1 how dangerous the moment is. Warms the picture. */
   danger?: number;
+  /**
+   * 0..1 how much the moment is worth. Punches the picture up and closes the
+   * corners in, which is what a broadcast grade does when the director knows
+   * the next thirty seconds decide the match. Read separately from `danger`:
+   * the same shot is a different picture in a settled game.
+   */
+  tension?: number;
   /** 0..1 goal celebration intensity. Pushes the home colour through. */
   flash?: number;
   homeColor?: string;
@@ -48,6 +55,7 @@ export function drawBroadcastGrade(
   const W = view.width;
   const H = view.height;
   const danger = clamp01(options.danger ?? 0);
+  const tension = clamp01(options.tension ?? 0);
   const flash = clamp01(options.flash ?? 0);
 
   ctx.fillStyle = COOL_WASH;
@@ -63,12 +71,29 @@ export function drawBroadcastGrade(
     ctx.fillRect(0, 0, W, H);
   }
 
+  if (tension > 0.01) {
+    // The centre lifts and the corners close in. It is the cheapest honest
+    // version of the punch a grade gets for a decisive moment, and it costs
+    // two fills.
+    const lift = ctx.createRadialGradient(
+      W / 2, H * 0.5, 0,
+      W / 2, H * 0.5, Math.max(W, H) * 0.5,
+    );
+    lift.addColorStop(0, 'rgba(255,248,232,' + (tension * 0.05).toFixed(3) + ')');
+    lift.addColorStop(1, 'rgba(255,248,232,0)');
+    ctx.fillStyle = lift;
+    ctx.fillRect(0, 0, W, H);
+  }
+
   const inner = Math.min(W, H) * 0.34;
   const outer = Math.max(W, H) * 0.76;
+  // The frame closes in as the moment gets bigger — tunnel vision is the
+  // one thing every tense broadcast has and no calm one does.
+  const vignetteStrength = VIGNETTE_STRENGTH * (1 + tension * 0.32);
   const vignette = ctx.createRadialGradient(W / 2, H * 0.52, inner, W / 2, H * 0.52, outer);
   vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(0.62, 'rgba(0,0,0,' + (VIGNETTE_STRENGTH * 0.26).toFixed(3) + ')');
-  vignette.addColorStop(1, 'rgba(0,0,0,' + VIGNETTE_STRENGTH.toFixed(3) + ')');
+  vignette.addColorStop(0.62, 'rgba(0,0,0,' + (vignetteStrength * 0.26).toFixed(3) + ')');
+  vignette.addColorStop(1, 'rgba(0,0,0,' + vignetteStrength.toFixed(3) + ')');
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 }

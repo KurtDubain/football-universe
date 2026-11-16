@@ -15,6 +15,7 @@ import {
 import { BASE_UNITS_PER_METER, type BroadcastView } from './broadcast-view';
 import type { PitchOrientation } from './geometry';
 import type { ShotOutcome } from './event-scene';
+import type { KeeperDivePlan } from './keeper-action';
 import {
   GOAL_CELEB_MAX_FRAMES,
   SHOT_OUTCOME_MAX_FRAMES,
@@ -108,6 +109,30 @@ export interface BroadcastPlayerOptions {
   actionProgress?: number;
   visualScale?: number;
   orientation?: PitchOrientation;
+  /**
+   * Goalkeepers wear a third colour, and at a framing where a shirt number
+   * is four pixels tall that is the only thing answering which one of these
+   * is the keeper. `keeperColor` comes from `keeperKitColor`.
+   */
+  isKeeper?: boolean;
+  keeperColor?: string;
+  /** The committed dive, planned in pitch space by `keeperDivePlan`. */
+  dive?: KeeperDivePlan;
+  /** Where the keeper stands along the pitch width, for resolving the dive. */
+  diveWidthFraction?: number;
+  /** ...and along its length. */
+  lengthFraction?: number;
+  /**
+   * Where the shot is going, in the same two fractions.
+   *
+   * Only used to decide which way the body falls. The travel vector cannot
+   * answer that: under a touchline camera the goal mouth runs along the depth
+   * axis, so a dive across it points almost straight into the lens and
+   * foreshortens to a few pixels. The ball can say which side the keeper
+   * ended up on; the travel cannot.
+   */
+  diveTargetWidthFraction?: number;
+  diveTargetLengthFraction?: number;
 }
 
 /**
@@ -161,8 +186,12 @@ export function drawBroadcastPlayer(
 
   const skin = SKIN_TONES[Math.abs(seed) % SKIN_TONES.length];
   const hair = HAIR_TONES[Math.abs(seed * 7 + 3) % HAIR_TONES.length];
-  const shorts = shadeColor(color, -0.55);
-  const socks = shadeColor(color, -0.2);
+  // A keeper in the same shirt as their own back four is a real problem in
+  // football and an unreadable one on a screen, so the third colour is not
+  // decoration: it is the only cue that survives the wide framing.
+  const shirt = options.isKeeper ? (options.keeperColor ?? color) : color;
+  const shorts = shadeColor(shirt, -0.55);
+  const socks = shadeColor(shirt, -0.2);
   // A shirt that matches the grass is a real problem in football and a worse
   // one on a screen, so the outline carries the separation, not the colour.
   const outline = teamSide === 'home' ? 'rgba(255,255,255,0.58)' : 'rgba(191,219,254,0.74)';
@@ -174,6 +203,45 @@ export function drawBroadcastPlayer(
   const gx = ground.x;
   const stridePhase = frame * 0.44 + seed * 1.7;
   const bob = Math.abs(Math.cos(stridePhase)) * height * 0.02 * moving;
+
+  // A dive is planned in pitch space, but under a touchline camera the goal
+  // mouth runs almost straight up the frame: a keeper diving across it is
+  // moving toward or away from the lens, which foreshortens rather than
+  // rotates. So the body is tipped only by the sideways part of the travel,
+  // and the rest is carried by the travel itself plus a compressed
+  // silhouette. Rotating by the whole vector would stand the keeper on
+  // their head the moment they went toward the near post.
+  const divePlan = options.dive;
+  const dive = (() => {
+    if (!divePlan || divePlan.extension <= 0.01) return null;
+    const widthFraction = options.diveWidthFraction;
+    const lengthFraction = options.lengthFraction;
+    if (widthFraction === undefined || lengthFraction === undefined) return null;
+    const from = view.at(lengthFraction, widthFraction);
+    const to = view.at(lengthFraction, widthFraction + divePlan.travel);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const span = Math.hypot(dx, dy);
+    if (span < 0.01) return null;
+    const ballWidth = options.diveTargetWidthFraction;
+    const ballLength = options.diveTargetLengthFraction;
+    const ball = ballWidth !== undefined && ballLength !== undefined
+      ? view.at(ballLength, ballWidth)
+      : to;
+    return {
+      dx,
+      dy,
+      // The body goes over toward the ball, at the angle the dive plan asked
+      // for. Deriving the angle from the travel vector instead — which is what
+      // this did first — left a keeper diving into the lens lying almost
+      // upright, because the only part of that vector with any screen length
+      // is the part that is not the dive.
+      rotation: (ball.x >= from.x ? 1 : -1) * Math.abs(divePlan.rotation),
+      // A body going horizontal presents less height to a low lens.
+      squash: 1 - 0.34 * divePlan.extension * (0.4 + divePlan.stretch * 0.6),
+      lift: divePlan.lift * height * 0.34,
+    };
+  })();
 
   let legSwing = Math.sin(stridePhase) * height * 0.2 * moving;
   let armSwing = -legSwing * 0.7;
@@ -196,6 +264,15 @@ export function drawBroadcastPlayer(
     crouch = actionWave * height * 0.035;
   }
 
+  if (dive) {
+    // Both arms travel with the ball. A dive with the arms still hanging
+    // reads as a player falling over rather than a keeper reaching for
+    // something, which is the exact confusion this pose exists to remove.
+    armRaise = Math.max(armRaise, 0.82 + 0.18 * (divePlan?.reach ?? 0));
+    legSwing *= 0.3;
+    crouch = 0;
+  }
+
   const hipY = footY - height * 0.46 + crouch - bob;
   const shoulderY = footY - height * 0.76 + crouch - bob;
   const headY = footY - height * 0.885 + crouch - bob;
@@ -208,10 +285,27 @@ export function drawBroadcastPlayer(
   const paint = (): void => {
   // Ground shadow: wider than it is deep, because the light is overhead and
   // the camera is low. A round shadow reads as a figure hovering off the turf.
+  // The shadow stays on the turf while the body leaves it, so it tracks the
+  // dive and fades as the keeper gets further off the ground.
+  const shadowFade = dive ? 1 / (1 + dive.lift / (height * 0.5)) : 1;
   ctx.beginPath();
-  ctx.ellipse(gx + lean * 0.4, footY, height * 0.2, height * 0.07, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.34)';
+  ctx.ellipse(
+    gx + lean * 0.4 + (dive ? dive.dx : 0),
+    footY + (dive ? dive.dy : 0),
+    height * 0.2 * shadowFade,
+    height * 0.07 * shadowFade,
+    0, 0, Math.PI * 2,
+  );
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.34 * shadowFade).toFixed(3) + ')';
   ctx.fill();
+
+  ctx.save();
+  if (dive) {
+    ctx.translate(gx + dive.dx, footY + dive.dy - dive.lift);
+    ctx.rotate(dive.rotation);
+    ctx.scale(1, dive.squash);
+    ctx.translate(-gx, -footY);
+  }
 
   const legWidth = Math.max(0.8, height * 0.075);
   const legSpread = hipHalf * 0.55;
@@ -263,7 +357,7 @@ export function drawBroadcastPlayer(
   };
 
   traceTorso();
-  ctx.fillStyle = color;
+  ctx.fillStyle = shirt;
   ctx.fill();
 
   const kit = options.kitPattern ?? 0;
@@ -271,7 +365,7 @@ export function drawBroadcastPlayer(
     ctx.save();
     traceTorso();
     ctx.clip();
-    ctx.fillStyle = shadeColor(color, kit === 2 ? -0.36 : 0.32);
+    ctx.fillStyle = shadeColor(shirt, kit === 2 ? -0.36 : 0.32);
     if (kit === 1) {
       const stripeWidth = Math.max(0.6, shoulderHalf * 0.4);
       for (let index = -2; index <= 2; index += 1) {
@@ -370,6 +464,8 @@ export function drawBroadcastPlayer(
     ctx.fillStyle = 'rgba(255,255,255,0.72)';
     ctx.fillText(String(number), gx + lean * 0.6, numberY);
   }
+
+  ctx.restore();
 
   if (hasBall) {
     const pulse = 1 + Math.sin(frame * 0.18) * 0.12;

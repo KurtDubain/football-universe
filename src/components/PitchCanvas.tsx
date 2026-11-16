@@ -19,6 +19,8 @@ import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
 import { drawBroadcastStadium } from './pitch-canvas/broadcast-stadium';
 import { drawBroadcastGrade } from './pitch-canvas/broadcast-grade';
 import { scoreAtMinute } from './pitch-canvas/live-score';
+import { matchTension } from './pitch-canvas/tension';
+import { keeperDivePlan, keeperKitColor } from './pitch-canvas/keeper-action';
 import { teamBadgeParts } from './team-badge-geometry';
 import {
   drawBroadcastPlayer,
@@ -1031,10 +1033,23 @@ function PitchCanvas(props: Props) {
         : 0;
       const crowdFlash = Math.max(goalFlash, lastAtmosphereRef.current.danger * 0.2);
 
+      // How much this moment is worth, which is not the same question as how
+      // loud it is. `danger` only knows about the ball; a shot in the last
+      // ten minutes of a level game and the same shot in a settled one are
+      // identical to it and nothing like identical to a viewer.
+      const tension = matchTension({
+        danger: lastAtmosphereRef.current.danger,
+        minute,
+        homeScore: liveScore.home,
+        awayScore: liveScore.away,
+        durationMinutes: maxMinute,
+      });
+
       drawBroadcastStadium(ctx, view, {
         homeColor,
         density: renderBudget.quality === 'full' ? 1 : 0.55,
         excitement: lastAtmosphereRef.current.danger,
+        tension,
         flash: crowdFlash,
         crest: homeCrest,
         scoreboard: {
@@ -1581,6 +1596,12 @@ function PitchCanvas(props: Props) {
         }),
       });
 
+      // Both keeper kits are resolved once per frame rather than per figure:
+      // the colour has to stay identical across the whole match or the keeper
+      // appears to change shirt between cameras.
+      const homeKeeperColor = keeperKitColor(homeColor, awayColor);
+      const awayKeeperColor = keeperKitColor(awayColor, homeColor);
+
       const pushPlayer = (
         player: PitchRosterPlayer,
         stateIndex: number,
@@ -1594,6 +1615,19 @@ function PitchCanvas(props: Props) {
         const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
         const isAttacker = directedActors.attackerId === player.playerId;
         const isDefender = directedActors.defenderId === player.playerId;
+        const isKeeper = player.position === 'GK';
+        // The dive is planned from two facts the engine already produced —
+        // where the shot is going and where this keeper is standing — so a
+        // beaten keeper comes up short instead of the save silently
+        // happening off screen.
+        const keeperDive = isKeeper && isDefender && directedShotScene?.outcome === 'save'
+          ? keeperDivePlan({
+            targetY: directedShotScene.target.y,
+            keeperY: playerState.y,
+            progress: phaseProgress,
+            action: directedShotScene.event.type === 'save' ? 'catch' : 'save',
+          })
+          : undefined;
         const receivingTouch = hasBall && currentPhase.kind === 'pass'
           && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
         const ground = view.fromDrawing(P + playerState.x * fw, P + playerState.y * fh);
@@ -1662,6 +1696,13 @@ function PitchCanvas(props: Props) {
             label: isEventPlayer ? player.playerName : undefined,
             labelPlacement,
             action,
+            isKeeper,
+            keeperColor: teamSide === 'home' ? homeKeeperColor : awayKeeperColor,
+            dive: keeperDive,
+            diveWidthFraction: playerState.y,
+            lengthFraction: playerState.x,
+            diveTargetWidthFraction: directedShotScene?.target.y,
+            diveTargetLengthFraction: directedShotScene?.target.x,
             actionProgress: receivingTouch
               ? phaseFrameRef.current / receptionFrames
               : isAttacker ? attackerActionProgress : phaseProgress,
@@ -1840,6 +1881,7 @@ function PitchCanvas(props: Props) {
       // is an overlay, not part of the picture.
       drawBroadcastGrade(ctx, view, {
         danger: lastAtmosphereRef.current.danger,
+        tension,
         flash: goalFlash,
         homeColor,
       });
