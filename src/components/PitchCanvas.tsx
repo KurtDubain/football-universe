@@ -16,6 +16,7 @@ import {
   type BroadcastView,
 } from './pitch-canvas/broadcast-view';
 import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
+import { drawBroadcastStadium } from './pitch-canvas/broadcast-stadium';
 import {
   drawBroadcastPlayer,
   drawBroadcastBall,
@@ -986,6 +987,13 @@ function PitchCanvas(props: Props) {
 
       shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
 
+      drawBroadcastStadium(ctx, view, {
+        homeColor,
+        density: renderBudget.quality === 'full' ? 1 : 0.55,
+        excitement: lastAtmosphereRef.current.danger,
+        frame: f,
+        seed: 20260722,
+      });
       drawBroadcastPitch(ctx, view, { flagColor: homeColor });
 
       if (halftime) {

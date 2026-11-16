@@ -14,8 +14,6 @@ import {
 } from './projection';
 import type { BroadcastView } from './broadcast-view';
 
-export const BROADCAST_SURROUND_COLOR = '#070d0a';
-
 const STRIPE_COUNT = 10;
 const GRASS_DARK = '#164327';
 const GRASS_LIGHT = '#22603a';
@@ -271,8 +269,10 @@ export interface BroadcastPitchOptions {
 }
 
 /**
- * Draw the whole pitch for one camera rig. Fills the canvas, so it must be the
- * first thing drawn inside the camera transform.
+ * Draw the grass, markings, goals and corner flags for one camera rig.
+ *
+ * The surround behind it belongs to `drawBroadcastStadium`, which fills the
+ * canvas and therefore has to run first.
  */
 export function drawBroadcastPitch(
   ctx: CanvasRenderingContext2D,
@@ -281,9 +281,6 @@ export function drawBroadcastPitch(
 ): void {
   const W = view.width;
   const H = view.height;
-  ctx.fillStyle = BROADCAST_SURROUND_COLOR;
-  ctx.fillRect(0, 0, W, H);
-
   const corners = pitchCorners(view.rig, W, H);
   // A soft dark apron just outside the grass so the touchline reads as an
   // edge rather than a seam against the surround.

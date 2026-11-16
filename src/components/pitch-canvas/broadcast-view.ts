@@ -24,6 +24,9 @@ import {
   type ProjectedPoint,
 } from './projection';
 
+/** Everything outside the grass: the dark the stadium is lit out of. */
+export const BROADCAST_SURROUND_COLOR = '#070d0a';
+
 const DRAWING_GEOMETRY = createPitchGeometry(
   LOGICAL_PITCH_WIDTH,
   LOGICAL_PITCH_HEIGHT,
