@@ -453,6 +453,171 @@ function openPlayDuration(travel: number, roll: number): number {
 }
 
 /**
+ * Flight time for a pass inside a move that is going somewhere.
+ *
+ * Open play is a team looking for a way through, and it is paced like one:
+ * 42-80 frames of flight and 26-56 of hold. A move that ends in a shot is the
+ * opposite. The receiver is already moving, the pass is weighted, and the
+ * touch is short. At the open-play tempo an eight-pass move ran past 24
+ * seconds, which is longer than the passage it exists to depict.
+ */
+function directedPassDuration(travel: number, roll: number): number {
+  const reach = clamp((travel - 0.06) / 0.36, 0, 1);
+  return (25 + reach * 20) * (0.9 + roll * 0.2);
+}
+
+/**
+ * How many build-up passes a goalscoring move is built from.
+ *
+ * The directed route used to be three players — whoever was on the ball,
+ * the creator, the shooter — so every goal in the broadcast arrived after
+ * two passes and about a second of football. Nothing in the simulation
+ * records how a chance was constructed, so the length of the approach is a
+ * presentation choice, and a real goalscoring move is eight to twelve
+ * touches: circulation, a switch, the final third, then the ball that
+ * creates the shot.
+ */
+const DIRECTED_APPROACH_MIN = 6;
+const DIRECTED_APPROACH_SPREAD = 3;
+
+/** Closest outfield slot to a point on the pitch, in the attacking frame. */
+function nearestSlotToPoint(
+  formation: FormationSlot[],
+  point: { x: number; y: number },
+  attackingHome: boolean,
+  excluded: number[],
+): number {
+  let best = -1;
+  let bestDistance = Infinity;
+  for (let index = 0; index < formation.length; index++) {
+    const slot = formation[index];
+    if (slot.role === 'GK' || excluded.includes(index)) continue;
+    const x = attackingHome ? slot.x : 1 - slot.x;
+    // Lateral distance is weighted down: a pass across the pitch to the
+    // other flank is a longer ball than a pass down the line, and the
+    // generator is allowed to prefer the player who is actually free.
+    const distance = Math.hypot(x - point.x, (slot.y - point.y) * 0.8);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
+  }
+  return best >= 0 ? best : nearestSlot(formation, ['MF'], point.y, excluded);
+}
+
+interface DirectedApproach {
+  /** Receivers of the build-up passes, in order. */
+  players: number[];
+  /** Where each of those passes is played, aligned with `players`. */
+  targets: Array<{ x: number; y: number }>;
+}
+
+/**
+ * The passes that get the ball from wherever it is to the man who creates
+ * the chance.
+ *
+ * Waypoints rather than a fixed chain, so the move can start deep or high
+ * and still read as one attack. Progress runs along a quadratic through a
+ * control point held at least 0.16 behind the chance: when the ball is
+ * already in the final third the curve dips back into midfield before
+ * coming forward again, which is what a side that wins it high and cannot
+ * go straight through actually does.
+ */
+function buildDirectedApproach(
+  formation: FormationSlot[],
+  attackingHome: boolean,
+  startIdx: number,
+  source: { x: number; y: number },
+  entry: { x: number; y: number },
+  upperFlank: boolean,
+  creator: number,
+  shooter: number,
+  roll: (n: number) => number,
+): DirectedApproach {
+  const players: number[] = [];
+  const targets: Array<{ x: number; y: number }> = [];
+  const wanted = DIRECTED_APPROACH_MIN + Math.floor(roll(51) * DIRECTED_APPROACH_SPREAD);
+  const flankY = upperFlank ? 0.17 : 0.83;
+  const oppositeY = 1 - flankY;
+  const controlX = Math.min(source.x, entry.x - 0.16);
+  const shape = roll(52);
+  const lateralAt = shape < 0.34
+    ? (t: number) => (
+      t < 0.42
+        ? source.y + (oppositeY - source.y) * (t / 0.42)
+        : t < 0.74
+          ? oppositeY + (0.5 - oppositeY) * ((t - 0.42) / 0.32)
+          : 0.5 + (entry.y - 0.5) * ((t - 0.74) / 0.26)
+    )
+    : shape < 0.68
+      ? (t: number) => source.y + (flankY - source.y) * Math.min(1, t * 1.6)
+      : (t: number) => 0.5 + (entry.y - 0.5) * t + Math.sin(t * Math.PI * 2) * 0.1;
+
+  let previous = startIdx;
+  const recent: number[] = [startIdx];
+  let guard = 0;
+  while (players.length < wanted && guard++ < wanted * 4) {
+    const step = players.length;
+    const t = (step + 1) / (wanted + 1);
+    // Deep circulation covers less ground than the run into the final
+    // third, so progress is shaped rather than linear.
+    const shaped = Math.pow(t, 1.22);
+    const inverse = 1 - shaped;
+    const jitter = (roll(60 + step) - 0.5) * 0.028;
+    const point = {
+      x: clamp(
+        inverse * inverse * source.x
+          + 2 * inverse * shaped * controlX
+          + shaped * shaped * entry.x
+          + jitter,
+        0.06,
+        0.94,
+      ),
+      y: clamp(lateralAt(t) + jitter * 0.6, 0.09, 0.91),
+    };
+    // The last two receivers stay out of the build-up so the chance itself
+    // keeps the two players the event names, and the previous passer is
+    // excluded so nobody plays a pass to themselves.
+    const receiver = nearestSlotToPoint(
+      formation,
+      point,
+      attackingHome,
+      [creator, shooter, previous, ...recent.slice(-2)],
+    );
+    if (receiver === previous) break;
+    players.push(receiver);
+    targets.push(point);
+    recent.push(receiver);
+    previous = receiver;
+  }
+  return { players, targets };
+}
+
+/** Where the creator receives the ball for each shape of chance. */
+function chanceEntryPoint(
+  chanceStyle: PresentationChanceStyle,
+  upperFlank: boolean,
+  isHome: boolean,
+  source: { x: number; y: number },
+  shotOrigin: { x: number; y: number },
+  roll: (n: number) => number,
+): { x: number; y: number } {
+  if (chanceStyle === 'cross') {
+    return mirrorPoint({ x: 0.76 + roll(21) * 0.05, y: upperFlank ? 0.13 : 0.87 }, isHome);
+  }
+  if (chanceStyle === 'cutback') {
+    return mirrorPoint({ x: 0.87 + roll(22) * 0.035, y: upperFlank ? 0.18 : 0.82 }, isHome);
+  }
+  if (chanceStyle === 'through_ball') {
+    return mirrorPoint({ x: 0.66 + roll(23) * 0.06, y: 0.42 + (roll(24) - 0.5) * 0.16 }, isHome);
+  }
+  return {
+    x: source.x + (shotOrigin.x - source.x) * 0.72,
+    y: source.y + (shotOrigin.y - source.y) * 0.52,
+  };
+}
+
+/**
  * Generate a possession sequence with realistic flow and occasional interceptions.
  */
 export function generateSequence(seed: number, options: SequenceOptions = {}): { phases: PassPhase[]; endsInShot: boolean } {
@@ -498,9 +663,6 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     const creator = options.creatorIdx !== undefined && options.creatorIdx !== shooter
       ? options.creatorIdx
       : defaultCreator === shooter ? (defaultCreator + 1) % 11 : defaultCreator;
-    route = [options.startingPlayerIdx, creator, shooter]
-      .filter((slot): slot is number => slot !== undefined)
-      .filter((slot, index, slots) => index === 0 || slot !== slots[index - 1]);
     const shooterY = formation[shooter]?.y ?? 0.5;
     const styleRoll = r(15);
     chanceStyle = options.chanceStyle ?? (
@@ -520,9 +682,36 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       : 0.42 + r(18) * 0.16;
     directedShotOrigin = mirrorPoint({ x: shotProgress, y: shotY }, isHome);
     const source = options.sourceOverride ?? (() => {
-      const slot = formation[route[0]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
+      const slot = formation[options.startingPlayerIdx ?? nearestSlot(formation, ['MF'], 0.5)];
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
+    const startIdx = options.startingPlayerIdx
+      ?? nearestSlotToPoint(formation, source, isHome, [creator, shooter]);
+    const chanceEntry = chanceEntryPoint(
+      chanceStyle,
+      upperFlank,
+      isHome,
+      source,
+      directedShotOrigin,
+      r,
+    );
+    // The move is the build-up plus the two passes the event names: the
+    // creator receiving where the chance is made, then the ball the shooter
+    // finishes. Everything before that is how the ball got there, which is
+    // the half of the goal the two-pass route never drew.
+    const approachPlan = buildDirectedApproach(
+      formation,
+      isHome,
+      startIdx,
+      source,
+      chanceEntry,
+      upperFlank,
+      creator,
+      shooter,
+      r,
+    );
+    route = [startIdx, ...approachPlan.players, creator, shooter];
+    passTargets = [...approachPlan.targets, chanceEntry, directedShotOrigin];
     const directedShotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
     const sourceProgress = isHome ? source.x : 1 - source.x;
     pattern = options.transition
@@ -532,33 +721,6 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
         : chanceStyle === 'through_ball' || directedShotProgress - sourceProgress > 0.35
           ? 'counter'
           : 'central_combination';
-    passTargets = route.slice(1).map((receiverIdx, index) => {
-      const t = (index + 1) / Math.max(1, route.length - 1);
-      if (index === route.length - 2) return directedShotOrigin!;
-      if (chanceStyle === 'cross') {
-        return mirrorPoint({
-          x: 0.76 + r(21 + index) * 0.05,
-          y: upperFlank ? 0.13 : 0.87,
-        }, isHome);
-      }
-      if (chanceStyle === 'cutback') {
-        return mirrorPoint({
-          x: 0.87 + r(21 + index) * 0.035,
-          y: upperFlank ? 0.18 : 0.82,
-        }, isHome);
-      }
-      if (chanceStyle === 'through_ball') {
-        return mirrorPoint({
-          x: 0.66 + r(21 + index) * 0.06,
-          y: 0.42 + (r(24 + index) - 0.5) * 0.16,
-        }, isHome);
-      }
-      const receiverY = formation[receiverIdx]?.y ?? directedShotOrigin!.y;
-      return {
-        x: source.x + (directedShotOrigin!.x - source.x) * t,
-        y: source.y + (directedShotOrigin!.y - source.y) * t * 0.72 + (receiverY - 0.5) * 0.06,
-      };
-    });
   } else {
     const plan = buildOpenPlayPlan(
       seed,
@@ -587,11 +749,12 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
     const travel = Math.hypot(target.x - source.x, target.y - source.y);
-    // Kept only for the directed-chance path, whose arcs are hand-tuned per
-    // delivery shape. Open play uses the ramp above.
-    const longBall = travel > 0.34;
     const isLastPass = i === route.length - 2;
     const directedDelivery = Boolean(options.forceShot && isLastPass && chanceStyle);
+    // The pass that sets the chance up: the creator receiving in the area
+    // the chance is built from. Longer than a build-up touch, shorter than
+    // the delivery itself.
+    const directedSetup = Boolean(options.forceShot && chanceStyle && i === route.length - 3);
     const directedDuration = chanceStyle === 'cross'
       ? 44 + r(i + 10) * 8
       : chanceStyle === 'through_ball'
@@ -599,6 +762,9 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
         : chanceStyle === 'cutback'
           ? 27 + r(i + 10) * 6
           : 30 + r(i + 10) * 7;
+    // Only the delivery keeps a hand-tuned arc. Every other pass in the
+    // move goes through the same distance ramp as open play, so a short
+    // build-up touch stays on the grass and a switch of play lifts.
     const directedArc = chanceStyle === 'cross'
       ? 0.62 + r(i + 13) * 0.22
       : chanceStyle === 'through_ball'
@@ -615,16 +781,20 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       stage: stageForPass(pattern, i, route.length - 1),
       chanceStyle,
       duration: options.forceShot
-        ? directedDelivery ? directedDuration : (longBall ? 34 + r(i + 10) * 7 : 27 + r(i + 11) * 7)
+        ? directedDelivery
+          ? directedDuration
+          : directedSetup
+            ? 33 + r(i + 10) * 9
+            : directedPassDuration(travel, r(i + 11))
         : openPlayDuration(travel, r(i + 11)),
       hold: options.forceShot
-        ? 7 + r(i + 12) * 4
+        ? directedDelivery
+          ? 16 + r(i + 12) * 8
+          : directedSetup
+            ? 13 + r(i + 12) * 8
+            : 9 + r(i + 12) * 7
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
-      arc: directedDelivery
-        ? directedArc
-        : options.forceShot
-          ? (longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18)
-          : passArc(travel, pattern, r(i + 13)),
+      arc: directedDelivery ? directedArc : passArc(travel, pattern, r(i + 13)),
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
       ...(i === 0 && options.startingPlayerIdx !== undefined && {
         releaseDelayFrames: options.restart

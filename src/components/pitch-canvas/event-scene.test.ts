@@ -52,23 +52,46 @@ describe('event-directed pitch scenes', () => {
     expect(sceneForEvent(freeKick, 'HOME')).toMatchObject({ attackingHome: false, outcome: 'delivery' });
   });
 
-  it('selects an upcoming shot scene and keeps its target deterministic', () => {
+  it('selects the shot scene on its own minute and keeps its target deterministic', () => {
     const events = [event('yellow_card', 'HOME', 39), event('goal', 'AWAY', 40)];
-    const first = findEventScene(events, 38, 'HOME');
-    const second = findEventScene(events, 38, 'HOME');
+    const first = findEventScene(events, 40, 'HOME');
+    const second = findEventScene(events, 40, 'HOME');
 
     expect(first?.event.type).toBe('goal');
     expect(first).toEqual(second);
     expect(first?.target.x).toBeLessThan(0.05);
   });
 
-  it('prepares shot and set-piece scenes five minutes before the event', () => {
+  it('never hands back a scene the clock has not reached', () => {
+    // The dead air this removes: a scene prepared early ran out of phases and
+    // then sat on its hold frame until the clock caught up, which is the
+    // `minute < eventMinute` branch of the wait gate. If no scene can ever be
+    // returned for a minute before its own event, that branch is unreachable.
+    const events = [
+      event('goal', 'AWAY', 40),
+      event('corner', 'HOME', 41),
+      event('yellow_card', 'HOME', 42),
+      event('gk_save', 'AWAY', 43),
+    ];
+    for (let minute = 30; minute <= 45; minute++) {
+      const scene = findEventScene(events, minute, 'HOME');
+      if (scene) expect(minute).toBeGreaterThanOrEqual(scene.event.minute);
+    }
+  });
+
+  it('prepares shot and set-piece scenes on the event minute and never before', () => {
     const goal = event('goal', 'AWAY', 40);
     const corner = event('corner', 'HOME', 55);
 
-    expect(findEventScene([goal], 35, 'HOME')?.event).toBe(goal);
-    expect(findEventScene([goal], 34, 'HOME')).toBeNull();
-    expect(findEventScene([corner], 50, 'HOME')?.event).toBe(corner);
+    // Preparing a scene early meant the move played out, ran out of phases
+    // and then sat on its hold frame until the clock caught up. The clock
+    // stops at the event minute anyway, so that is the only minute a scene
+    // is allowed to start on.
+    expect(findEventScene([goal], 40, 'HOME')?.event).toBe(goal);
+    expect(findEventScene([goal], 39, 'HOME')).toBeNull();
+    expect(findEventScene([goal], 35, 'HOME')).toBeNull();
+    expect(findEventScene([corner], 55, 'HOME')?.event).toBe(corner);
+    expect(findEventScene([corner], 50, 'HOME')).toBeNull();
   });
 
   it('generates a forced attacking sequence that ends in a shot', () => {
@@ -86,17 +109,23 @@ describe('event-directed pitch scenes', () => {
       creatorIdx: 7,
       shooterIdx: 10,
     });
+    const passes = sequence.phases.filter(phase => phase.kind === 'pass');
+    const lastPass = passes[passes.length - 1];
+    const shot = sequence.phases[sequence.phases.length - 1];
 
-    expect(sequence.phases[0]).toMatchObject({ passerIdx: 7, receiverIdx: 10, kind: 'pass' });
-    expect(sequence.phases.at(-1)).toMatchObject({ passerIdx: 10, receiverIdx: 10, kind: 'shot' });
-    expect(sequence.phases[0].duration).toBeGreaterThanOrEqual(18);
-    expect(sequence.phases.at(-1)?.duration).toBeGreaterThanOrEqual(18);
-    expect(Math.abs(sequence.phases.at(-1)?.swerve ?? 0)).toBeLessThanOrEqual(0.45);
-    expect(sequence.phases[0].targetOverride?.x).toBeGreaterThanOrEqual(0.8);
-    expect(sequence.phases.at(-1)?.sourceOverride).toEqual(sequence.phases[0].targetOverride);
+    // The build-up is presentation; the two passes that make the chance are
+    // the ones the simulation named, and they stay exactly where they were.
+    expect(sequence.endsInShot).toBe(true);
+    expect(passes.length).toBeGreaterThanOrEqual(8);
+    expect(lastPass).toMatchObject({ passerIdx: 7, receiverIdx: 10, kind: 'pass' });
+    expect(shot).toMatchObject({ passerIdx: 10, receiverIdx: 10, kind: 'shot' });
+    expect(shot.duration).toBeGreaterThanOrEqual(18);
+    expect(Math.abs(shot.swerve ?? 0)).toBeLessThanOrEqual(0.45);
+    expect(lastPass.targetOverride?.x).toBeGreaterThanOrEqual(0.8);
+    expect(shot.sourceOverride).toEqual(lastPass.targetOverride);
   });
 
-  it('keeps the authoritative shooter after a one-two that starts at the shooter', () => {
+  it('keeps the authoritative shooter when the attack starts at the shooter', () => {
     const sequence = generateSequence(42, {
       attackingHome: true,
       forceShot: true,
@@ -105,12 +134,13 @@ describe('event-directed pitch scenes', () => {
       shooterIdx: 9,
       sourceOverride: { x: 0.78, y: 0.5 },
     });
+    const passes = sequence.phases.filter(phase => phase.kind === 'pass');
 
-    expect(sequence.phases.map(phase => [phase.passerIdx, phase.receiverIdx])).toEqual([
-      [9, 6],
-      [6, 9],
-      [9, 9],
-    ]);
+    // The shooter is on the ball at both ends of the move. The build-up in
+    // between has to route around him without him ever passing to himself.
+    expect(passes[0].passerIdx).toBe(9);
+    expect(passes[passes.length - 1]).toMatchObject({ passerIdx: 6, receiverIdx: 9 });
+    expect(passes.some(pass => pass.passerIdx === pass.receiverIdx)).toBe(false);
     expect(sequence.phases.at(-1)).toMatchObject({ kind: 'shot', passerIdx: 9 });
   });
 
@@ -263,16 +293,28 @@ describe('beat scenes', () => {
     expect(scene?.beat).toBe('red_card');
   });
 
-  it('steps aside when a shot lands on the minute after the card', () => {
+  it('lets a shot own a minute it shares with a card', () => {
     const events = [
       event('red_card', 'HOME', 30),
-      event('goal', 'AWAY', 31),
+      event('goal', 'AWAY', 30),
     ];
     expect(findEventScene(events, 30, 'HOME')?.outcome).toBe('goal');
   });
 
-  it('ignores beats outside the five-minute window', () => {
+  it('plays a card on its own minute when the shot is a minute later', () => {
+    // The window is one minute now, so a card no longer has to step aside
+    // for a goal it cannot see: each gets the minute it belongs to.
+    const events = [
+      event('red_card', 'HOME', 30),
+      event('goal', 'AWAY', 31),
+    ];
+    expect(findEventScene(events, 30, 'HOME')?.beat).toBe('red_card');
+    expect(findEventScene(events, 31, 'HOME')?.outcome).toBe('goal');
+  });
+
+  it('ignores beats on any other minute', () => {
     const events = [event('yellow_card', 'HOME', 40)];
     expect(findEventScene(events, 30, 'HOME')).toBeNull();
+    expect(findEventScene(events, 40, 'HOME')?.beat).toBe('yellow_card');
   });
 });

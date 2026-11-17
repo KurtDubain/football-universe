@@ -394,3 +394,73 @@ describe('camera cuts inside a possession', () => {
     expect(ordinaryCuts).toBe(0);
   });
 });
+describe('directed attack length', () => {
+  const attack = (seed: number) => generateSequence(seed, {
+    attackingHome: seed % 2 === 0,
+    forceShot: true,
+    startingPlayerIdx: 2 + (seed % 8),
+    sourceOverride: { x: 0.12 + (seed % 40) / 100, y: 0.2 + (seed % 55) / 100 },
+  });
+
+  it('builds a goalscoring move from eight passes or more', () => {
+    // The regression this locks down. The directed route used to be three
+    // players — the man on the ball, the creator, the shooter — so every goal
+    // in the broadcast arrived after two passes and about a second of
+    // football, and the attack had nothing to hold the clock for.
+    const counts: number[] = [];
+    for (let seed = 1; seed <= 600; seed++) {
+      const sequence = attack(seed);
+      const passes = sequence.phases.filter(phase => phase.kind === 'pass');
+      counts.push(passes.length);
+      expect(passes.some(pass => pass.passerIdx === pass.receiverIdx)).toBe(false);
+      expect(sequence.phases[sequence.phases.length - 1].kind).toBe('shot');
+    }
+    expect(Math.min(...counts)).toBeGreaterThanOrEqual(8);
+    expect(counts.reduce((sum, count) => sum + count, 0) / counts.length)
+      .toBeGreaterThanOrEqual(8.5);
+  });
+
+  it('keeps every pass of the move on the pitch and finishes in the final third', () => {
+    for (let seed = 1; seed <= 400; seed++) {
+      const attackingHome = seed % 2 === 0;
+      const sequence = attack(seed);
+      const passes = sequence.phases.filter(phase => phase.kind === 'pass');
+
+      for (const pass of passes) {
+        const target = pass.targetOverride;
+        expect(target).toBeDefined();
+        expect(target!.x).toBeGreaterThanOrEqual(0.03);
+        expect(target!.x).toBeLessThanOrEqual(0.97);
+        expect(target!.y).toBeGreaterThanOrEqual(0.05);
+        expect(target!.y).toBeLessThanOrEqual(0.95);
+      }
+
+      // The last pass is the one the shooter finishes, so it has to arrive
+      // somewhere a shot could actually be taken from.
+      const last = passes[passes.length - 1].targetOverride!;
+      const progress = attackingHome ? last.x : 1 - last.x;
+      expect(progress).toBeGreaterThanOrEqual(0.78);
+    }
+  });
+
+  it('never cuts the camera between two passes of the same attack', () => {
+    // An attack is now ten passes long instead of two, so the question the
+    // open-play test asks is worth asking here too: the whole move is one
+    // passage of football and it belongs to one camera.
+    let cuts = 0;
+    for (let seed = 1; seed <= 600; seed++) {
+      const sequence = attack(seed);
+      let previous: string | null = null;
+      for (const pass of sequence.phases.filter(phase => phase.kind === 'pass')) {
+        const moment: BroadcastCameraMoment = pass.stage === 'create' || pass.stage === 'finish'
+          ? 'attack'
+          : 'build';
+        const ballLength = Math.min(1, Math.max(0, pass.targetOverride?.x ?? 0.5));
+        const rig = rigForMoment(moment, pass.attackingHome, ballLength).id;
+        if (previous !== null && previous !== rig) cuts++;
+        previous = rig;
+      }
+    }
+    expect(cuts).toBe(0);
+  });
+});

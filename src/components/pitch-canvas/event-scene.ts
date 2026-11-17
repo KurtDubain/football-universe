@@ -149,11 +149,14 @@ export function findEventScene(
   const flashScene = flashEvent ? sceneForEvent(flashEvent, homeTeamId, flashIndex >= 0 ? flashIndex : undefined) : null;
   if (flashScene) return flashScene;
 
+  // Only the minute the event belongs to. A scene used to be prepared up to
+  // five minutes early, which meant the move played out, ran out of phases
+  // and then sat on its hold frame waiting for the clock to reach the goal —
+  // two and a half seconds of a frozen pitch before every finish. The
+  // playback clock stops at the event minute anyway, so starting there is
+  // both the honest moment and the one with no dead air in it.
   const nearby = events
-    .filter(event => {
-      const lead = event.minute - minute;
-      return lead >= 0 && lead <= 5;
-    })
+    .filter(event => event.minute === minute)
     .map(event => sceneForEvent(event, homeTeamId, events.indexOf(event)))
     .filter((scene): scene is EventScene => scene !== null);
 

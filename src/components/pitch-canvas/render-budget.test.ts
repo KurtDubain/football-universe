@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   degradeRenderBudget,
+  frameTempoScale,
   restoreRenderBudget,
   selectRenderBudget,
   shouldDegradeRenderBudget,
@@ -24,6 +25,24 @@ const healthy: FramePressure = {
   p95FrameIntervalMs: 17,
   p95RenderMs: 4,
 };
+
+describe('frame tempo scale', () => {
+  it('keeps a degraded cadence from halving the match', () => {
+    // The regression this locks down. The degraded tier renders at 30 fps,
+    // and every match-tempo counter advances once per rendered frame, so a
+    // machine that degraded played the whole broadcast at half speed — a
+    // ten-pass attack ran twenty seconds and a full match ran six minutes.
+    expect(frameTempoScale(1000 / 30)).toBeCloseTo(2, 6);
+    expect(frameTempoScale(1000 / 60)).toBeCloseTo(1, 6);
+  });
+
+  it('falls back to real time for a cadence it cannot read', () => {
+    expect(frameTempoScale(0)).toBe(1);
+    expect(frameTempoScale(-5)).toBe(1);
+    expect(frameTempoScale(Number.NaN)).toBe(1);
+    expect(frameTempoScale(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+});
 
 describe('pitch render budget', () => {
   it('caps mobile pixels and particles without reducing simulation cadence', () => {

@@ -113,6 +113,22 @@ export function shouldRestoreRenderBudget(pressure: FramePressure): boolean {
  * a transient stall now costs a few seconds of 30fps instead of a permanent
  * downgrade.
  */
+/**
+ * How much of a 60 fps match-tempo step one rendered frame is worth.
+ *
+ * The degraded tier halves the cadence to 30 fps. Every counter that drives
+ * the match — the pass timeline, the shot outcome, the goal celebration, the
+ * card beat, the idle cruise — advances once per rendered frame, so without
+ * this the whole broadcast plays at whatever cadence the machine could
+ * afford: half speed on a degraded one, and a ninety-minute match doubles
+ * with it. Tempo belongs to wall-clock time; the cadence only decides how
+ * smoothly that time is drawn.
+ */
+export function frameTempoScale(frameStepMs: number): number {
+  if (!Number.isFinite(frameStepMs) || frameStepMs <= 0) return 1;
+  return frameStepMs / SIXTY_FPS_MS;
+}
+
 export function degradeRenderBudget(current: RenderBudget): RenderBudget {
   if (current.quality === 'reduced' || current.quality === 'degraded') return current;
   return {

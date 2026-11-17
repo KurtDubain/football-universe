@@ -111,25 +111,30 @@ export function nextPlaybackStep(
  * left to wait for.
  */
 const ROUTINE_BEAT_HOLD_MS: Readonly<Record<RoutineBeatKind, number>> = {
-  foul: 880,
-  corner: 960,
-  save: 820,
-  shot_off_target: 680,
+  foul: 1480,
+  corner: 1580,
+  save: 1400,
+  shot_off_target: 1300,
 };
 
 /**
  * A minute with nothing in it.
  *
  * This used to be the default state of the live modes and it was tuned as
- * one: 540 ms of the same passing loop, minute after minute. Now that most
- * minutes carry a routine beat, the quiet ones are connective tissue between
- * two moments, and they are allowed to be brisk.
+ * one: 540 ms of the same passing loop, minute after minute. Round one cut
+ * it to 430 ms on the grounds that a quiet minute is connective tissue, and
+ * that was right when a directed attack was two passes and a second long —
+ * the match had nowhere to put the time. An attack is now eight to ten
+ * passes and ten seconds, so the connective tissue is the part that has to
+ * hold the rhythm together: at 430 ms the canvas advanced eighteen frames
+ * per minute, which is half a pass, and a passage of play took three minutes
+ * of match clock to cross the screen.
  */
-const QUIET_MINUTE_MS = 430;
+const QUIET_MINUTE_MS = 1150;
 
 /** Immersive stretches every beat; live plays it at the tempo it was cut for. */
 const IMMERSIVE_BEAT_SCALE = 1.45;
-const IMMERSIVE_QUIET_MS = 660;
+const IMMERSIVE_QUIET_MS = 1780;
 
 function routineBeatHold(kind: RoutineBeatKind, scale: number, reducedMotion: boolean): number {
   const base = ROUTINE_BEAT_HOLD_MS[kind] * scale;
@@ -145,23 +150,29 @@ export function playbackTickDelay(
   routineBeat?: RoutineBeat | null,
 ): number {
   const eventJustRevealed = flashEvent?.minute === minute;
-  const approachingShot = !flashEvent
-    && isShotHighlight(nextHighlight)
-    && nextHighlight!.minute - minute <= 5;
+  // The live modes used to slow the five minutes before a shot to 720 ms so
+  // the attack had time to play before the clock reached the goal. A scene
+  // is now prepared on the event minute itself and holds the clock while it
+  // runs, so that crutch is gone — and it was costing more than it bought:
+  // it outranked the routine beat for thirty of the ninety minutes, which is
+  // a third of the match where the timeline built in round one was thrown
+  // away and every minute looked the same.
   if (mode === 'live') {
-    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1650;
-    if (eventJustRevealed) return reducedMotion ? 320 : 900;
-    if (approachingShot) return reducedMotion ? 280 : 720;
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 2400;
+    if (eventJustRevealed) return reducedMotion ? 320 : 1400;
     if (routineBeat) return routineBeatHold(routineBeat.kind, 1, reducedMotion);
     return reducedMotion ? 240 : QUIET_MINUTE_MS;
   }
   if (mode === 'immersive') {
-    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 550 : 2300;
-    if (eventJustRevealed) return reducedMotion ? 380 : 1300;
-    if (approachingShot) return reducedMotion ? 340 : 980;
+    if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 550 : 3200;
+    if (eventJustRevealed) return reducedMotion ? 380 : 1900;
     if (routineBeat) return routineBeatHold(routineBeat.kind, IMMERSIVE_BEAT_SCALE, reducedMotion);
     return reducedMotion ? 300 : IMMERSIVE_QUIET_MS;
   }
+
+  const approachingShot = !flashEvent
+    && isShotHighlight(nextHighlight)
+    && nextHighlight!.minute - minute <= 5;
 
   if (!flashEvent
     && isSetPieceHighlight(nextHighlight)

@@ -69,6 +69,7 @@ import {
 } from './pitch-canvas/types';
 import {
   degradeRenderBudget,
+  frameTempoScale,
   restoreRenderBudget,
   selectRenderBudget,
   shouldDegradeRenderBudget,
@@ -951,6 +952,14 @@ function PitchCanvas(props: Props) {
       const renderStarted = performance.now();
       frameRef.current++;
       const f = frameRef.current;
+      // Every match-tempo counter below advances once per rendered frame, but
+      // the render budget drops the cadence from 60 to 30 fps under sustained
+      // frame pressure. Without this the whole match plays at half speed on a
+      // machine that degraded: a two-pass attack was survivable at 2x, a
+      // ten-pass one is not, and a ninety-minute broadcast doubles with it.
+      // Tempo is a function of wall-clock time; the cadence only decides how
+      // smoothly that time is drawn.
+      const frameScale = frameTempoScale(renderBudget.frameStepMs);
       // Read live props from ref (no closure capture → no rAF restart on prop change)
       const live = liveRef.current;
       const {
@@ -1113,7 +1122,7 @@ function PitchCanvas(props: Props) {
       });
       if (cruiseWindow) {
         if (idleFramesRef.current === 0) idleStartMinuteRef.current = minute;
-        if (live.active) idleFramesRef.current++;
+        if (live.active) idleFramesRef.current += frameScale;
       } else {
         idleFramesRef.current = 0;
       }
@@ -1362,7 +1371,7 @@ function PitchCanvas(props: Props) {
         loadSequence(gen.phases, sequenceSeedRef.current);
         sequenceSceneRef.current = null;
       } else if (phase) {
-        phaseFrameRef.current += playbackMotionRate(livePlaybackMode);
+        phaseFrameRef.current += playbackMotionRate(livePlaybackMode) * frameScale;
         if (phaseStateRef.current !== 'holding') {
           // Check for interception mid-pass
           let turnoverLoaded = false;
@@ -2033,7 +2042,7 @@ function PitchCanvas(props: Props) {
 
       // ── Goal celebration, anchored to the projected goal mouth ──
       if (goalCelebFrame.current > 0) {
-        goalCelebFrame.current--;
+        goalCelebFrame.current = Math.max(0, goalCelebFrame.current - frameScale);
         // The side is snapshotted when the goal fires: `nearEvent` can become
         // undefined mid-celebration, because the window outlasts the ±1min
         // event lookup the rest of the frame relies on.
@@ -2052,7 +2061,7 @@ function PitchCanvas(props: Props) {
       // ── Card or substitution, held at the touchline ──
       const beatScene = beatSceneRef.current;
       if (beatScene && beatScene.beat && beatFrameRef.current > 0) {
-        beatFrameRef.current--;
+        beatFrameRef.current = Math.max(0, beatFrameRef.current - frameScale);
         drawBroadcastBeat(ctx, {
           view,
           frame: beatFrameRef.current,
@@ -2099,7 +2108,7 @@ function PitchCanvas(props: Props) {
           x: screenTarget.x,
           y: screenTarget.y,
         };
-        shotOutcomeFrameRef.current--;
+        shotOutcomeFrameRef.current = Math.max(0, shotOutcomeFrameRef.current - frameScale);
       }
 
       // Grade last, inside the camera transform, so it covers the celebration

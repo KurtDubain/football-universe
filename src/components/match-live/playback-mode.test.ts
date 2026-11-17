@@ -37,10 +37,10 @@ describe('match live playback modes', () => {
     expect(playbackTickDelay('highlights', 20, events[2], true)).toBe(300);
     expect(playbackTickDelay('highlights', 20, events[0], false)).toBe(120);
     expect(playbackTickDelay('highlights', 16, events[1], false)).toBe(1800);
-    expect(playbackTickDelay('live', 20, events[2], false)).toBe(1650);
-    expect(playbackTickDelay('live', 21, events[2], false)).toBe(430);
-    expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(2300);
-    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(660);
+    expect(playbackTickDelay('live', 20, events[2], false)).toBe(2400);
+    expect(playbackTickDelay('live', 21, events[2], false)).toBe(1150);
+    expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(3200);
+    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(1780);
   });
 
   it('slows the highlights timeline while a set piece is being prepared', () => {
@@ -52,8 +52,13 @@ describe('match live playback modes', () => {
   it('reserves enough real time for an open-play chance to reach its shot', () => {
     expect(playbackTickDelay('highlights', 15, null, false, events[2])).toBe(520);
     expect(playbackTickDelay('highlights', 17, null, false, events[2])).toBe(520);
-    expect(playbackTickDelay('live', 18, null, false, events[2])).toBe(720);
-    expect(playbackTickDelay('immersive', 19, null, false, events[2])).toBe(980);
+    // The live modes no longer slow down for an approaching shot. The scene
+    // is prepared on the event minute and holds the clock for as long as the
+    // move runs, so the minute before a goal is an ordinary minute again —
+    // and it is a routine beat again, which the old slowdown was suppressing
+    // for a third of the match.
+    expect(playbackTickDelay('live', 18, null, false, events[2])).toBe(1150);
+    expect(playbackTickDelay('immersive', 19, null, false, events[2])).toBe(1780);
   });
 
   it('slows physical action without slowing the concise highlights cut', () => {
@@ -117,10 +122,10 @@ describe('routine beat pacing', () => {
   });
 
   it('never lets a beat outrank the moment it is approaching', () => {
-    // A shot five minutes out is already being built toward; a corner beat
-    // landing on the same minute must not slow the approach down.
-    expect(playbackTickDelay('live', 15, null, false, events[2], routineBeats.corner)).toBe(720);
-    expect(playbackTickDelay('live', 20, events[2], false, undefined, routineBeats.corner)).toBe(1650);
+    // A corner beat owns its minute; what it must never outrank is the
+    // minute the event itself is on screen.
+    expect(playbackTickDelay('live', 15, null, false, events[2], routineBeats.corner)).toBe(1580);
+    expect(playbackTickDelay('live', 20, events[2], false, undefined, routineBeats.corner)).toBe(2400);
   });
 
   it('leaves highlights alone', () => {
