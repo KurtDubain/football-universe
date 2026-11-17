@@ -168,6 +168,24 @@ export interface PassPhase {
    * twenty metres back to reach them.
    */
   creatorIdx?: number;
+  /**
+   * The player the event credits with the shot, on every phase of the move.
+   *
+   * The shooter receives nothing until the last pass, so without a target of
+   * their own they hold a formation slot for the whole build-up and only
+   * start running when the final ball is played — half a second, from thirty
+   * metres out. Measured on a real replay, the shooter stood 20-31 m from
+   * the planned release point and the shot was struck from somewhere they
+   * were not.
+   */
+  shooterIdx?: number;
+  /**
+   * Where the chance will be struck from, known from the first phase.
+   *
+   * The shooter runs at this for the length of the move rather than for the
+   * length of the last pass.
+   */
+  shotOrigin?: { x: number; y: number };
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };
 }

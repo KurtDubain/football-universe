@@ -112,7 +112,11 @@ describe('pitch possession sequences', () => {
       sourceOverride: source,
       releaseDelayFrames: 18,
     });
-    expect(shot).toMatchObject({ kind: 'shot', pattern: 'counter', stage: 'finish', releaseDelayFrames: 14 });
+    expect(shot).toMatchObject({ kind: 'shot', pattern: 'counter', stage: 'finish' });
+    // A striker takes a touch and sets themselves: at least 26 frames of
+    // run-up, where it used to be a flat fourteen (a quarter of a second).
+    expect(shot.releaseDelayFrames).toBeGreaterThanOrEqual(26);
+    expect(shot.releaseDelayFrames).toBeLessThanOrEqual(36);
     expect(shot.duration).toBeGreaterThanOrEqual(30);
     expect(shot.hold).toBeGreaterThanOrEqual(20);
   });
@@ -519,7 +523,7 @@ describe('pass reachability', () => {
     expect(retargetPassToReceiver(phase, { x: 0.62, y: 0.4 })).toBe(phase);
   });
 
-  it('keeps a shot release point within a sprint of the shooter', () => {
+  it('strikes the ball from where the shooter actually is', () => {
     const phase: PassPhase = {
       passerIdx: 9,
       receiverIdx: 9,
@@ -537,13 +541,17 @@ describe('pass reachability', () => {
     const nearReach = Math.hypot(near.sourceOverride!.x - 0.82, near.sourceOverride!.y - 0.5);
     expect(nearReach).toBeLessThanOrEqual(0.051);
 
-    // A shooter still in their own half does NOT get a seventy-metre shot:
-    // the origin is held at the edge of the shooting range instead of being
-    // dragged back to them, and the flight time follows the origin that was
-    // actually chosen rather than the one the move was planned around.
+    // A shooter who has not made the run gets the ball struck from where
+    // THEY are. It used to be pinned to the edge of a shooting band, which
+    // put the release point seventeen metres in front of the striker — a
+    // shot leaving from a spot on the pitch where nobody was standing. The
+    // move now gives the striker a run for the whole possession, so this is
+    // the fallback rather than the normal case, but it must never invent a
+    // release point. Flight time follows the origin actually chosen.
     const far = retargetPassToReceiver(phase, { x: 0.55, y: 0.5 });
-    expect(far.sourceOverride!.x).toBeGreaterThanOrEqual(0.72);
-    expect(far.sourceOverride!.x).toBeLessThanOrEqual(0.94);
+    const farReach = Math.hypot(far.sourceOverride!.x - 0.55, far.sourceOverride!.y - 0.5);
+    expect(farReach).toBeLessThanOrEqual(0.051);
+    expect(far.sourceOverride!.x).toBeLessThan(0.72);
     expect(far.duration).toBeGreaterThan(phase.duration);
   });
 
@@ -686,5 +694,147 @@ describe('pass reachability', () => {
     // Measured over 200 attacks the old generator demanded a median of
     // 37 m/s from the receiver and 95.7% of passes were unreachable.
     expect(worstRequiredSpeed).toBeLessThan(11);
+  });
+
+  it('runs the shooter into the strike point instead of striking from nowhere', () => {
+    let worstGap = 0;
+    let worstDistance = 0;
+
+    for (let seed = 1; seed <= 40; seed++) {
+      const players = livePlayers();
+      const { phases } = generateSequence(seed * 977, {
+        attackingHome: true,
+        forceShot: true,
+        playerPositions: players,
+      });
+      let ballX = players[phases[0].passerIdx].x;
+
+      for (let index = 0; index < phases.length; index++) {
+        const live = players[phases[index].receiverIdx];
+        const mates = players.slice(0, 11).map(p => ({ x: p.x, y: p.y }));
+        const phase = retargetPassToReceiver(
+          phases[index],
+          { x: live.x, y: live.y },
+          { teammates: mates, ball: { x: ballX, y: 0.5 } },
+        );
+        phases[index] = phase;
+        const isShot = phase.kind === 'shot';
+        const source = phase.sourceOverride ?? { x: ballX, y: 0.5 };
+        const target = isShot ? { x: 1, y: 0.5 } : (phase.targetOverride ?? { x: 0.5, y: 0.5 });
+        if (isShot) {
+          const shooter = players[phase.passerIdx];
+          worstGap = Math.max(worstGap, Math.hypot(
+            (source.x - shooter.x) * LENGTH_METERS,
+            (source.y - shooter.y) * WIDTH_METERS,
+          ));
+          worstDistance = Math.max(worstDistance, Math.hypot(
+            (1 - source.x) * LENGTH_METERS,
+            (source.y - 0.5) * WIDTH_METERS,
+          ));
+        }
+        ballX = isShot ? source.x : target.x;
+
+        const total = phase.duration + phase.hold;
+        for (let frame = 0; frame < total; frame++) {
+          const t = Math.min(1, frame / phase.duration);
+          const state = frame < phase.duration ? 'passing' : 'holding';
+          updatePlayerPositions(
+            players,
+            source.x + (target.x - source.x) * t,
+            source.y + (target.y - source.y) * t,
+            'home',
+            phase.passerIdx,
+            phase,
+            state,
+            null,
+            0,
+            undefined,
+            undefined,
+            t,
+            undefined,
+            undefined,
+            frame,
+            1,
+          );
+        }
+      }
+    }
+
+    // The regression this guards: the shooter had no run of their own, so
+    // they held a formation slot for the whole build-up and the release
+    // point was then pinned to the edge of a shooting band. Measured on a
+    // real replay, three of six shots were struck from thirty metres and one
+    // left from a spot twenty-four metres from the striker.
+    expect(worstGap).toBeLessThan(6);
+    expect(worstDistance).toBeLessThan(30);
+  });
+
+  it('never sends a re-aimed pass across the pitch at a speed no ball has', () => {
+    let worstSpeed = 0;
+
+    for (let seed = 1; seed <= 60; seed++) {
+      const players = livePlayers();
+      const { phases } = generateSequence(seed * 977, {
+        attackingHome: seed % 2 === 0,
+        forceShot: seed % 3 === 0,
+        playerPositions: players,
+      });
+      let ballX = players[phases[0].passerIdx].x;
+
+      for (let index = 0; index < phases.length; index++) {
+        const live = players[phases[index].receiverIdx];
+        const mates = players.slice(0, 11).map(p => ({ x: p.x, y: p.y }));
+        const phase = retargetPassToReceiver(
+          phases[index],
+          { x: live.x, y: live.y },
+          { teammates: mates, ball: { x: ballX, y: 0.5 } },
+        );
+        phases[index] = phase;
+        const isShot = phase.kind === 'shot';
+        const source = phase.sourceOverride ?? { x: ballX, y: 0.5 };
+        const target = isShot
+          ? { x: phase.attackingHome ? 1 : 0, y: 0.5 }
+          : (phase.targetOverride ?? { x: 0.5, y: 0.5 });
+        if (!isShot) {
+          const metres = Math.hypot(
+            (target.x - source.x) * LENGTH_METERS,
+            (target.y - source.y) * WIDTH_METERS,
+          );
+          worstSpeed = Math.max(worstSpeed, metres / (phase.duration / FRAMES_PER_SECOND));
+        }
+        ballX = isShot ? source.x : target.x;
+
+        const total = phase.duration + phase.hold;
+        for (let frame = 0; frame < total; frame++) {
+          const t = Math.min(1, frame / phase.duration);
+          const state = frame < phase.duration ? 'passing' : 'holding';
+          updatePlayerPositions(
+            players,
+            source.x + (target.x - source.x) * t,
+            source.y + (target.y - source.y) * t,
+            'home',
+            phase.passerIdx,
+            phase,
+            state,
+            null,
+            0,
+            undefined,
+            undefined,
+            t,
+            undefined,
+            undefined,
+            frame,
+            1,
+          );
+        }
+      }
+    }
+
+    // The regression this guards: flight time was derived from the planned
+    // distance and never recomputed when the pass was re-aimed at the
+    // receiver's live position, so a ball planned at twelve metres flew
+    // fifty-eight in forty-two frames. Measured on a real replay the worst
+    // pass crossed the pitch at eighty-two metres a second.
+    expect(worstSpeed).toBeLessThan(40);
   });
 });

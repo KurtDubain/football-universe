@@ -461,9 +461,17 @@ export function passArc(
  * either side of the same threshold, so a pass that grew by a metre could take
  * 60% longer to arrive — a ball that changes speed in a jump reads as a cut.
  */
-function openPlayDuration(travel: number, roll: number): number {
-  const reach = clamp((travel - 0.1) / 0.45, 0, 1);
-  return (42 + reach * 38) * (0.9 + roll * 0.22);
+function openPlayDuration(travelMeters: number, roll: number): number {
+  // Short and medium passes keep the tempo the match is already paced at.
+  // A ball that is genuinely long is lofted, and it has to take the time a
+  // lofted ball takes: the old curve ramped over a normalized hypotenuse
+  // and topped out near ninety frames, so an eighty-metre ball crossed the
+  // pitch in a second and a half — fifty metres a second, which reads as a
+  // cut rather than as a pass.
+  const speed = travelMeters <= 30
+    ? OPEN_PLAY_BALL_SPEED_MPS
+    : Math.max(LONG_BALL_SPEED_MPS, OPEN_PLAY_BALL_SPEED_MPS - (travelMeters - 30) * 0.14);
+  return clamp(travelMeters / speed * 60, 24, 156) * (0.92 + roll * 0.16);
 }
 
 /**
@@ -476,6 +484,10 @@ function openPlayDuration(travel: number, roll: number): number {
  * seconds, which is longer than the passage it exists to depict.
  */
 const DIRECTED_BALL_SPEED_MPS = 17;
+/** The tempo ordinary open-play circulation is already paced at. */
+const OPEN_PLAY_BALL_SPEED_MPS = 30;
+/** A ball that is actually launched travels slower through the air. */
+const LONG_BALL_SPEED_MPS = 23;
 const CROSS_BALL_SPEED_MPS = 13;
 /** A struck shot leaves the boot at roughly 28 m/s; a header is slower. */
 const STRIKE_SPEED_MPS = 28;
@@ -491,11 +503,13 @@ const HEADER_SPEED_MPS = 19;
  * arrive somewhere the ball has not reached yet.
  *
  * 17 m/s is a firm ground pass; a cross is slower because it is lofted. The
- * floor keeps a short touch from landing on the frame it is played, and the
- * ceiling stops a switched ball from hanging in the air for two seconds.
+ * floor keeps a short touch from landing on the frame it is played. The
+ * ceiling is 2.2 s, which is what a ball switched the length of the pitch
+ * actually spends in the air; at 96 frames the same ball crossed the pitch
+ * at fifty metres a second.
  */
 function passFlightFrames(travelMeters: number, speedMps: number, roll: number): number {
-  return clamp(travelMeters / speedMps * 60, 15, 96) * (0.92 + roll * 0.16);
+  return clamp(travelMeters / speedMps * 60, 15, 132) * (0.92 + roll * 0.16);
 }
 
 /**
@@ -624,6 +638,15 @@ function nearestLiveSlotAhead(
 const MAX_PASS_LEAD = 0.024;
 
 /**
+ * How far a build-up pass may reasonably travel, in metres.
+ *
+ * A receiver further away than this is not the man the move is looking for,
+ * however close they stand to the waypoint. Picking them anyway turned a
+ * nine-pass move into a sequence of forty-metre lumps.
+ */
+const MAX_SANE_PASS_METERS = 38;
+
+/**
  * Play the ball at a receiver's feet rather than at a spot on a curve.
  *
  * The waypoint still decides who receives it — that is what carries the
@@ -655,12 +678,6 @@ function reachableTarget(
  */
 const SHOT_REACH = 0.05;
 
-/**
- * The band a shot may be struck from, as progress toward the goal line.
- * 0.72 to 0.94 is 29 m out to 6 m out: a long-range effort to a tap-in.
- */
-const SHOT_MIN_PROGRESS = 0.72;
-const SHOT_MAX_PROGRESS = 0.94;
 
 /**
  * Re-aim a pass at its receiver's live position, at the moment it is played.
@@ -704,17 +721,31 @@ export function retargetPassToReceiver(
       const floor = ballProgress - RECYCLE_TOLERANCE;
       let bestIdx = -1;
       let bestDistance = Infinity;
+      let farIdx = -1;
+      let farDistance = Infinity;
       for (let index = 0; index < teammates.length; index++) {
         if (index === phase.passerIdx) continue;
         const mate = teammates[index];
         if (!mate) continue;
         if (attackProgress(mate.x, phase.attackingHome) < floor) continue;
         const distance = Math.hypot(mate.x - phase.targetOverride.x, (mate.y - phase.targetOverride.y) * 0.8);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIdx = index;
+        // A build-up is a sequence of passes, not a sequence of long balls.
+        // The receiver nearest the waypoint is the right one to pick, but
+        // only while they are somewhere a pass could actually reach;
+        // otherwise the ball is lumped forty metres because that is where
+        // the nearest forward happens to be standing.
+        const reach = Math.hypot((mate.x - ball.x) * 105, (mate.y - ball.y) * 68);
+        if (reach <= MAX_SANE_PASS_METERS) {
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIdx = index;
+          }
+        } else if (distance < farDistance) {
+          farDistance = distance;
+          farIdx = index;
         }
       }
+      if (bestIdx < 0) bestIdx = farIdx;
       if (bestIdx >= 0 && bestIdx !== receiverIdx) {
         receiverIdx = bestIdx;
         receiver = teammates[bestIdx];
@@ -735,17 +766,33 @@ export function retargetPassToReceiver(
       && adjusted.y === phase.targetOverride.y
       && receiverIdx === phase.receiverIdx
     ) return phase;
-    return { ...phase, targetOverride: adjusted, receiverIdx };
+    // Re-aiming moves the ball further than the plan assumed, and the flight
+    // time was derived from the planned distance. Measured on a real replay,
+    // a pass planned at twelve metres was re-aimed fifty-eight metres away
+    // and still flew in forty-two frames: eighty-two metres a second, which
+    // is what made a move read as a blur instead of as passes.
+    const releasePoint = phase.sourceOverride ?? ball;
+    let duration = phase.duration;
+    if (releasePoint) {
+      const metres = Math.hypot(
+        (adjusted.x - releasePoint.x) * 105,
+        (adjusted.y - releasePoint.y) * 68,
+      );
+      const needed = passFlightFrames(metres, DIRECTED_BALL_SPEED_MPS * 1.3, 0.5);
+      if (needed > duration) duration = needed;
+    }
+    return { ...phase, targetOverride: adjusted, receiverIdx, duration };
   }
   if (phase.kind === 'shot' && phase.sourceOverride) {
+    // The ball is struck from where the striker actually is. It used to be
+    // pinned inside a shooting band, so a striker who had not made the run
+    // had the ball struck seventeen metres in front of them: a shot leaving
+    // from a spot on the pitch where nobody was standing. The shooter now
+    // runs at the strike point for the whole move, so the band is not needed
+    // to keep the chance worth taking, and holding it only invented a lie.
     const adjusted = reachableTarget(receiverPosition, phase.sourceOverride, SHOT_REACH);
-    // ...but it has to stay a shot. A striker who has not made the run is a
-    // striker who does not get the ball struck from seventy metres; the
-    // origin is held inside a range that is still a chance worth taking.
-    const progress = phase.attackingHome ? adjusted.x : 1 - adjusted.x;
-    const held = clamp(progress, SHOT_MIN_PROGRESS, SHOT_MAX_PROGRESS);
     const heldPoint = {
-      x: phase.attackingHome ? held : 1 - held,
+      x: adjusted.x,
       y: clamp(adjusted.y, 0.14, 0.86),
     };
     if (heldPoint.x === phase.sourceOverride.x && heldPoint.y === phase.sourceOverride.y) return phase;
@@ -1063,6 +1110,12 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     passTargets = plan.targets;
   }
 
+  // Whoever the route ends with is the player who strikes the chance. They
+  // need to know that from the first phase so they can make the run.
+  const directedShooterIdx = options.forceShot && directedShotOrigin
+    ? route[route.length - 1]
+    : undefined;
+
   const phases: PassPhase[] = [];
   for (let i = 0; i < route.length - 1; i++) {
     const target = passTargets[i] ?? buildPassTarget(route[i + 1], isHome, r(i + 41), false, formation);
@@ -1105,6 +1158,12 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       passerIdx: route[i],
       receiverIdx: route[i + 1],
       ...(directedCreatorIdx !== undefined ? { creatorIdx: directedCreatorIdx } : {}),
+      // The shooter runs at the strike point for the whole move, not just for
+      // the last pass. Without this they only start moving when the final ball
+      // is played, which is half a second from thirty metres out.
+      ...(directedShooterIdx !== undefined
+        ? { shooterIdx: directedShooterIdx, shotOrigin: directedShotOrigin }
+        : {}),
       // The last two passes are the chance itself: the creator receiving where
       // the event says, then the ball the shooter finishes. Neither may be
       // redirected to whoever happens to be free.
@@ -1120,7 +1179,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
           : directedSetup
             ? passFlightFrames(travelMeters, DIRECTED_BALL_SPEED_MPS, r(i + 10))
             : passFlightFrames(travelMeters, DIRECTED_BALL_SPEED_MPS, r(i + 11))
-        : openPlayDuration(travel, r(i + 11)),
+        : openPlayDuration(travelMeters, r(i + 11)),
       hold: options.forceShot
         ? directedDelivery
           ? 16 + r(i + 12) * 8
@@ -1159,7 +1218,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       arc: 0.04 + r(33) * 0.16,
       swerve: (r(34) - 0.5) * (options.forceShot ? 0.9 : 0.65),
       intercepted: false,
-      releaseDelayFrames: options.forceShot ? 14 : 10,
+      // A striker takes a touch and sets themselves before striking. Fourteen
+      // frames is a quarter of a second, which is the ball leaving the foot
+      // the instant it arrives.
+      releaseDelayFrames: options.forceShot ? 26 + r(35) * 10 : 10,
       ...(directedShotOrigin ? { sourceOverride: directedShotOrigin } : {}),
     });
   }

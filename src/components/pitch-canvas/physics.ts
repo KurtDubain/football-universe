@@ -781,7 +781,27 @@ export function updatePlayerPositions(
       // during the build-up by design, so without this they hold their
       // formation slot while the move goes past them and the ball has to
       // come back twenty metres to reach them.
-      if (currentPhase.creatorIdx !== undefined && formIdx === currentPhase.creatorIdx) {
+      if (currentPhase.shooterIdx !== undefined && formIdx === currentPhase.shooterIdx && currentPhase.shotOrigin) {
+        // The striker runs in behind for the length of the move, not for the
+        // length of the last pass. They receive nothing until the final ball,
+        // so without a target of their own they hold a formation slot for
+        // eight passes and then get half a second to cover thirty metres.
+        // Measured on a real replay the shooter stood 20-31 m from the
+        // release point and the shot left from a spot nobody was standing on.
+        const attackDir = isHomeTeam ? 1 : -1;
+        const strike = currentPhase.shotOrigin;
+        // Never more than 23 m ahead of the ball, and never past the point
+        // the chance is struck from: the run arrives as the ball does.
+        const lead = clamp(ballNX + attackDir * 0.22, 0.1, 0.93);
+        targetX_n = attackDir > 0 ? Math.min(lead, strike.x) : Math.max(lead, strike.x);
+        // Drift onto the strike lane as the ball gets close enough for the
+        // run to be worth committing to.
+        const ballProgress = isHomeTeam ? ballNX : 1 - ballNX;
+        const strikeProgress = isHomeTeam ? strike.x : 1 - strike.x;
+        const chase = clamp((ballProgress - (strikeProgress - 0.28)) / 0.28, 0, 1);
+        targetY_n = clamp(lerp(slot.y, strike.y, 0.35 + 0.5 * chase), 0.1, 0.9);
+        playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.55 + 0.35 * chase);
+      } else if (currentPhase.creatorIdx !== undefined && formIdx === currentPhase.creatorIdx) {
         const attackDir = isHomeTeam ? 1 : -1;
         targetX_n = clamp(ballNX + attackDir * 0.1, 0.1, 0.93);
         targetY_n = clamp(lerp(slot.y, 0.5, 0.3), 0.12, 0.88);
