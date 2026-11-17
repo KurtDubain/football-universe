@@ -17,6 +17,8 @@ export interface TournamentMusicSessionSnapshot {
   status: TournamentMusicPlaybackStatus;
   backgroundHeld: boolean;
   overrideActive: boolean;
+  /** True when the bed faded itself out after a long silence, not by request. */
+  idlePaused: boolean;
   revision: number;
 }
 
@@ -25,6 +27,7 @@ interface SessionState {
   originSeason: number | null;
   desired: boolean;
   manuallyPaused: boolean;
+  idlePaused: boolean;
   status: TournamentMusicPlaybackStatus;
   revision: number;
 }
@@ -34,6 +37,7 @@ const state: SessionState = {
   originSeason: null,
   desired: false,
   manuallyPaused: false,
+  idlePaused: false,
   status: 'idle',
   revision: 0,
 };
@@ -55,6 +59,7 @@ function buildSnapshot(): TournamentMusicSessionSnapshot {
     status: state.status,
     backgroundHeld: holds.size > 0 && !override,
     overrideActive: Boolean(override),
+    idlePaused: state.idlePaused,
     revision: state.revision,
   };
 }
@@ -84,7 +89,9 @@ export function selectTournamentMusic(scene: AmbientMusicScene, seasonNumber: nu
   state.scene = scene;
   state.originSeason = seasonNumber;
   if (contextChanged || state.status === 'idle' || state.status === 'ended') {
-    state.desired = !state.manuallyPaused;
+    // An idle bed stays quiet when the context comes back: silence was the
+    // point of fading out, and only the viewer gets to undo it.
+    state.desired = !state.manuallyPaused && !state.idlePaused;
     state.status = state.desired ? 'starting' : 'paused';
     state.revision++;
   }
@@ -97,6 +104,7 @@ export function playTournamentMusic(scene?: AmbientMusicScene, seasonNumber?: nu
   if (!state.scene) return;
   state.desired = true;
   state.manuallyPaused = false;
+  state.idlePaused = false;
   state.status = 'starting';
   state.revision++;
   emit();
@@ -106,6 +114,7 @@ export function pauseTournamentMusic(): void {
   if (!state.scene) return;
   state.desired = false;
   state.manuallyPaused = true;
+  state.idlePaused = false;
   state.status = 'paused';
   state.revision++;
   emit();
@@ -117,6 +126,7 @@ export function clearTournamentMusic(): void {
   state.originSeason = null;
   state.desired = false;
   state.manuallyPaused = false;
+  state.idlePaused = false;
   if (!overrideActive) {
     state.status = 'idle';
     state.revision++;
@@ -135,6 +145,33 @@ export function retryTournamentMusicPlayback(): void {
 export function expireTournamentMusicForSeason(seasonNumber: number): void {
   if (state.originSeason === null || state.originSeason === seasonNumber) return;
   clearTournamentMusic();
+}
+
+/**
+ * Fade the bed out because nobody has touched anything for a long time.
+ *
+ * Distinct from a manual pause on purpose: a manual pause is an instruction
+ * and must survive, while an idle pause is the product being polite and is
+ * undone by the next thing the viewer does.
+ */
+export function idlePauseTournamentMusic(): void {
+  if (!state.scene || !state.desired || state.idlePaused) return;
+  state.desired = false;
+  state.idlePaused = true;
+  state.status = 'paused';
+  state.revision++;
+  emit();
+}
+
+/** Bring an idled bed back. Does nothing if the viewer paused it themselves. */
+export function wakeTournamentMusic(): void {
+  if (!state.idlePaused) return;
+  state.idlePaused = false;
+  if (!state.scene || state.manuallyPaused) return;
+  state.desired = true;
+  state.status = 'starting';
+  state.revision++;
+  emit();
 }
 
 export function holdTournamentMusic(owner: string): () => void {
@@ -184,6 +221,7 @@ export function resetTournamentMusicSession(): void {
   state.originSeason = null;
   state.desired = false;
   state.manuallyPaused = false;
+  state.idlePaused = false;
   state.status = 'idle';
   state.revision++;
   holds.clear();

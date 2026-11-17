@@ -1,5 +1,7 @@
 import { useLocation } from 'react-router-dom';
+import type { AmbientMusicScene } from '../feedback/ambient-music';
 import { unlockGameAudio } from '../feedback/game-feedback';
+import { isLeagueBedRoute } from '../feedback/league-music-context';
 import { TOURNAMENT_MUSIC_META, type TournamentMusicTone } from '../feedback/tournament-music-meta';
 import {
   clearTournamentMusic,
@@ -10,6 +12,7 @@ import {
 import { Icon } from './Icon';
 
 const TONE_CLASSES: Readonly<Record<TournamentMusicTone, string>> = {
+  slate: 'border-slate-400/35 bg-slate-900/70 text-slate-100',
   amber: 'border-amber-500/35 bg-amber-950/55 text-amber-100',
   violet: 'border-violet-500/35 bg-violet-950/55 text-violet-100',
   orange: 'border-orange-500/35 bg-orange-950/55 text-orange-100',
@@ -18,7 +21,7 @@ const TONE_CLASSES: Readonly<Record<TournamentMusicTone, string>> = {
   emerald: 'border-emerald-500/35 bg-emerald-950/55 text-emerald-100',
 };
 
-const OWNER_ROUTES = {
+const OWNER_ROUTES: Readonly<Record<Exclude<AmbientMusicScene, 'league_season'>, string>> = {
   league_cup: '/cup/league_cup',
   super_cup: '/cup/super_cup',
   mainland_cup: '/cup/mainland_cup',
@@ -29,13 +32,18 @@ const OWNER_ROUTES = {
   world_cup_champion: '/cup/world_cup',
 } as const;
 
+function isOwnerRoute(scene: AmbientMusicScene, pathname: string): boolean {
+  if (scene === 'league_season') return isLeagueBedRoute(pathname);
+  return pathname === OWNER_ROUTES[scene];
+}
+
 function playbackLabel(
-  status: ReturnType<typeof useTournamentMusicSession>['status'],
-  backgroundHeld: boolean,
-  overrideActive: boolean,
+  session: ReturnType<typeof useTournamentMusicSession>,
 ): string {
+  const { status, backgroundHeld, overrideActive, idlePaused } = session;
   if (overrideActive) return '直播音乐接管';
   if (backgroundHeld) return '比赛期间暂歇';
+  if (idlePaused) return '闲置暂歇';
   if (status === 'playing') return '正在播放';
   if (status === 'starting') return '正在切换';
   if (status === 'blocked') return '等待播放';
@@ -47,12 +55,12 @@ export default function TournamentMusicNowPlaying() {
   const location = useLocation();
   const session = useTournamentMusicSession();
   if (!session.scene) return null;
-  if (location.pathname === OWNER_ROUTES[session.scene]) return null;
+  if (isOwnerRoute(session.scene, location.pathname)) return null;
 
   const baseMeta = TOURNAMENT_MUSIC_META[session.scene];
   const effectiveMeta = session.effectiveScene ? TOURNAMENT_MUSIC_META[session.effectiveScene] : baseMeta;
-  const statusLabel = playbackLabel(session.status, session.backgroundHeld, session.overrideActive);
-  const retryable = session.status === 'blocked' || session.status === 'ended';
+  const statusLabel = playbackLabel(session);
+  const retryable = session.status === 'blocked' || session.status === 'ended' || session.idlePaused;
   const shouldPause = session.desired && !retryable;
   const toggle = () => {
     unlockGameAudio();

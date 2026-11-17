@@ -1,5 +1,6 @@
 import easternCupThemeUrl from '../assets/audio/eastern-cup-theme-v1.m4a';
 import leagueCupThemeUrl from '../assets/audio/league-cup-theme-v1.m4a';
+import leagueSeasonBedUrl from '../assets/audio/league-season-v1.m4a';
 import mainlandCupThemeUrl from '../assets/audio/mainland-cup-theme-v1.m4a';
 import southernCupThemeUrl from '../assets/audio/southern-cup-theme-v1.m4a';
 import superCupThemeUrl from '../assets/audio/super-cup-theme-v1.m4a';
@@ -10,6 +11,7 @@ import type { CompetitionType } from '../types/match';
 import { getFeedbackPreferences } from './preferences';
 
 export type AmbientMusicScene =
+  | 'league_season'
   | 'league_cup'
   | 'super_cup'
   | 'mainland_cup'
@@ -53,6 +55,9 @@ export interface AmbientMusicDuckOptions {
 // track. The champion cue stays two decibels forward without returning to the
 // previous near-full-scale music mix.
 export const AMBIENT_MUSIC_TRACKS: Readonly<Record<AmbientMusicScene, { source: string; loop: boolean; gain: number }>> = {
+  // The bed sits under everything else, so it is mixed a third quieter than the
+  // quietest fanfare. A track that plays for an hour has to be easy to forget.
+  league_season: { source: leagueSeasonBedUrl, loop: true, gain: 0.22 },
   league_cup: { source: leagueCupThemeUrl, loop: true, gain: 0.35 },
   super_cup: { source: superCupThemeUrl, loop: true, gain: 0.3 },
   mainland_cup: { source: mainlandCupThemeUrl, loop: true, gain: 0.33 },

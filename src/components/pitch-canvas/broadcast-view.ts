@@ -59,10 +59,21 @@ export const RIG_SETTLE: Record<CameraRigId, number> = {
   box: 0.06,
 };
 
-/** Where a rig wants to sit this frame, given where the ball is. */
-export function rigFollowCenterX(rig: CameraRig, ballLengthFraction: number): number {
+/**
+ * Where a rig wants to sit this frame, given where the ball is.
+ *
+ * `followScale` scales that drift, defaulting to the operator tracking the
+ * play. The idle cruise passes a low value for its locked-off shot, which is
+ * how a camera can hold position and let the ball run through frame. At 1
+ * the result is identical to the two-argument call this replaced.
+ */
+export function rigFollowCenterX(
+  rig: CameraRig,
+  ballLengthFraction: number,
+  followScale = 1,
+): number {
   const gap = clamp(ballLengthFraction - rig.centerX, -0.5, 0.5);
-  return rig.centerX + gap * RIG_FOLLOW[rig.id];
+  return rig.centerX + gap * RIG_FOLLOW[rig.id] * clamp(followScale, 0, 1);
 }
 
 export interface BroadcastView {

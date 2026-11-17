@@ -1,6 +1,6 @@
 import type { AmbientMusicScene } from './ambient-music';
 
-export type TournamentMusicTone = 'amber' | 'violet' | 'orange' | 'cyan' | 'rose' | 'emerald';
+export type TournamentMusicTone = 'slate' | 'amber' | 'violet' | 'orange' | 'cyan' | 'rose' | 'emerald';
 
 export interface TournamentMusicMeta {
   label: string;
@@ -8,6 +8,9 @@ export interface TournamentMusicMeta {
 }
 
 export const TOURNAMENT_MUSIC_META: Readonly<Record<AmbientMusicScene, TournamentMusicMeta>> = {
+  // The bed is the only scene with no competition attached, so it takes the
+  // neutral tone rather than borrowing a cup's colour.
+  league_season: { label: '联赛赛季床', tone: 'slate' },
   league_cup: { label: '联赛杯主题', tone: 'amber' },
   super_cup: { label: '超级杯主题', tone: 'violet' },
   mainland_cup: { label: '大陆杯主题', tone: 'orange' },

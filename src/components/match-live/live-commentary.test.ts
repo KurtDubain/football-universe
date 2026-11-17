@@ -64,6 +64,20 @@ describe('live commentary', () => {
     expect(buildLiveCommentary({ ...base, event: freeKick })).toContain('化解了这次定位球');
   });
 
+  it('never narrates a phase with anything the simulation did not produce', () => {
+    const text = buildLiveCommentary({ ...base, event: null, minute: 40, homeScore: 0, awayScore: 0 });
+    expect(text).toBe('主队与客队战成 0:0。');
+    expect(buildLiveCommentary({ ...base, event: null, minute: 40, homeScore: 3, awayScore: 1 }))
+      .toBe('主队 3:1 领先客队。');
+    // The old filler is gone for good: no claim about tempo, space or control.
+    for (const minute of [10, 40, 70]) {
+      const line = buildLiveCommentary({ ...base, event: null, minute });
+      expect(line).not.toContain('空间');
+      expect(line).not.toContain('节奏');
+      expect(line).not.toContain('控制');
+    }
+  });
+
   it('retains phase narration and every revealed event in newest-first order', () => {
     const events: MatchEvent[] = [
       { minute: 12, type: 'miss', teamId: 'away', description: '客队远射稍稍偏出' },
@@ -81,8 +95,8 @@ describe('live commentary', () => {
     expect(history).toHaveLength(6);
     expect(history.map(entry => entry.text)).toEqual(expect.arrayContaining([
       '比赛开球，双方开始试探。',
-      '双方正在争夺中场控制，进攻仍在寻找空间。',
-      '比赛节奏逐渐稳定，下一次推进可能形成机会。',
+      '主队与客队战成 0:0。',
+      '主队 1:0 领先客队。',
       '客队远射稍稍偏出，客队错过了改写比分的机会。',
       '主队率先破门。主队取得领先。',
       '主队中场送出助攻',

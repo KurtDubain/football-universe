@@ -16,6 +16,7 @@ import { getMatchTags, shouldCelebrate } from '../components/celebration-logic';
 import ResultAnimation from '../components/ResultAnimation';
 import MatchLive from '../components/MatchLive';
 import TeamName from '../components/TeamName';
+import { VenueTag } from '../components/VenueTag';
 import { pickFocusMatches } from '../engine/season/match-importance';
 import { getFixtureStorylineLabel } from '../engine/season/storylines';
 import { detectPlayerHighlights } from '../engine/players/player-highlights';
@@ -451,7 +452,11 @@ function DashboardContent({ world }: { world: GameWorld }) {
                       <span className="text-slate-400">
                         下场 vs <span className="text-slate-200">{getTeamName(opponentId, world.teamBases)}</span>
                         {nextFixture?.isNeutralVenue ? (
-                          <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] text-amber-400"><Icon name="stadium" size={11} /> 中立</span>
+                          <VenueTag
+                            isNeutralVenue
+                            icon
+                            className="ml-1 text-[11px]"
+                          />
                         ) : (
                           <span className="text-slate-500">{nextFixture?.homeTeamId === tid ? ' (主)' : ' (客)'}</span>
                         )}

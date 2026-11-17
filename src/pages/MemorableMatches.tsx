@@ -9,7 +9,7 @@ import { SegmentedControl } from '../components/ui';
 const TYPE_META: Record<MemorableType, { emoji: string; label: string; color: string }> = {
   blowout: { emoji: '💥', label: '大屠杀', color: 'text-red-400 bg-red-900/30 border-red-700/40' },
   shootout: { emoji: '🎯', label: '点球大战', color: 'text-amber-400 bg-amber-900/30 border-amber-700/40' },
-  last_minute: { emoji: '⚡', label: '绝杀', color: 'text-yellow-400 bg-yellow-900/30 border-yellow-700/40' },
+  last_minute: { emoji: '⚡', label: '绝杀', color: 'text-orange-400 bg-orange-900/30 border-orange-700/40' },
   upset: { emoji: '🎲', label: '世纪冷门', color: 'text-purple-400 bg-purple-900/30 border-purple-700/40' },
   coronation: { emoji: '👑', label: '加冕之战', color: 'text-emerald-400 bg-emerald-900/30 border-emerald-700/40' },
   goalfest: { emoji: '⚽', label: '进球大战', color: 'text-blue-400 bg-blue-900/30 border-blue-700/40' },

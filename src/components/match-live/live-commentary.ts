@@ -40,6 +40,46 @@ function scoringContext(context: CommentaryContext, teamName: string): string {
   return '';
 }
 
+/**
+ * What can honestly be said about a minute with no event in it.
+ *
+ * The phase lines this replaced asserted things the simulation never
+ * produced — that a side was "still looking for space", that the tempo had
+ * "settled", that space was "opening up". None of that is knowable from a
+ * match state, and a broadcast that says it anyway is inventing a match.
+ * The score is the one thing that is true at every minute, so it is the
+ * only thing a quiet minute is allowed to say.
+ */
+function scoreLine(context: CommentaryContext): string {
+  const { homeScore, awayScore, homeTeamName, awayTeamName } = context;
+  if (homeScore === awayScore) {
+    return homeTeamName + '与' + awayTeamName + '战成 ' + homeScore + ':' + awayScore + '。';
+  }
+  const homeLeads = homeScore > awayScore;
+  const leader = homeLeads ? homeTeamName : awayTeamName;
+  const trailer = homeLeads ? awayTeamName : homeTeamName;
+  const high = Math.max(homeScore, awayScore);
+  const low = Math.min(homeScore, awayScore);
+  return leader + ' ' + high + ':' + low + ' 领先' + trailer + '。';
+}
+
+/** Goals scored by each side up to and including a minute. */
+function scoreAtMinute(
+  events: MatchEvent[],
+  minute: number,
+  homeTeamId: string,
+): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const event of events) {
+    if (event.minute > minute) continue;
+    if (event.type !== 'goal' && event.type !== 'own_goal') continue;
+    if (event.teamId === homeTeamId) home++;
+    else away++;
+  }
+  return { home, away };
+}
+
 export function buildLiveCommentary(context: CommentaryContext): string {
   const { event, minute, homeTeamName, awayTeamName } = context;
   if (!event) {
@@ -47,10 +87,8 @@ export function buildLiveCommentary(context: CommentaryContext): string {
     if (minute === 46) return '下半场开始，比赛重新进入节奏。';
     if (minute === 91) return '加时赛开始，双方的每一次选择都更加谨慎。';
     if (minute === 106) return '加时赛下半场开始，比赛进入最后的较量。';
-    if (minute >= 85 && minute <= 90) return '比赛进入最后阶段，每一次攻防都可能决定结果。';
-    if (minute < 30) return '双方正在争夺中场控制，进攻仍在寻找空间。';
-    if (minute < 60) return '比赛节奏逐渐稳定，下一次推进可能形成机会。';
-    return '体能和阵型开始影响比赛，场上空间正在增多。';
+    const score = scoreLine(context);
+    return minute >= 85 && minute <= 90 ? '比赛进入最后阶段，' + score : score;
   }
 
   const teamName = event.teamId === context.homeTeamId ? homeTeamName : awayTeamName;
@@ -103,6 +141,9 @@ export function buildLiveCommentaryHistory({
 
   for (const minute of commentaryBeats) {
     if (minute > currentMinute) continue;
+    // The beat reports the score as it stood at that minute. Reading the final
+    // score here would announce a goal before the timeline had reached it.
+    const beatScore = scoreAtMinute(events, minute, homeTeamId);
     entries.push({
       id: `phase:${minute}`,
       minute,
@@ -110,8 +151,8 @@ export function buildLiveCommentaryHistory({
       text: buildLiveCommentary({
         event: null,
         minute,
-        homeScore,
-        awayScore,
+        homeScore: beatScore.home,
+        awayScore: beatScore.away,
         penaltyHomeScore,
         penaltyAwayScore,
         homeTeamId,

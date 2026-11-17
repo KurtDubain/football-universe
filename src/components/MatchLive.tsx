@@ -22,6 +22,7 @@ import {
 import liveScoreboardArtwork from '../assets/visual/live-scoreboard-v1.webp';
 import { DecorativeImage } from './DecorativeImage';
 import TeamBadge from './TeamBadge';
+import { VenueTag } from './VenueTag';
 import {
   buildLiveCommentary,
   buildLiveCommentaryHistory,
@@ -411,7 +412,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                       <span className="hidden sm:inline">{ht?.name ?? '主队'}</span>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-400">
-                      {result.tournamentHostTeamId === result.homeTeamId ? '东道主 · 中立场' : result.isNeutralVenue ? '中立场' : '主队'}
+                      <VenueTag
+                        isNeutralVenue={result.isNeutralVenue}
+                        hostTeamId={result.tournamentHostTeamId}
+                        teamId={result.homeTeamId}
+                        fallback="主队"
+                      />
                     </div>
                   </div>
                   {ht && <TeamBadge teamId={ht.id} shortName={ht.shortName} color={ht.color} size={34} />}
@@ -425,7 +431,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                       <span className="hidden sm:inline">{at?.name ?? '客队'}</span>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-400">
-                      {result.tournamentHostTeamId === result.awayTeamId ? '东道主 · 中立场' : result.isNeutralVenue ? '中立场' : '客队'}
+                      <VenueTag
+                        isNeutralVenue={result.isNeutralVenue}
+                        hostTeamId={result.tournamentHostTeamId}
+                        teamId={result.awayTeamId}
+                        fallback="客队"
+                      />
                     </div>
                   </div>
                 </div>
@@ -619,6 +630,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 awayTeamId={result.awayTeamId}
                 homeShortName={ht?.shortName ?? '主队'}
                 awayShortName={at?.shortName ?? '客队'}
+                isNeutralVenue={result.isNeutralVenue}
+                hostTeamId={result.tournamentHostTeamId}
                 flashEvent={pendingPresentationEvent}
                 allEvents={allEvents}
                 homeMatchday={result.homeMatchday}

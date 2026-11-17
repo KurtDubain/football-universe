@@ -204,3 +204,75 @@ describe('event-directed pitch scenes', () => {
     expect(actorsForEvent(goal, [goal, intervening, laterAssist]).creatorId).toBeUndefined();
   });
 });
+
+describe('beat scenes', () => {
+  it('gives cards and substitutions a scene with no ball path', () => {
+    for (const [type, beat] of [
+      ['yellow_card', 'yellow_card'],
+      ['red_card', 'red_card'],
+      ['substitution', 'substitution'],
+    ] as const) {
+      const scene = sceneForEvent(event(type, 'AWAY'), 'HOME');
+      expect(scene).not.toBeNull();
+      expect(scene?.outcome).toBe('beat');
+      expect(scene?.beat).toBe(beat);
+      // The team named by the event owns the touchline, not the attack.
+      expect(scene?.attackingHome).toBe(false);
+      // A touchline, never a goal mouth.
+      expect(scene?.target.y).toBeLessThan(0.12);
+      expect(scene?.target.x).toBeGreaterThanOrEqual(0.3);
+      expect(scene?.target.x).toBeLessThanOrEqual(0.7);
+    }
+  });
+
+  it('leaves events that are neither a shot, a set piece nor a beat alone', () => {
+    expect(sceneForEvent(event('assist', 'HOME'), 'HOME')).toBeNull();
+  });
+
+  it('never lets a substitution displace a shot on the same minute', () => {
+    const events = [
+      event('substitution', 'HOME', 30),
+      event('goal', 'AWAY', 30),
+    ];
+    const scene = findEventScene(events, 30, 'HOME');
+    expect(scene?.outcome).toBe('goal');
+  });
+
+  it('ranks a red card above a yellow above a substitution', () => {
+    const events = [
+      event('substitution', 'HOME', 30),
+      event('yellow_card', 'AWAY', 30),
+      event('red_card', 'HOME', 30),
+    ];
+    expect(findEventScene(events, 30, 'HOME')?.beat).toBe('red_card');
+
+    const withoutRed = events.filter(item => item.type !== 'red_card');
+    expect(findEventScene(withoutRed, 30, 'HOME')?.beat).toBe('yellow_card');
+
+    const onlySub = events.filter(item => item.type === 'substitution');
+    expect(findEventScene(onlySub, 30, 'HOME')?.beat).toBe('substitution');
+  });
+
+  it('keeps a card when the next shot is far enough away to fit both', () => {
+    const events = [
+      event('red_card', 'HOME', 30),
+      event('goal', 'AWAY', 34),
+    ];
+    const scene = findEventScene(events, 30, 'HOME');
+    expect(scene?.outcome).toBe('beat');
+    expect(scene?.beat).toBe('red_card');
+  });
+
+  it('steps aside when a shot lands on the minute after the card', () => {
+    const events = [
+      event('red_card', 'HOME', 30),
+      event('goal', 'AWAY', 31),
+    ];
+    expect(findEventScene(events, 30, 'HOME')?.outcome).toBe('goal');
+  });
+
+  it('ignores beats outside the five-minute window', () => {
+    const events = [event('yellow_card', 'HOME', 40)];
+    expect(findEventScene(events, 30, 'HOME')).toBeNull();
+  });
+});

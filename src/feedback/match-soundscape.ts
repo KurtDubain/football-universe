@@ -5,6 +5,12 @@ import type {
   MatchPresentationCue,
 } from '../types/match-presentation';
 import { getUnlockedGameAudioContext } from './game-feedback';
+import {
+  CHANT_PROFILE_GAIN,
+  chantLayerGains,
+  getChantBuffers,
+  type ChantLayerKey,
+} from './crowd-chant';
 import type { SoundProfile } from './preferences';
 
 export type MatchSoundCue =
@@ -295,6 +301,8 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private crowdGain: GainNode | null = null;
+  private chantGain: GainNode | null = null;
+  private chantLayers: Array<[ChantLayerKey, GainNode]> | null = null;
   private crowdReactionGain: GainNode | null = null;
   private actionGain: GainNode | null = null;
   private accentGain: GainNode | null = null;
@@ -382,6 +390,29 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     createLayer(260, 0.42, 0.71);
     createLayer(1680, 0.2, 1.13, 'highpass');
 
+    // The pulse under the hiss: four loops, each behind its own gain, faded
+    // in one at a time as the match gets bigger. Built once per context and
+    // looped, so the whole chant costs one buffer set and no scheduling.
+    const chantGain = context.createGain();
+    chantGain.gain.value = CHANT_PROFILE_GAIN[this.profile] * this.effectsVolume;
+    chantGain.connect(master);
+    const chantBuffers = getChantBuffers(context, this.seed);
+    const chantLayers: Array<[ChantLayerKey, GainNode]> = [];
+    const chantKeys: ChantLayerKey[] = ['sparse', 'dense', 'thump', 'voice'];
+    for (const key of chantKeys) {
+      const source = context.createBufferSource();
+      const layerGain = context.createGain();
+      source.buffer = chantBuffers[key];
+      source.loop = true;
+      layerGain.gain.value = 0.0001;
+      source.connect(layerGain).connect(chantGain);
+      source.start(0, (this.seed % 900) / 1000);
+      this.sources.push(source);
+      chantLayers.push([key, layerGain]);
+    }
+    this.chantGain = chantGain;
+    this.chantLayers = chantLayers;
+
     this.context = context;
     this.master = master;
     this.crowdGain = crowdGain;
@@ -390,6 +421,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.accentGain = accentGain;
     this.compressor = compressor;
     this.eventNoise = buffers.event;
+    this.refreshChantGain(0.6);
     this.playOpeningWhistle();
     reportSoundscape({ type: 'start' });
     return true;
@@ -403,6 +435,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.lastCrowdIntensity = intensity;
     this.macroPaused = snapshot.paused;
     this.refreshCrowdGain(0.45);
+    this.refreshChantGain(0.45);
   }
 
   updatePresentation(snapshot: MatchPresentationAtmosphere): void {
@@ -411,6 +444,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     const previousDanger = this.presentationDanger;
     this.presentationDanger = clamp(snapshot.danger);
     this.refreshCrowdGain(0.16);
+    this.refreshChantGain(0.16);
 
     const dangerIsHigh = !this.macroPaused && this.presentationDanger >= 0.72;
     if (dangerIsHigh && !this.dangerWasHigh && previousDanger < 0.72) {
@@ -664,6 +698,14 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     setGain(this.master, this.muted ? 0.0001 : mix.master, this.context, 0.2);
     this.refreshCrowdGain(0.25);
     setGain(this.crowdReactionGain, mix.reaction * this.effectsVolume, this.context, 0.25);
+    if (this.chantGain) {
+      setGain(
+        this.chantGain,
+        CHANT_PROFILE_GAIN[this.profile] * this.effectsVolume,
+        this.context,
+        0.25,
+      );
+    }
     setGain(this.actionGain, mix.action * this.effectsVolume, this.context, 0.2);
     setGain(this.accentGain, mix.accent * this.effectsVolume, this.context, 0.2);
   }
@@ -687,6 +729,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.context = null;
     this.master = null;
     this.crowdGain = null;
+    this.chantGain?.disconnect();
+    this.chantGain = null;
+    this.chantLayers = null;
     this.crowdReactionGain = null;
     this.actionGain = null;
     this.accentGain = null;
@@ -696,6 +741,15 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.presentationDanger = 0;
     this.dangerWasHigh = false;
     if (wasStarted) reportSoundscape({ type: 'stop' });
+  }
+
+  /** Fade each chant layer to where the match currently sits. */
+  private refreshChantGain(duration: number): void {
+    if (!this.context || !this.chantLayers) return;
+    const gains = chantLayerGains(this.lastCrowdIntensity, this.macroPaused);
+    for (const [key, node] of this.chantLayers) {
+      setGain(node, Math.max(0.0001, gains[key]), this.context, duration);
+    }
   }
 
   private refreshCrowdGain(duration: number): void {

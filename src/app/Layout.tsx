@@ -5,6 +5,8 @@ import { useGameStore } from '../store/game-store';
 import { getSeasonWindowDisplay, getWindowTypeLabel, getWindowTypeColor, getTeamName } from '../utils/format';
 import Logo from '../components/Logo';
 import NewsTicker from '../components/NewsTicker';
+import CeremonyDirector from '../components/CeremonyDirector';
+import LeagueMusicDirector from '../components/LeagueMusicDirector';
 import TournamentMusicDirector from '../components/TournamentMusicDirector';
 import TournamentMusicNowPlaying from '../components/TournamentMusicNowPlaying';
 import AchievementToast from '../components/AchievementToast';
@@ -617,6 +619,8 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         <TournamentMusicDirector seasonNumber={seasonNumber} />
+        <LeagueMusicDirector />
+        <CeremonyDirector />
         {/* Top bar */}
         <header className="app-shell-header h-[48px] bg-[var(--surface-floating)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-[70]">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">

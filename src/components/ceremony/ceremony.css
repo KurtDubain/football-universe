@@ -1,0 +1,407 @@
+/* Ceremony pages.
+ *
+ * The language is print: a sheet settles onto the desk, two colour plates
+ * slide into register, a stamp lands, foil catches the light once. Nothing
+ * glows, nothing bursts, and no image is involved.
+ *
+ * Every rule below describes the FINISHED page. Movement is added only
+ * inside prefers-reduced-motion: no-preference, so a viewer who asked for
+ * less motion sees the same page, already at rest, with nothing to follow.
+ *
+ * This sheet ships with the lazy overlay chunk and is deliberately spare:
+ * the CSS budget is shared with every screen in the product.
+ */
+
+.ceremony-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  --ink: #14130f;
+  --paper: #efe7d6;
+  --edge: #d9cdb2;
+  --foil: #cfa94f;
+  --cyan: #1f9bb5;
+  --magenta: #c2407a;
+  --stamp: #a32d3c;
+  --rule: rgba(62, 52, 32, 0.55);
+  --register: 0.6px;
+}
+
+.ceremony-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: radial-gradient(120% 90% at 50% 38%, rgba(9, 11, 16, 0.74), rgba(3, 4, 7, 0.95));
+  cursor: pointer;
+}
+
+.ceremony-page {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 96px);
+  overflow: hidden auto;
+  padding: 24px 22px 18px;
+  color: var(--ink);
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 104, 74, 0.05) 0 1px, transparent 1px 3px),
+    radial-gradient(140% 120% at 50% 0%, #f7f1e4 0%, var(--paper) 58%, var(--edge) 100%);
+  border: 1px solid rgba(90, 78, 54, 0.38);
+  box-shadow: 0 26px 62px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* The shadow a turning page throws, used once and then gone. */
+.ceremony-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(58, 46, 26, 0.34), rgba(58, 46, 26, 0) 38%);
+}
+
+.ceremony-rule {
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--rule) 14%, var(--rule) 86%, transparent);
+}
+
+.ceremony-eyebrow,
+.ceremony-colophon {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(62, 52, 32, 0.72);
+}
+
+.ceremony-eyebrow {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+
+.ceremony-colophon {
+  margin: 18px 0 0;
+  font-size: 10px;
+  color: rgba(62, 52, 32, 0.58);
+}
+
+/* Two plates, slightly out of register, the way a cheap press leaves them. */
+.ceremony-title {
+  position: relative;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(22px, 6vw, 34px);
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.ceremony-title::before,
+.ceremony-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.ceremony-title::before {
+  --register-from: -7px;
+  --register-to: calc(var(--register) * -1);
+  color: var(--cyan);
+  transform: translateX(var(--register-to));
+}
+
+.ceremony-title::after {
+  --register-from: 7px;
+  --register-to: var(--register);
+  color: var(--magenta);
+  transform: translateX(var(--register-to));
+}
+
+.ceremony-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(62, 52, 32, 0.28);
+}
+
+.ceremony-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(32, 28, 18, 0.86);
+}
+
+.ceremony-line--lead {
+  text-align: center;
+  font-size: 14px;
+}
+
+.ceremony-chips,
+.ceremony-podium,
+.ceremony-honours,
+.ceremony-entrants {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ceremony-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ceremony-chips li {
+  padding: 3px 9px;
+  border: 1px solid rgba(62, 52, 32, 0.3);
+  font-size: 11px;
+  color: rgba(42, 36, 22, 0.8);
+}
+
+.ceremony-champion {
+  text-align: center;
+}
+
+.ceremony-champion-name {
+  margin: 0;
+  font-size: clamp(24px, 7vw, 38px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+/* Foil, not glow: one warm sweep across the letters, then still. */
+.ceremony-foil {
+  background-image: linear-gradient(100deg, #7d5f26, #cfa94f 26%, #f6e6b4 44%, #cfa94f 64%, #7d5f26);
+  background-size: 210% 100%;
+  background-position: 50% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.ceremony-score,
+.ceremony-versus {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+  color: rgba(42, 36, 22, 0.9);
+}
+
+.ceremony-score {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.ceremony-versus {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgba(62, 52, 32, 0.66);
+}
+
+.ceremony-stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-self: center;
+  margin-top: 4px;
+  padding: 8px 20px;
+  border: 3px double var(--stamp);
+  border-radius: 6px;
+  color: var(--stamp);
+  opacity: 0.9;
+  transform: rotate(-7deg);
+}
+
+.ceremony-stamp span {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  opacity: 0.82;
+}
+
+.ceremony-stamp-label {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  opacity: 1;
+}
+
+.ceremony-podium,
+.ceremony-honours {
+  display: grid;
+  gap: 5px;
+}
+
+.ceremony-podium li,
+.ceremony-entrants li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.ceremony-podium li {
+  font-size: 13px;
+}
+
+.ceremony-rank {
+  width: 18px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: rgba(62, 52, 32, 0.6);
+}
+
+.ceremony-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
+.ceremony-honours li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 3px;
+  border-bottom: 1px dotted rgba(62, 52, 32, 0.32);
+  font-size: 12px;
+}
+
+.ceremony-honours span:first-child {
+  letter-spacing: 0.12em;
+  color: rgba(62, 52, 32, 0.7);
+}
+
+.ceremony-entrants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 3px 10px;
+  font-size: 11px;
+}
+
+.ceremony-entrants span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ceremony-skip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(228, 220, 198, 0.34);
+  border-radius: 4px;
+  background: rgba(12, 14, 20, 0.62);
+  color: #e7e0cd;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.ceremony-skip:hover {
+  background: rgba(30, 34, 44, 0.82);
+  border-color: rgba(228, 220, 198, 0.6);
+}
+
+.ceremony-skip:focus-visible {
+  outline: 2px solid var(--foil);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ceremony-root {
+    animation: ceremony-fade-in 240ms ease-out both;
+  }
+
+  .ceremony-page {
+    animation: ceremony-page-settle 720ms cubic-bezier(0.2, 0.7, 0.24, 1) both;
+  }
+
+  .ceremony-page::after {
+    animation: ceremony-fold-pass 760ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+  }
+
+  .ceremony-title::before,
+  .ceremony-title::after {
+    animation: ceremony-register 900ms cubic-bezier(0.2, 0.7, 0.24, 1) both;
+  }
+
+  .ceremony-line,
+  .ceremony-stamp,
+  .ceremony-podium li,
+  .ceremony-honours li {
+    opacity: 0;
+    animation: ceremony-line-set 520ms cubic-bezier(0.22, 0.68, 0.24, 1) forwards;
+    animation-delay: var(--ceremony-delay, 0ms);
+  }
+
+  .ceremony-stamp {
+    animation-name: ceremony-stamp-land;
+    animation-duration: 620ms;
+    animation-timing-function: cubic-bezier(0.3, 0.9, 0.3, 1);
+  }
+
+  .ceremony-foil {
+    animation: ceremony-foil-sweep 1500ms ease-out both;
+  }
+}
+
+@keyframes ceremony-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ceremony-page-settle {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(-9deg) translateY(22px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes ceremony-fold-pass {
+  from { opacity: 0.9; transform: translateY(-100%); }
+  to { opacity: 0; transform: translateY(100%); }
+}
+
+/* One keyframe serves both plates: the offsets live on the element. */
+@keyframes ceremony-register {
+  from { transform: translateX(var(--register-from)); }
+  to { transform: translateX(var(--register-to)); }
+}
+
+@keyframes ceremony-line-set {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ceremony-stamp-land {
+  0% { opacity: 0; transform: rotate(-16deg) scale(2.3); }
+  55% { opacity: 0.95; transform: rotate(-5deg) scale(0.93); }
+  72% { opacity: 0.92; transform: rotate(-8.6deg) scale(1.04); }
+  100% { opacity: 0.9; transform: rotate(-7deg) scale(1); }
+}
+
+@keyframes ceremony-foil-sweep {
+  from { background-position: -40% 0; }
+  to { background-position: 50% 0; }
+}

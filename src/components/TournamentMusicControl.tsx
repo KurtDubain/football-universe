@@ -16,6 +16,7 @@ let musicOwnerCounter = 0;
 export type { TournamentMusicTone } from '../feedback/tournament-music-meta';
 
 const TONE_CLASSES: Readonly<Record<TournamentMusicTone, string>> = {
+  slate: 'border-slate-400/35 bg-slate-900/70 text-slate-100 hover:bg-slate-800/80',
   amber: 'border-amber-400/35 bg-amber-950/55 text-amber-100 hover:bg-amber-950/75',
   violet: 'border-violet-400/35 bg-violet-950/55 text-violet-100 hover:bg-violet-950/75',
   orange: 'border-orange-400/35 bg-orange-950/55 text-orange-100 hover:bg-orange-950/75',

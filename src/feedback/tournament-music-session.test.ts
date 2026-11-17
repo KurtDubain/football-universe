@@ -4,12 +4,14 @@ import {
   expireTournamentMusicForSeason,
   getTournamentMusicSession,
   holdTournamentMusic,
+  idlePauseTournamentMusic,
   overrideTournamentMusic,
   pauseTournamentMusic,
   playTournamentMusic,
   resetTournamentMusicSession,
   retryTournamentMusicPlayback,
   selectTournamentMusic,
+  wakeTournamentMusic,
 } from './tournament-music-session';
 
 describe('tournament music session', () => {
@@ -100,5 +102,40 @@ describe('tournament music session', () => {
     expect(getTournamentMusicSession()).toMatchObject({ effectiveScene: null, status: 'idle' });
     retryTournamentMusicPlayback();
     expect(getTournamentMusicSession().status).toBe('idle');
+  });
+
+  it('fades an idle bed out and lets the next action bring it back', () => {
+    selectTournamentMusic('league_season', 4);
+    idlePauseTournamentMusic();
+    expect(getTournamentMusicSession()).toMatchObject({
+      scene: 'league_season',
+      desired: false,
+      idlePaused: true,
+      status: 'paused',
+    });
+
+    // A context change must not undo the silence the fade-out asked for.
+    selectTournamentMusic('league_season', 5);
+    expect(getTournamentMusicSession().desired).toBe(false);
+
+    wakeTournamentMusic();
+    expect(getTournamentMusicSession()).toMatchObject({
+      desired: true,
+      idlePaused: false,
+      status: 'starting',
+    });
+  });
+
+  it('never overrides a pause the viewer asked for', () => {
+    selectTournamentMusic('league_season', 4);
+    pauseTournamentMusic();
+    idlePauseTournamentMusic();
+    expect(getTournamentMusicSession().idlePaused).toBe(false);
+
+    wakeTournamentMusic();
+    expect(getTournamentMusicSession()).toMatchObject({
+      desired: false,
+      status: 'paused',
+    });
   });
 });

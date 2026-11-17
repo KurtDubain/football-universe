@@ -22,6 +22,7 @@
 
 import { BROADCAST_SURROUND_COLOR, type BroadcastView } from './broadcast-view';
 import { drawTeamCrest } from './team-crest';
+import type { SeatTone, VenueBanner, VenueIdentity } from './venue-identity';
 
 /** How far past the corners the stand reaches, relative to the far touchline. */
 const STAND_WIDTH_FACTOR = 1.36;
@@ -32,7 +33,7 @@ const CONCOURSE_FRACTION = 0.085;
 const SEAT_PITCH_PX = 4.2;
 const ROW_PITCH_PX = 2.1;
 /** Seats come in solid runs; this is how many runs fit across the stand. */
-const SEAT_BLOCKS = 9;
+export const SEAT_BLOCKS = 9;
 /** Where the upper tier starts, as a share of the raked rows. */
 const UPPER_TIER_SPLIT = 0.46;
 
@@ -77,12 +78,21 @@ export interface StadiumScoreboard {
 export interface StadiumOptions {
   /** Home club colour: the lower tier leans toward it. */
   homeColor?: string;
+  /** Away club colour. Only read on a neutral ground, where both sets of fans are in the stand. */
+  awayColor?: string;
+  /**
+   * Who the ground belongs to. Omitted means a club ground belonging to the
+   * home side, which is what every caller passed before neutral venues existed.
+   */
+  venue?: VenueIdentity;
   /** 0..1 crowd density, from the render budget. */
   density?: number;
   /** 0..1 how loud it is right now. Drives the light wash over the stand. */
   excitement?: number;
   /** Home crest, unfurled as a tifo over one block of the stand. */
   crest?: StadiumCrest;
+  /** Colour the stand washes when the ball goes in. The scoring club own, not the home club. */
+  celebrationColor?: string;
   /** Scoreline and clock for the big screen. Omitted means no screen. */
   scoreboard?: StadiumScoreboard;
   /** 0..1 celebration intensity: phone flashes and a home-colour wash. */
@@ -138,11 +148,27 @@ function blockSeatColor(
   block: number,
   upper: boolean,
   seed: number,
-  homeColor?: string,
+  base: string,
 ): string {
-  const source = homeColor && parseHex(homeColor) ? homeColor : FALLBACK_SEAT_BASE;
+  const source = parseHex(base) ? base : FALLBACK_SEAT_BASE;
   const jitter = 0.86 + seatNoise(block, upper ? 5 : 2, seed + 13) * 0.3;
   return shade(source, (upper ? UPPER_TIER_SHADE : LOWER_TIER_SHADE) * jitter);
+}
+
+/**
+ * The colour one block of seats leans to.
+ *
+ * A club ground is one colour end to end. A final is two blocs with a neutral
+ * band between them, because that is what a neutral venue actually holds: both
+ * sets of fans, and the rest of the ground.
+ */
+function seatBaseFor(block: number, options: StadiumOptions): string {
+  const venue = options.venue;
+  if (!venue) return options.homeColor ?? FALLBACK_SEAT_BASE;
+  const tone: SeatTone = venue.blocks[block] ?? 'neutral';
+  if (tone === 'home') return options.homeColor ?? FALLBACK_SEAT_BASE;
+  if (tone === 'away') return options.awayColor ?? FALLBACK_SEAT_BASE;
+  return FALLBACK_SEAT_BASE;
 }
 
 /** Cached white bloom for the crowd's phone flashes. */
@@ -224,22 +250,42 @@ export interface TifoRect {
  * so the animated cloth sits exactly on the painted one — two copies of this
  * arithmetic is how a ripple ends up floating beside its own banner.
  */
-function tifoRectFor(canvasWidth: number, roofBottom: number, usable: number, seed: number): TifoRect {
-  const onLeft = seatNoise(3, 7, seed) < 0.5;
+function tifoRectsFor(
+  banners: VenueBanner[],
+  canvasWidth: number,
+  roofBottom: number,
+  usable: number,
+  seed: number,
+): TifoRect[] {
+  if (banners.length === 0) return [];
   const jitter = seatNoise(4, 11, seed) * 0.14;
-  return {
-    left: canvasWidth * (onLeft ? 0.04 + jitter : 0.64 + jitter),
-    top: roofBottom + usable * 0.08,
-    width: (canvasWidth / SEAT_BLOCKS) * 1.7,
-    height: usable * 0.54,
-  };
+  const top = roofBottom + usable * 0.08;
+  const height = usable * 0.54;
+  // One banner takes the wider cloth and picks a side. Two take one side each
+  // and give up width, so neither of them runs under the big screen.
+  if (banners.length === 1) {
+    const onLeft = seatNoise(3, 7, seed) < 0.5;
+    return [{
+      left: canvasWidth * (onLeft ? 0.04 + jitter : 0.64 + jitter),
+      top,
+      width: (canvasWidth / SEAT_BLOCKS) * 1.7,
+      height,
+    }];
+  }
+  const width = (canvasWidth / SEAT_BLOCKS) * 1.35;
+  return banners.slice(0, 2).map(banner => ({
+    left: canvasWidth * (banner.side === 'left' ? 0.05 + jitter : 0.63 + jitter),
+    top,
+    width,
+    height,
+  }));
 }
 
 interface StandLayer {
   key: string;
   canvas: HTMLCanvasElement;
   height: number;
-  tifo: TifoRect | null;
+  tifos: TifoRect[];
 }
 
 let cachedStand: StandLayer | null = null;
@@ -253,7 +299,11 @@ function standKey(view: BroadcastView, options: StadiumOptions): string {
     view.width,
     view.height,
     options.homeColor ?? '',
-    options.crest ? (options.crest.teamId ?? options.crest.shortName) : '',
+    options.awayColor ?? '',
+    options.venue ? options.venue.blocks.join('') : '',
+    options.venue
+      ? options.venue.banners.map(b => b.side + (b.crest.teamId ?? b.crest.shortName)).join(',')
+      : '',
     (options.density ?? 1).toFixed(2),
     options.seed ?? 0,
   ].join('|');
@@ -275,7 +325,7 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   canvas.width = Math.max(8, Math.ceil(span));
   canvas.height = Math.ceil(standHeight);
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { key, canvas, height: canvas.height, tifo: null };
+  if (!ctx) return { key, canvas, height: canvas.height, tifos: [] };
 
   const roofBottom = canvas.height * ROOF_FRACTION;
   const concourseHeight = canvas.height * CONCOURSE_FRACTION;
@@ -299,7 +349,7 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
     const rowLeft = (canvas.width - rowSpan) / 2;
     const blockWidth = rowSpan / SEAT_BLOCKS;
     for (let block = 0; block < SEAT_BLOCKS; block++) {
-      ctx.fillStyle = blockSeatColor(block, upper, seed, options.homeColor);
+      ctx.fillStyle = blockSeatColor(block, upper, seed, seatBaseFor(block, options));
       ctx.fillRect(rowLeft + block * blockWidth, y - seatHeight, blockWidth, seatHeight);
     }
     // The people on top of them. This is the only noisy layer in the stand.
@@ -320,32 +370,36 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
     }
   }
 
-  // Tifo: one run of the stand under a banner. A club that fills its ground
-  // does this, and it is the loudest home-colour signal anywhere in the frame.
+  // Tifo: a run of the stand under a banner. A club that fills its ground
+  // hangs one with its own crest on it, and that is the loudest home-colour
+  // signal anywhere in the frame; a final hangs two, one per set of fans.
   // Drawn over the seats rather than instead of them, because that is what a
   // banner is: a sheet held above people.
-  const crest = options.crest;
-  const tifo = crest && canvas.width > 60
-    ? tifoRectFor(canvas.width, roofBottom, usable, seed)
-    : null;
-  if (crest && tifo) {
-    const tifoLeft = tifo.left;
-    const tifoTop = tifo.top;
-    const tifoWidth = tifo.width;
-    const tifoHeight = tifo.height;
+  const banners: VenueBanner[] = options.venue
+    ? options.venue.banners
+    : options.crest
+      ? [{ side: 'left', crest: options.crest }]
+      : [];
+  const tifos = canvas.width > 60
+    ? tifoRectsFor(banners, canvas.width, roofBottom, usable, seed)
+    : [];
+  for (let index = 0; index < tifos.length; index += 1) {
+    const rect = tifos[index];
+    const crest = banners[index]?.crest;
+    if (!crest) continue;
     ctx.fillStyle = shade(crest.color, 0.72);
-    ctx.fillRect(tifoLeft, tifoTop, tifoWidth, tifoHeight);
+    ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
     // A banner is cloth: it hangs in folds and it is darker along the top.
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.fillRect(tifoLeft, tifoTop, tifoWidth, tifoHeight * 0.16);
+    ctx.fillRect(rect.left, rect.top, rect.width, rect.height * 0.16);
     ctx.fillStyle = 'rgba(0,0,0,0.1)';
     for (let fold = 1; fold < 4; fold += 1) {
-      ctx.fillRect(tifoLeft + (fold * tifoWidth) / 4, tifoTop, tifoWidth * 0.04, tifoHeight);
+      ctx.fillRect(rect.left + (fold * rect.width) / 4, rect.top, rect.width * 0.04, rect.height);
     }
     drawTeamCrest(ctx, {
-      cx: tifoLeft + tifoWidth / 2,
-      cy: tifoTop + tifoHeight * 0.55,
-      size: Math.min(tifoWidth * 0.84, tifoHeight * 0.94),
+      cx: rect.left + rect.width / 2,
+      cy: rect.top + rect.height * 0.55,
+      size: Math.min(rect.width * 0.84, rect.height * 0.94),
       teamId: crest.teamId,
       shortName: crest.shortName,
       // Dark on a bright banner. A white crest on the club's own colour has no
@@ -390,7 +444,7 @@ function buildStand(view: BroadcastView, options: StadiumOptions, span: number):
   ctx.fillStyle = STAND_DIM;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  return { key, canvas, height: canvas.height, tifo };
+  return { key, canvas, height: canvas.height, tifos };
 }
 
 /** Below this the scoreline is a smudge, so the screen is left out entirely. */
@@ -403,8 +457,8 @@ interface BigScreenGeometry {
   standHeight: number;
   viewWidth: number;
   board: StadiumScoreboard;
-  /** Horizontal span the screen must not cover, in canvas coordinates. */
-  avoid?: { left: number; right: number };
+  /** Horizontal spans the screen must not cover, in canvas coordinates. */
+  avoid?: Array<{ left: number; right: number }>;
 }
 
 /**
@@ -425,16 +479,17 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometr
     Math.min(geometry.centerX - width / 2, geometry.viewWidth - width - 4),
   );
   const avoid = geometry.avoid;
-  if (avoid && x < avoid.right && x + width > avoid.left) {
+  const hit = avoid?.find(span => x < span.right && x + width > span.left);
+  if (hit) {
     // The screen is clamped into the frame, so on a panning camera it lands
-    // squarely on the banner: both live on the stand, and the clamp puts the
+    // squarely on a banner: both live on the stand, and the clamp puts the
     // screen at whichever edge the pan opened up. A tifo behind the big screen
-    // is a tifo nobody sees, and the banner is the loudest home-colour signal
+    // is a tifo nobody sees, and the banner is the loudest club-colour signal
     // in the frame. Step around it, into whichever side has room.
-    const roomLeft = avoid.left - 4;
-    const roomRight = geometry.viewWidth - avoid.right - 4;
-    if (roomLeft >= width) x = avoid.left - width - 4;
-    else if (roomRight >= width) x = avoid.right + 4;
+    const roomLeft = hit.left - 4;
+    const roomRight = geometry.viewWidth - hit.right - 4;
+    if (roomLeft >= width) x = hit.left - width - 4;
+    else if (roomRight >= width) x = hit.right + 4;
     x = Math.max(4, Math.min(x, geometry.viewWidth - width - 4));
   }
   const y = geometry.top;
@@ -536,21 +591,19 @@ function drawCrowdSurge(
  * it: two copies of this arithmetic is how a ripple ends up floating beside
  * its own banner, and how a scoreboard ends up parked on top of one.
  */
-function tifoScreenRect(
+function tifoScreenRects(
   layer: StandLayer,
   standLeft: number,
   span: number,
-): { left: number; top: number; width: number; height: number } | null {
-  const rect = layer.tifo;
-  if (!rect) return null;
+): Array<{ left: number; top: number; width: number; height: number }> {
   const scaleX = span / layer.canvas.width;
   const scaleY = layer.height / layer.canvas.height;
-  return {
+  return layer.tifos.map(rect => ({
     left: standLeft + rect.left * scaleX,
     top: rect.top * scaleY,
     width: rect.width * scaleX,
     height: rect.height * scaleY,
-  };
+  }));
 }
 
 /**
@@ -562,13 +615,9 @@ function tifoScreenRect(
  */
 function drawTifoWave(
   ctx: CanvasRenderingContext2D,
-  layer: StandLayer,
-  standLeft: number,
-  span: number,
+  screen: { left: number; top: number; width: number; height: number },
   options: StadiumOptions,
 ): void {
-  const screen = tifoScreenRect(layer, standLeft, span);
-  if (!screen) return;
   const { left, top, width, height } = screen;
   if (width < 6 || height < 4) return;
 
@@ -631,7 +680,7 @@ export function drawBroadcastStadium(
   const farY = rig.farEdgeY * H;
   const standHeight = Math.max(10, farY - 2);
 
-  let tifoOnScreen: { left: number; right: number } | undefined;
+  let tifoOnScreen: Array<{ left: number; right: number }> | undefined;
   if (typeof document !== 'undefined') {
     const key = standKey(view, options);
     if (!cachedStand || cachedStand.key !== key) {
@@ -639,10 +688,15 @@ export function drawBroadcastStadium(
     }
     ctx.drawImage(cachedStand.canvas, standLeft, 0, span, cachedStand.height);
     drawCrowdSurge(ctx, standLeft, span, standHeight, options);
-    drawTifoWave(ctx, cachedStand, standLeft, span, options);
-    const banner = tifoScreenRect(cachedStand, standLeft, span);
-    if (banner && banner.width >= 6) {
-      tifoOnScreen = { left: banner.left, right: banner.left + banner.width };
+    const banners = tifoScreenRects(cachedStand, standLeft, span).filter(b => b.width >= 6);
+    for (const banner of banners) {
+      drawTifoWave(ctx, banner, options);
+    }
+    if (banners.length > 0) {
+      tifoOnScreen = banners.map(banner => ({
+        left: banner.left,
+        right: banner.left + banner.width,
+      }));
     }
   }
 
@@ -692,10 +746,10 @@ export function drawBroadcastStadium(
   // bank of phone flashes across it.
   const flash = options.flash ?? 0;
   if (flash > 0.02) {
-    if (options.homeColor) {
+    if (options.celebrationColor) {
       const wash = ctx.createLinearGradient(0, standHeight, 0, standHeight * 0.18);
-      wash.addColorStop(0, rgbaOf(options.homeColor, 0.22 * flash));
-      wash.addColorStop(1, rgbaOf(options.homeColor, 0));
+      wash.addColorStop(0, rgbaOf(options.celebrationColor, 0.22 * flash));
+      wash.addColorStop(1, rgbaOf(options.celebrationColor, 0));
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = wash;

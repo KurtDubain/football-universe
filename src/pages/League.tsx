@@ -19,6 +19,7 @@ import { leagueConfigs } from '../config/competitions';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 import TeamBadge from '../components/TeamBadge';
 import { CompetitionMark } from '../components/FootballIdentity';
+import { VenueTag } from '../components/VenueTag';
 import { useUiSessionState } from '../app/ui-session-state';
 import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 
@@ -638,19 +639,27 @@ export default function League() {
                                   <span className="text-sm font-medium text-slate-200 whitespace-nowrap" title={homeTeam.name}>
                                     {homeTeam.shortName}
                                   </span>
-                                  <span className="text-xs text-green-500 shrink-0">
-                                    (主)
-                                  </span>
+                                  {!fixture.isNeutralVenue && (
+                                    <span className="text-xs text-green-500 shrink-0">
+                                      (主)
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-center px-3 shrink-0">
                                   <div className="text-sm font-bold text-slate-400">
                                     VS
                                   </div>
+                                  <VenueTag
+                                    isNeutralVenue={fixture.isNeutralVenue}
+                                    className="text-[10px]"
+                                  />
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                  <span className="text-xs text-slate-500 shrink-0">
-                                    (客)
-                                  </span>
+                                  {!fixture.isNeutralVenue && (
+                                    <span className="text-xs text-slate-500 shrink-0">
+                                      (客)
+                                    </span>
+                                  )}
                                   <span className="text-sm font-medium text-slate-200 whitespace-nowrap" title={awayTeam.name}>
                                     {awayTeam.shortName}
                                   </span>

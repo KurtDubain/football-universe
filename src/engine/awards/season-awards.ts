@@ -294,10 +294,10 @@ export const AWARD_META: Record<
   { label: string; emoji: string; color: string }
 > = {
   mvp: { label: '金球奖', emoji: '🏅', color: 'text-amber-400' },
-  golden_boot: { label: '金靴奖', emoji: '👟', color: 'text-yellow-400' },
+  golden_boot: { label: '金靴奖', emoji: '👟', color: 'text-orange-400' },
   best_forward: { label: '最佳前锋', emoji: '⚽', color: 'text-red-400' },
   best_midfielder: { label: '最佳中场', emoji: '🎯', color: 'text-green-400' },
   best_defender: { label: '最佳后卫', emoji: '🛡️', color: 'text-blue-400' },
   best_goalkeeper: { label: '最佳门将', emoji: '🧤', color: 'text-cyan-300' },
-  young_player: { label: '最佳新星', emoji: '🌟', color: 'text-emerald-400' },
+  young_player: { label: '最佳新星', emoji: '🌟', color: 'text-violet-400' },
 };

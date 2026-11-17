@@ -5,6 +5,7 @@ const audioDir = new URL('../src/assets/audio/', import.meta.url);
 const expectedTracks = [
   'eastern-cup-theme-v1.m4a',
   'league-cup-theme-v1.m4a',
+  'league-season-v1.m4a',
   'mainland-cup-theme-v1.m4a',
   'southern-cup-theme-v1.m4a',
   'super-cup-theme-v1.m4a',
@@ -14,7 +15,13 @@ const expectedTracks = [
 ] as const;
 
 const MAX_TRACK_BYTES = 560_000;
-const MAX_TOTAL_BYTES = 2_800_000;
+// 2.8 MB → 3.2 MB for v4.69.0. The league bed is the first track that is not
+// a fanfare: it loops for as long as the viewer stays on the season desk, so
+// it is written at forty-two seconds rather than twenty-five, which is 375 KB
+// at the 72 kbps its pads need. None of this is precached — the service
+// worker only globs js, css, html, svg, png, webp, ico and woff2 — so the
+// cost is paid once, on demand, by a viewer who has music switched on.
+const MAX_TOTAL_BYTES = 3_200_000;
 
 function durationSeconds(buffer: Buffer): number {
   const marker = buffer.indexOf(Buffer.from('mvhd'));

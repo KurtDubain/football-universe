@@ -10,7 +10,8 @@ export interface MatchPresentationCue {
   moment: 'setup' | 'contact' | 'outcome';
   event: MatchEvent;
   attackingHome: boolean;
-  action?: 'delivery' | 'shot';
+  /** `beat` is a card or a substitution: a stoppage with no ball path. */
+  action?: 'delivery' | 'shot' | 'beat';
   outcome?: 'goal' | 'save' | 'block' | 'miss' | 'delivery';
 }
 

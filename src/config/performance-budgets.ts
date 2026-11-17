@@ -10,7 +10,16 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     gzipBytes: 160_000,
   },
   css: {
-    bytes: 190 * KiB,
+    // 190 KiB → 191.4 KiB for v4.69.0. The ceremony pages ship their own
+    // stylesheet with the lazy overlay chunk (src/components/ceremony/
+    // ceremony.css, 6.2 KB). It is fetched only when a season opens or
+    // closes, a cup final is decided, or a World Cup begins or ends, so it
+    // costs nothing on the first paint — but the check sums every deployed
+    // stylesheet, lazy ones included. Measured total is 195,941 against this
+    // cap, and gzip stays at roughly 30.1 KB against 30 KiB, so the initial
+    // critical path is unchanged. Inlining the sheet into index.css would
+    // move the same bytes onto the critical path rather than remove them.
+    bytes: 197_000,
     gzipBytes: 30 * KiB,
   },
   images: {
@@ -47,7 +56,16 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // second is how a badge ends up disagreeing with the simulation. Measured
     // precache bytes are 1,995,795 against the 2,150,000 cap and initial JS
     // gzip is 158,464 against 160,000, so only the entry count moved.
-    entries: 89,
+    //
+    // 89 → 90 for v4.69.0. The ceremony overlay is the first React.lazy
+    // boundary in the product, and that boundary is what moves React out of
+    // the chunks it used to be inlined into: Rolldown now emits react-*.js
+    // as a chunk shared by the entry graph and the overlay. The overlay chunk
+    // and its stylesheet are both excluded in pwa-precache-policy; this
+    // shared React shard cannot be, because it is also an initial dependency
+    // and omitting it would fail the initial-precache assertion. Measured
+    // precache bytes are 1,976,573 against the 2,150,000 cap.
+    entries: 90,
     bytes: 2_150_000,
   },
 } as const;

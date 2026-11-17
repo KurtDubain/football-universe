@@ -5,10 +5,12 @@ import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxo
 import { clamp, lerp, seededRand } from './pitch-canvas/math';
 import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence';
 import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
+import { BEAT_MAX_FRAMES, drawBroadcastBeat } from './pitch-canvas/broadcast-beat';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
 import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
 import type { BroadcastCameraMoment } from './pitch-canvas/camera';
-import { rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
+import { CAMERA_RIGS, rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
+import { idleCruiseShotAt, isIdleCruiseWindow } from './pitch-canvas/idle-cruise';
 import {
   createBroadcastView,
   rigFollowCenterX,
@@ -16,11 +18,12 @@ import {
   type BroadcastView,
 } from './pitch-canvas/broadcast-view';
 import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
-import { drawBroadcastStadium } from './pitch-canvas/broadcast-stadium';
+import { drawBroadcastStadium, SEAT_BLOCKS } from './pitch-canvas/broadcast-stadium';
 import { drawBroadcastGrade } from './pitch-canvas/broadcast-grade';
 import { scoreAtMinute } from './pitch-canvas/live-score';
 import { matchTension } from './pitch-canvas/tension';
 import { keeperDivePlan, keeperKitColor } from './pitch-canvas/keeper-action';
+import { celebrationColorFor, venueIdentity } from './pitch-canvas/venue-identity';
 import { teamBadgeParts } from './team-badge-geometry';
 import {
   drawBroadcastPlayer,
@@ -146,6 +149,10 @@ interface Props {
   awayTeamId: string;
   homeShortName: string;
   awayShortName: string;
+  /** Neutral venues carry neither club's ground. See venue-identity.ts. */
+  isNeutralVenue?: boolean;
+  /** World Cup host. Buys atmosphere, not a home match. */
+  hostTeamId?: string;
   flashEvent: MatchEvent | null;
   allEvents: MatchEvent[];
   homeMatchday?: MatchdaySnapshot;
@@ -284,12 +291,31 @@ function sequenceOptionsForScene(
   };
 }
 
+/**
+ * The name plate under a card.
+ *
+ * Reads the roster rather than the event description: descriptions are
+ * prose written for the feed, and a broadcast caption is a name and a
+ * number. An empty string simply draws no plate — a booking with no
+ * identifiable player is still a booking.
+ */
+function beatLabelFor(
+  scene: EventScene,
+  homeRoster: PitchRosterPlayer[],
+  awayRoster: PitchRosterPlayer[],
+): string {
+  const roster = scene.attackingHome ? homeRoster : awayRoster;
+  const player = roster.find(entry => entry.playerId === scene.event.playerId);
+  if (!player?.playerName) return '';
+  return player.playerNumber + ' ' + player.playerName;
+}
+
 const FIXED_FRAME_MS = 1000 / 60;
 
 function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, awayTeamId, flashEvent, allEvents,
-    homeShortName, awayShortName,
+    homeShortName, awayShortName, isNeutralVenue = false, hostTeamId,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
     possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
@@ -321,6 +347,18 @@ function PitchCanvas(props: Props) {
     () => ({ teamId: awayTeamId, shortName: awayShortName, color: awayColor }),
     [awayColor, awayShortName, awayTeamId],
   );
+  const venue = useMemo(
+    () => venueIdentity({
+      isNeutralVenue,
+      hostTeamId,
+      homeTeamId,
+      awayTeamId,
+      homeCrest,
+      awayCrest,
+      seatBlocks: SEAT_BLOCKS,
+    }),
+    [awayCrest, awayTeamId, homeCrest, homeTeamId, hostTeamId, isNeutralVenue],
+  );
   const liveScore = useMemo(
     () => scoreAtMinute(allEvents, homeTeamId, minute),
     [allEvents, homeTeamId, minute],
@@ -340,6 +378,10 @@ function PitchCanvas(props: Props) {
   // is the only part of the camera that moves continuously.
   const viewRigIdRef = useRef<CameraRigId>('tactical');
   const viewCenterXRef = useRef(0.5);
+  /** Frames of quiet the director has been free to move the camera for. */
+  const idleFramesRef = useRef(0);
+  /** Match minute that quiet stretch began at; fixes the cruise rotation. */
+  const idleStartMinuteRef = useRef(0);
   const attackingRightRef = useRef(true);
   const viewRef = useRef<BroadcastView | null>(null);
   const goalCelebFrame = useRef(0);
@@ -356,6 +398,9 @@ function PitchCanvas(props: Props) {
   const shotOutcomeHeldRef = useRef(false);
   const particlesRef = useRef<Particle[]>([]);
   const pendingImpactSceneRef = useRef<EventScene | null>(null);
+  /** The card or substitution currently being shown, if any. */
+  const beatSceneRef = useRef<EventScene | null>(null);
+  const beatFrameRef = useRef(0);
   const triggeredImpactKeyRef = useRef<string | null>(null);
   const emittedPresentationCueIdsRef = useRef(new Set<string>());
   const lastAtmosphereRef = useRef<MatchPresentationAtmosphere & { frame: number }>({
@@ -452,7 +497,7 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
+    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   });
   useEffect(() => {
@@ -460,7 +505,7 @@ function PitchCanvas(props: Props) {
       minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
       homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-      homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
+      homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
       onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
@@ -468,7 +513,7 @@ function PitchCanvas(props: Props) {
     minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
-    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
+    homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
     onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
   ]);
 
@@ -776,7 +821,7 @@ function PitchCanvas(props: Props) {
     }
 
     function triggerShotImpact(scene: EventScene, currentHomeColor: string, currentAwayColor: string): void {
-      if (scene.outcome === 'delivery') return;
+      if (scene.outcome === 'delivery' || scene.outcome === 'beat') return;
       const targetX = P + scene.target.x * fw;
       const targetY = P + scene.target.y * fh;
       triggeredImpactKeyRef.current = scene.key;
@@ -863,7 +908,7 @@ function PitchCanvas(props: Props) {
         possession: livePossession, homeFormation: liveHomeFormation, awayFormation: liveAwayFormation,
         homeApproach: liveHomeApproach, awayApproach: liveAwayApproach,
         formationLayouts: liveFormationLayouts, featuredPlayerIdSet: liveFeaturedPlayerIds,
-        homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore,
+        homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
       } = live;
       const homePossessionShare = livePossession[0] / 100;
 
@@ -873,7 +918,7 @@ function PitchCanvas(props: Props) {
       const resultPresentationBusy = shotOutcomeFrameRef.current > 30 || goalCelebFrame.current > 50;
       const shouldHoldPlayback = shouldHoldClock({
         active: live.active,
-        hasScene: Boolean(sequenceSceneRef.current),
+        hasScene: Boolean(sequenceSceneRef.current) || beatFrameRef.current > 0,
         eventMinute: sequenceSceneRef.current?.event.minute ?? 0,
         minute,
         hasActivePhase: Boolean(activeDirectedPhase),
@@ -895,7 +940,19 @@ function PitchCanvas(props: Props) {
       const canStartScene = !activeDirectedPhase && !resultPresentationBusy;
       const queuedScene = canStartScene ? queuedScenesRef.current[0] : undefined;
       const sceneToStart = queuedScene ?? (canStartScene ? eventScene : undefined);
-      if (sceneToStart && activeSceneKeyRef.current !== sceneToStart.key) {
+      // A beat has no ball path, so it never enters the sequence machinery:
+      // it takes the frame for its own length and then gets out of the way.
+      if (
+        sceneToStart && sceneToStart.outcome === 'beat' && sceneToStart.beat
+        && activeSceneKeyRef.current !== sceneToStart.key
+      ) {
+        beatSceneRef.current = sceneToStart;
+        beatFrameRef.current = BEAT_MAX_FRAMES;
+        activeSceneKeyRef.current = sceneToStart.key;
+        sequenceSceneRef.current = null;
+        emitPresentationCue(sceneToStart, 'outcome', { action: 'beat' });
+        if (queuedScenesRef.current[0]?.key === sceneToStart.key) queuedScenesRef.current.shift();
+      } else if (sceneToStart && activeSceneKeyRef.current !== sceneToStart.key) {
         // A new attack replaces any lingering cue from the previous chance.
         shotOutcomeFrameRef.current = 0;
         goalCelebFrame.current = 0;
@@ -986,8 +1043,31 @@ function PitchCanvas(props: Props) {
         ?? attackingRightRef.current;
       attackingRightRef.current = attackingRight;
       const ballLengthFraction = clamp((ballPos.current.x - P) / fw, 0, 1);
-      const baseRig = rigForMoment(cameraMoment, attackingRight, ballLengthFraction);
-      const followTargetX = rigFollowCenterX(baseRig, ballLengthFraction);
+      // Nothing is being directed, so the director keeps the broadcast moving
+      // on a cadence of its own rather than holding whatever position the
+      // play stage happens to map to. It yields the instant anything is
+      // directed, and it does not touch the first moment and a half of quiet.
+      const cruiseWindow = isIdleCruiseWindow({
+        hasScene: Boolean(sequenceSceneRef.current),
+        hasBeat: beatFrameRef.current > 0,
+        resultBusy: shotOutcomeFrameRef.current > 0 || goalCelebFrame.current > 0,
+        halftime,
+      });
+      if (cruiseWindow) {
+        if (idleFramesRef.current === 0) idleStartMinuteRef.current = minute;
+        if (live.active) idleFramesRef.current++;
+      } else {
+        idleFramesRef.current = 0;
+      }
+      const cruiseShot = idleCruiseShotAt(idleFramesRef.current, idleStartMinuteRef.current);
+      const baseRig = cruiseShot
+        ? CAMERA_RIGS[cruiseShot.rigId]
+        : rigForMoment(cameraMoment, attackingRight, ballLengthFraction);
+      const followTargetX = rigFollowCenterX(
+        baseRig,
+        ballLengthFraction,
+        cruiseShot?.followScale ?? 1,
+      );
       if (viewRigIdRef.current !== baseRig.id) {
         // Hard cut. Easing across a lens change would smear the pitch through
         // every intermediate framing, which is the one thing a real cut never
@@ -1032,6 +1112,11 @@ function PitchCanvas(props: Props) {
         ? clamp((goalCelebFrame.current / GOAL_CELEB_MAX_FRAMES) * 1.6, 0, 1)
         : 0;
       const crowdFlash = Math.max(goalFlash, lastAtmosphereRef.current.danger * 0.2);
+      // Whoever scored, not whoever is nominally at home. On a neutral ground
+      // there is no home colour to wash the frame in at all.
+      const celebrationColor = goalFlash > 0.02
+        ? celebrationColorFor(goalCelebRightSide.current, homeColor, awayColor) ?? undefined
+        : undefined;
 
       // How much this moment is worth, which is not the same question as how
       // loud it is. `danger` only knows about the ball; a shot in the last
@@ -1047,11 +1132,13 @@ function PitchCanvas(props: Props) {
 
       drawBroadcastStadium(ctx, view, {
         homeColor,
+        awayColor,
+        venue,
         density: renderBudget.quality === 'full' ? 1 : 0.55,
         excitement: lastAtmosphereRef.current.danger,
         tension,
         flash: crowdFlash,
-        crest: homeCrest,
+        celebrationColor,
         scoreboard: {
           minute,
           homeScore: liveScore.home,
@@ -1062,7 +1149,10 @@ function PitchCanvas(props: Props) {
         frame: f,
         seed: 20260722,
       });
-      drawBroadcastPitch(ctx, view, { flagColor: homeColor, crest: homeCrest });
+      drawBroadcastPitch(ctx, view, {
+        flagColor: venue.flagColor ?? undefined,
+        crest: venue.centreCrest ?? undefined,
+      });
 
       if (halftime) {
         drawHalftime(ctx, W, H, liveBreakLabel?.label, liveBreakLabel?.sublabel, orientationRef.current);
@@ -1838,6 +1928,22 @@ function PitchCanvas(props: Props) {
         });
       }
 
+      // ── Card or substitution, held at the touchline ──
+      const beatScene = beatSceneRef.current;
+      if (beatScene && beatScene.beat && beatFrameRef.current > 0) {
+        beatFrameRef.current--;
+        drawBroadcastBeat(ctx, {
+          view,
+          frame: beatFrameRef.current,
+          beat: beatScene.beat,
+          at: beatScene.target,
+          teamColor: beatScene.attackingHome ? live.homeColor : live.awayColor,
+          label: beatLabelFor(beatScene, homeRoster, awayRoster),
+          orientation: orientationRef.current,
+        });
+        if (beatFrameRef.current === 0) beatSceneRef.current = null;
+      }
+
       let outcomeLabel: {
         remainingFrames: number;
         outcome: Exclude<ShotOutcome, 'goal'>;
@@ -1883,7 +1989,7 @@ function PitchCanvas(props: Props) {
         danger: lastAtmosphereRef.current.danger,
         tension,
         flash: goalFlash,
-        homeColor,
+        celebrationColor,
       });
 
       ctx.restore();

@@ -3,6 +3,7 @@ import { useGameStore } from '../store/game-store';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import MatchDetailModal from '../components/MatchDetailModal';
+import { VenueTag } from '../components/VenueTag';
 import { isDerby, getDerbyName } from '../config/derbies';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import {
@@ -209,10 +210,15 @@ export default function Calendar() {
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: awayTeam.color }} />
                               <span className="text-slate-300 whitespace-nowrap" title={awayTeam.name}>{awayTeam.shortName}</span>
                             </div>
-                            <span className="text-[10px] text-slate-600 ml-2 shrink-0">
+                            <span className="text-[10px] text-slate-600 ml-2 shrink-0 inline-flex items-center gap-1">
                               {calDerby
                                 ? <span className="text-orange-400">{calDerby}</span>
-                                : fixture.isNeutralVenue ? '中立场 · 预测 →' : '预测 →'}
+                                : (
+                                  <>
+                                    <VenueTag isNeutralVenue={fixture.isNeutralVenue} />
+                                    <span>预测 →</span>
+                                  </>
+                                )}
                             </span>
                           </button>
                         );

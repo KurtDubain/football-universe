@@ -34,7 +34,7 @@ export function getMatchTags(
   } else if (knockoutRound === 2) {
     tags.push({ label: '八强', color: 'bg-blue-600 text-white' });
   } else if (knockoutRound === 1) {
-    tags.push({ label: '16强', color: 'bg-sky-700 text-white' });
+    tags.push({ label: '16强', color: 'bg-cyan-700 text-white' });
   }
   if (competitionType === 'relegation_playoff') {
     tags.push({ label: '保级战', color: 'bg-red-600 text-white', glow: true });

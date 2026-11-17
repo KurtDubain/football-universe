@@ -17,6 +17,7 @@ import {
   cnRoundLabel,
 } from '../utils/format';
 import { shootoutEventLabel } from './match-live/live-commentary';
+import { VenueTag } from './VenueTag';
 import {
   APPROACH_LABELS,
   TACTICS_REASON_LABELS,
@@ -234,9 +235,10 @@ function PreMatchView({
                 {fixture.leg === 1 ? '首回合' : '次回合'}
               </div>
             )}
-            {fixture.isNeutralVenue && (
-              <div className="mt-0.5 text-[10px] font-medium text-amber-400">中立场</div>
-            )}
+            <VenueTag
+              isNeutralVenue={fixture.isNeutralVenue}
+              className="mt-0.5 text-[10px]"
+            />
           </div>
 
           {/* Away team */}
@@ -608,7 +610,7 @@ function PostMatchView({
                   {fixture.leg === 1 ? '首回合' : '次回合'}
                 </span>
               )}
-              {neutralVenue && <span className="font-medium text-amber-400">中立场</span>}
+              <VenueTag isNeutralVenue={neutralVenue} />
               {result.extraTime && (
                 <span className="text-amber-400">
                   加时 {result.etHomeGoals ?? 0}-{result.etAwayGoals ?? 0}

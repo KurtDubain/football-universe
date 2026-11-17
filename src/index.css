@@ -1,5 +1,313 @@
 @import "tailwindcss";
 
+/* ── Semantic palette ───────────────────────────────────────────────────────
+ *
+ * The token layer existed but was not wired up: 3,630 direct palette classes
+ * across 66 files still resolved to Tailwind defaults, so the app had a
+ * colour system on paper and a different one on screen. Redefining the
+ * palette itself retires every one of them at once, including the opacity
+ * variants (bg-slate-700/20 and friends) that the old utility-override
+ * bridge never reached.
+ *
+ * Each family keeps its own name and its own light-to-dark ramp, so a
+ * hierarchy built out of 300/500/900 survives. What changes is which hue
+ * the ramp is built from: one semantic token per role, mixed toward paper
+ * for the light end and toward the page for the dark end.
+ *
+ * Families that carry no meaning in this product are not left in place to
+ * be reached for by accident — lime, fuchsia and stone resolve to the same
+ * roles as their neighbours.
+ */
+/* ── Semantic palette ───────────────────────────────────────────────────────
+ *
+ * The token layer existed but was not wired up: 3,630 direct palette classes
+ * across 66 files still resolved to Tailwind defaults, so the app had a
+ * colour system on paper and a different one on screen. Redefining the
+ * palette itself retires every one of them at once, including the opacity
+ * variants (bg-slate-700/20 and friends) that the old utility-override
+ * bridge never reached.
+ *
+ * Each family keeps its own name and its own light-to-dark ramp, so a
+ * hierarchy built out of 300/500/900 survives. What changes is which hue
+ * the ramp is built from.
+ *
+ * Shade 500 of every family is the semantic token itself, by reference, so
+ * moving a token still moves the colour it names. The shades either side are
+ * precomputed from it rather than written as color-mix(): Tailwind emits a
+ * fallback copy of every color-mix value inside an @supports block, and with
+ * a thousand opacity utilities that doubled the stylesheet to get a palette
+ * that compresses smaller than the one it replaced. Regenerate the derived
+ * shades when a token moves; 500 will follow on its own.
+ *
+ * Families that carry no meaning here are not left in place to be reached
+ * for by accident — lime, fuchsia and stone resolve to their neighbours.
+ */
+@theme {
+  /* danger */
+  --color-red-50: #ebd7c8;
+  --color-red-100: #e9ccbe;
+  --color-red-200: #e6bbae;
+  --color-red-300: #e2a499;
+  --color-red-400: #db827a;
+  --color-red-500: var(--danger);
+  --color-red-600: #b8504b;
+  --color-red-700: #98443f;
+  --color-red-800: #783834;
+  --color-red-900: #572c28;
+  --color-red-950: #3b211e;
+  /* rose */
+  --color-rose-50: #e9d9ce;
+  --color-rose-100: #e5cfc8;
+  --color-rose-200: #e0c0be;
+  --color-rose-300: #d9acb1;
+  --color-rose-400: #ce8d9d;
+  --color-rose-500: var(--rose);
+  --color-rose-600: #a85d75;
+  --color-rose-700: #8b4f62;
+  --color-rose-800: #6e404e;
+  --color-rose-900: #51323b;
+  --color-rose-950: #37252a;
+  /* clay */
+  --color-orange-50: #e7dac7;
+  --color-orange-100: #e3d0bc;
+  --color-orange-200: #dcc2ab;
+  --color-orange-300: #d3af94;
+  --color-orange-400: #c59272;
+  --color-orange-500: var(--clay);
+  --color-orange-600: #9d6341;
+  --color-orange-700: #825438;
+  --color-orange-800: #67442e;
+  --color-orange-900: #4c3424;
+  --color-orange-950: #34271c;
+  /* warning */
+  --color-amber-50: #ebdfc5;
+  --color-amber-100: #e9d9b9;
+  --color-amber-200: #e6cfa6;
+  --color-amber-300: #e2c38d;
+  --color-amber-400: #dbb168;
+  --color-amber-500: var(--warning);
+  --color-amber-600: #b88735;
+  --color-amber-700: #98712e;
+  --color-amber-800: #785b26;
+  --color-amber-900: #57441f;
+  --color-amber-950: #3b3118;
+  --color-yellow-50: #ebdfc5;
+  --color-yellow-100: #e9d9b9;
+  --color-yellow-200: #e6cfa6;
+  --color-yellow-300: #e2c38d;
+  --color-yellow-400: #dbb168;
+  --color-yellow-500: var(--warning);
+  --color-yellow-600: #b88735;
+  --color-yellow-700: #98712e;
+  --color-yellow-800: #785b26;
+  --color-yellow-900: #57441f;
+  --color-yellow-950: #3b3118;
+  /* success */
+  --color-emerald-50: #d9e2cc;
+  --color-emerald-100: #cbdfc5;
+  --color-emerald-200: #b6d9b9;
+  --color-emerald-300: #9ad1aa;
+  --color-emerald-400: #70c693;
+  --color-emerald-500: var(--success);
+  --color-emerald-600: #38a169;
+  --color-emerald-700: #2f8658;
+  --color-emerald-800: #276b47;
+  --color-emerald-900: #1f5036;
+  --color-emerald-950: #173827;
+  --color-green-50: #d9e2cc;
+  --color-green-100: #cbdfc5;
+  --color-green-200: #b6d9b9;
+  --color-green-300: #9ad1aa;
+  --color-green-400: #70c693;
+  --color-green-500: var(--success);
+  --color-green-600: #38a169;
+  --color-green-700: #2f8658;
+  --color-green-800: #276b47;
+  --color-green-900: #1f5036;
+  --color-green-950: #173827;
+  --color-lime-50: #d9e2cc;
+  --color-lime-100: #cbdfc5;
+  --color-lime-200: #b6d9b9;
+  --color-lime-300: #9ad1aa;
+  --color-lime-400: #70c693;
+  --color-lime-500: var(--success);
+  --color-lime-600: #38a169;
+  --color-lime-700: #2f8658;
+  --color-lime-800: #276b47;
+  --color-lime-900: #1f5036;
+  --color-lime-950: #173827;
+  /* teal */
+  --color-teal-50: #dbe0d1;
+  --color-teal-100: #cedacd;
+  --color-teal-200: #bbd2c6;
+  --color-teal-300: #a2c7bd;
+  --color-teal-400: #7cb6b0;
+  --color-teal-500: var(--teal);
+  --color-teal-600: #458e8b;
+  --color-teal-700: #3b7774;
+  --color-teal-800: #305f5c;
+  --color-teal-900: #254745;
+  --color-teal-950: #1b3330;
+  --color-cyan-50: #dbe0d1;
+  --color-cyan-100: #cedacd;
+  --color-cyan-200: #bbd2c6;
+  --color-cyan-300: #a2c7bd;
+  --color-cyan-400: #7cb6b0;
+  --color-cyan-500: var(--teal);
+  --color-cyan-600: #458e8b;
+  --color-cyan-700: #3b7774;
+  --color-cyan-800: #305f5c;
+  --color-cyan-900: #254745;
+  --color-cyan-950: #1b3330;
+  /* info */
+  --color-blue-50: #dddcd2;
+  --color-blue-100: #d1d5ce;
+  --color-blue-200: #c0c9c9;
+  --color-blue-300: #a8b9c1;
+  --color-blue-400: #86a2b5;
+  --color-blue-500: var(--info);
+  --color-blue-600: #527692;
+  --color-blue-700: #44637a;
+  --color-blue-800: #375061;
+  --color-blue-900: #2a3d48;
+  --color-blue-950: #1f2c32;
+  --color-sky-50: #dddcd2;
+  --color-sky-100: #d1d5ce;
+  --color-sky-200: #c0c9c9;
+  --color-sky-300: #a8b9c1;
+  --color-sky-400: #86a2b5;
+  --color-sky-500: var(--info);
+  --color-sky-600: #527692;
+  --color-sky-700: #44637a;
+  --color-sky-800: #375061;
+  --color-sky-900: #2a3d48;
+  --color-sky-950: #1f2c32;
+  --color-indigo-50: #dddcd2;
+  --color-indigo-100: #d1d5ce;
+  --color-indigo-200: #c0c9c9;
+  --color-indigo-300: #a8b9c1;
+  --color-indigo-400: #86a2b5;
+  --color-indigo-500: var(--info);
+  --color-indigo-600: #527692;
+  --color-indigo-700: #44637a;
+  --color-indigo-800: #375061;
+  --color-indigo-900: #2a3d48;
+  --color-indigo-950: #1f2c32;
+  /* special */
+  --color-violet-50: #e2dad3;
+  --color-violet-100: #dad1cf;
+  --color-violet-200: #cec4ca;
+  --color-violet-300: #beb1c3;
+  --color-violet-400: #a696b9;
+  --color-violet-500: var(--special);
+  --color-violet-600: #786897;
+  --color-violet-700: #64577d;
+  --color-violet-800: #504763;
+  --color-violet-900: #3b364a;
+  --color-violet-950: #292833;
+  --color-purple-50: #e2dad3;
+  --color-purple-100: #dad1cf;
+  --color-purple-200: #cec4ca;
+  --color-purple-300: #beb1c3;
+  --color-purple-400: #a696b9;
+  --color-purple-500: var(--special);
+  --color-purple-600: #786897;
+  --color-purple-700: #64577d;
+  --color-purple-800: #504763;
+  --color-purple-900: #3b364a;
+  --color-purple-950: #292833;
+  --color-fuchsia-50: #e2dad3;
+  --color-fuchsia-100: #dad1cf;
+  --color-fuchsia-200: #cec4ca;
+  --color-fuchsia-300: #beb1c3;
+  --color-fuchsia-400: #a696b9;
+  --color-fuchsia-500: var(--special);
+  --color-fuchsia-600: #786897;
+  --color-fuchsia-700: #64577d;
+  --color-fuchsia-800: #504763;
+  --color-fuchsia-900: #3b364a;
+  --color-fuchsia-950: #292833;
+  --color-pink-50: #e2dad3;
+  --color-pink-100: #dad1cf;
+  --color-pink-200: #cec4ca;
+  --color-pink-300: #beb1c3;
+  --color-pink-400: #a696b9;
+  --color-pink-500: var(--special);
+  --color-pink-600: #786897;
+  --color-pink-700: #64577d;
+  --color-pink-800: #504763;
+  --color-pink-900: #3b364a;
+  --color-pink-950: #292833;
+  /* competition-gold */
+  --color-gold-50: #eae0c9;
+  --color-gold-100: #e7dabf;
+  --color-gold-200: #e2d2b0;
+  --color-gold-300: #dcc69c;
+  --color-gold-400: #d3b67f;
+  --color-gold-500: var(--competition-gold);
+  --color-gold-600: #ae8d51;
+  --color-gold-700: #907644;
+  --color-gold-800: #725e38;
+  --color-gold-900: #53472b;
+  --color-gold-950: #393220;
+  /* neutral: the ink-and-paper ramp the whole product is built on */
+  --color-slate-50: var(--paper);
+  --color-slate-100: var(--text-primary);
+  --color-slate-200: #e0dfd5;
+  --color-slate-300: var(--text-secondary);
+  --color-slate-400: #afb5ab;
+  --color-slate-500: var(--text-muted);
+  --color-slate-600: var(--text-disabled);
+  --color-slate-700: #2a342d;
+  --color-slate-800: var(--surface-panel);
+  --color-slate-900: var(--surface-floating);
+  --color-slate-950: var(--surface-page);
+  --color-gray-50: var(--paper);
+  --color-gray-100: var(--text-primary);
+  --color-gray-200: #e0dfd5;
+  --color-gray-300: var(--text-secondary);
+  --color-gray-400: #afb5ab;
+  --color-gray-500: var(--text-muted);
+  --color-gray-600: var(--text-disabled);
+  --color-gray-700: #2a342d;
+  --color-gray-800: var(--surface-panel);
+  --color-gray-900: var(--surface-floating);
+  --color-gray-950: var(--surface-page);
+  --color-zinc-50: var(--paper);
+  --color-zinc-100: var(--text-primary);
+  --color-zinc-200: #e0dfd5;
+  --color-zinc-300: var(--text-secondary);
+  --color-zinc-400: #afb5ab;
+  --color-zinc-500: var(--text-muted);
+  --color-zinc-600: var(--text-disabled);
+  --color-zinc-700: #2a342d;
+  --color-zinc-800: var(--surface-panel);
+  --color-zinc-900: var(--surface-floating);
+  --color-zinc-950: var(--surface-page);
+  --color-neutral-50: var(--paper);
+  --color-neutral-100: var(--text-primary);
+  --color-neutral-200: #e0dfd5;
+  --color-neutral-300: var(--text-secondary);
+  --color-neutral-400: #afb5ab;
+  --color-neutral-500: var(--text-muted);
+  --color-neutral-600: var(--text-disabled);
+  --color-neutral-700: #2a342d;
+  --color-neutral-800: var(--surface-panel);
+  --color-neutral-900: var(--surface-floating);
+  --color-neutral-950: var(--surface-page);
+  --color-stone-50: var(--paper);
+  --color-stone-100: var(--text-primary);
+  --color-stone-200: #e0dfd5;
+  --color-stone-300: var(--text-secondary);
+  --color-stone-400: #afb5ab;
+  --color-stone-500: var(--text-muted);
+  --color-stone-600: var(--text-disabled);
+  --color-stone-700: #2a342d;
+  --color-stone-800: var(--surface-panel);
+  --color-stone-900: var(--surface-floating);
+  --color-stone-950: var(--surface-page);
+}
+
 :root {
   color-scheme: dark;
 
@@ -21,6 +329,17 @@
   --success: #3fb978;
   --warning: #d49b3c;
   --danger: #d45a55;
+  /* Cool neutral information, and the one restrained violet the product allows
+     for rare and special states. Neither is a team colour and neither is neon. */
+  --info: #5d87a8;
+  --special: #8a76ad;
+  /* Three more hues, and only for category palettes. A player tag list, an award
+     list and a match-tag row each need seven things that read apart at badge
+     size; five semantic roles collapse them into four. These carry no meaning
+     of their own — they answer "which one is this", not "what does this mean". */
+  --rose: #c26a86;
+  --clay: #b5714a;
+  --teal: #4fa3a0;
   --competition-gold: #c9a25c;
   --team-identity: #8ca8bc;
   --signal-red: #b8463e;
@@ -77,20 +396,10 @@ body {
   min-height: 100dvh;
 }
 
-/* Legacy utility bridge: keep old screens inside the same ink-and-paper palette. */
-.text-slate-100 { color: var(--text-primary); }
-.text-slate-200,
-.text-slate-300 { color: var(--text-secondary); }
-.text-slate-400,
-.text-slate-500 { color: var(--text-muted); }
-.text-slate-600 { color: var(--text-disabled); }
-.bg-slate-700 { background-color: var(--surface-raised); }
-.bg-slate-800 { background-color: var(--surface-panel); }
-.bg-slate-900,
-.bg-slate-950 { background-color: var(--surface-floating); }
-.border-slate-600,
-.border-slate-700 { border-color: var(--border-strong); }
-.border-slate-800 { border-color: var(--border-subtle); }
+/* The slate bridge that used to live here is gone: the @theme ramp above
+   covers every shade and, unlike a list of utility overrides, it also covers
+   the opacity variants — bg-slate-700/20 was silently rendering the stock
+   Tailwind slate rather than this palette. */
 
 .welcome-stage {
   min-height: 100vh;

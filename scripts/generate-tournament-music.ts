@@ -71,7 +71,7 @@ const SCORES: Score[] = [
   },
 ];
 
-type CompetitionStyle = 'knockout' | 'ceremony' | 'mainland' | 'southern' | 'eastern';
+type CompetitionStyle = 'knockout' | 'ceremony' | 'mainland' | 'southern' | 'eastern' | 'league';
 
 interface CompetitionScore extends Score {
   style: CompetitionStyle;
@@ -173,6 +173,38 @@ const COMPETITION_SCORES: CompetitionScore[] = [
     ],
     intensity: 0.86,
     style: 'eastern',
+  },
+];
+
+/**
+ * The league bed.
+ *
+ * Every other score here announces something: a draw, a final, a trophy.
+ * This one has to survive being heard for an hour, so it is written the
+ * other way round — half the loop is accompaniment with no lead at all, the
+ * pulse is one soft kick per bar instead of a backbeat, and the melody stays
+ * in the middle register where nothing sparkles.
+ *
+ * Sixteen bars at 92 BPM is 41.7 seconds, inside the 45-second ceiling the
+ * audio manifest enforces, and long enough that the seam does not become the
+ * thing a listener notices.
+ */
+const LEAGUE_SCORES: CompetitionScore[] = [
+  {
+    name: 'league-season-v1',
+    bpm: 92,
+    bars: 16,
+    progression: [
+      [50, 57, 62, 65], [46, 53, 58, 62], [48, 55, 60, 64], [45, 52, 57, 60],
+    ],
+    melody: [
+      [2, 0, 1.5, 62, 0.5], [2, 2, 1, 65, 0.46], [3, 1, 2, 69, 0.52],
+      [6, 0, 1, 67, 0.46], [6, 2, 1.5, 65, 0.44], [7, 1.5, 2, 62, 0.5],
+      [10, 0, 1.5, 69, 0.5], [10, 2.5, 1, 72, 0.48], [11, 1, 2, 70, 0.5],
+      [14, 0, 1, 65, 0.46], [14, 2, 1.5, 62, 0.44], [15, 1, 2.5, 57, 0.48],
+    ],
+    intensity: 0.58,
+    style: 'league',
   },
 ];
 
@@ -368,6 +400,7 @@ const STYLE_LEADS: Readonly<Record<CompetitionStyle, SynthVoice>> = {
   mainland: 'reed',
   southern: 'reed',
   eastern: 'mallet',
+  league: 'mallet',
 };
 
 function scoreNoiseSeed(name: string): number {
@@ -405,6 +438,13 @@ function addCompetitionPercussion(
     addDrum(channels, barStart + beat * 2, 'tom', 0.095 * volume);
     addDrum(channels, barStart + beat * 3, 'rim', 0.04 * volume);
     if (bar % 4 === 3) addDrum(channels, barStart + beat * 3.5, 'frame', 0.08 * volume);
+  } else if (score.style === 'league') {
+    // One soft pulse per bar and a breath on the half bar. No backbeat: a bed
+    // that marks beats is a bed that asks to be listened to.
+    addDrum(channels, barStart, 'kick', 0.062 * volume);
+    addDrum(channels, barStart + beat * 2, 'rim', 0.03 * volume);
+    if (bar % 2 === 1) addDrum(channels, barStart + beat * 3.5, 'frame', 0.045 * volume);
+    for (let step = 1; step < 8; step += 2) addDrum(channels, barStart + beat * step / 2, 'shaker', 0.013 * volume);
   } else if (score.style === 'southern') {
     addDrum(channels, barStart, 'kick', 0.085 * volume);
     addDrum(channels, barStart + beat * 1.5, 'clap', 0.055 * volume);
@@ -459,6 +499,20 @@ function addCompetitionAccompaniment(
       addVoice(channels, barStart + beat * beatOffset, beat * 1.7, midiFrequency(root - 12), 0.054 * intensity, -0.12, 'bass');
       addVoice(channels, barStart + beat * beatOffset, beat * 0.82, midiFrequency(chord[2] + 12), 0.03 * intensity, 0.24, 'mallet');
     }
+  } else if (score.style === 'league') {
+    addVoice(channels, barStart, beat * 3.9, midiFrequency(root - 12), 0.044 * intensity, -0.1, 'bass');
+    addVoice(channels, barStart + beat * 2, beat * 1.9, midiFrequency(root - 12), 0.03 * intensity, 0.1, 'bass');
+    for (const [index, beatOffset] of [1, 2.5, 3.5].entries()) {
+      addVoice(
+        channels,
+        barStart + beat * beatOffset,
+        beat * 0.9,
+        midiFrequency(chord[(index + 1) % chord.length] + 12),
+        0.02 * intensity,
+        0.26,
+        'mallet',
+      );
+    }
   } else if (score.style === 'southern') {
     for (const beatOffset of [0, 1.5, 2.5]) {
       addVoice(channels, barStart + beat * beatOffset, beat * 0.78, midiFrequency(root - 12), 0.047 * intensity, -0.18, 'bass');
@@ -493,15 +547,20 @@ function renderCompetitionScore(score: CompetitionScore): Buffer {
   for (const [bar, beatOffset, beatDuration, midi, velocity] of score.melody) {
     const start = (bar * 4 + beatOffset) * beat;
     const noteDuration = beatDuration * beat;
-    const leadVolume = score.style === 'southern' ? 0.062 : score.style === 'eastern' ? 0.066 : 0.068;
+    const leadVolume = score.style === 'league' ? 0.05
+      : score.style === 'southern' ? 0.062
+      : score.style === 'eastern' ? 0.066
+      : 0.068;
     addVoice(channels, start, noteDuration, midiFrequency(midi), leadVolume * velocity, -0.14, lead);
-    const supportVoice: SynthVoice = score.style === 'ceremony' ? 'bell'
+    const supportVoice: SynthVoice = score.style === 'ceremony' || score.style === 'league' ? 'bell'
       : score.style === 'mainland' || score.style === 'eastern' ? 'mallet'
       : 'pluck';
     addVoice(channels, start + 0.012, noteDuration * 0.88, midiFrequency(midi + 12), 0.014 * velocity, 0.3, supportVoice);
   }
 
-  const reflections = score.style === 'southern'
+  const reflections = score.style === 'league'
+    ? [[0.16, 0.085], [0.31, 0.05]] as const
+    : score.style === 'southern'
     ? [[0.085, 0.09], [0.17, 0.055]] as const
     : score.style === 'mainland'
       ? [[0.13, 0.1], [0.27, 0.06]] as const
@@ -571,4 +630,7 @@ function writeTrack(name: string, wave: Buffer, bitrate: number): void {
 
 for (const score of SCORES) writeTrack(score.name, renderScore(score), 112_000);
 for (const score of COMPETITION_SCORES) writeTrack(score.name, renderCompetitionScore(score), 96_000);
+// The bed runs for forty-two seconds and is mostly pads, so it can afford a
+// lower bitrate than the fanfares without anyone hearing the difference.
+for (const score of LEAGUE_SCORES) writeTrack(score.name, renderCompetitionScore(score), 72_000);
 rmSync(tempDir, { recursive: true, force: true });

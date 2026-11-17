@@ -2,7 +2,7 @@
 //
 // A broadcast picture is not the raw scene. It is graded — cooled toward the
 // stadium's white floodlights, warmed when the crowd is on its feet, pushed
-// toward the home colour when the ball goes in — and it carries a lens
+// toward the scoring club's colour when the ball goes in — and it carries a lens
 // vignette. None of that changes what happened on the pitch, and together it
 // is most of the reason a frame reads as television rather than as a diagram.
 
@@ -18,9 +18,14 @@ export interface BroadcastGradeOptions {
    * the same shot is a different picture in a settled game.
    */
   tension?: number;
-  /** 0..1 goal celebration intensity. Pushes the home colour through. */
+  /** 0..1 goal celebration intensity. Pushes the scoring club colour through. */
   flash?: number;
-  homeColor?: string;
+  /**
+   * The colour that answers a goal: whichever club scored. Reading the home
+   * colour instead washed a neutral final in a club that had no ground there,
+   * and washed an away goal in the wrong colour everywhere else.
+   */
+  celebrationColor?: string;
 }
 
 /** The cool white of floodlights, laid over everything. */
@@ -66,8 +71,8 @@ export function drawBroadcastGrade(
     ctx.fillRect(0, 0, W, H);
   }
 
-  if (flash > 0.02 && options.homeColor) {
-    ctx.fillStyle = rgbaOf(options.homeColor, flash * 0.1);
+  if (flash > 0.02 && options.celebrationColor) {
+    ctx.fillStyle = rgbaOf(options.celebrationColor, flash * 0.1);
     ctx.fillRect(0, 0, W, H);
   }
 
