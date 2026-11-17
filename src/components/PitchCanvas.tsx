@@ -3,7 +3,7 @@ import type { MatchdaySnapshot, MatchEvent } from '../types/match';
 import type { CoachFormation, MatchApproach } from '../types/coach';
 import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxonomy';
 import { clamp, lerp, seededRand } from './pitch-canvas/math';
-import { generateSequence, type SequenceOptions } from './pitch-canvas/sequence';
+import { generateSequence, retargetPassToReceiver, type SequenceOptions } from './pitch-canvas/sequence';
 import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
 import { BEAT_MAX_FRAMES, drawBroadcastBeat } from './pitch-canvas/broadcast-beat';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
@@ -278,6 +278,7 @@ function sequenceOptionsForScene(
   homeApproach: MatchApproach,
   awayApproach: MatchApproach,
   continuity?: { source: { x: number; y: number }; startingPlayerIdx: number; transition?: boolean },
+  playerPositions?: ReadonlyArray<{ x: number; y: number }>,
 ): SequenceOptions {
   const actors = actorsForEvent(scene.event, events);
   const attackingRoster = scene.attackingHome ? homeRoster : awayRoster;
@@ -305,6 +306,10 @@ function sequenceOptionsForScene(
     awayFormation,
     homeApproach,
     awayApproach,
+    // A directed attack is built from where the players actually are. Without
+    // this the route is planned against formation slots, and the receiver of
+    // a pass can be twenty metres from the ball when it is played to them.
+    playerPositions,
   };
 }
 
@@ -812,6 +817,19 @@ function PitchCanvas(props: Props) {
       return step.applied;
     }
 
+    /**
+     * Aim the ball at the receiver as they are now, not as the plan assumed.
+     *
+     * The route is built once when the possession starts; the players keep
+     * moving for the whole move. Without this the fifth pass of an attack is
+     * aimed at where a player used to be.
+     */
+    function retargetPhase(phase: PassPhase): PassPhase {
+      const offset = phase.attackingHome ? 0 : 11;
+      const live = playerPosRef.current[offset + phase.receiverIdx];
+      return retargetPassToReceiver(phase, live ? { x: live.x, y: live.y } : null);
+    }
+
     function loadSequence(phases: PassPhase[], seed: number): void {
       // A sequence can be replaced while the ball is still in the air: a pass
       // cut out, a scene resolving into a restart. Carry the height it had and
@@ -827,8 +845,9 @@ function PitchCanvas(props: Props) {
       interceptedRef.current = false;
       tacticalAssignmentKeyRef.current = '';
       tacticalAssignmentsRef.current = null;
-      const firstPhase = phases[0];
+      const firstPhase = phases[0] ? retargetPhase(phases[0]) : undefined;
       if (!firstPhase) return;
+      sequenceRef.current[0] = firstPhase;
       const layout = firstPhase.attackingHome
         ? liveRef.current.formationLayouts.home
         : liveRef.current.formationLayouts.away;
@@ -935,8 +954,11 @@ function PitchCanvas(props: Props) {
           initialLive.awayFormation,
           initialLive.homeApproach,
           initialLive.awayApproach,
+          undefined,
+          playerPosRef.current,
         )
         : {
+          playerPositions: playerPosRef.current,
           homePossessionShare,
           homeFormation: initialLive.homeFormation,
           awayFormation: initialLive.awayFormation,
@@ -1055,6 +1077,7 @@ function PitchCanvas(props: Props) {
             liveHomeApproach,
             liveAwayApproach,
             continuity,
+            playerPosRef.current,
           ),
         );
         loadSequence(directed.phases, sceneToStart.seed);
@@ -1338,6 +1361,7 @@ function PitchCanvas(props: Props) {
             awayFormation: liveAwayFormation,
             homeApproach: liveHomeApproach,
             awayApproach: liveAwayApproach,
+            playerPositions: playerPosRef.current,
           };
           postShotRestingBallRef.current = null;
           shotOutcomeHeldRef.current = false;
@@ -1365,6 +1389,7 @@ function PitchCanvas(props: Props) {
             awayFormation: liveAwayFormation,
             homeApproach: liveHomeApproach,
             awayApproach: liveAwayApproach,
+            playerPositions: playerPosRef.current,
           };
         }
           const gen = generateSequence(sequenceSeedRef.current, continuationOptions);
@@ -1430,7 +1455,7 @@ function PitchCanvas(props: Props) {
             ));
           }
         } else if (phaseStateRef.current === 'holding' && phaseFrameRef.current >= phase.hold) {
-          const newPhase = sequenceRef.current[phaseIdxRef.current + 1];
+          let newPhase = sequenceRef.current[phaseIdxRef.current + 1];
           const scene = sequenceSceneRef.current;
           const impactFired = scene
             ? pendingImpactSceneRef.current?.key === scene.key
@@ -1454,6 +1479,8 @@ function PitchCanvas(props: Props) {
             phaseIdxRef.current++;
             phaseFrameRef.current = 0;
             if (newPhase) {
+              newPhase = retargetPhase(newPhase);
+              sequenceRef.current[phaseIdxRef.current] = newPhase;
               phaseStateRef.current = newPhase.kind === 'shot' ? 'shooting' : 'passing';
               const newPhaseLayout = newPhase.attackingHome
                 ? liveFormationLayouts.home
@@ -1742,6 +1769,7 @@ function PitchCanvas(props: Props) {
         releaseDelayFrames > 0
           ? clamp(phaseFrameRef.current / releaseDelayFrames, 0, 1)
           : 1,
+        frameScale,
       );
       if (stoppage) {
         const gatherProgress = stoppageGatherProgress(stoppage.frame, stoppage.plan.holdFrames);

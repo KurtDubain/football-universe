@@ -267,7 +267,10 @@ describe('pitch player movement', () => {
       sourceOverride: { x: 0.8, y: 0.5 },
     };
 
-    for (let frame = 0; frame < 84; frame++) {
+    // The wall walks into shape at a footballer's pace. A live free kick
+    // stages the wall directly when the scene loads; this is the un-staged
+    // path, and it needs enough frames for players to actually get there.
+    for (let frame = 0; frame < 220; frame++) {
       updatePlayerPositions(
         players,
         0.8,
@@ -316,7 +319,7 @@ describe('pitch player movement', () => {
     expect(numberTen.y).toBeCloseTo(0.5);
   });
 
-  it('keeps the shooter near the release point and supporting forwards in separate lanes', () => {
+  it('never snaps the shooter to the release point and keeps support lanes apart', () => {
     const players = initialPlayers();
     const shot: PassPhase = {
       passerIdx: 9,
@@ -334,8 +337,13 @@ describe('pitch player movement', () => {
       updatePlayerPositions(players, 0.985, 0.5, 'home', 9, shot, 'shooting', { x: 0.985, y: 0.5 }, 0.07);
     }
 
-    expect(players[9].x).toBeGreaterThan(0.8);
-    expect(players[9].x).toBeLessThan(0.9);
+    // The shooter walks toward their release point and is never snapped to
+    // it. This used to assert `> 0.8`, which was the defect itself: the
+    // release clamp moved the shooter 29 m in a single frame, on the most
+    // visible frame of the match.
+    expect(players[9].x).toBeGreaterThan(0.52);
+    expect(players[9].x).toBeLessThan(0.8);
+    // Nobody follows the ball into the goal.
     expect(players[8].x).toBeLessThan(0.94);
     expect(players[10].x).toBeLessThan(0.94);
     expect(Math.abs(players[8].y - players[10].y)).toBeGreaterThan(0.04);
@@ -381,7 +389,10 @@ describe('pitch player movement', () => {
       sourceOverride: { x: 0.82, y: 0.5 },
     };
 
-    for (let frame = 0; frame < 30; frame++) {
+    // A back line dropping into its own box covers eight or nine metres. At
+    // a footballer's pace that is over three seconds, not half of one: the old
+    // budget of 30 frames only worked because players moved at 24 m/s.
+    for (let frame = 0; frame < 200; frame++) {
       updatePlayerPositions(players, 0.96, 0.48, 'home', 9, shot, 'shooting', { x: 0.985, y: 0.48 }, 0.04);
     }
 
@@ -482,7 +493,8 @@ describe('pitch player movement', () => {
       intercepted: false,
     };
 
-    for (let frame = 0; frame < 12; frame++) {
+    // A keeper narrowing the angle covers about five metres off their line.
+    for (let frame = 0; frame < 70; frame++) {
       updatePlayerPositions(players, 0.86, 0.35, 'home', 9, phase, 'shooting', { x: 0.985, y: 0.45 }, 0.04);
     }
 
@@ -561,10 +573,12 @@ describe('pitch player movement', () => {
     const action = { playerIndex: 13, target: { x: 0.985, y: 0.54 } };
     const initialDistance = distToBall(players[13], 0.91, 0.54);
 
-    for (let frame = 0; frame < 90; frame++) {
+    // Recovering into a shooting lane is a fifteen-metre run, not a five-metre
+    // one, so the blocker needs the length of a real approach.
+    for (let frame = 0; frame < 190; frame++) {
       updatePlayerPositions(
         players, 0.72, 0.5, 'home', 7, createPhase, 'passing', null, 0.04,
-        action, undefined, frame / 90,
+        action, undefined, frame / 190,
       );
     }
 
@@ -785,6 +799,100 @@ describe('pitch motion liveliness', () => {
     expect(settled).toEqual({ x: 0.965, y: 0.055 });
     expect(start).toBeDefined();
     expect(Math.hypot(start!.x - settled!.x, start!.y - settled!.y)).toBeGreaterThan(0.02);
+  });
+});
+
+describe('realistic player pace', () => {
+  const PITCH_LENGTH_METERS = 105;
+  const PITCH_WIDTH_METERS = 68;
+  const FRAMES_PER_SECOND = 60;
+
+  it('never moves a player faster than a footballer can run', () => {
+    const players = initialPlayers();
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      pattern: 'counter',
+      stage: 'finish',
+      duration: 40,
+      hold: 20,
+      arc: 0.1,
+      intercepted: false,
+      sourceOverride: { x: 0.84, y: 0.5 },
+    };
+
+    let peakSpeed = 0;
+    let peakStep = 0;
+    const before = players.map(player => ({ x: player.x, y: player.y }));
+    for (let frame = 0; frame < 600; frame++) {
+      updatePlayerPositions(
+        players,
+        0.5 + 0.45 * (frame / 600),
+        0.5,
+        'home',
+        9,
+        phase,
+        'shooting',
+        { x: 0.985, y: 0.5 },
+        0,
+      );
+      for (let index = 0; index < 22; index++) {
+        const step = Math.hypot(
+          (players[index].x - before[index].x) * PITCH_LENGTH_METERS,
+          (players[index].y - before[index].y) * PITCH_WIDTH_METERS,
+        );
+        peakStep = Math.max(peakStep, step);
+        peakSpeed = Math.max(peakSpeed, step * FRAMES_PER_SECOND);
+        before[index].x = players[index].x;
+        before[index].y = players[index].y;
+      }
+    }
+
+    // An elite sprinter peaks around 10 m/s. The old speed table produced a
+    // 24 m/s cruise and a 63 m/s sprint, which is what made the pitch look
+    // like it was on fast-forward.
+    expect(peakSpeed).toBeLessThan(12);
+    // No single frame may carry a player further than a stride. The release
+    // clamp used to move the shooter 19.9 m in one frame.
+    expect(peakStep).toBeLessThan(0.5);
+  });
+
+  it('covers the same ground per second at half the frame rate', () => {
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'pass',
+      pattern: 'counter',
+      stage: 'progress',
+      duration: 60,
+      hold: 10,
+      arc: 0.05,
+      intercepted: false,
+      targetOverride: { x: 0.9, y: 0.5 },
+    };
+
+    // A 30 fps machine runs a 33 ms step where a 60 fps one runs 16.7 ms, so
+    // it must move each player twice as far per call. Without that the same
+    // player covers the same ground in half the wall-clock speed while the
+    // ball keeps real time around them.
+    const run = (steps: number, stepScale: number) => {
+      const players = initialPlayers();
+      for (let frame = 0; frame < steps; frame++) {
+        updatePlayerPositions(
+          players, 0.5, 0.5, 'home', 9, phase, 'passing', null, 0,
+          undefined, undefined, 0.5, undefined, undefined, frame, 1, stepScale,
+        );
+      }
+      return players[9].x;
+    };
+
+    const atSixty = run(120, 1);
+    const atThirty = run(60, 2);
+
+    expect(atThirty).toBeCloseTo(atSixty, 2);
   });
 });
 

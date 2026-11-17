@@ -724,6 +724,7 @@ export function updatePlayerPositions(
   formations: PitchFormationLayouts = DEFAULT_FORMATIONS,
   motionClock = 0,
   releaseProgress = 1,
+  stepScale = 1,
 ): void {
   const isAttHome = currentPhase.attackingHome;
   const defendingHome = !isAttHome;
@@ -976,7 +977,7 @@ export function updatePlayerPositions(
     if (motionClock > 0 && !isHolder && !isReceiver) {
       const settleDistance = Math.hypot(targetX_n - playerPos[i].x, targetY_n - playerPos[i].y);
       if (settleDistance < IDLE_DRIFT_RADIUS) {
-        const drift = idleDriftOffset(i, motionClock);
+        const drift = idleDriftOffset(i, motionClock * stepScale);
         const blend = 1 - settleDistance / IDLE_DRIFT_RADIUS;
         targetX_n = clamp(targetX_n + drift.x * blend, 0.03, 0.97);
         targetY_n = clamp(targetY_n + drift.y * blend, 0.05, 0.95);
@@ -991,16 +992,42 @@ export function updatePlayerPositions(
     const dy = targetY_n - p.y;
     const distance = Math.hypot(dx, dy);
     const sprintBoost = 1 + p.sprintT * 0.55;
+    // Urgency, not superhuman pace. These were 1.7 and 1.3, which on top of
+    // the old speed table produced 63 m/s. A defender throwing themselves at a
+    // block is at their own top speed, not above it.
     const directedRecoveryBoost = defensiveAction?.playerIndex === i && slot.role !== 'GK'
-      ? currentPhase.kind === 'pass' ? 1.7 : 1.3
+      ? currentPhase.kind === 'pass' ? 1.15 : 1.08
       : 1;
-    const roleMotion = slot.role === 'GK'
-      ? { speed: 0.00255, acceleration: 0.00028 }
+    // Jog pace per role, in normalized pitch-length units per 60fps frame.
+    //
+    // These were 0.00255-0.0038, which is 16-24 m/s: two and a half times a
+    // sprinter, and six times one once the sprint and recovery boosts stack.
+    // Measured over 2.0M player-frames, 36.6% of frames exceeded 11 m/s and
+    // the 99th percentile was 34.5 m/s. The pitch is 105 m long, so a forward
+    // crossed it in four seconds.
+    //
+    // A footballer jogs at 5-6 m/s and sprints at 9-10. The sprint boost below
+    // supplies the difference, so these are deliberately jog values:
+    // 0.00098 * 105 * 60 = 6.2 m/s for a forward, reaching 9.6 m/s at full
+    // sprint. Acceleration is 4.4 m/s^2 rather than the old 174, which is why
+    // a player now takes two seconds to reach top speed instead of 0.14.
+    const baseMotion = slot.role === 'GK'
+      ? { speed: 0.00054, acceleration: 0.0000079 }
       : slot.role === 'DF'
-        ? { speed: 0.0034, acceleration: 0.00038 }
+        ? { speed: 0.00089, acceleration: 0.0000106 }
         : slot.role === 'MF'
-          ? { speed: 0.00365, acceleration: 0.00043 }
-          : { speed: 0.0038, acceleration: 0.00046 };
+          ? { speed: 0.00094, acceleration: 0.0000111 }
+          : { speed: 0.00098, acceleration: 0.0000116 };
+    // Both are per-frame quantities, so a renderer running a 33 ms step must
+    // move a player twice as far per call as one running a 16.7 ms step, or the
+    // same player covers the same ground in half the wall-clock speed. The
+    // rhythm counters were decoupled from the frame step in 4.71.0; without
+    // this the ball would keep real time while the players around it slowed to
+    // a jog, which is worse on a degraded machine than it was before.
+    const roleMotion = {
+      speed: baseMotion.speed * stepScale,
+      acceleration: baseMotion.acceleration * stepScale,
+    };
     const maxSpeed = roleMotion.speed * sprintBoost * directedRecoveryBoost;
     // Pace scales with the size of the move, exactly as it did before, but
     // never falls below a jog. The old controller was this line without the
@@ -1049,10 +1076,15 @@ export function updatePlayerPositions(
       p.vx = 0;
       p.vy = 0;
     }
-    if (isHolder && phaseState !== 'holding' && currentPhase.sourceOverride) {
-      p.x = clamp(p.x, currentPhase.sourceOverride.x - 0.025, currentPhase.sourceOverride.x + 0.025);
-      p.y = clamp(p.y, currentPhase.sourceOverride.y - 0.025, currentPhase.sourceOverride.y + 0.025);
-    }
+    // The holder is deliberately NOT snapped to the release point here.
+    //
+    // This used to clamp the carrier inside a 0.025 radius of sourceOverride
+    // the instant the ball left the foot. The shooter's run-up was far too
+    // short to reach the shot origin, so the clamp is what moved them: 200 of
+    // 200 shots teleported the shooter, by up to 19.9 m, on the single most
+    // visible frame of the match. The target assignment above already keeps a
+    // released passer walking back toward their release point, which is the
+    // behaviour the clamp was protecting, without the snap.
     p.sprintT *= 0.95; // sprint decays
   }
 }

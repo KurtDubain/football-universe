@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildPassTarget, generateSequence, restartReleaseDelay } from './sequence';
+import { buildPassTarget, generateSequence, restartReleaseDelay, retargetPassToReceiver } from './sequence';
 import { passArc } from './sequence';
-import { decayBallLiftCarry, LIFT_CARRY_FLOOR } from './physics';
-import { getFormationSlots, getTacticalFormationSlots } from './types';
+import { decayBallLiftCarry, LIFT_CARRY_FLOOR, updatePlayerPositions } from './physics';
+import { getFormationSlots, getTacticalFormationSlots, type PassPhase, type PlayerState } from './types';
 import { rigForMoment } from './projection';
 import type { BroadcastCameraMoment } from './camera';
 
@@ -462,5 +462,143 @@ describe('directed attack length', () => {
       }
     }
     expect(cuts).toBe(0);
+  });
+});
+
+describe('pass reachability', () => {
+  const LENGTH_METERS = 105;
+  const WIDTH_METERS = 68;
+  const FRAMES_PER_SECOND = 60;
+
+  function livePlayers(): PlayerState[] {
+    const slots = getFormationSlots('4-3-3');
+    return Array.from({ length: 22 }, (_, index) => {
+      const isHome = index < 11;
+      const base = slots[index % 11];
+      return { x: isHome ? base.x : 1 - base.x, y: base.y, vx: 0, vy: 0, sprintT: 0 };
+    });
+  }
+
+  it('pulls a pass target back to where its receiver actually is', () => {
+    const phase: PassPhase = {
+      passerIdx: 5,
+      receiverIdx: 8,
+      attackingHome: true,
+      kind: 'pass',
+      duration: 30,
+      hold: 10,
+      arc: 0.05,
+      intercepted: false,
+      targetOverride: { x: 0.9, y: 0.2 },
+    };
+
+    const aimed = retargetPassToReceiver(phase, { x: 0.5, y: 0.5 });
+    const lead = Math.hypot(aimed.targetOverride!.x - 0.5, aimed.targetOverride!.y - 0.5);
+
+    // The ball is aimed at the receiver's feet, not at a spot twenty metres
+    // away that only a sprinter could reach.
+    expect(lead).toBeLessThanOrEqual(0.025);
+    // Who plays the pass and who receives it never change.
+    expect(aimed.passerIdx).toBe(5);
+    expect(aimed.receiverIdx).toBe(8);
+  });
+
+  it('leaves a pass untouched when the receiver is already on the ball', () => {
+    const phase: PassPhase = {
+      passerIdx: 5,
+      receiverIdx: 8,
+      attackingHome: true,
+      kind: 'pass',
+      duration: 30,
+      hold: 10,
+      arc: 0.05,
+      intercepted: false,
+      targetOverride: { x: 0.62, y: 0.4 },
+    };
+
+    expect(retargetPassToReceiver(phase, { x: 0.62, y: 0.4 })).toBe(phase);
+  });
+
+  it('keeps a shot release point within a sprint of the shooter', () => {
+    const phase: PassPhase = {
+      passerIdx: 9,
+      receiverIdx: 9,
+      attackingHome: true,
+      kind: 'shot',
+      duration: 30,
+      hold: 20,
+      arc: 0.1,
+      intercepted: false,
+      sourceOverride: { x: 0.88, y: 0.5 },
+    };
+
+    const aimed = retargetPassToReceiver(phase, { x: 0.55, y: 0.5 });
+    const reach = Math.hypot(aimed.sourceOverride!.x - 0.55, aimed.sourceOverride!.y - 0.5);
+
+    expect(reach).toBeLessThanOrEqual(0.051);
+  });
+
+  it('never asks a receiver to outrun a footballer across a whole attack', () => {
+    let worstRequiredSpeed = 0;
+
+    for (let seed = 1; seed <= 40; seed++) {
+      const players = livePlayers();
+      const { phases } = generateSequence(seed * 977, {
+        attackingHome: true,
+        forceShot: true,
+        playerPositions: players,
+      });
+      let previousTarget: { x: number; y: number } | null = null;
+
+      for (let index = 0; index < phases.length; index++) {
+        const live = players[phases[index].receiverIdx];
+        const phase = retargetPassToReceiver(phases[index], { x: live.x, y: live.y });
+        phases[index] = phase;
+        const isShot = phase.kind === 'shot';
+        const source: { x: number; y: number } = phase.sourceOverride ?? previousTarget ?? { x: 0.5, y: 0.5 };
+        const arrival: { x: number; y: number } = isShot
+          ? source
+          : (phase.targetOverride ?? { x: 0.5, y: 0.5 });
+        const receiver = players[phase.receiverIdx];
+        const distance = Math.hypot(
+          (arrival.x - receiver.x) * LENGTH_METERS,
+          (arrival.y - receiver.y) * WIDTH_METERS,
+        );
+        const window = (isShot ? phase.duration + phase.hold : phase.duration) / FRAMES_PER_SECOND;
+        worstRequiredSpeed = Math.max(worstRequiredSpeed, distance / window);
+
+        const ballTarget: { x: number; y: number } = isShot
+          ? { x: phase.attackingHome ? 1 : 0, y: 0.5 }
+          : arrival;
+        const total = phase.duration + phase.hold;
+        for (let frame = 0; frame < total; frame++) {
+          const t = Math.min(1, frame / phase.duration);
+          const state = frame < phase.duration ? 'passing' : 'holding';
+          updatePlayerPositions(
+            players,
+            source.x + (ballTarget.x - source.x) * t,
+            source.y + (ballTarget.y - source.y) * t,
+            'home',
+            phase.passerIdx,
+            phase,
+            state,
+            null,
+            0,
+            undefined,
+            undefined,
+            t,
+            undefined,
+            undefined,
+            frame,
+            1,
+          );
+        }
+        previousTarget = phase.sourceOverride ?? ballTarget;
+      }
+    }
+
+    // Measured over 200 attacks the old generator demanded a median of
+    // 37 m/s from the receiver and 95.7% of passes were unreachable.
+    expect(worstRequiredSpeed).toBeLessThan(11);
   });
 });
