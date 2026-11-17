@@ -532,10 +532,96 @@ describe('pass reachability', () => {
       sourceOverride: { x: 0.88, y: 0.5 },
     };
 
-    const aimed = retargetPassToReceiver(phase, { x: 0.55, y: 0.5 });
-    const reach = Math.hypot(aimed.sourceOverride!.x - 0.55, aimed.sourceOverride!.y - 0.5);
+    // A shooter already in the box gets the ball struck from where they are.
+    const near = retargetPassToReceiver(phase, { x: 0.82, y: 0.5 });
+    const nearReach = Math.hypot(near.sourceOverride!.x - 0.82, near.sourceOverride!.y - 0.5);
+    expect(nearReach).toBeLessThanOrEqual(0.051);
 
-    expect(reach).toBeLessThanOrEqual(0.051);
+    // A shooter still in their own half does NOT get a seventy-metre shot:
+    // the origin is held at the edge of the shooting range instead of being
+    // dragged back to them, and the flight time follows the origin that was
+    // actually chosen rather than the one the move was planned around.
+    const far = retargetPassToReceiver(phase, { x: 0.55, y: 0.5 });
+    expect(far.sourceOverride!.x).toBeGreaterThanOrEqual(0.72);
+    expect(far.sourceOverride!.x).toBeLessThanOrEqual(0.94);
+    expect(far.duration).toBeGreaterThan(phase.duration);
+  });
+
+  it('carries the ball upfield instead of circulating in its own half', () => {
+    let worstNetGain = Infinity;
+    let worstBackPasses = 0;
+
+    for (let seed = 1; seed <= 40; seed++) {
+      const slots = getFormationSlots('4-3-3');
+      const players: PlayerState[] = Array.from({ length: 22 }, (_, index) => {
+        const isHome = index < 11;
+        const base = slots[index % 11];
+        return { x: isHome ? base.x : 1 - base.x, y: base.y, vx: 0, vy: 0, sprintT: 0 };
+      });
+      const { phases } = generateSequence(seed * 977, {
+        attackingHome: true,
+        forceShot: true,
+        playerPositions: players,
+      });
+
+      let ballX = players[phases[0].passerIdx].x;
+      const startX = ballX;
+      let back = 0;
+      let previous: { x: number; y: number } | null = null;
+
+      for (let index = 0; index < phases.length; index++) {
+        const live = players[phases[index].receiverIdx];
+        const mates = players.slice(0, 11).map(p => ({ x: p.x, y: p.y }));
+        const phase = retargetPassToReceiver(
+          phases[index],
+          { x: live.x, y: live.y },
+          { teammates: mates, ball: { x: ballX, y: 0.5 } },
+        );
+        phases[index] = phase;
+        const isShot = phase.kind === 'shot';
+        const source = phase.sourceOverride ?? previous ?? { x: 0.5, y: 0.5 };
+        const target = isShot
+          ? { x: 1, y: 0.5 }
+          : (phase.targetOverride ?? { x: 0.5, y: 0.5 });
+        if (!isShot && target.x < ballX - 0.03) back++;
+        ballX = isShot ? source.x : target.x;
+
+        const total = phase.duration + phase.hold;
+        for (let frame = 0; frame < total; frame++) {
+          const t = Math.min(1, frame / phase.duration);
+          const state = frame < phase.duration ? 'passing' : 'holding';
+          updatePlayerPositions(
+            players,
+            source.x + (target.x - source.x) * t,
+            source.y + (target.y - source.y) * t,
+            'home',
+            phase.passerIdx,
+            phase,
+            state,
+            null,
+            0,
+            undefined,
+            undefined,
+            t,
+            undefined,
+            undefined,
+            frame,
+            1,
+          );
+        }
+        previous = phase.sourceOverride ?? target;
+      }
+
+      worstNetGain = Math.min(worstNetGain, (ballX - startX) * 105);
+      worstBackPasses = Math.max(worstBackPasses, back);
+    }
+
+    // The regression this guards: aiming the ball at the receiver's feet
+    // without requiring them to be forward made a nine-pass move spend
+    // itself between 16 m and 54 m, never advancing, and then strike a shot
+    // from 76 m with the ball last seen at 37 m.
+    expect(worstNetGain).toBeGreaterThan(25);
+    expect(worstBackPasses).toBeLessThanOrEqual(1);
   });
 
   it('never asks a receiver to outrun a footballer across a whole attack', () => {

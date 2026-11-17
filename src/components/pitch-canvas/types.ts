@@ -150,6 +150,24 @@ export interface PassPhase {
   chanceStyle?: PresentationChanceStyle;
   restart?: PresentationRestart;
   intercepted: boolean; // pass gets stolen halfway through
+  /**
+   * The event names this receiver, so the pass may not be redirected.
+   *
+   * Build-up passes go to whoever is actually forward when the ball is
+   * played, but the creator and the shooter are facts the simulation
+   * produced and must arrive as themselves.
+   */
+  lockedReceiver?: boolean;
+  /**
+   * The player the event credits with creating the chance, when one is named.
+   *
+   * They are deliberately kept out of the build-up so the chance keeps the two
+   * players the simulation named, which means nothing ever passes to them and
+   * nothing pulls them forward either: without this they stand in their
+   * formation slot while the move goes past them, and the ball has to come
+   * twenty metres back to reach them.
+   */
+  creatorIdx?: number;
   sourceOverride?: { x: number; y: number };
   targetOverride?: { x: number; y: number };
 }

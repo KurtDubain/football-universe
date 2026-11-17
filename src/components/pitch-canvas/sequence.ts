@@ -477,6 +477,9 @@ function openPlayDuration(travel: number, roll: number): number {
  */
 const DIRECTED_BALL_SPEED_MPS = 17;
 const CROSS_BALL_SPEED_MPS = 13;
+/** A struck shot leaves the boot at roughly 28 m/s; a header is slower. */
+const STRIKE_SPEED_MPS = 28;
+const HEADER_SPEED_MPS = 19;
 
 /**
  * Pass flight time from the distance the ball actually travels.
@@ -548,28 +551,65 @@ function livePositionFor(
   return entry ? { x: entry.x, y: entry.y } : null;
 }
 
-/** Closest outfield player to a point, measured from live positions. */
-function nearestLiveSlotToPoint(
+/**
+ * How far behind the ball a build-up receiver may be, as a fraction of the
+ * pitch length. 0.03 is about three metres: enough for a player who has
+ * drifted to receive a ball laid back to them, not enough for a move to
+ * spend nine passes circulating among its own defenders.
+ */
+const RECYCLE_TOLERANCE = 0.03;
+
+/** A point's progress toward the goal the attacker is aiming at, 0..1. */
+function attackProgress(x: number, attackingHome: boolean): number {
+  return attackingHome ? x : 1 - x;
+}
+
+/**
+ * Closest live outfield player to a point, among those at or ahead of the
+ * ball.
+ *
+ * Without the forward requirement the receiver is simply whoever is nearest
+ * the waypoint, and while the team is still in its own half that is a
+ * defender. The ball is aimed at the receiver's feet, so it follows them
+ * back down the pitch: measured over 200 attacks the move spent its whole
+ * nine passes between 16 m and 54 m, never advancing, and then struck a shot
+ * from 76 m with the ball last seen at 37 m.
+ *
+ * If nobody qualifies the most advanced available player is taken instead,
+ * so the move always progresses even when the shape has not pushed up yet.
+ */
+function nearestLiveSlotAhead(
   formation: FormationSlot[],
   positions: ReadonlyArray<{ x: number; y: number }> | undefined,
   point: { x: number; y: number },
   attackingHome: boolean,
   excluded: number[],
+  ballProgress: number,
 ): number {
   if (!positions) return nearestSlotToPoint(formation, point, attackingHome, excluded);
+  const floor = ballProgress - RECYCLE_TOLERANCE;
   let best = -1;
   let bestDistance = Infinity;
+  let fallback = -1;
+  let fallbackProgress = -Infinity;
   for (let index = 0; index < formation.length; index++) {
     if (formation[index].role === 'GK' || excluded.includes(index)) continue;
     const live = livePositionFor(positions, index, attackingHome);
     if (!live) continue;
+    const progress = attackProgress(live.x, attackingHome);
     const distance = Math.hypot(live.x - point.x, (live.y - point.y) * 0.8);
-    if (distance < bestDistance) {
+    if (progress >= floor && distance < bestDistance) {
       bestDistance = distance;
       best = index;
     }
+    if (progress > fallbackProgress) {
+      fallbackProgress = progress;
+      fallback = index;
+    }
   }
-  return best >= 0 ? best : nearestSlotToPoint(formation, point, attackingHome, excluded);
+  if (best >= 0) return best;
+  if (fallback >= 0) return fallback;
+  return nearestSlotToPoint(formation, point, attackingHome, excluded);
 }
 
 /**
@@ -616,6 +656,13 @@ function reachableTarget(
 const SHOT_REACH = 0.05;
 
 /**
+ * The band a shot may be struck from, as progress toward the goal line.
+ * 0.72 to 0.94 is 29 m out to 6 m out: a long-range effort to a tap-in.
+ */
+const SHOT_MIN_PROGRESS = 0.72;
+const SHOT_MAX_PROGRESS = 0.94;
+
+/**
  * Re-aim a pass at its receiver's live position, at the moment it is played.
  *
  * A directed route is planned once, when the possession begins, but the
@@ -629,20 +676,95 @@ const SHOT_REACH = 0.05;
  * ball is aimed moves, and only ever toward the player it was already going
  * to.
  */
+export interface RetargetContext {
+  /** Live positions of the attacking team's eleven players, slot order. */
+  teammates?: ReadonlyArray<{ x: number; y: number }>;
+  /** Where the ball is as the pass is played. */
+  ball?: { x: number; y: number };
+}
+
 export function retargetPassToReceiver(
   phase: PassPhase,
   receiverPosition: { x: number; y: number } | null,
+  context?: RetargetContext,
 ): PassPhase {
   if (!receiverPosition) return phase;
   if (phase.kind === 'pass' && phase.targetOverride) {
-    const adjusted = reachableTarget(receiverPosition, phase.targetOverride);
-    if (adjusted.x === phase.targetOverride.x && adjusted.y === phase.targetOverride.y) return phase;
-    return { ...phase, targetOverride: adjusted };
+    // A build-up pass goes to whoever is actually forward now. The planned
+    // receiver was chosen when the move was built, and by the time the ball
+    // reaches them they have often dropped back behind it — which is what
+    // made a nine-pass move spend itself in its own half. The two passes the
+    // event names keep their receiver: those are facts, not choices.
+    let receiver = receiverPosition;
+    let receiverIdx = phase.receiverIdx;
+    const teammates = context?.teammates;
+    const ball = context?.ball;
+    if (teammates && ball && !phase.lockedReceiver) {
+      const ballProgress = attackProgress(ball.x, phase.attackingHome);
+      const floor = ballProgress - RECYCLE_TOLERANCE;
+      let bestIdx = -1;
+      let bestDistance = Infinity;
+      for (let index = 0; index < teammates.length; index++) {
+        if (index === phase.passerIdx) continue;
+        const mate = teammates[index];
+        if (!mate) continue;
+        if (attackProgress(mate.x, phase.attackingHome) < floor) continue;
+        const distance = Math.hypot(mate.x - phase.targetOverride.x, (mate.y - phase.targetOverride.y) * 0.8);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIdx = index;
+        }
+      }
+      if (bestIdx >= 0 && bestIdx !== receiverIdx) {
+        receiverIdx = bestIdx;
+        receiver = teammates[bestIdx];
+      }
+    }
+    // Led forward, not toward wherever the plan last pointed. A receiver who
+    // has dropped back since the move was planned must not drag the ball
+    // back with them; the ball is played in front of them instead.
+    const forwardLane = {
+      x: phase.attackingHome
+        ? Math.max(phase.targetOverride.x, receiver.x)
+        : Math.min(phase.targetOverride.x, receiver.x),
+      y: phase.targetOverride.y,
+    };
+    const adjusted = reachableTarget(receiver, forwardLane);
+    if (
+      adjusted.x === phase.targetOverride.x
+      && adjusted.y === phase.targetOverride.y
+      && receiverIdx === phase.receiverIdx
+    ) return phase;
+    return { ...phase, targetOverride: adjusted, receiverIdx };
   }
   if (phase.kind === 'shot' && phase.sourceOverride) {
     const adjusted = reachableTarget(receiverPosition, phase.sourceOverride, SHOT_REACH);
-    if (adjusted.x === phase.sourceOverride.x && adjusted.y === phase.sourceOverride.y) return phase;
-    return { ...phase, sourceOverride: adjusted };
+    // ...but it has to stay a shot. A striker who has not made the run is a
+    // striker who does not get the ball struck from seventy metres; the
+    // origin is held inside a range that is still a chance worth taking.
+    const progress = phase.attackingHome ? adjusted.x : 1 - adjusted.x;
+    const held = clamp(progress, SHOT_MIN_PROGRESS, SHOT_MAX_PROGRESS);
+    const heldPoint = {
+      x: phase.attackingHome ? held : 1 - held,
+      y: clamp(adjusted.y, 0.14, 0.86),
+    };
+    if (heldPoint.x === phase.sourceOverride.x && heldPoint.y === phase.sourceOverride.y) return phase;
+    // Flight time follows the origin that was actually chosen. The duration
+    // was derived from the planned release point, so pulling the origin back
+    // to the shooter left a 29 m shot arriving in the time a 12 m one needed.
+    const travelMeters = Math.hypot(
+      (phase.attackingHome ? 1 - heldPoint.x : heldPoint.x) * 105,
+      (heldPoint.y - 0.5) * 68,
+    );
+    return {
+      ...phase,
+      sourceOverride: heldPoint,
+      duration: passFlightFrames(
+        travelMeters,
+        phase.chanceStyle === 'cross' ? HEADER_SPEED_MPS : STRIKE_SPEED_MPS,
+        0.5,
+      ),
+    };
   }
   return phase;
 }
@@ -699,6 +821,9 @@ function buildDirectedApproach(
   let previous = startIdx;
   const recent: number[] = [startIdx];
   let guard = 0;
+  // The ball cannot go backwards, so the floor for the next receiver rises
+  // with every pass completed.
+  let ballProgress = attackProgress(source.x, attackingHome);
   while (players.length < wanted && guard++ < wanted * 4) {
     const step = players.length;
     const t = (step + 1) / (wanted + 1);
@@ -721,17 +846,30 @@ function buildDirectedApproach(
     // The last two receivers stay out of the build-up so the chance itself
     // keeps the two players the event names, and the previous passer is
     // excluded so nobody plays a pass to themselves.
-    const receiver = nearestLiveSlotToPoint(
+    const receiver = nearestLiveSlotAhead(
       formation,
       positions,
       point,
       attackingHome,
       [creator, shooter, previous, ...recent.slice(-2)],
+      ballProgress,
     );
     if (receiver === previous) break;
     players.push(receiver);
-    // The waypoint chose the receiver; the ball is aimed at their feet.
-    targets.push(reachableTarget(livePositionFor(positions, receiver, attackingHome), point));
+    // The waypoint chose the receiver and the lane; the ball is aimed at
+    // their feet, led forward. Leading toward the waypoint without the
+    // forward floor let a waypoint that had dipped behind the receiver pull
+    // the ball back down the pitch.
+    const live = livePositionFor(positions, receiver, attackingHome);
+    const forwardLane = live
+      ? {
+        x: attackingHome ? Math.max(point.x, live.x) : Math.min(point.x, live.x),
+        y: point.y,
+      }
+      : point;
+    const target = reachableTarget(live, forwardLane);
+    targets.push(target);
+    ballProgress = Math.max(ballProgress, attackProgress(target.x, attackingHome));
     recent.push(receiver);
     previous = receiver;
   }
@@ -799,6 +937,8 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
   let pattern: PresentationPlayPattern;
   let passTargets: Array<{ x: number; y: number }>;
   let directedShotOrigin: { x: number; y: number } | undefined;
+  let directedShotFlight: number | undefined;
+  let directedCreatorIdx: number | undefined;
   let chanceStyle: PresentationChanceStyle | undefined;
   if (options.forceShot) {
     const forwards = roleIndices(formation, 'FW');
@@ -825,7 +965,7 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     const shotY = chanceStyle === 'central'
       ? Math.min(0.68, Math.max(0.32, shooterY + (r(18) - 0.5) * 0.1))
       : 0.42 + r(18) * 0.16;
-    const shooterLive = livePositionFor(options.playerPositions, shooter, isHome);
+    directedCreatorIdx = creator;
     const creatorLive = livePositionFor(options.playerPositions, creator, isHome);
     // The shot origin has to be somewhere the shooter can actually get to.
     //
@@ -835,13 +975,19 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     // way in a single frame — the 19.9 m teleport. The origin is now pulled
     // back to within a sprint of the shooter and kept inside a range that is
     // still a shot worth taking.
+    // The shot origin is NOT constrained by where the shooter is standing
+    // when the move is planned. At that moment they are still in their
+    // formation slot, fifty metres out; getting them into the box is the
+    // whole point of the eight passes that follow. Pulling the origin back
+    // to them here made every shot in the game a 39.9 m effort, and the
+    // release-time retarget then dragged it out to seventy.
+    //
+    // Reachability is handled at the moment of release instead, where the
+    // shooter has actually made the run.
     const rawOrigin = mirrorPoint({ x: shotProgress, y: shotY }, isHome);
-    const reachedOrigin = reachableTarget(shooterLive, rawOrigin, 0.062);
-    const originProgress = isHome ? reachedOrigin.x : 1 - reachedOrigin.x;
-    const clampedProgress = clamp(originProgress, 0.62, 0.93);
     directedShotOrigin = {
-      x: isHome ? clampedProgress : 1 - clampedProgress,
-      y: clamp(reachedOrigin.y, 0.14, 0.86),
+      x: rawOrigin.x,
+      y: clamp(rawOrigin.y, 0.14, 0.86),
     };
     const source = options.sourceOverride ?? (() => {
       const slot = formation[options.startingPlayerIdx ?? nearestSlot(formation, ['MF'], 0.5)];
@@ -878,6 +1024,19 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     );
     route = [startIdx, ...approachPlan.players, creator, shooter];
     passTargets = [...approachPlan.targets, chanceEntry, directedShotOrigin];
+    // Shot flight follows the real distance too. It used to be a flat 26-40
+    // frames whether the ball was travelling seven metres or thirty, which
+    // put a struck shot at 76-154 m/s — three to five times a real one, and
+    // fast enough to cross the screen in a couple of frames.
+    const shotTravelMeters = Math.hypot(
+      (isHome ? 1 - directedShotOrigin.x : directedShotOrigin.x) * 105,
+      (directedShotOrigin.y - 0.5) * 68,
+    );
+    directedShotFlight = passFlightFrames(
+      shotTravelMeters,
+      chanceStyle === 'cross' ? HEADER_SPEED_MPS : STRIKE_SPEED_MPS,
+      r(31),
+    );
     const directedShotProgress = isHome ? directedShotOrigin.x : 1 - directedShotOrigin.x;
     const sourceProgress = isHome ? source.x : 1 - source.x;
     pattern = options.transition
@@ -945,6 +1104,11 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     phases.push({
       passerIdx: route[i],
       receiverIdx: route[i + 1],
+      ...(directedCreatorIdx !== undefined ? { creatorIdx: directedCreatorIdx } : {}),
+      // The last two passes are the chance itself: the creator receiving where
+      // the event says, then the ball the shooter finishes. Neither may be
+      // redirected to whoever happens to be free.
+      ...(directedDelivery || directedSetup ? { lockedReceiver: true } : {}),
       attackingHome: isHome,
       kind: 'pass',
       pattern,
@@ -982,13 +1146,14 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     phases.push({
       passerIdx: shooterIdx,
       receiverIdx: shooterIdx,
+      lockedReceiver: true,
       attackingHome: isHome,
       kind: 'shot',
       pattern,
       stage: 'finish',
       chanceStyle,
       duration: options.forceShot
-        ? chanceStyle === 'cross' ? 26 + r(31) * 7 : 31 + r(31) * 9
+        ? directedShotFlight ?? (chanceStyle === 'cross' ? 26 + r(31) * 7 : 31 + r(31) * 9)
         : 32 + r(31) * 12,
       hold: options.forceShot ? 20 + r(32) * 8 : 16 + r(32) * 8,
       arc: 0.04 + r(33) * 0.16,

@@ -777,7 +777,16 @@ export function updatePlayerPositions(
       targetX_n = setPieceTarget.x;
       targetY_n = setPieceTarget.y;
     } else if (teamHasBall) {
-      if (currentPhase.pattern) {
+      // The creator makes the run the chance needs. They receive nothing
+      // during the build-up by design, so without this they hold their
+      // formation slot while the move goes past them and the ball has to
+      // come back twenty metres to reach them.
+      if (currentPhase.creatorIdx !== undefined && formIdx === currentPhase.creatorIdx) {
+        const attackDir = isHomeTeam ? 1 : -1;
+        targetX_n = clamp(ballNX + attackDir * 0.1, 0.1, 0.93);
+        targetY_n = clamp(lerp(slot.y, 0.5, 0.3), 0.12, 0.88);
+        playerPos[i].sprintT = Math.max(playerPos[i].sprintT, 0.6);
+      } else if (currentPhase.pattern) {
         const shape = computeAttackingShapeTarget({
           formIdx,
           isHomeTeam,

@@ -827,7 +827,18 @@ function PitchCanvas(props: Props) {
     function retargetPhase(phase: PassPhase): PassPhase {
       const offset = phase.attackingHome ? 0 : 11;
       const live = playerPosRef.current[offset + phase.receiverIdx];
-      return retargetPassToReceiver(phase, live ? { x: live.x, y: live.y } : null);
+      const teammates = playerPosRef.current
+        .slice(offset, offset + 11)
+        .map(entry => ({ x: entry.x, y: entry.y }));
+      const ball = {
+        x: clamp((ballPos.current.x - P) / fw, 0.03, 0.97),
+        y: clamp((ballPos.current.y - P) / fh, 0.05, 0.95),
+      };
+      return retargetPassToReceiver(
+        phase,
+        live ? { x: live.x, y: live.y } : null,
+        { teammates, ball },
+      );
     }
 
     function loadSequence(phases: PassPhase[], seed: number): void {
