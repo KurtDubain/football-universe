@@ -1,5 +1,6 @@
 import { editionStorageKey } from '../../edition/policy';
 import type { MatchEvent } from '../../types/match';
+import type { RoutineBeat, RoutineBeatKind } from './routine-timeline';
 
 export type PlaybackMode = 'highlights' | 'live' | 'immersive';
 
@@ -101,12 +102,47 @@ export function nextPlaybackStep(
   return Math.max(1, Math.min(5, target - minute, maxMinute - minute));
 }
 
+/**
+ * How long a routine beat is allowed to own the screen.
+ *
+ * Each of the four needs a different amount of real time to read as itself.
+ * A whistle plus a referee walking over is the longest; a shot that misses is
+ * the shortest, because the ball is already on its way and there is nothing
+ * left to wait for.
+ */
+const ROUTINE_BEAT_HOLD_MS: Readonly<Record<RoutineBeatKind, number>> = {
+  foul: 880,
+  corner: 960,
+  save: 820,
+  shot_off_target: 680,
+};
+
+/**
+ * A minute with nothing in it.
+ *
+ * This used to be the default state of the live modes and it was tuned as
+ * one: 540 ms of the same passing loop, minute after minute. Now that most
+ * minutes carry a routine beat, the quiet ones are connective tissue between
+ * two moments, and they are allowed to be brisk.
+ */
+const QUIET_MINUTE_MS = 430;
+
+/** Immersive stretches every beat; live plays it at the tempo it was cut for. */
+const IMMERSIVE_BEAT_SCALE = 1.45;
+const IMMERSIVE_QUIET_MS = 660;
+
+function routineBeatHold(kind: RoutineBeatKind, scale: number, reducedMotion: boolean): number {
+  const base = ROUTINE_BEAT_HOLD_MS[kind] * scale;
+  return reducedMotion ? Math.round(base * 0.42) : Math.round(base);
+}
+
 export function playbackTickDelay(
   mode: PlaybackMode,
   minute: number,
   flashEvent: MatchEvent | null,
   reducedMotion: boolean,
   nextHighlight?: MatchEvent,
+  routineBeat?: RoutineBeat | null,
 ): number {
   const eventJustRevealed = flashEvent?.minute === minute;
   const approachingShot = !flashEvent
@@ -116,13 +152,15 @@ export function playbackTickDelay(
     if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 450 : 1650;
     if (eventJustRevealed) return reducedMotion ? 320 : 900;
     if (approachingShot) return reducedMotion ? 280 : 720;
-    return reducedMotion ? 240 : 540;
+    if (routineBeat) return routineBeatHold(routineBeat.kind, 1, reducedMotion);
+    return reducedMotion ? 240 : QUIET_MINUTE_MS;
   }
   if (mode === 'immersive') {
     if (eventJustRevealed && isHighlightEvent(flashEvent)) return reducedMotion ? 550 : 2300;
     if (eventJustRevealed) return reducedMotion ? 380 : 1300;
     if (approachingShot) return reducedMotion ? 340 : 980;
-    return reducedMotion ? 300 : 820;
+    if (routineBeat) return routineBeatHold(routineBeat.kind, IMMERSIVE_BEAT_SCALE, reducedMotion);
+    return reducedMotion ? 300 : IMMERSIVE_QUIET_MS;
   }
 
   if (!flashEvent

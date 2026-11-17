@@ -38,6 +38,9 @@ export function restartReleaseDelay(restart: PresentationRestart): number {
   if (restart === 'kickoff') return 30;
   if (restart === 'goal_kick') return 24;
   if (restart === 'keeper_release') return 22;
+  // A throw-in needs the taker to walk to the touchline and the box to form,
+  // which is longer than a clearance but nowhere near a goal kick.
+  if (restart === 'throw_in') return 20;
   if (restart === 'clearance') return 12;
   return 7;
 }

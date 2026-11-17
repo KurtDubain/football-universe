@@ -14,6 +14,11 @@ import {
   playbackReducer,
   type PlaybackPhase,
 } from './playback-state';
+import {
+  buildRoutineTimeline,
+  EMPTY_ROUTINE_TIMELINE,
+  routineBeatAtMinute,
+} from './routine-timeline';
 
 interface PlaybackControllerOptions {
   result: MatchResult;
@@ -91,6 +96,16 @@ export function useMatchPlaybackController({
   const [pitchAvailable, setPitchAvailable] = useState(true);
   const timeline = useMemo(() => buildPlaybackTimeline(result), [result]);
   const { events: allEvents, maxMinute, timelineMax } = timeline;
+  const routineTimeline = useMemo(() => buildRoutineTimeline(result), [result]);
+  // Highlights is the mode that exists to skip the dull minutes. Filling them
+  // back in would be this feature working against itself.
+  const routineBeats = playback.mode === 'highlights'
+    ? EMPTY_ROUTINE_TIMELINE
+    : routineTimeline;
+  const routineBeat = useMemo(
+    () => routineBeatAtMinute(routineBeats, playback.minute),
+    [playback.minute, routineBeats],
+  );
 
   const shownEvents = allEvents.slice(0, playback.consumedEventCount);
   const pendingPresentationEvent = playback.pendingEventIndex === null
@@ -136,6 +151,7 @@ export function useMatchPlaybackController({
       playback.flashEvent,
       reducedMotion,
       nextHighlight,
+      routineBeat,
     );
     const timer = window.setTimeout(() => {
       dispatch({ type: 'tick', events: allEvents, maxMinute: timelineMax, homeTeamId: result.homeTeamId });
@@ -154,6 +170,7 @@ export function useMatchPlaybackController({
     presentationHolding,
     reducedMotion,
     result.homeTeamId,
+    routineBeat,
     timelineMax,
   ]);
 
@@ -211,6 +228,8 @@ export function useMatchPlaybackController({
     playback,
     allEvents,
     shownEvents,
+    routineBeats,
+    routineBeat,
     pendingPresentationEvent,
     maxMinute,
     timelineMax,

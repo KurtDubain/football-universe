@@ -1,7 +1,10 @@
 import type { MatchEvent } from '../../types/match';
+import type { RoutineBeat, RoutineBeatKind } from './routine-timeline';
 
 interface CommentaryContext {
   event: MatchEvent | null;
+  /** The routine beat landing on this minute, when the mode plays one. */
+  routineBeat?: RoutineBeat | null;
   minute: number;
   homeScore: number;
   awayScore: number;
@@ -22,6 +25,8 @@ export interface LiveCommentaryEntry {
 
 interface CommentaryHistoryContext {
   events: MatchEvent[];
+  /** Routine beats already revealed, oldest first. */
+  routineBeats?: RoutineBeat[];
   currentMinute: number;
   homeTeamId: string;
   homeTeamName: string;
@@ -80,13 +85,73 @@ function scoreAtMinute(
   return { home, away };
 }
 
+/**
+ * What a routine beat is allowed to say.
+ *
+ * Every line here restates one number the simulator already committed to —
+ * a foul, a corner, a shot off target, a save — and nothing else. The three
+ * phrasings per kind exist so a match with twenty-two fouls does not read as
+ * the same sentence typed twenty-two times; which one is used is fixed by the
+ * beat id, so a replay says exactly what it said the first time.
+ */
+const ROUTINE_BEAT_LINES: Readonly<Record<
+  RoutineBeatKind,
+  ReadonlyArray<(team: string) => string>
+>> = {
+  foul: [
+    team => `${team}犯规，裁判鸣哨。`,
+    team => `${team}在拼抢中犯规，比赛中断。`,
+    team => `裁判吹停比赛，${team}被判犯规。`,
+  ],
+  corner: [
+    team => `${team}获得角球。`,
+    team => `${team}赢得一个角球机会。`,
+    team => `角球，${team}准备开出。`,
+  ],
+  save: [
+    team => `${team}的射门被门将化解。`,
+    team => `门将把${team}的射门挡了下来。`,
+    team => `${team}完成一次射正，被门将没收。`,
+  ],
+  shot_off_target: [
+    team => `${team}起脚攻门，球偏出。`,
+    team => `${team}尝试射门，未能打在门框内。`,
+    team => `${team}完成一次打门，偏离目标。`,
+  ],
+};
+
+function beatVariantIndex(id: string, length: number): number {
+  let hash = 2166136261;
+  for (let index = 0; index < id.length; index++) {
+    hash ^= id.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % length + length) % length;
+}
+
+export function routineBeatLine(
+  beat: RoutineBeat,
+  homeTeamId: string,
+  homeTeamName: string,
+  awayTeamName: string,
+): string {
+  const teamName = beat.teamId === homeTeamId ? homeTeamName : awayTeamName;
+  const variants = ROUTINE_BEAT_LINES[beat.kind];
+  return variants[beatVariantIndex(beat.id, variants.length)](teamName);
+}
+
 export function buildLiveCommentary(context: CommentaryContext): string {
-  const { event, minute, homeTeamName, awayTeamName } = context;
+  const { event, minute, homeTeamName, awayTeamName, routineBeat } = context;
   if (!event) {
+    // Structural boundaries win: a beat landing on the minute the second half
+    // starts should not talk over the restart.
     if (minute < 3) return '比赛开球，双方开始试探。';
     if (minute === 46) return '下半场开始，比赛重新进入节奏。';
     if (minute === 91) return '加时赛开始，双方的每一次选择都更加谨慎。';
     if (minute === 106) return '加时赛下半场开始，比赛进入最后的较量。';
+    if (routineBeat) {
+      return routineBeatLine(routineBeat, context.homeTeamId, homeTeamName, awayTeamName);
+    }
     const score = scoreLine(context);
     return minute >= 85 && minute <= 90 ? '比赛进入最后阶段，' + score : score;
   }
@@ -127,6 +192,7 @@ export function buildLiveCommentary(context: CommentaryContext): string {
 
 export function buildLiveCommentaryHistory({
   events,
+  routineBeats = [],
   currentMinute,
   homeTeamId,
   homeTeamName,
@@ -189,6 +255,16 @@ export function buildLiveCommentaryHistory({
       event,
     });
   });
+
+  for (const beat of routineBeats) {
+    if (beat.minute > currentMinute) continue;
+    entries.push({
+      id: beat.id,
+      minute: beat.minute,
+      label: `${beat.minute}'`,
+      text: routineBeatLine(beat, homeTeamId, homeTeamName, awayTeamName),
+    });
+  }
 
   return entries.sort((a, b) => b.minute - a.minute || b.id.localeCompare(a.id));
 }

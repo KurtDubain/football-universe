@@ -5,6 +5,8 @@ import {
   buildLiveCommentaryHistory,
   shootoutEventLabel,
 } from './live-commentary';
+import { routineBeatLine } from './live-commentary';
+import type { RoutineBeat } from './routine-timeline';
 
 const base = {
   minute: 82,
@@ -102,5 +104,100 @@ describe('live commentary', () => {
       '主队中场送出助攻',
     ]));
     expect(history[0].minute).toBe(30);
+  });
+});
+
+const beatBase = {
+  minute: 82,
+  homeScore: 2,
+  awayScore: 1,
+  penaltyHomeScore: 0,
+  penaltyAwayScore: 0,
+  homeTeamId: 'home',
+  homeTeamName: '主队',
+  awayTeamName: '客队',
+};
+
+function beat(kind: RoutineBeat["kind"], teamId = 'home', minute = 31): RoutineBeat {
+  return { id: `routine:${minute}:${kind}:${teamId}`, minute, kind, teamId };
+}
+
+describe('routine beat commentary', () => {
+  it('says the beat instead of repeating the score', () => {
+    const text = buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('foul') });
+    expect(text).not.toContain('2:1');
+    expect(text).toContain('主队');
+    expect(text).toMatch(/犯规|鸣哨|吹停/);
+  });
+
+  it('names the side the beat belongs to', () => {
+    expect(buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('corner', 'away') }))
+      .toContain('客队');
+    expect(buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('corner', 'home') }))
+      .toContain('主队');
+  });
+
+  it('only claims what the stat it came from proves', () => {
+    expect(buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('shot_off_target') }))
+      .toMatch(/偏出|门框|目标/);
+    expect(buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('save') }))
+      .toMatch(/门将/);
+    // An off-target shot may not be described as a goal, a save or a corner.
+    const offTarget = buildLiveCommentary({ ...beatBase, event: null, routineBeat: beat('shot_off_target') });
+    expect(offTarget).not.toMatch(/进球|破门|门将|角球/);
+  });
+
+  it('varies the phrasing but never the fact', () => {
+    const lines = new Set<string>();
+    for (let minute = 2; minute <= 80; minute++) {
+      lines.add(routineBeatLine(beat('foul', 'home', minute), 'home', '主队', '客队'));
+    }
+    expect(lines.size).toBeGreaterThan(1);
+    for (const line of lines) expect(line).toContain('主队');
+  });
+
+  it('keeps a beat stable across a replay', () => {
+    const first = routineBeatLine(beat('corner'), 'home', '主队', '客队');
+    const second = routineBeatLine(beat('corner'), 'home', '主队', '客队');
+    expect(second).toBe(first);
+  });
+
+  it('still marks the structural minutes itself', () => {
+    expect(buildLiveCommentary({ ...beatBase, event: null, minute: 46, routineBeat: beat('foul', 'home', 46) }))
+      .toBe('下半场开始，比赛重新进入节奏。');
+    expect(buildLiveCommentary({ ...beatBase, event: null, minute: 1, routineBeat: null }))
+      .toBe('比赛开球，双方开始试探。');
+  });
+
+  it('falls back to the score when the minute carries no beat', () => {
+    expect(buildLiveCommentary({ ...beatBase, event: null, routineBeat: null }))
+      .toBe('主队 2:1 领先客队。');
+  });
+
+  it('logs revealed beats and holds back the rest', () => {
+    const routineBeats = [beat('foul', 'home', 10), beat('corner', 'away', 40), beat('save', 'home', 70)];
+    const history = buildLiveCommentaryHistory({
+      events: [],
+      routineBeats,
+      currentMinute: 40,
+      homeTeamId: 'home',
+      homeTeamName: '主队',
+      awayTeamName: '客队',
+    });
+    const logged = history.filter(entry => entry.id.startsWith('routine:'));
+    expect(logged).toHaveLength(2);
+    expect(logged.every(entry => entry.minute <= 40)).toBe(true);
+    expect(logged[0].minute).toBe(40);
+  });
+
+  it('keeps the log unchanged when no beats are supplied', () => {
+    const withoutBeats = buildLiveCommentaryHistory({
+      events: [],
+      currentMinute: 35,
+      homeTeamId: 'home',
+      homeTeamName: '主队',
+      awayTeamName: '客队',
+    });
+    expect(withoutBeats.some(entry => entry.id.startsWith('routine:'))).toBe(false);
   });
 });

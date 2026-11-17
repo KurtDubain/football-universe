@@ -152,6 +152,24 @@ function advanceTicks(count: number, milliseconds: number): void {
   for (let tick = 0; tick < count; tick++) advance(milliseconds);
 }
 
+/**
+ * Advance the fake clock until the scoreboard shows a given minute.
+ *
+ * The live modes no longer spend one fixed number of milliseconds per
+ * minute: a minute carrying a routine beat is held longer than a silent one,
+ * and which minutes carry one depends on the match. Driving the clock off
+ * what the scoreboard says keeps these tests honest about pacing instead of
+ * hard-coding a delay that any rhythm change would invalidate.
+ */
+function advanceToMinute(target: number, budgetMs = 150_000): void {
+  const label = `${target}'`;
+  for (let elapsed = 0; elapsed < budgetMs; elapsed += 120) {
+    if (document.body.querySelector('[data-testid="live-minute"]')?.textContent === label) return;
+    advance(120);
+  }
+  throw new Error(`Clock never reached ${label}`);
+}
+
 function liveTickDelay(
   minute = 0,
   flashEvent: MatchEvent | null = null,
@@ -290,13 +308,13 @@ describe('MatchLive playback state machine', () => {
     advance(liveTickDelay());
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("1'");
 
-    advanceTicks(44, liveTickDelay());
+    advanceToMinute(45);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
     expect(document.body.textContent).toContain('中场休息');
     advance(liveBreakDelay - 1);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("45'");
     advance(1);
-    advance(liveTickDelay());
+    advanceToMinute(46);
     expect(document.body.querySelector('[data-testid="live-minute"]')?.textContent).toBe("46'");
   });
 
@@ -370,16 +388,16 @@ describe('MatchLive playback state machine', () => {
       penaltyAway: 0,
     })} teamBases={teamBases} onClose={() => undefined} />);
 
-    advanceTicks(45, liveTickDelay());
+    advanceToMinute(45);
     expect(document.body.textContent).toContain('中场休息');
     advance(liveBreakDelay);
-    advanceTicks(45, liveTickDelay());
+    advanceToMinute(90);
     expect(document.body.textContent).toContain('进入加时赛');
     advance(liveBreakDelay);
-    advanceTicks(5, liveTickDelay(90, null, events[0]));
-    advance(liveTickDelay(95, events[0]));
-    advanceTicks(20, liveTickDelay());
-    advanceTicks(4, liveTickDelay(116, null, events[1]));
+    advanceToMinute(95);
+    // The goal at 95 is held for its reveal before the clock moves again.
+    advance(2400);
+    advanceToMinute(120);
     expect(document.body.textContent).toContain('点球大战即将开始');
     advance(liveBreakDelay);
     advance(liveTickDelay(120, null, events[1]));

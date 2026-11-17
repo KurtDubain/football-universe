@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchEvent } from '../../types/match';
+import type { RoutineBeat } from './routine-timeline';
 import {
   nextPlaybackStep,
   playbackBreakDelay,
@@ -37,9 +38,9 @@ describe('match live playback modes', () => {
     expect(playbackTickDelay('highlights', 20, events[0], false)).toBe(120);
     expect(playbackTickDelay('highlights', 16, events[1], false)).toBe(1800);
     expect(playbackTickDelay('live', 20, events[2], false)).toBe(1650);
-    expect(playbackTickDelay('live', 21, events[2], false)).toBe(540);
+    expect(playbackTickDelay('live', 21, events[2], false)).toBe(430);
     expect(playbackTickDelay('immersive', 20, events[2], false)).toBe(2300);
-    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(820);
+    expect(playbackTickDelay('immersive', 21, events[2], false)).toBe(660);
   });
 
   it('slows the highlights timeline while a set piece is being prepared', () => {
@@ -79,5 +80,61 @@ describe('match live playback modes', () => {
     expect(readPlaybackModePreference(storage)).toBe('immersive');
     values.set('football-universe:match-playback-mode', 'invalid');
     expect(readPlaybackModePreference(storage)).toBe('highlights');
+  });
+});
+
+const routineBeats: Record<RoutineBeat["kind"], RoutineBeat> = {
+  foul: { id: 'routine:31:foul:home', minute: 31, kind: 'foul', teamId: 'home' },
+  corner: { id: 'routine:31:corner:home', minute: 31, kind: 'corner', teamId: 'home' },
+  save: { id: 'routine:31:save:home', minute: 31, kind: 'save', teamId: 'home' },
+  shot_off_target: { id: 'routine:31:shot_off_target:home', minute: 31, kind: 'shot_off_target', teamId: 'home' },
+};
+
+describe('routine beat pacing', () => {
+  it('gives every kind of quiet minute its own length', () => {
+    const lengths = (['foul', 'corner', 'save', 'shot_off_target'] as const)
+      .map(kind => playbackTickDelay('live', 31, null, false, undefined, routineBeats[kind]));
+    expect(new Set(lengths).size).toBe(4);
+    // A corner needs the most setup; a shot already on its way needs the least.
+    expect(lengths[1]).toBeGreaterThan(lengths[0]);
+    expect(lengths[0]).toBeGreaterThan(lengths[3]);
+  });
+
+  it('makes a beat minute longer than a silent one', () => {
+    const quiet = playbackTickDelay('live', 31, null, false);
+    for (const kind of ['foul', 'corner', 'save', 'shot_off_target'] as const) {
+      expect(playbackTickDelay('live', 31, null, false, undefined, routineBeats[kind]))
+        .toBeGreaterThan(quiet);
+    }
+  });
+
+  it('stretches every beat in immersive mode', () => {
+    for (const kind of ['foul', 'corner', 'save', 'shot_off_target'] as const) {
+      const live = playbackTickDelay('live', 31, null, false, undefined, routineBeats[kind]);
+      const immersive = playbackTickDelay('immersive', 31, null, false, undefined, routineBeats[kind]);
+      expect(immersive).toBeGreaterThan(live);
+    }
+  });
+
+  it('never lets a beat outrank the moment it is approaching', () => {
+    // A shot five minutes out is already being built toward; a corner beat
+    // landing on the same minute must not slow the approach down.
+    expect(playbackTickDelay('live', 15, null, false, events[2], routineBeats.corner)).toBe(720);
+    expect(playbackTickDelay('live', 20, events[2], false, undefined, routineBeats.corner)).toBe(1650);
+  });
+
+  it('leaves highlights alone', () => {
+    const withoutBeat = playbackTickDelay('highlights', 31, null, false);
+    expect(playbackTickDelay('highlights', 31, null, false, undefined, routineBeats.foul))
+      .toBe(withoutBeat);
+  });
+
+  it('shortens every beat under reduced motion', () => {
+    for (const kind of ['foul', 'corner', 'save', 'shot_off_target'] as const) {
+      const normal = playbackTickDelay('live', 31, null, false, undefined, routineBeats[kind]);
+      const reduced = playbackTickDelay('live', 31, null, true, undefined, routineBeats[kind]);
+      expect(reduced).toBeLessThan(normal);
+      expect(reduced).toBeGreaterThan(0);
+    }
   });
 });

@@ -12,6 +12,13 @@ import type { BroadcastCameraMoment } from './pitch-canvas/camera';
 import { CAMERA_RIGS, rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
 import { idleCruiseShotAt, isIdleCruiseWindow } from './pitch-canvas/idle-cruise';
 import {
+  stoppageForBeat,
+  stoppageGatherProgress,
+  stoppageGatherTarget,
+  type StoppagePlan,
+} from './pitch-canvas/stoppage';
+import type { RoutineBeat } from './match-live/routine-timeline';
+import {
   createBroadcastView,
   rigFollowCenterX,
   RIG_SETTLE,
@@ -155,6 +162,11 @@ interface Props {
   hostTeamId?: string;
   flashEvent: MatchEvent | null;
   allEvents: MatchEvent[];
+  /**
+   * The routine beat landing on the current minute, if the mode plays one.
+   * Only a foul uses it: it is the one beat that stops the match.
+   */
+  routineBeat?: RoutineBeat | null;
   homeMatchday?: MatchdaySnapshot;
   awayMatchday?: MatchdaySnapshot;
   finished: boolean;
@@ -315,6 +327,7 @@ const FIXED_FRAME_MS = 1000 / 60;
 function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, awayTeamId, flashEvent, allEvents,
+    routineBeat = null,
     homeShortName, awayShortName, isNeutralVenue = false, hostTeamId,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
     possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
@@ -382,6 +395,8 @@ function PitchCanvas(props: Props) {
   const idleFramesRef = useRef(0);
   /** Match minute that quiet stretch began at; fixes the cruise rotation. */
   const idleStartMinuteRef = useRef(0);
+  /** The whistle currently holding the match still, if any. */
+  const stoppageRef = useRef<{ plan: StoppagePlan; frame: number } | null>(null);
   const attackingRightRef = useRef(true);
   const viewRef = useRef<BroadcastView | null>(null);
   const goalCelebFrame = useRef(0);
@@ -494,7 +509,7 @@ function PitchCanvas(props: Props) {
   // Live snapshot of props for the long-running rAF loop to read from.
   // Avoids restarting the rAF chain on every minute / flashEvent change.
   const liveRef = useRef({
-    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, routineBeat, halftime, breakLabel, finished, active, targetShift,
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
@@ -502,7 +517,7 @@ function PitchCanvas(props: Props) {
   });
   useEffect(() => {
     liveRef.current = {
-      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active, targetShift,
+      minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, routineBeat, halftime, breakLabel, finished, active, targetShift,
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
       homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
       homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
@@ -510,7 +525,7 @@ function PitchCanvas(props: Props) {
     };
     wakeRenderLoopRef.current();
   }, [
-    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, halftime, breakLabel, finished, active,
+    minute, maxMinute, homeColor, awayColor, homeTeamId, allEvents, routineBeat, halftime, breakLabel, finished, active,
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
@@ -1161,9 +1176,33 @@ function PitchCanvas(props: Props) {
         return;
       }
 
+      // ── Stoppage ──
+      // A whistle stops the match. Every branch below assumes the ball is in
+      // play, so the whole block sits out while a stoppage is being shown —
+      // which is the point: the ball has to stop for a foul to read as one.
+      const stoppagePlan = stoppageForBeat(live.routineBeat);
+      const runningStoppage = stoppageRef.current;
+      if (runningStoppage) {
+        runningStoppage.frame++;
+        if (runningStoppage.frame >= runningStoppage.plan.holdFrames) stoppageRef.current = null;
+      } else if (
+        stoppagePlan
+        // A directed moment owns the frame. A whistle must never cut away
+        // from a goal, a card, or a shot still resolving.
+        && !sequenceSceneRef.current
+        && !beatSceneRef.current
+        && !resultPresentationBusy
+        && !halftime
+      ) {
+        stoppageRef.current = { plan: stoppagePlan, frame: 0 };
+      }
+      const stoppage = stoppageRef.current;
+
       // ── Sequence advancement ──
       const phase = sequenceRef.current[phaseIdxRef.current];
-      if (!phase && !resultPresentationBusy) {
+      if (stoppage) {
+        // Play is dead.
+      } else if (!phase && !resultPresentationBusy) {
         // Continue from the prior ball location. Event scenes use a football-
         // specific restart instead of teleporting into another formation slot.
         sequenceSeedRef.current += 1;
@@ -1248,10 +1287,18 @@ function PitchCanvas(props: Props) {
           const nextOffset = nextAttackingHome ? 0 : 11;
           const ballX = clamp((ballPos.current.x - P) / fw, 0.03, 0.97);
           const ballY = clamp((ballPos.current.y - P) / fh, 0.05, 0.95);
+          // Now and then the ball has simply gone out. A throw-in is how it
+          // comes back, and it was the one restart a quiet stretch never
+          // showed: every continuation started from wherever the ball happened
+          // to be, which after a few minutes reads as a passing drill.
+          const throwIn = seededRand(sequenceSeedRef.current * 53 + 11) < 0.3;
           continuationOptions = {
             attackingHome: nextAttackingHome,
             startingPlayerIdx: nearestPlayerSlot(nextRoster, playerPosRef.current, nextOffset, ballX, ballY),
-            sourceOverride: { x: ballX, y: ballY },
+            sourceOverride: throwIn
+              ? { x: clamp(ballX, 0.12, 0.88), y: ballY < 0.5 ? 0.025 : 0.975 }
+              : { x: ballX, y: ballY },
+            ...(throwIn ? { restart: 'throw_in' as const } : {}),
             homePossessionShare,
             homeFormation: liveHomeFormation,
             awayFormation: liveAwayFormation,
@@ -1499,6 +1546,11 @@ function PitchCanvas(props: Props) {
 
       ballPos.current.x = bx;
       ballPos.current.y = by;
+      if (stoppage) {
+        ballPos.current.x = P + stoppage.plan.spot.x * fw;
+        ballPos.current.y = P + stoppage.plan.spot.y * fh;
+        ballArcLiftRef.current = 0;
+      }
 
       const pendingImpact = activeImpactScene
         ?? (pendingImpactSceneRef.current?.key === directedShotScene?.key
@@ -1629,6 +1681,22 @@ function PitchCanvas(props: Props) {
           ? clamp(phaseFrameRef.current / releaseDelayFrames, 0, 1)
           : 1,
       );
+      if (stoppage) {
+        const gatherProgress = stoppageGatherProgress(stoppage.frame, stoppage.plan.holdFrames);
+        for (let playerIndex = 0; playerIndex < 22; playerIndex++) {
+          const player = playerPosRef.current[playerIndex];
+          const gather = stoppageGatherTarget(
+            playerIndex,
+            player.x,
+            player.y,
+            stoppage.plan,
+            gatherProgress,
+          );
+          if (!gather) continue;
+          player.x = gather.x;
+          player.y = gather.y;
+        }
+      }
       const pinnedPlayerIndices = new Set<number>();
       const holderOffset = isAttHome ? 0 : 11;
       pinnedPlayerIndices.add(holderOffset + ballHolderIdx);

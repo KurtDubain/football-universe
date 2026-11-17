@@ -86,6 +86,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     playback,
     allEvents,
     shownEvents,
+    routineBeats,
+    routineBeat,
     pendingPresentationEvent,
     maxMinute: maxMin,
     timelineMax,
@@ -313,11 +315,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
   const commentaryEntries = useMemo(() => buildLiveCommentaryHistory({
     events: shownEvents,
+    routineBeats,
     currentMinute: playback.minute,
     homeTeamId: result.homeTeamId,
     homeTeamName: ht?.name ?? '主队',
     awayTeamName: at?.name ?? '客队',
-  }), [at?.name, ht?.name, playback.minute, result.homeTeamId, shownEvents]);
+  }), [at?.name, ht?.name, playback.minute, result.homeTeamId, routineBeats, shownEvents]);
 
   // Commentary text for current state
   const commentary = useMemo(() => {
@@ -327,6 +330,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     if (shootoutBreak) return '加时赛仍未分胜负，点球大战即将开始。';
     return buildLiveCommentary({
       event: playback.flashEvent,
+      routineBeat,
       minute: playback.minute,
       homeScore: playback.homeScore,
       awayScore: playback.awayScore,
@@ -350,6 +354,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     playback.penaltyHomeScore,
     result.homeTeamId,
     result.penalties,
+    routineBeat,
     shootoutBreak,
   ]);
 
@@ -634,6 +639,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 hostTeamId={result.tournamentHostTeamId}
                 flashEvent={pendingPresentationEvent}
                 allEvents={allEvents}
+                routineBeat={routineBeat}
                 homeMatchday={result.homeMatchday}
                 awayMatchday={result.awayMatchday}
                 finished={finished}
