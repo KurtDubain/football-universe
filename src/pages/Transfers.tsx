@@ -16,16 +16,38 @@ const posColor: Record<string, string> = {
 };
 
 /**
- * Detect "swap-back" legs: a `free` record paired with a `transfer` record in
- * the same (season, windowIndex) window where the two records move opposite
- * directions between the same pair of teams. The free leg is then a swap, not
- * a release. Returns the set of record indices (within `all`) that should be
- * rendered as swaps.
+ * Detect the two legs of a swap deal.
+ *
+ * A swap moves two players in opposite directions inside one window, so the
+ * page has to render both legs as the single deal they were rather than as
+ * two unrelated moves. Current records name their counterpart through
+ * `swapPartnerId`, which is exact. The inverse-team heuristic below
+ * is kept for records written before that field existed.
+ *
+ * Returns the set of record indices (within `all`) to render as swaps.
  */
 function detectSwapIndices(all: TransferRecord[]): Set<number> {
   const swaps = new Set<number>();
-  // Bucket transfer-type records by (season|windowIndex|fromTeamId|toTeamId)
-  // for O(1) lookup of an inverse match for each `free` record.
+
+  // Exact pairing. One record per player per window, so the first index wins.
+  const byPlayerInWindow = new Map<string, number>();
+  all.forEach((r, idx) => {
+    const k = `${r.season}|${r.windowIndex}|${r.playerId}`;
+    if (!byPlayerInWindow.has(k)) byPlayerInWindow.set(k, idx);
+  });
+  all.forEach((r, idx) => {
+    if (!r.swapPartnerId) return;
+    const partner = byPlayerInWindow.get(`${r.season}|${r.windowIndex}|${r.swapPartnerId}`);
+    // A counterpart trimmed out of the bounded transfer history leaves this
+    // leg unpaired, which renders as an ordinary move rather than a false swap.
+    if (partner === undefined) return;
+    swaps.add(idx);
+    swaps.add(partner);
+  });
+
+  // Legacy fallback: a `free` record paired with a `transfer` record in the
+  // same (season, windowIndex) window where the two move opposite directions
+  // between the same pair of teams. The free leg is then a swap, not a release.
   const transferKey = new Map<string, number[]>();
   all.forEach((r, idx) => {
     if (r.type !== 'transfer') return;
@@ -34,14 +56,14 @@ function detectSwapIndices(all: TransferRecord[]): Set<number> {
     transferKey.get(k)!.push(idx);
   });
   all.forEach((r, idx) => {
-    if (r.type !== 'free') return;
-    // Look for a transfer with reversed teams in the same window
+    if (r.type !== 'free' || swaps.has(idx)) return;
     const inverseKey = `${r.season}|${r.windowIndex}|${r.toTeamId}|${r.fromTeamId}`;
     const matches = transferKey.get(inverseKey);
-    if (matches && matches.length > 0) {
+    // Skip a leg already claimed by the exact pairing above.
+    const partner = matches?.find(m => !swaps.has(m));
+    if (partner !== undefined) {
       swaps.add(idx);
-      // Also flag the matched transfer leg so it visually pairs as a swap.
-      swaps.add(matches[0]);
+      swaps.add(partner);
     }
   });
   return swaps;

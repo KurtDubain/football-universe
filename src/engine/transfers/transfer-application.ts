@@ -138,6 +138,8 @@ export function createTransferRecord(params: {
   fee?: number;
   premiumRatio?: number;
   reason: string;
+  /** The other player's uuid when this record is one leg of a two-way swap. */
+  swapPartnerId?: string;
 }): TransferRecord {
   const { player } = params;
   return {
@@ -155,5 +157,6 @@ export function createTransferRecord(params: {
     fee: params.fee,
     premiumRatio: params.premiumRatio,
     reason: params.reason,
+    ...(params.swapPartnerId ? { swapPartnerId: params.swapPartnerId } : {}),
   };
 }

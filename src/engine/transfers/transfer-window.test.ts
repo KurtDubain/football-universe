@@ -547,3 +547,120 @@ describe('processTransferWindow — squad-size target gate on free agents', () =
     expect(signings(buildPoolWorld(26))).toBeGreaterThan(0);
   });
 });
+
+describe('processTransferWindow — elite-to-elite swaps file both legs', () => {
+  /**
+   * The only squad shape `attemptEliteSwaps` accepts: each club carries a
+   * surplus past the starter slots in one position and a shortage in the
+   * other, so the two surplus players play different positions and each is an
+   * upgrade on the other club's weakest player at that position.
+   *
+   * Four clubs, not two: `resolveMarketTiers` caps buyers at `n - 1`, so a
+   * two-club world yields a single buyer and the swap lane never opens.
+   */
+  function buildSwapWorld(): GameWorld {
+    const alpha = makeTeam('alpha', 90);
+    const beta = makeTeam('beta', 89);
+    const gamma = makeTeam('gamma', 60);
+    const delta = makeTeam('delta', 58);
+
+    const alphaSquad: Player[] = [
+      makePlayer('alpha', 9, 'FW', 88, 'a-fw1'),
+      makePlayer('alpha', 10, 'FW', 86, 'a-fw2'),
+      makePlayer('alpha', 11, 'FW', 84, 'a-fw3'),
+      makePlayer('alpha', 17, 'FW', 82, 'a-fw4'), // surplus
+      makePlayer('alpha', 8, 'MF', 70, 'a-mf1'),  // shortage
+      makePlayer('alpha', 1, 'GK', 85, 'a-gk1'),
+    ];
+    const betaSquad: Player[] = [
+      makePlayer('beta', 9, 'MF', 88, 'b-mf1'),
+      makePlayer('beta', 10, 'MF', 86, 'b-mf2'),
+      makePlayer('beta', 11, 'MF', 84, 'b-mf3'),
+      makePlayer('beta', 17, 'MF', 82, 'b-mf4'),  // surplus
+      makePlayer('beta', 8, 'FW', 70, 'b-fw1'),   // shortage
+      makePlayer('beta', 1, 'GK', 85, 'b-gk1'),
+    ];
+    const filler = (teamId: string): Player[] => [
+      makePlayer(teamId, 9, 'FW', 62, teamId + '-fw'),
+      makePlayer(teamId, 1, 'GK', 62, teamId + '-gk'),
+    ];
+
+    return {
+      ...buildWorld(),
+      teamBases: { alpha, beta, gamma, delta },
+      squads: {
+        alpha: alphaSquad,
+        beta: betaSquad,
+        gamma: filler('gamma'),
+        delta: filler('delta'),
+      },
+      // No season stats means no poaching candidates, so the swap lane is the
+      // only thing that can move a player in this fixture.
+      playerStats: {},
+      teamFinances: {
+        alpha: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+        beta: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+        gamma: { cash: 20, totalIncome: 0, totalExpense: 0, history: [] },
+        delta: { cash: 20, totalIncome: 0, totalExpense: 0, history: [] },
+      },
+    };
+  }
+
+  /** First seed whose window produced a swap, with both legs returned. */
+  function firstSwapSeed(world: GameWorld) {
+    for (let seed = 0; seed < 400; seed++) {
+      const result = processTransferWindow(world, new SeededRNG(seed));
+      const legs = result.transfers.filter(t => t.swapPartnerId !== undefined);
+      if (legs.length > 0) return { result, legs };
+    }
+    throw new Error('no seed produced an elite swap in 400 tries');
+  }
+
+  it('records a transfer for both players, not just the incoming one', () => {
+    const { result, legs } = firstSwapSeed(buildSwapWorld());
+
+    expect(legs).toHaveLength(2);
+    const [first, second] = legs;
+
+    // Opposite directions between the same two clubs, in the same window.
+    expect(first.fromTeamId).toBe(second.toTeamId);
+    expect(first.toTeamId).toBe(second.fromTeamId);
+    expect(first.season).toBe(second.season);
+    expect(first.windowIndex).toBe(second.windowIndex);
+    expect(first.playerId).not.toBe(second.playerId);
+
+    // Each leg names the other, which is what lets the transfer page render
+    // the pair as one deal instead of two unrelated moves.
+    expect(first.swapPartnerId).toBe(second.playerId);
+    expect(second.swapPartnerId).toBe(first.playerId);
+
+    // The defect this guards: only the incoming leg used to be filed, so the
+    // outgoing player sat in a squad their own latest transfer record
+    // contradicted — which `validateWorldData` reports as
+    // `transfer_latest_squad_mismatch` and which erased the move from their
+    // career line and the club story.
+    const teamOf = (uuid: string) => Object.entries(result.squads)
+      .find(([, squad]) => squad.some(player => player.uuid === uuid))?.[0];
+    expect(teamOf(first.playerId)).toBe(first.toTeamId);
+    expect(teamOf(second.playerId)).toBe(second.toTeamId);
+  });
+
+  it('keeps a swap out of the finance ledger', () => {
+    const { legs } = firstSwapSeed(buildSwapWorld());
+    // Recorded without a fee on purpose: season-end skips cash booking for
+    // fee-less moves, so a swap cannot perturb club cash or the wage cap.
+    for (const leg of legs) {
+      expect(leg.fee).toBeUndefined();
+      expect(leg.type).toBe('transfer');
+    }
+  });
+
+  it('leaves squad sizes unchanged', () => {
+    const world = buildSwapWorld();
+    const { result } = firstSwapSeed(world);
+    // Zero-sum by construction: both sides surrender a surplus player.
+    for (const teamId of Object.keys(world.squads)) {
+      expect(result.squads[teamId]).toHaveLength(world.squads[teamId].length);
+    }
+  });
+});

@@ -494,18 +494,40 @@ function attemptEliteSwaps(params: {
     playerStats = applied.playerStats;
     spent.add(chosen.playerA.uuid);
     spent.add(chosen.playerB.uuid);
+    const teamAName = world.teamBases[chosen.teamA]?.name ?? chosen.teamA;
     const teamBName = world.teamBases[chosen.teamB]?.name ?? chosen.teamB;
     const outgoingName = applied.displacedPlayer.name ?? applied.displacedPlayer.number + '号';
+    const incomingName = applied.movedPlayer.name ?? applied.movedPlayer.number + '号';
+    // Both legs are filed. A swap moves two players in opposite directions,
+    // so recording only the incoming one left the outgoing player sitting in
+    // a squad that disagreed with their latest transfer record — which the
+    // world validator reports as `transfer_latest_squad_mismatch`, and which
+    // erased the move from that player's career line, the club story and the
+    // transfer page. `swapPartnerId` points the two legs at each other so the
+    // page can render them as the single deal they were.
     transfers.push(createTransferRecord({
       season: seasonNumber,
       windowIndex,
       player: applied.movedPlayer,
       fromTeamId: chosen.teamA,
-      fromTeamName: world.teamBases[chosen.teamA]?.name ?? chosen.teamA,
+      fromTeamName: teamAName,
       toTeamId: chosen.teamB,
       toTeamName: teamBName,
       type: 'transfer',
       reason: teamBName + '以' + outgoingName + '交换补强',
+      swapPartnerId: applied.displacedPlayer.uuid,
+    }));
+    transfers.push(createTransferRecord({
+      season: seasonNumber,
+      windowIndex,
+      player: applied.displacedPlayer,
+      fromTeamId: chosen.teamB,
+      fromTeamName: teamBName,
+      toTeamId: chosen.teamA,
+      toTeamName: teamAName,
+      type: 'transfer',
+      reason: teamAName + '以' + incomingName + '交换补强',
+      swapPartnerId: applied.movedPlayer.uuid,
     }));
     params.needsByTeam[chosen.teamA] = assessSquadNeeds(squads[chosen.teamA]);
     params.needsByTeam[chosen.teamB] = assessSquadNeeds(squads[chosen.teamB]);

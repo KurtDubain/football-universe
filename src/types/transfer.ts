@@ -47,6 +47,15 @@ export interface TransferRecord {
    */
   premiumRatio?: number;
   reason: string;      // human-readable e.g. "强援加盟", "自由转会"
+  /**
+   * The other player's uuid when this record is one leg of a two-way swap.
+   *
+   * A swap moves two players in opposite directions inside one window, so it
+   * only reads as a single deal if both legs can find each other. Absent on
+   * every record written before this field existed, and on every non-swap
+   * move; the transfer page falls back to leaving those unpaired.
+   */
+  swapPartnerId?: string;
   /** Optional presentation snapshot for an explicit observer transfer action. */
   observerInitiated?: boolean;
   observerImpact?: ObserverTransferImpact;
