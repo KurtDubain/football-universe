@@ -80,6 +80,14 @@ export interface BroadcastView {
   rig: CameraRig;
   width: number;
   height: number;
+  /**
+   * Which way the drawing space is turned on the way to the screen.
+   *
+   * Anything that has to read as text rather than as scenery needs this:
+   * in portrait the whole space is turned a quarter turn, so a label drawn
+   * flat in drawing coordinates comes out on its side.
+   */
+  orientation: PitchOrientation;
   /** Drawing-space pixels per metre at the near touchline. */
   unitsPerMeter: number;
   /**
@@ -121,6 +129,7 @@ export function createBroadcastView(
     rig,
     width,
     height,
+    orientation,
     unitsPerMeter,
     up,
     right,

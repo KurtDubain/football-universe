@@ -21,6 +21,8 @@
 // not re-render several thousand seats, and it does not have to.
 
 import { BROADCAST_SURROUND_COLOR, type BroadcastView } from './broadcast-view';
+import { withUpright } from './renderer';
+import type { PitchOrientation } from './geometry';
 import { drawTeamCrest } from './team-crest';
 import type { SeatTone, VenueBanner, VenueIdentity } from './venue-identity';
 
@@ -459,6 +461,8 @@ interface BigScreenGeometry {
   board: StadiumScoreboard;
   /** Horizontal spans the screen must not cover, in canvas coordinates. */
   avoid?: Array<{ left: number; right: number }>;
+  /** Which way the drawing space is turned on the way to the screen. */
+  orientation: PitchOrientation;
 }
 
 /**
@@ -471,8 +475,15 @@ interface BigScreenGeometry {
  * rather than as a building.
  */
 function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometry): void {
+  const portrait = geometry.orientation === 'portrait';
   const height = geometry.standHeight * 0.38;
-  const width = Math.min(height * 2.6, geometry.viewWidth * 0.24);
+  // Portrait turns the drawing space a quarter turn, so the screen width on
+  // the glass comes from the drawing height and vice versa. Keeping the 2.6:1
+  // landscape strip therefore lands a tall thin slab on the phone with the
+  // scoreline running up it, which is the one thing a scoreboard never does.
+  // A square reads correctly from either side and leaves room for upright
+  // text, so portrait gets one.
+  const width = portrait ? height : Math.min(height * 2.6, geometry.viewWidth * 0.24);
   if (width < MIN_SCREEN_WIDTH || height < MIN_SCREEN_HEIGHT) return;
   let x = Math.max(
     4,
@@ -503,23 +514,59 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, geometry: BigScreenGeometr
   ctx.fillStyle = panel;
   ctx.fillRect(x, y, width, height);
 
-  const barWidth = Math.max(2, width * 0.085);
-  ctx.fillStyle = board.home.color;
-  ctx.fillRect(x, y, barWidth, height);
-  ctx.fillStyle = board.away.color;
-  ctx.fillRect(x + width - barWidth, y, barWidth, height);
+  const barWidth = Math.max(2, (portrait ? height : width) * 0.085);
+  if (portrait) {
+    // Drawing +y is screen-right in portrait, so the club bars become the left
+    // and right edges of the board instead of its top and bottom — which is
+    // also the order the scoreboard above the canvas prints them in.
+    ctx.fillStyle = board.home.color;
+    ctx.fillRect(x, y, width, barWidth);
+    ctx.fillStyle = board.away.color;
+    ctx.fillRect(x, y + height - barWidth, width, barWidth);
+  } else {
+    ctx.fillStyle = board.home.color;
+    ctx.fillRect(x, y, barWidth, height);
+    ctx.fillStyle = board.away.color;
+    ctx.fillRect(x + width - barWidth, y, barWidth, height);
+  }
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const scoreText = board.homeScore + ' - ' + board.awayScore;
+  const clockText = board.minute + "'";
+
+  if (portrait) {
+    // Drawing +x is screen-up, so the scoreline sits above the clock and both
+    // run along drawing +y, which is screen-right. `withUpright` turns the
+    // glyphs back so they read horizontally on the glass instead of climbing
+    // up it.
+    const midY = y + height / 2;
+    const scoreAt = x + width * 0.68;
+    const clockAt = x + width * 0.3;
+    const portraitScore = height * 0.34;
+    ctx.font = '800 ' + portraitScore.toFixed(1) + 'px Inter, Arial, sans-serif';
+    ctx.fillStyle = '#f8fafc';
+    withUpright(ctx, scoreAt, midY, geometry.orientation, () => {
+      ctx.fillText(scoreText, scoreAt, midY);
+    });
+    const portraitClock = Math.max(5, height * 0.2);
+    ctx.font = '600 ' + portraitClock.toFixed(1) + 'px Inter, Arial, sans-serif';
+    ctx.fillStyle = 'rgba(226,232,240,0.7)';
+    withUpright(ctx, clockAt, midY, geometry.orientation, () => {
+      ctx.fillText(clockText, clockAt, midY);
+    });
+    return;
+  }
+
   const scoreSize = height * 0.52;
   ctx.font = '800 ' + scoreSize.toFixed(1) + 'px Inter, Arial, sans-serif';
   ctx.fillStyle = '#f8fafc';
-  ctx.fillText(board.homeScore + ' - ' + board.awayScore, x + width / 2, y + height * 0.42);
+  ctx.fillText(scoreText, x + width / 2, y + height * 0.42);
 
   const clockSize = Math.max(5, height * 0.24);
   ctx.font = '600 ' + clockSize.toFixed(1) + 'px Inter, Arial, sans-serif';
   ctx.fillStyle = 'rgba(226,232,240,0.7)';
-  ctx.fillText(board.minute + "'", x + width / 2, y + height * 0.8);
+  ctx.fillText(clockText, x + width / 2, y + height * 0.8);
 }
 function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
@@ -739,6 +786,7 @@ export function drawBroadcastStadium(
       viewWidth: view.width,
       board: options.scoreboard,
       avoid: tifoOnScreen,
+      orientation: view.orientation,
     });
   }
 
