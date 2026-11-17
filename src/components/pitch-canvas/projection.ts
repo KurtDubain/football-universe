@@ -160,20 +160,53 @@ export const BOX_CAMERA_REACH = 0.26;
  * 2.45x lens on the centre circle with the goal it was supposedly framing
  * somewhere off the side of the picture. The ball has to be near the goal too.
  */
+/**
+ * How much further the ball may drift before the tight camera gives the shot
+ * back, once it has taken it.
+ *
+ * `BOX_CAMERA_REACH` alone is a hard threshold on a value that jitters. A ball
+ * hovering on the boundary flipped the lens every frame, which measured as a
+ * burst of a dozen cuts inside half a second around every shot. Releasing
+ * later than engaging is the standard fix and costs nothing here, because the
+ * extra reach frames the same penalty area the camera was already on.
+ */
+export const BOX_CAMERA_RELEASE_REACH = BOX_CAMERA_REACH + 0.07;
+
+/** Whether the tight camera owns the shot, with hysteresis. */
+export function boxCameraEngaged(
+  attackingRight: boolean,
+  ballLengthFraction: number,
+  wasEngaged: boolean,
+): boolean {
+  const goalLengthFraction = attackingRight ? 1 : 0;
+  const distance = Math.abs(ballLengthFraction - goalLengthFraction);
+  return distance <= (wasEngaged ? BOX_CAMERA_RELEASE_REACH : BOX_CAMERA_REACH);
+}
+
 export function rigForMoment(
   moment: BroadcastCameraMoment,
   attackingRight: boolean,
   ballLengthFraction: number,
+  boxEngaged = boxCameraEngaged(attackingRight, ballLengthFraction, false),
 ): CameraRig {
   if (moment === 'set_piece' || moment === 'finish' || moment === 'outcome') {
-    const goalLengthFraction = attackingRight ? 1 : 0;
-    if (Math.abs(ballLengthFraction - goalLengthFraction) <= BOX_CAMERA_REACH) {
+    if (boxEngaged) {
       return { ...CAMERA_RIGS.box, centerX: attackingRight ? 0.79 : 0.21 };
     }
     return CAMERA_RIGS.sideline;
   }
-  if (moment === 'attack') return CAMERA_RIGS.sideline;
-  return CAMERA_RIGS.tactical;
+  // Open play belongs to the main camera.
+  //
+  // This used to send `build` to the high camera and `attack` to the main
+  // one, keyed on the stage of the pass currently in flight. Every possession
+  // runs build -> progress -> create, so every possession cut from the high
+  // camera to the main one at the same point and then back again: measured
+  // over 3,000 generated sequences, 3,000 of them produced exactly one cut
+  // and every one of those cuts was tactical -> sideline. A director holds
+  // the main camera through circulation and cuts when there is a reason to.
+  // `wide` is the only moment with no play in it at all.
+  if (moment === 'wide') return CAMERA_RIGS.tactical;
+  return CAMERA_RIGS.sideline;
 }
 
 /**

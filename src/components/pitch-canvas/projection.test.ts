@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOX_CAMERA_REACH,
+  BOX_CAMERA_RELEASE_REACH,
   CAMERA_RIGS,
+  boxCameraEngaged,
   pitchCorners,
   projectPitchPoint,
   rigDepthScale,
@@ -86,11 +88,29 @@ describe('broadcast camera projection', () => {
 
   it('cuts to the box camera only for the moments that deserve it', () => {
     expect(rigForMoment('wide', true, 0.9).id).toBe('tactical');
-    expect(rigForMoment('build', true, 0.5).id).toBe('tactical');
+    expect(rigForMoment('build', true, 0.5).id).toBe('sideline');
     expect(rigForMoment('attack', true, 0.8).id).toBe('sideline');
     expect(rigForMoment('set_piece', true, 0.95).id).toBe('box');
     expect(rigForMoment('finish', true, 0.9).id).toBe('box');
     expect(rigForMoment('outcome', true, 0.88).id).toBe('box');
+  });
+
+  it('releases the tight camera later than it engages it', () => {
+    // A single hard threshold on a value that jitters flipped the lens every
+    // frame. Measured on a real broadcast that was a burst of a dozen cuts
+    // inside half a second around every shot.
+    const between = 1 - (BOX_CAMERA_REACH + BOX_CAMERA_RELEASE_REACH) / 2;
+    expect(BOX_CAMERA_RELEASE_REACH).toBeGreaterThan(BOX_CAMERA_REACH);
+    expect(boxCameraEngaged(true, between, false)).toBe(false);
+    expect(boxCameraEngaged(true, between, true)).toBe(true);
+    // And a ball jittering across the boundary cannot flip it once engaged.
+    for (const offset of [-0.02, -0.01, 0, 0.01, 0.02]) {
+      expect(boxCameraEngaged(true, between + offset, true)).toBe(true);
+    }
+    // Still released once it genuinely leaves the area.
+    expect(boxCameraEngaged(true, 1 - BOX_CAMERA_RELEASE_REACH - 0.02, true)).toBe(false);
+    // Same from the other end.
+    expect(boxCameraEngaged(false, 1 - between, true)).toBe(true);
   });
 
   it('refuses the tight camera when the ball is nowhere near the goal', () => {

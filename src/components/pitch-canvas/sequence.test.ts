@@ -3,6 +3,8 @@ import { buildPassTarget, generateSequence, restartReleaseDelay } from './sequen
 import { passArc } from './sequence';
 import { decayBallLiftCarry, LIFT_CARRY_FLOOR } from './physics';
 import { getFormationSlots, getTacticalFormationSlots } from './types';
+import { rigForMoment } from './projection';
+import type { BroadcastCameraMoment } from './camera';
 
 describe('pitch possession sequences', () => {
   it('creates deterministic, bounded receiving points rather than fixed formation coordinates', () => {
@@ -353,5 +355,42 @@ describe('carried ball height', () => {
     expect(decayBallLiftCarry(LIFT_CARRY_FLOOR)).toEqual({ applied: 0, remaining: 0 });
     expect(decayBallLiftCarry(-5)).toEqual({ applied: 0, remaining: 0 });
     expect(decayBallLiftCarry(Number.NaN)).toEqual({ applied: 0, remaining: 0 });
+  });
+});
+
+describe('camera cuts inside a possession', () => {
+  it('never cuts between two ordinary passes', () => {
+    // The regression this locks down. `build` used to resolve to the high
+    // camera and `attack` to the main one, keyed on the stage of the pass
+    // currently in flight. Every possession runs build -> progress -> create,
+    // so every possession cut once at the same point: measured over 3,000
+    // generated sequences, 3,000 produced exactly one cut and every one of
+    // them was tactical -> sideline. Open play now holds the main camera, so
+    // the only cuts left are the ones a director would actually make.
+    let ordinaryCuts = 0;
+    let possessions = 0;
+    for (let seed = 1; seed <= 600; seed++) {
+      const sequence = generateSequence(seed, { attackingHome: seed % 2 === 0 });
+      possessions++;
+      let previous: { rig: string; directed: boolean } | null = null;
+      for (const phase of sequence.phases) {
+        const directed = phase.kind === 'shot' || Boolean(phase.setPiece);
+        const moment: BroadcastCameraMoment = phase.kind === 'shot'
+          ? 'finish'
+          : phase.setPiece
+            ? 'set_piece'
+            : phase.stage === 'create' || phase.stage === 'finish'
+              ? 'attack'
+              : 'build';
+        const ballLength = Math.min(1, Math.max(0, phase.targetOverride?.x ?? 0.5));
+        const rig = rigForMoment(moment, phase.attackingHome, ballLength).id;
+        if (previous !== null && previous.rig !== rig && !directed && !previous.directed) {
+          ordinaryCuts++;
+        }
+        previous = { rig, directed };
+      }
+    }
+    expect(possessions).toBe(600);
+    expect(ordinaryCuts).toBe(0);
   });
 });

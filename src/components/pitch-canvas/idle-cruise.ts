@@ -47,13 +47,20 @@ export interface IdleCruiseShot {
  * `rigForMoment` already refuses to make.
  *
  * The holds are deliberately uneven. An even cadence reads as a metronome
- * within two cycles; 3.5 / 4.2 / 2.8 / 3.8 s does not.
+ * within two cycles; 8 / 10 / 7 / 9 s does not.
+ *
+ * They used to run 3.5 / 4.2 / 2.8 / 3.8 s. That was tuned when the moment
+ * table was also cutting once per possession, so the two systems together
+ * produced a cut roughly every two seconds and the broadcast read as a
+ * slideshow. Now that open play holds the main camera, the cruise is the
+ * only thing cutting during a quiet stretch, and it has to behave like an
+ * operator filling time rather than a machine on a timer.
  */
 export const IDLE_CRUISE_SCHEDULE: readonly IdleCruiseShot[] = [
-  { rigId: 'tactical', holdFrames: 210, followScale: 1 },
-  { rigId: 'sideline', holdFrames: 252, followScale: 0.85 },
-  { rigId: 'tactical', holdFrames: 168, followScale: 0.3 },
-  { rigId: 'sideline', holdFrames: 228, followScale: 1 },
+  { rigId: 'tactical', holdFrames: 480, followScale: 1 },
+  { rigId: 'sideline', holdFrames: 600, followScale: 0.85 },
+  { rigId: 'tactical', holdFrames: 420, followScale: 0.3 },
+  { rigId: 'sideline', holdFrames: 540, followScale: 1 },
 ];
 
 /** Frames one full pass through the schedule takes. */

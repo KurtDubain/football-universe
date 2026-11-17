@@ -70,13 +70,15 @@ describe('idle cruise director', () => {
   it(
     'cuts on a cadence a broadcast would recognise',
     () => {
+      // These were 2.8-4.2 s, which together with the moment table cutting
+      // once per possession produced a cut about every two seconds.
       for (const shot of IDLE_CRUISE_SCHEDULE) {
-        expect(seconds(shot.holdFrames)).toBeGreaterThanOrEqual(2.5);
-        expect(seconds(shot.holdFrames)).toBeLessThanOrEqual(5);
+        expect(seconds(shot.holdFrames)).toBeGreaterThanOrEqual(6);
+        expect(seconds(shot.holdFrames)).toBeLessThanOrEqual(12);
       }
       expect(new Set(IDLE_CRUISE_SCHEDULE.map(shot => shot.holdFrames)).size)
         .toBe(IDLE_CRUISE_SCHEDULE.length);
-      expect(seconds(IDLE_CRUISE_CYCLE_FRAMES)).toBeGreaterThan(10);
+      expect(seconds(IDLE_CRUISE_CYCLE_FRAMES)).toBeGreaterThan(30);
     },
   );
 

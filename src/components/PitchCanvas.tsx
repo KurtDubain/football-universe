@@ -9,7 +9,7 @@ import { BEAT_MAX_FRAMES, drawBroadcastBeat } from './pitch-canvas/broadcast-bea
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
 import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
 import type { BroadcastCameraMoment } from './pitch-canvas/camera';
-import { CAMERA_RIGS, rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
+import { boxCameraEngaged, CAMERA_RIGS, rigForMoment, type CameraRig, type CameraRigId } from './pitch-canvas/projection';
 import { idleCruiseShotAt, isIdleCruiseWindow } from './pitch-canvas/idle-cruise';
 import {
   stoppageForBeat,
@@ -399,6 +399,16 @@ function PitchCanvas(props: Props) {
   const idleFramesRef = useRef(0);
   /** Match minute that quiet stretch began at; fixes the cruise rotation. */
   const idleStartMinuteRef = useRef(0);
+  /** Whether the tight camera owns the shot, so its release can lag. */
+  const boxEngagedRef = useRef(false);
+  /**
+   * Latched the moment a shot starts and released when its outcome clears.
+   *
+   * Without it the moment fell back to open play in the gap between the
+   * shot landing and the outcome frame starting, so every shot cut to the
+   * main camera and straight back to the tight one.
+   */
+  const shotCameraRef = useRef(false);
   /** The whistle currently holding the match still, if any. */
   const stoppageRef = useRef<{ plan: StoppagePlan; frame: number } | null>(null);
   const attackingRightRef = useRef(true);
@@ -1061,17 +1071,24 @@ function PitchCanvas(props: Props) {
         : null;
       const livePhase = sequenceRef.current[phaseIdxRef.current];
 
+      const shotOutcomeBusy = shotOutcomeFrameRef.current > 0 || goalCelebFrame.current > 0;
+      if (livePhase?.kind === 'shot') shotCameraRef.current = true;
+      else if (shotCameraRef.current && !shotOutcomeBusy) shotCameraRef.current = false;
       const cameraMoment: BroadcastCameraMoment = halftime
         ? 'wide'
-        : shotOutcomeFrameRef.current > 0 || goalCelebFrame.current > 0
+        : shotOutcomeBusy
           ? 'outcome'
-          : livePhase?.kind === 'shot'
+          : shotCameraRef.current
             ? 'finish'
             : livePhase?.setPiece
               ? 'set_piece'
               : livePhase?.stage === 'create' || livePhase?.stage === 'finish'
                 ? 'attack'
-                : livePhase?.stage === 'build'
+                // Any phase that is still live is open play. Keying this on
+                // `stage === build` sent progress and transition to `wide`,
+                // which is the high camera — so a possession cut to the main
+                // camera and straight back again between two passes.
+                : livePhase
                   ? 'build'
                   : 'wide';
       // Which camera this moment is shot on.
@@ -1101,9 +1118,18 @@ function PitchCanvas(props: Props) {
         idleFramesRef.current = 0;
       }
       const cruiseShot = idleCruiseShotAt(idleFramesRef.current, idleStartMinuteRef.current);
+      // The tight camera engages and releases on different thresholds, so a
+      // ball sitting on the boundary cannot flip the lens every frame.
+      const urgentMoment = cameraMoment === 'set_piece'
+        || cameraMoment === 'finish'
+        || cameraMoment === 'outcome';
+      const boxEngaged = urgentMoment
+        ? boxCameraEngaged(attackingRight, ballLengthFraction, boxEngagedRef.current)
+        : false;
+      boxEngagedRef.current = boxEngaged;
       const baseRig = cruiseShot
         ? CAMERA_RIGS[cruiseShot.rigId]
-        : rigForMoment(cameraMoment, attackingRight, ballLengthFraction);
+        : rigForMoment(cameraMoment, attackingRight, ballLengthFraction, boxEngaged);
       const followTargetX = rigFollowCenterX(
         baseRig,
         ballLengthFraction,
