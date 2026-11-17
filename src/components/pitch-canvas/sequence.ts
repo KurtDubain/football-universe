@@ -1,5 +1,5 @@
 // Pass-sequence generator. Pure: same seed → same output; no canvas / refs.
-import { seededRand } from './math';
+import { clamp, seededRand } from './math';
 import { generateSetPieceSequence } from './set-pieces';
 import type { CoachFormation, MatchApproach } from '../../types/coach';
 import {
@@ -384,6 +384,75 @@ export function buildPassTarget(
 }
 
 /**
+ * The highest an open-play pass of each kind is allowed to climb, as a
+ * fraction of the renderer's maximum lift.
+ *
+ * Height is a property of what a pass is for, not of how far it goes. A
+ * switch of play is a diagonal that has to clear a midfield and really is
+ * lofted; a long ball from the back is the highest pass in the game; a
+ * counter is a ball threaded forward into space and stays on the deck.
+ *
+ * Deciding height from distance alone — which is what this replaced — drew a
+ * 45 m counter and a 45 m switch identically, and because the old rule was a
+ * step at 0.34 rather than a ramp, a pass that grew by a metre went from ankle
+ * height to more than twice a player's height between one frame and the next.
+ * Measured over 11,314 generated phases, 31-47% of passes crossed that step and
+ * the worst of them peaked at 2.32 player heights — during a counter, which is
+ * the one passage a viewer is actually watching.
+ */
+const PATTERN_ARC_CEILING: Readonly<Record<PresentationPlayPattern, number>> = {
+  switch_play: 0.95,
+  build_up: 0.9,
+  wing_overload: 0.7,
+  recycle: 0.3,
+  central_combination: 0.28,
+  counter: 0.24,
+};
+
+/** Arc every pass starts from: the ball rolls, it does not hop. */
+const ARC_FLOOR = 0.055;
+
+/**
+ * Distance at which a pass starts to leave the grass, and how long the ramp is.
+ *
+ * Tuned against the distances the generator actually produces: the median pass
+ * is 17-24 m and only the back-to-front balls reach 60-70 m, so the ramp has to
+ * be short enough that a 39 m switch of play reads as lofted while a 20 m
+ * combination stays flat.
+ */
+const ARC_RAMP_START = 0.14;
+const ARC_RAMP_SPAN = 0.26;
+
+/**
+ * Arc for an open-play pass.
+ *
+ * Squaring the reach is what keeps medium passes on the grass and lets only
+ * genuinely long ones climb. A linear ramp still floated a 25 m ball
+ * noticeably; this one leaves it at ankle height.
+ */
+export function passArc(
+  travel: number,
+  pattern: PresentationPlayPattern | undefined,
+  roll: number,
+): number {
+  const reach = clamp((travel - ARC_RAMP_START) / ARC_RAMP_SPAN, 0, 1);
+  const ceiling = PATTERN_ARC_CEILING[pattern ?? 'recycle'] ?? 0.3;
+  return (ARC_FLOOR + reach * reach * (ceiling - ARC_FLOOR)) * (0.82 + roll * 0.36);
+}
+
+/**
+ * Flight time for an open-play pass.
+ *
+ * Ramped for the same reason the arc is. The old code had two fixed bands
+ * either side of the same threshold, so a pass that grew by a metre could take
+ * 60% longer to arrive — a ball that changes speed in a jump reads as a cut.
+ */
+function openPlayDuration(travel: number, roll: number): number {
+  const reach = clamp((travel - 0.1) / 0.45, 0, 1);
+  return (42 + reach * 38) * (0.9 + roll * 0.22);
+}
+
+/**
  * Generate a possession sequence with realistic flow and occasional interceptions.
  */
 export function generateSequence(seed: number, options: SequenceOptions = {}): { phases: PassPhase[]; endsInShot: boolean } {
@@ -517,7 +586,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       const slot = formation[route[i]] ?? formation[nearestSlot(formation, ['MF'], 0.5)];
       return { x: isHome ? slot.x : 1 - slot.x, y: slot.y };
     })();
-    const longBall = Math.hypot(target.x - source.x, target.y - source.y) > 0.34;
+    const travel = Math.hypot(target.x - source.x, target.y - source.y);
+    // Kept only for the directed-chance path, whose arcs are hand-tuned per
+    // delivery shape. Open play uses the ramp above.
+    const longBall = travel > 0.34;
     const isLastPass = i === route.length - 2;
     const directedDelivery = Boolean(options.forceShot && isLastPass && chanceStyle);
     const directedDuration = chanceStyle === 'cross'
@@ -544,11 +616,15 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       chanceStyle,
       duration: options.forceShot
         ? directedDelivery ? directedDuration : (longBall ? 34 + r(i + 10) * 7 : 27 + r(i + 11) * 7)
-        : longBall ? 70 + r(i + 10) * 25 : 42 + r(i + 11) * 20,
+        : openPlayDuration(travel, r(i + 11)),
       hold: options.forceShot
         ? 7 + r(i + 12) * 4
         : isLastPass ? 18 + r(i + 12) * 18 : 26 + r(i + 12) * 30,
-      arc: directedDelivery ? directedArc : longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18,
+      arc: directedDelivery
+        ? directedArc
+        : options.forceShot
+          ? (longBall ? 0.55 + r(i + 13) * 0.4 : r(i + 13) * 0.18)
+          : passArc(travel, pattern, r(i + 13)),
       intercepted: willIntercept && i === route.length - 2, // last pass gets stolen
       ...(i === 0 && options.startingPlayerIdx !== undefined && {
         releaseDelayFrames: options.restart

@@ -89,6 +89,10 @@ import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mod
 import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
 import { isWaitingForEvent, shouldHoldClock } from './pitch-canvas/playback-gates';
 import {
+  decayBallLiftCarry,
+  LIFT_CARRY_FLOOR,
+} from './pitch-canvas/physics';
+import {
   createRenderMetricsTracker,
   EMPTY_RENDER_METRICS,
   type RenderMetricsSnapshot,
@@ -452,6 +456,15 @@ function PitchCanvas(props: Props) {
   const queuedScenesRef = useRef<EventScene[]>([]);
   const ballSourceRef = useRef({ x: 0.5, y: 0.5 });
   const ballArcLiftRef = useRef(0);
+  /**
+   * Height the ball still had when the sequence under it was replaced.
+   *
+   * A pass cut out at the top of its arc used to drop to the grass in a single
+   * frame, because the new sequence starts with the ball at the interceptor's
+   * feet and no lift of its own. That one-frame drop was the most visible cut
+   * in a match, and it landed exactly on the turnovers the viewer is watching.
+   */
+  const ballLiftCarryRef = useRef(0);
   const interceptedRef = useRef(false);
   const tacticalAssignmentsRef = useRef<TacticalAssignments | null>(null);
   const tacticalAssignmentKeyRef = useRef('');
@@ -781,7 +794,20 @@ function PitchCanvas(props: Props) {
       updateRenderingDebug(debugActive, debugPause);
     }
 
+    /** Take this frame's carried height and decay what is left of it. */
+    function takeLiftCarry(): number {
+      const step = decayBallLiftCarry(ballLiftCarryRef.current);
+      ballLiftCarryRef.current = step.remaining;
+      return step.applied;
+    }
+
     function loadSequence(phases: PassPhase[], seed: number): void {
+      // A sequence can be replaced while the ball is still in the air: a pass
+      // cut out, a scene resolving into a restart. Carry the height it had and
+      // let it settle rather than dropping it between one frame and the next.
+      if (ballArcLiftRef.current > LIFT_CARRY_FLOOR) {
+        ballLiftCarryRef.current = ballArcLiftRef.current;
+      }
       sequenceSeedRef.current = seed;
       sequenceRef.current = phases;
       phaseIdxRef.current = 0;
@@ -1567,7 +1593,8 @@ function PitchCanvas(props: Props) {
 
       let displayBx = bx;
       let displayBy = by;
-      let displayArcLift = ballArcLiftRef.current;
+      const liftCarry = takeLiftCarry();
+      let displayArcLift = ballArcLiftRef.current + liftCarry;
       if (shotOutcomeFrameRef.current > 0) {
         const rebound = computePostShotBallPosition({
           outcome: shotOutcomeRef.current,
@@ -1579,7 +1606,7 @@ function PitchCanvas(props: Props) {
         });
         displayBx = rebound.bx;
         displayBy = rebound.by;
-        displayArcLift = rebound.arcLift;
+        displayArcLift = rebound.arcLift + liftCarry;
         postShotRestingBallRef.current = { x: rebound.bx, y: rebound.by };
         ballSpinRef.current += rebound.spinDelta;
       }

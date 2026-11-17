@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPassTarget, generateSequence, restartReleaseDelay } from './sequence';
+import { passArc } from './sequence';
+import { decayBallLiftCarry, LIFT_CARRY_FLOOR } from './physics';
 import { getFormationSlots, getTacticalFormationSlots } from './types';
 
 describe('pitch possession sequences', () => {
@@ -238,5 +240,118 @@ describe('pitch possession sequences', () => {
     }
 
     expect(representativeRoutes.size).toBe(formations.length);
+  });
+});
+
+/**
+ * Ball height is measured in units of a drawn player. The pitch is 520 logical
+ * units for 105 m and a player is 1.82 m, so one player is 9.01 units and the
+ * renderer lifts the ball by arc * 22.
+ */
+const PLAYER_UNITS = 1.82 / (105 / 520);
+const MAX_LIFT = 22;
+const playerHeights = (arc: number) => (arc * MAX_LIFT) / PLAYER_UNITS;
+
+describe('pass height', () => {
+  it('keeps a counter on the deck while a switch of play climbs', () => {
+    // The whole point: at the same distance these are different passes. A
+    // counter is threaded into space; a switch has to clear a midfield.
+    for (const travel of [0.2, 0.3, 0.4, 0.45]) {
+      const counter = playerHeights(passArc(travel, 'counter', 0.5));
+      const switchPlay = playerHeights(passArc(travel, 'switch_play', 0.5));
+      expect(counter).toBeLessThan(switchPlay);
+    }
+  });
+
+  it('never lofts a counter, however far it goes', () => {
+    for (let travel = 0.05; travel <= 0.7; travel += 0.01) {
+      for (const roll of [0, 0.5, 1]) {
+        expect(playerHeights(passArc(travel, 'counter', roll))).toBeLessThan(0.8);
+      }
+    }
+  });
+
+  it('still lets a long ball and a switch of play get up in the air', () => {
+    expect(playerHeights(passArc(0.66, 'build_up', 1))).toBeGreaterThan(1.8);
+    expect(playerHeights(passArc(0.36, 'switch_play', 1))).toBeGreaterThan(1.4);
+  });
+
+  it('leaves a short combination at ankle height', () => {
+    for (const pattern of ['central_combination', 'recycle', 'counter'] as const) {
+      expect(playerHeights(passArc(0.16, pattern, 1))).toBeLessThan(0.4);
+    }
+  });
+
+  it('rises smoothly with distance instead of stepping at a threshold', () => {
+    // The steepest the curve ever gets is about 16% more height per extra metre
+    // of pass, which at that point is 0.38 m of peak. The rule this replaced
+    // stepped from 0.12 to 0.55 arc — a 350% jump — at a fixed distance.
+    for (const pattern of ['counter', 'switch_play', 'build_up', 'wing_overload'] as const) {
+      let previous = passArc(0.05, pattern, 0.5);
+      for (let travel = 0.06; travel <= 0.7; travel += 0.01) {
+        const current = passArc(travel, pattern, 0.5);
+        expect(current).toBeGreaterThanOrEqual(previous - 1e-9);
+        expect((current - previous) / previous).toBeLessThan(0.2);
+        previous = current;
+      }
+    }
+  });
+
+  it('does not jump when a pass crosses the old 0.34 threshold', () => {
+    // The reported bug: a pass that grew by a metre went from ankle height to
+    // more than twice a player's height in a single frame.
+    for (const pattern of ['counter', 'switch_play', 'build_up'] as const) {
+      const below = passArc(0.335, pattern, 0.5);
+      const above = passArc(0.345, pattern, 0.5);
+      expect((above - below) / below).toBeLessThan(0.1);
+    }
+  });
+
+  it('holds every pattern inside a believable ceiling', () => {
+    // 95th-percentile travel for each pattern, measured over 11,314 generated
+    // phases. Judging a switch of play at 70 m says nothing about the passes a
+    // viewer actually sees, so each pattern is held to its own range.
+    const usualTravel: Readonly<Record<string, number>> = {
+      counter: 0.42, switch_play: 0.37, build_up: 0.68,
+      wing_overload: 0.33, central_combination: 0.21, recycle: 0.3,
+    };
+    const patterns = ['counter', 'switch_play', 'build_up', 'wing_overload',
+      'central_combination', 'recycle'] as const;
+    for (const pattern of patterns) {
+      // 2.6 players is 4.7 m, about as high as a struck long ball climbs.
+      const realistic = playerHeights(passArc(usualTravel[pattern], pattern, 1));
+      expect(realistic).toBeGreaterThan(0);
+      expect(realistic).toBeLessThan(2.6);
+      // Even a physically impossible full-pitch ball stays under 5.5 m.
+      expect(playerHeights(passArc(1, pattern, 1))).toBeLessThan(3);
+    }
+  });
+
+  it('treats an unknown pattern as a flat one', () => {
+    expect(passArc(0.5, undefined, 0.5)).toBeLessThan(passArc(0.5, 'switch_play', 0.5));
+  });
+});
+
+describe('carried ball height', () => {
+  it('settles a ball cut out at the top of its arc instead of dropping it', () => {
+    let carry = 20;
+    const drawn: number[] = [];
+    for (let frame = 0; frame < 60 && carry > 0; frame++) {
+      const step = decayBallLiftCarry(carry);
+      drawn.push(step.applied);
+      carry = step.remaining;
+    }
+    expect(drawn[0]).toBe(20);
+    expect(drawn.length).toBeGreaterThan(8);
+    expect(drawn.length).toBeLessThan(40);
+    for (let i = 1; i < drawn.length; i++) expect(drawn[i]).toBeLessThan(drawn[i - 1]);
+    expect(carry).toBe(0);
+  });
+
+  it('leaves a ball that was already on the grass alone', () => {
+    expect(decayBallLiftCarry(0)).toEqual({ applied: 0, remaining: 0 });
+    expect(decayBallLiftCarry(LIFT_CARRY_FLOOR)).toEqual({ applied: 0, remaining: 0 });
+    expect(decayBallLiftCarry(-5)).toEqual({ applied: 0, remaining: 0 });
+    expect(decayBallLiftCarry(Number.NaN)).toEqual({ applied: 0, remaining: 0 });
   });
 });

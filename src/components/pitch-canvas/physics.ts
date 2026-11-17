@@ -277,6 +277,30 @@ export function buildTacticalAssignments(
  * Compute ball pixel position + arc lift + spin delta for the current frame.
  * Pure: same input → same output. Caller accumulates spin onto its own ref.
  */
+/**
+ * Per-frame decay of a ball height carried across a sequence swap.
+ *
+ * A pass cut out at the top of its arc used to drop to the grass in a single
+ * frame, because the sequence replacing it starts with the ball at the
+ * interceptor's feet and no lift of its own. That one-frame drop was the most
+ * visible cut in a match, and it landed on the turnovers the viewer is watching.
+ */
+export const LIFT_CARRY_DECAY = 0.86;
+
+/** Below this a carried height is gone and the ball is simply on the grass. */
+export const LIFT_CARRY_FLOOR = 0.4;
+
+/**
+ * One frame of carried height: what to draw now, and what is left for next frame.
+ *
+ * 0.86 a frame settles a ball cut out at the top of a long pass in about a
+ * third of a second, which reads as the ball coming down rather than as a cut.
+ */
+export function decayBallLiftCarry(carry: number): { applied: number; remaining: number } {
+  if (!Number.isFinite(carry) || carry <= LIFT_CARRY_FLOOR) return { applied: 0, remaining: 0 };
+  return { applied: carry, remaining: carry * LIFT_CARRY_DECAY };
+}
+
 export function computeBallPosition(input: BallComputeInput): BallComputeResult {
   const {
     passing, phaseFrame, duration, arc, source, target, frame,
