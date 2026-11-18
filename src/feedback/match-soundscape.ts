@@ -1,11 +1,13 @@
 import type { MatchEvent, MatchResult } from '../types/match';
-import { eventAttacksForHome, isShotEvent } from '../engine/match/event-taxonomy';
+import { eventAttacksForHome, isShotEvent, playOriginForEvent } from '../engine/match/event-taxonomy';
 import type {
+  MatchBallTouchCue,
   MatchPresentationAtmosphere,
   MatchPresentationCue,
 } from '../types/match-presentation';
 import { getUnlockedGameAudioContext } from './game-feedback';
 import {
+  CHANT_BUS_TRIM,
   CHANT_PROFILE_GAIN,
   chantLayerGains,
   getChantBuffers,
@@ -47,6 +49,7 @@ export interface MatchSoundscape {
   updatePresentation: (snapshot: MatchPresentationAtmosphere) => void;
   playEvent: (event: MatchEvent) => void;
   playPresentation: (cue: MatchPresentationCue) => void;
+  playBallTouch: (cue: MatchBallTouchCue) => void;
   playEmphasis: (emphasis: MatchSoundEmphasis) => void;
   playStage: (stage: 'halftime' | 'extra_time' | 'shootout' | 'fulltime', outcome?: MatchStageOutcome) => void;
   setMuted: (muted: boolean) => void;
@@ -135,13 +138,33 @@ export function computeCrowdIntensity(
   return clamp(0.24 + prestige * 0.42 + progress * 0.12 + lateTension, 0.16, 1);
 }
 
+/**
+ * How a struck ball should sound, from how hard it was hit.
+ *
+ * A five-metre touch and a thirty-metre switch are the same gesture at
+ * different efforts, and the effort is what the ear hears. Both sit well under
+ * a shot, which is the whole reason a shot sounds like a shot.
+ */
+export function ballTouchTone(speedMps: number): { strength: number; brightness: number } {
+  const effort = clamp((speedMps - 8) / 20, 0, 1);
+  return {
+    strength: 0.45 + effort * 0.4,
+    brightness: 1150 + effort * 950,
+  };
+}
+
+/** Chant bus level for a profile, after the headroom trim. */
+export function chantBusGain(profile: SoundProfile, effectsVolume: number): number {
+  return CHANT_PROFILE_GAIN[profile] * CHANT_BUS_TRIM * effectsVolume;
+}
+
 export function computeCrowdGainLevel(
   matchIntensity: number,
   presentationDanger: number,
   paused: boolean,
 ): number {
   const activeDanger = paused ? 0 : clamp(presentationDanger);
-  return 0.016 + clamp(matchIntensity) * 0.045 + activeDanger * 0.026;
+  return 0.046 + clamp(matchIntensity) * 0.13 + activeDanger * 0.078;
 }
 
 export function isPresentationSequencedSoundEvent(event: MatchEvent): boolean {
@@ -212,23 +235,45 @@ function scheduleOscillator(
   }, { once: true });
 }
 
+/** Crowd texture. Pure, so the bed's real level can be measured in a test. */
+export function fillNoiseBuffer(data: Float32Array, sampleRate: number, seed: number): void {
+  const random = seededNoise(seed);
+  let smoothed = 0;
+  for (let index = 0; index < data.length; index++) {
+    const noise = random() * 2 - 1;
+    smoothed = smoothed * 0.84 + noise * 0.16;
+    const pulse = 0.72 + Math.sin(index / sampleRate * Math.PI * 3.1) * 0.12;
+    data[index] = clamp(smoothed * pulse, -1, 1);
+  }
+}
+
 function createNoiseBuffer(context: AudioContext, duration: number, seed: number): AudioBuffer {
   // Crowd texture does not need full output-rate fidelity. A compact buffer is
   // resampled by Web Audio and avoids a visible first-open task on slower phones.
   const sampleRate = Math.min(12_000, context.sampleRate);
   const length = Math.max(1, Math.floor(sampleRate * duration));
   const buffer = context.createBuffer(1, length, sampleRate);
-  const data = buffer.getChannelData(0);
-  const random = seededNoise(seed);
-  let smoothed = 0;
-  for (let index = 0; index < length; index++) {
-    const noise = random() * 2 - 1;
-    smoothed = smoothed * 0.84 + noise * 0.16;
-    const pulse = 0.72 + Math.sin(index / sampleRate * Math.PI * 3.1) * 0.12;
-    data[index] = clamp(smoothed * pulse, -1, 1);
-  }
+  fillNoiseBuffer(buffer.getChannelData(0), sampleRate, seed);
   return buffer;
 }
+
+/**
+ * The three filtered layers that make up the stand's continuous hiss.
+ *
+ * Exported so a mix test can work out what the bed actually puts on the bus.
+ * The bed used to sit 21 dB under the chant, which is not a balance: it is the
+ * continuous sound of a football ground rendered inaudible.
+ */
+export const CROWD_BED_LAYERS: ReadonlyArray<{
+  frequency: number;
+  volume: number;
+  playbackRate: number;
+  filterType?: BiquadFilterType;
+}> = [
+  { frequency: 980, volume: 0.7, playbackRate: 0.97 },
+  { frequency: 260, volume: 0.42, playbackRate: 0.71 },
+  { frequency: 1680, volume: 0.2, playbackRate: 1.13, filterType: 'highpass' },
+];
 
 const noiseBufferCache = new WeakMap<AudioContext, { crowd: AudioBuffer; event: AudioBuffer }>();
 
@@ -278,12 +323,19 @@ function scheduleWhistle(context: AudioContext, destination: AudioNode, offset =
   scheduleOscillator(context, destination, 2310, offset + 0.02, 0.13, 0.014, 'sine', 2050);
 }
 
-function createPannedOutput(context: AudioContext, destination: AudioNode, pan: number): AudioNode {
-  if (typeof context.createStereoPanner !== 'function' || Math.abs(pan) < 0.01) return destination;
-  const panner = context.createStereoPanner();
-  panner.pan.value = clamp(pan, -1, 1);
-  panner.connect(destination);
-  return panner;
+/** The two buses a strike or a reaction can be panned onto. */
+type PannableBus = 'action' | 'crowd';
+
+/**
+ * A panned tap on one of the two buses.
+ *
+ * This used to build a fresh `StereoPannerNode` on every single cue and never
+ * disconnect it. The audio context is a module-level singleton that is never
+ * closed, so a match leaked two nodes per cue for the life of the page. There
+ * are only four combinations in a match, so they are built once and cached.
+ */
+function pannedBusKey(bus: PannableBus, pan: number): string {
+  return bus + ':' + pan.toFixed(2);
 }
 
 function scheduleKickContact(
@@ -292,8 +344,9 @@ function scheduleKickContact(
   noise: AudioBuffer,
   offset = 0,
   strength = 1,
+  brightness = 1550,
 ): void {
-  scheduleNoiseBurst(context, destination, noise, 0.025 * strength, 0.09, 1550, offset);
+  scheduleNoiseBurst(context, destination, noise, 0.025 * strength, 0.09, brightness, offset);
   scheduleOscillator(context, destination, 96, offset, 0.075, 0.018 * strength, 'sine', 62);
 }
 
@@ -308,7 +361,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
   private accentGain: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private sources: AudioBufferSourceNode[] = [];
+  private panners = new Map<string, StereoPannerNode>();
   private eventNoise: AudioBuffer | null = null;
+  private lastTouchAt = -1;
   private muted: boolean;
   private profile: SoundProfile;
   private lastCrowdIntensity = 0.24;
@@ -386,15 +441,15 @@ class BrowserMatchSoundscape implements MatchSoundscape {
       source.start(0, (this.seed % 1400) / 1000);
       this.sources.push(source);
     };
-    createLayer(980, 0.7, 0.97);
-    createLayer(260, 0.42, 0.71);
-    createLayer(1680, 0.2, 1.13, 'highpass');
+    for (const layer of CROWD_BED_LAYERS) {
+      createLayer(layer.frequency, layer.volume, layer.playbackRate, layer.filterType);
+    }
 
     // The pulse under the hiss: four loops, each behind its own gain, faded
     // in one at a time as the match gets bigger. Built once per context and
     // looped, so the whole chant costs one buffer set and no scheduling.
     const chantGain = context.createGain();
-    chantGain.gain.value = CHANT_PROFILE_GAIN[this.profile] * this.effectsVolume;
+    chantGain.gain.value = chantBusGain(this.profile, this.effectsVolume);
     chantGain.connect(master);
     const chantBuffers = getChantBuffers(context, this.seed);
     const chantLayers: Array<[ChantLayerKey, GainNode]> = [];
@@ -469,24 +524,57 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.playClassifiedEvent(event, cue, true);
   }
 
+  /** A panned tap on one of the two buses, built once and reused. */
+  private pannedOutput(bus: PannableBus, pan: number): AudioNode | null {
+    const destination = bus === 'action' ? this.actionGain : this.crowdReactionGain;
+    if (!this.context || !destination) return null;
+    if (typeof this.context.createStereoPanner !== 'function' || Math.abs(pan) < 0.01) {
+      return destination;
+    }
+    const key = pannedBusKey(bus, pan);
+    const cached = this.panners.get(key);
+    if (cached) return cached;
+    const panner = this.context.createStereoPanner();
+    panner.pan.value = clamp(pan, -1, 1);
+    panner.connect(destination);
+    this.panners.set(key, panner);
+    return panner;
+  }
+
+  /**
+   * A pass being struck.
+   *
+   * A five-metre touch and a thirty-metre switch are the same gesture at
+   * different efforts, and the effort is what the ear hears: the short one is
+   * a dull knock, the long one a brighter, harder strike. Both sit well under
+   * a shot, which is the whole reason a shot sounds like a shot.
+   */
+  playBallTouch(cue: MatchBallTouchCue): void {
+    if ((!this.started && !this.start()) || !this.context || !this.eventNoise) return;
+    // A rapid sequence must not stack into a rattle.
+    const now = this.context.currentTime;
+    if (now - this.lastTouchAt < 0.07) return;
+    this.lastTouchAt = now;
+    const { strength, brightness } = ballTouchTone(cue.speedMps);
+    const output = this.pannedOutput('action', cue.attackingHome ? 0.24 : -0.24);
+    if (!output) return;
+    scheduleKickContact(this.context, output, this.eventNoise, 0, strength, brightness);
+  }
+
   playPresentation(cue: MatchPresentationCue): void {
     if ((!this.started && !this.start()) || !this.context || !this.actionGain
       || !this.crowdReactionGain || !this.eventNoise) return;
     const context = this.context;
     const noise = this.eventNoise;
-    const actionOutput = createPannedOutput(
-      context,
-      this.actionGain,
-      cue.attackingHome ? 0.24 : -0.24,
-    );
-    const crowdOutput = createPannedOutput(
-      context,
-      this.crowdReactionGain,
-      cue.attackingHome ? 0.12 : -0.12,
-    );
+    const actionOutput = this.pannedOutput('action', cue.attackingHome ? 0.24 : -0.24);
+    const crowdOutput = this.pannedOutput('crowd', cue.attackingHome ? 0.12 : -0.12);
+    if (!actionOutput || !crowdOutput) return;
 
     if (cue.moment === 'setup') {
-      const origin = cue.event.playOrigin;
+      // The raw `playOrigin` is absent on an open-play free kick, which is
+      // most of them: the referee still blows the whistle, so the whistle has
+      // to come from the same defaulting the rest of the engine uses.
+      const origin = playOriginForEvent(cue.event);
       if (origin === 'direct_free_kick' || origin === 'crossed_free_kick'
         || origin === 'penalty' || cue.event.shootout) {
         scheduleWhistle(context, actionOutput, 0.02);
@@ -552,8 +640,9 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     const context = this.context;
     const noise = this.eventNoise;
     const attackingHome = eventAttacksForHome(event, this.options.result.homeTeamId);
-    const actionOutput = createPannedOutput(context, this.actionGain, attackingHome ? 0.24 : -0.24);
-    const crowdOutput = createPannedOutput(context, this.crowdReactionGain, attackingHome ? 0.12 : -0.12);
+    const actionOutput = this.pannedOutput('action', attackingHome ? 0.24 : -0.24);
+    const crowdOutput = this.pannedOutput('crowd', attackingHome ? 0.12 : -0.12);
+    if (!actionOutput || !crowdOutput) return;
 
     reportSoundscape({
       type: 'event',
@@ -699,12 +788,7 @@ class BrowserMatchSoundscape implements MatchSoundscape {
     this.refreshCrowdGain(0.25);
     setGain(this.crowdReactionGain, mix.reaction * this.effectsVolume, this.context, 0.25);
     if (this.chantGain) {
-      setGain(
-        this.chantGain,
-        CHANT_PROFILE_GAIN[this.profile] * this.effectsVolume,
-        this.context,
-        0.25,
-      );
+      setGain(this.chantGain, chantBusGain(this.profile, this.effectsVolume), this.context, 0.25);
     }
     setGain(this.actionGain, mix.action * this.effectsVolume, this.context, 0.2);
     setGain(this.accentGain, mix.accent * this.effectsVolume, this.context, 0.2);
@@ -726,18 +810,31 @@ class BrowserMatchSoundscape implements MatchSoundscape {
       }
     }
     this.sources = [];
+    // Every bus this match built has to come down. Only the chant gain and the
+    // compressor used to be disconnected, which left the master, the stand
+    // bed, both reaction buses and the accent bus wired into a context that is
+    // never closed — so closing a match and opening the next one stacked a
+    // second copy of all of it onto the same output.
+    for (const panner of this.panners.values()) panner.disconnect();
+    this.panners.clear();
+    this.crowdGain?.disconnect();
+    this.crowdReactionGain?.disconnect();
+    this.actionGain?.disconnect();
+    this.accentGain?.disconnect();
+    this.chantGain?.disconnect();
+    this.compressor?.disconnect();
+    this.master?.disconnect();
     this.context = null;
     this.master = null;
     this.crowdGain = null;
-    this.chantGain?.disconnect();
     this.chantGain = null;
     this.chantLayers = null;
     this.crowdReactionGain = null;
     this.actionGain = null;
     this.accentGain = null;
-    this.compressor?.disconnect();
     this.compressor = null;
     this.eventNoise = null;
+    this.lastTouchAt = -1;
     this.presentationDanger = 0;
     this.dangerWasHigh = false;
     if (wasStarted) reportSoundscape({ type: 'stop' });

@@ -144,22 +144,59 @@ function lowpass(data: Float32Array, rate: number, frequency: number, q: number)
   }
 }
 
+/**
+ * Where each layer is allowed to peak.
+ *
+ * These layers used to be written at whatever level their synthesis happened
+ * to land on, which put the voice track at 1.07 — over full scale before it
+ * had been through a single gain — and left the balance between them an
+ * accident of the filter maths rather than a decision. Normalizing each one
+ * to a declared peak makes the balance something a test can check.
+ */
+export const CHANT_LAYER_PEAKS: Readonly<Record<ChantLayerKey, number>> = {
+  sparse: 0.55,
+  dense: 0.5,
+  thump: 0.7,
+  voice: 0.22,
+};
+
+/**
+ * Trim on the chant bus.
+ *
+ * The loudest the bus can get is the weighted sum of `CHANT_LAYER_PEAKS` and
+ * `chantLayerGains`, which is 1.81 before any gain. At the old profile gain of
+ * 1.36 that peaked at 2.69 — 8.6 dB over full scale — and the bus compressor
+ * spent the whole match pulling 20 dB out of a signal that was never meant to
+ * be that loud. This puts the worst case just under full scale instead.
+ */
+export const CHANT_BUS_TRIM = 0.3;
+
+/** Scale a buffer so its loudest sample sits exactly on `target`. */
+export function normalizePeak(data: Float32Array, target: number): void {
+  let peak = 0;
+  for (let index = 0; index < data.length; index += 1) {
+    const magnitude = Math.abs(data[index]);
+    if (magnitude > peak) peak = magnitude;
+  }
+  if (peak <= 1e-6) return;
+  const scale = target / peak;
+  for (let index = 0; index < data.length; index += 1) data[index] *= scale;
+}
+
 function makeBuffer(context: AudioContext, seconds: number, rate: number): AudioBuffer {
   const length = Math.max(1, Math.floor(rate * seconds));
   const buffer = context.createBuffer(1, length, rate);
   return buffer;
 }
 
-function clapTrack(
-  context: AudioContext,
+/** Clapping, scattered the way a crowd is never quite together. */
+export function fillClapTrack(
+  data: Float32Array,
   rate: number,
   seed: number,
   beats: number,
   density: number,
-  gain: number,
-): AudioBuffer {
-  const buffer = makeBuffer(context, beats * CHANT_BEAT_SECONDS, rate);
-  const data = buffer.getChannelData(0);
+): void {
   const random = seededChantNoise(seed);
   const hits = clapBeats(seed, beats, density);
   const clapLength = Math.floor(rate * 0.06);
@@ -167,7 +204,8 @@ function clapTrack(
     const start = Math.floor(beat * CHANT_BEAT_SECONDS * rate);
     // A crowd is never together: scatter each clap a few milliseconds.
     const scatter = Math.floor((random() - 0.5) * rate * 0.012);
-    const level = gain * (0.7 + random() * 0.5);
+    // Relative variation only; the absolute level comes from normalizePeak.
+    const level = 0.7 + random() * 0.5;
     for (let index = 0; index < clapLength; index += 1) {
       const at = start + scatter + index;
       if (at < 0 || at >= data.length) continue;
@@ -177,12 +215,10 @@ function clapTrack(
     }
   }
   bandpass(data, rate, 1750, 0.8);
-  return buffer;
 }
 
-function thumpTrack(context: AudioContext, rate: number, beats: number): AudioBuffer {
-  const buffer = makeBuffer(context, beats * CHANT_BEAT_SECONDS, rate);
-  const data = buffer.getChannelData(0);
+/** The low hit under the clap. */
+export function fillThumpTrack(data: Float32Array, rate: number, beats: number): void {
   const length = Math.floor(rate * 0.16);
   for (let beat = 0; beat < beats; beat += 2) {
     const start = Math.floor(beat * CHANT_BEAT_SECONDS * rate);
@@ -196,18 +232,19 @@ function thumpTrack(context: AudioContext, rate: number, beats: number): AudioBu
       data[at] += Math.sin((2 * Math.PI * frequency * index) / rate) * envelope * 0.9;
     }
   }
-  return buffer;
 }
 
-function voiceTrack(context: AudioContext, rate: number, seed: number, beats: number): AudioBuffer {
-  const buffer = makeBuffer(context, beats * CHANT_BEAT_SECONDS, rate);
-  const data = buffer.getChannelData(0);
+/** Distant voices, filtered down to their rhythm and nothing else. */
+export function fillVoiceTrack(data: Float32Array, rate: number, seed: number): void {
   const random = seededChantNoise(seed);
   let smoothed = 0;
   for (let index = 0; index < data.length; index += 1) {
     const noise = random() * 2 - 1;
     smoothed = smoothed * 0.93 + noise * 0.07;
-    data[index] = smoothed * 3.2;
+    // The 3.2 that used to sit here pushed this track to a peak of 1.07 —
+    // over full scale before any gain — so the level is set by
+    // `CHANT_LAYER_PEAKS` after the filters instead.
+    data[index] = smoothed;
   }
   // Everything above a few hundred hertz is gone. What is left is the swell of
   // a crowd, not the words, which is the point: a synthesised voice that can
@@ -219,7 +256,6 @@ function voiceTrack(context: AudioContext, rate: number, seed: number, beats: nu
     const swell = 0.55 + Math.sin(seconds * 1.9) * 0.28 + Math.sin(seconds * 0.61) * 0.17;
     data[index] *= swell;
   }
-  return buffer;
 }
 
 export interface ChantBuffers {
@@ -231,17 +267,41 @@ export interface ChantBuffers {
 
 const chantCache = new WeakMap<AudioContext, ChantBuffers>();
 
+/** How long each layer's loop is, at the chant tempo. */
+export function chantLayerSeconds(key: ChantLayerKey): number {
+  const beats = key === 'sparse' || key === 'voice' ? CHANT_SPARSE_BEATS : CHANT_DENSE_BEATS;
+  return beats * CHANT_BEAT_SECONDS;
+}
+
+/**
+ * Fill one normalized chant layer. Pure, so a test can measure what it built
+ * rather than trusting the synthesis to have landed somewhere sensible.
+ */
+export function buildChantLayer(
+  key: ChantLayerKey,
+  data: Float32Array,
+  rate: number,
+  seed: number,
+): void {
+  if (key === 'sparse') fillClapTrack(data, rate, seed ^ 0x2f1b, CHANT_SPARSE_BEATS, 0.34);
+  else if (key === 'dense') fillClapTrack(data, rate, seed ^ 0x7a3d, CHANT_DENSE_BEATS, 0.82);
+  else if (key === 'thump') fillThumpTrack(data, rate, CHANT_DENSE_BEATS);
+  else fillVoiceTrack(data, rate, seed ^ 0x51c7);
+  normalizePeak(data, CHANT_LAYER_PEAKS[key]);
+}
+
 /** One set of chant loops per audio context, built once and looped forever. */
 export function getChantBuffers(context: AudioContext, seed: number): ChantBuffers {
   const cached = chantCache.get(context);
   if (cached) return cached;
   const rate = Math.min(22_050, context.sampleRate);
-  const buffers: ChantBuffers = {
-    sparse: clapTrack(context, rate, seed ^ 0x2f1b, CHANT_SPARSE_BEATS, 0.34, 0.5),
-    dense: clapTrack(context, rate, seed ^ 0x7a3d, CHANT_DENSE_BEATS, 0.82, 0.42),
-    thump: thumpTrack(context, rate, CHANT_DENSE_BEATS),
-    voice: voiceTrack(context, rate, seed ^ 0x51c7, CHANT_SPARSE_BEATS),
-  };
+  const keys: ChantLayerKey[] = ['sparse', 'dense', 'thump', 'voice'];
+  const buffers = {} as ChantBuffers;
+  for (const key of keys) {
+    const buffer = makeBuffer(context, chantLayerSeconds(key), rate);
+    buildChantLayer(key, buffer.getChannelData(0), rate, seed);
+    buffers[key] = buffer;
+  }
   chantCache.set(context, buffers);
   return buffers;
 }

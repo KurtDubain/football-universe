@@ -28,6 +28,26 @@ export interface MatchPresentationCue {
   outcome?: 'goal' | 'save' | 'block' | 'miss' | 'delivery';
 }
 
+/**
+ * A ball struck in open play.
+ *
+ * Ordinary passes are not match events — the simulator does not record them —
+ * so they cannot travel as a `MatchPresentationCue`. They are still the most
+ * frequent sound in a football match by an order of magnitude, and their
+ * absence is why a possession sequence used to play out in silence.
+ */
+export interface MatchBallTouchCue {
+  /** Stable per strike, so a replayed frame cannot double it. */
+  id: string;
+  /** How far the ball travels, in metres. */
+  distanceMeters: number;
+  /** How hard it was struck, in metres per second. */
+  speedMps: number;
+  /** Where along the pitch the strike happened, 0..1. */
+  lengthFraction: number;
+  attackingHome: boolean;
+}
+
 export interface MatchPresentationAtmosphere {
   danger: number;
   attackingHome: boolean;

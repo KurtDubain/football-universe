@@ -13,6 +13,7 @@ import {
 } from '../feedback/match-soundscape';
 import type {
   MatchPresentationAtmosphere,
+  MatchBallTouchCue,
   MatchPresentationCue,
 } from '../types/match-presentation';
 import {
@@ -253,6 +254,16 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     soundscape?.playPresentation(cue);
   }, [
     commitPresentationCue,
+    feedbackPreferences.soundEnabled,
+    locallyMuted,
+    pageVisible,
+    showOpener,
+  ]);
+
+  const handleBallTouch = useCallback((cue: MatchBallTouchCue) => {
+    if (!feedbackPreferences.soundEnabled || locallyMuted || !pageVisible || showOpener) return;
+    soundscapeRef.current?.playBallTouch(cue);
+  }, [
     feedbackPreferences.soundEnabled,
     locallyMuted,
     pageVisible,
@@ -659,6 +670,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 onPlaybackHoldChange={setPresentationHolding}
                 onPlaybackAvailabilityChange={setPitchAvailable}
                 onPresentationCue={handlePresentationCue}
+                onBallTouch={handleBallTouch}
                 onPresentationAtmosphereChange={handlePresentationAtmosphere}
               />
             </div>

@@ -10,6 +10,7 @@ import type {
 import type { CoachFormation, MatchApproach } from '../../types/coach';
 
 export type {
+  MatchBallTouchCue,
   MatchPresentationAtmosphere,
   MatchPresentationCue,
   PresentationChanceStyle,

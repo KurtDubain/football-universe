@@ -47,6 +47,8 @@ import {
   LOGICAL_PITCH_WIDTH,
   PITCH_PADDING,
   playerSeparationDistance,
+  STANDARD_PITCH_LENGTH_METERS,
+  STANDARD_PITCH_WIDTH_METERS,
   type PitchOrientation,
 } from './pitch-canvas/geometry';
 import {
@@ -62,6 +64,7 @@ import {
 } from './pitch-canvas/renderer';
 import {
   getTacticalFormationSlots,
+  type MatchBallTouchCue,
   type MatchPresentationAtmosphere,
   type MatchPresentationCue,
   type Particle,
@@ -188,6 +191,7 @@ interface Props {
   onPlaybackHoldChange?: (holding: boolean) => void;
   onPlaybackAvailabilityChange?: (available: boolean) => void;
   onPresentationCue?: (cue: MatchPresentationCue) => void;
+  onBallTouch?: (cue: MatchBallTouchCue) => void;
   onPresentationAtmosphereChange?: (snapshot: MatchPresentationAtmosphere) => void;
 }
 
@@ -342,7 +346,7 @@ function PitchCanvas(props: Props) {
     homeShortName, awayShortName, isNeutralVenue = false, hostTeamId,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
     possession = [50, 50], featuredPlayerIds = [], homeApproach = 'balanced', awayApproach = 'balanced',
-    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onBallTouch, onPresentationAtmosphereChange,
   } = props;
 
   const homeFormation: CoachFormation = homeMatchday?.formation ?? '4-3-3';
@@ -494,6 +498,8 @@ function PitchCanvas(props: Props) {
    * `frame * rate(speed)` would snap the legs to a new place on every change.
    */
   const stridePhaseRef = useRef<number[]>([]);
+  /** Id of the last open-play strike reported, so a replayed frame cannot double it. */
+  const lastBallTouchIdRef = useRef('');
   const debugStateRef = useRef<PitchDebugState>({
     coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
     minute,
@@ -550,7 +556,7 @@ function PitchCanvas(props: Props) {
     eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
-    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onBallTouch, onPresentationAtmosphereChange,
   });
   useEffect(() => {
     liveRef.current = {
@@ -558,7 +564,7 @@ function PitchCanvas(props: Props) {
       eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
       homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
       homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
-      onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
+      onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onBallTouch, onPresentationAtmosphereChange,
     };
     wakeRenderLoopRef.current();
   }, [
@@ -566,7 +572,7 @@ function PitchCanvas(props: Props) {
     targetShift, eventScene, homeRoster, awayRoster, playbackMode, shootout, possession,
     homeFormation, awayFormation, homeApproach, awayApproach, formationLayouts, featuredPlayerIdSet,
     homeCrest, awayCrest, homeKitPattern, awayKitPattern, liveScore, venue,
-    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onPresentationAtmosphereChange,
+    onPlaybackHoldChange, onPlaybackAvailabilityChange, onPresentationCue, onBallTouch, onPresentationAtmosphereChange,
   ]);
 
   useEffect(() => () => {
@@ -1596,6 +1602,40 @@ function PitchCanvas(props: Props) {
         emitPresentationCue(directedShotScene, 'setup');
       }
       const contactFrame = contactFrameFor(currentPhase);
+      // Ordinary passes are not match events, so they cannot travel as a
+      // presentation cue — but they are the most frequent sound in a match by
+      // an order of magnitude, and a possession sequence playing out in silence
+      // is the giveaway that none of this is real. A set piece already has its
+      // own contact cue, so it stays out of this path.
+      if (
+        currentPhase.kind === 'pass'
+        && !currentPhase.setPiece
+        && !stoppage
+        && phaseStateRef.current !== 'holding'
+        && phaseFrameRef.current >= contactFrame
+      ) {
+        const touchId = sequenceSeedRef.current + ':' + phaseIdxRef.current;
+        if (lastBallTouchIdRef.current !== touchId) {
+          lastBallTouchIdRef.current = touchId;
+          const travelMeters = Math.hypot(
+            ((finalTargetX - ballSourceRef.current.x) / fw) * STANDARD_PITCH_LENGTH_METERS,
+            ((finalTargetY - ballSourceRef.current.y) / fh) * STANDARD_PITCH_WIDTH_METERS,
+          );
+          // The model already sized the flight from the speed it wanted, so
+          // reading it back off the duration is the same number rather than a
+          // second guess at it.
+          const speedMps = travelMeters / Math.max(0.05, currentPhase.duration / 60);
+          liveRef.current.onBallTouch?.({
+            id: touchId,
+            distanceMeters: travelMeters,
+            speedMps,
+            // At the contact frame the ball is still on the passer's foot,
+            // so the strike point is the source rather than the solved position.
+            lengthFraction: clamp((ballSourceRef.current.x - P) / fw, 0, 1),
+            attackingHome: isAttHome,
+          });
+        }
+      }
       if (
         directedShotScene
         && shouldEmitContactCue({
