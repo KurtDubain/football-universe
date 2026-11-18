@@ -1,8 +1,10 @@
 # 腾讯云部署与维护
 
-2026-11-17 23:53（北京时间）已更新**个人版**，应用版本 **4.73.0**，公开品牌为《下一季见：足球编年史》，继续开启 ICP 页脚。本次从干净的 `main/3ef5bb9` 构建，只更新 `football.dyp02.vip`；参赛版 `cup.dyp02.vip` 未构建、未上传、未切换。这一轮一次上线 4.68.0 至 4.73.0 六个版本，中间没有单独发过。
+2026-11-19 00:13（北京时间）已更新**个人版**，应用版本 **4.76.0**，公开品牌为《下一季见：足球编年史》，继续开启 ICP 页脚。本次从干净的 `main/194877f` 构建，只更新 `football.dyp02.vip`；参赛版 `cup.dyp02.vip` 未构建、未上传、未切换。这一轮是 v4.75.0 与 v4.76.0 两次界面打磨合并成一次发布——前者修转播演出，后者修交互与视觉。
 
-上一轮 2026-11-17 00:39 从 `main/18c3e76` 只更新个人版至 **4.67.0**；再上一轮 2026-11-13 18:35 从 `main/da77554` 只更新个人版至 **4.66.0**；再上一轮 2026-11-12 23:53 从 `main/a26dae8` 只更新个人版至 **4.65.0**；更早 2026-11-12 01:00 从 `main/6af5017` 只更新个人版至 **4.64.0**；2026-11-11 19:11 从 `main/ba91c95` 至 **4.63.0**、15:44 从 `main/f0956e2` 至 **4.62.0**；2026-09-25 19:25 从 `main/09a5984` 同时更新两版至 **4.61.11**。
+上一轮 2026-11-17 23:53 从 `main/3ef5bb9` 只更新个人版至 **4.73.0**，一次上线 4.68.0 至 4.73.0 六个版本，中间没有单独发过。
+
+再上一轮 2026-11-17 00:39 从 `main/18c3e76` 只更新个人版至 **4.67.0**；再上一轮 2026-11-13 18:35 从 `main/da77554` 只更新个人版至 **4.66.0**；再上一轮 2026-11-12 23:53 从 `main/a26dae8` 只更新个人版至 **4.65.0**；更早 2026-11-12 01:00 从 `main/6af5017` 只更新个人版至 **4.64.0**；2026-11-11 19:11 从 `main/ba91c95` 至 **4.63.0**、15:44 从 `main/f0956e2` 至 **4.62.0**；2026-09-25 19:25 从 `main/09a5984` 同时更新两版至 **4.61.11**。
 
 | 用途 | 地址 | 服务器目录 | Nginx 配置 |
 | --- | --- | --- | --- |
@@ -31,6 +33,24 @@ football-personal/ 或 football-contest/
 - 访问/错误日志：`/www/wwwlogs/football-personal.*.log`、`football-contest.*.log`。
 - 游戏 ACME 验证目录：`/www/wwwroot/apps/_acme/.well-known/acme-challenge`。
 - 日志轮转：`/etc/logrotate.d/football-static`，每日轮转、保留 14 份，并设 20 MB 阈值。
+
+## 当前发布来源（4.76.0，仅个人版）
+
+- 仓库：`git@github.com:KurtDubain/football-universe.git`；分支 `main`；完整提交 `194877f73bd4695407a503642f90eb8a8ffdb5ad`。构建前后与发布前均确认工作区干净、提交未变；本节为切换完成后补写的运维记录，不是附加游戏源码。
+- **本轮是快进合并，不是 `--no-ff`**：`main` 原本就是 `feat/youth-balance` 的祖先，12 个提交（`48d27fb` 至 `194877f`）零冲突直接快进，合并后 `main` 的 HEAD 即 `194877f`，历史保持线性，没有产生合并提交。与 4.64.0 至 4.67.0 一样：源码先合并并推送到 `origin/main`（`084f723..194877f`）再构建发布，发布来源就是 `main` 的 HEAD，而不是未合并的特性分支。特性分支 `feat/youth-balance` 本轮未推送到远端。
+- **门禁是在主仓 `main` 上重跑的，不是沿用 worktree 的结果**：`typecheck`（`tsc -b`）、`lint`（需加忽略项，见本节末）、`test`（196 文件 / 1,678 测试）、`docs:check`（v4.76.0，83,424 行 / 315 文件 / 196 测试文件）、`changelog:check`（v4.76.0，23 条）、`scripts:check`、`audio:check`（9 轨 / 2.90 MiB）、`BUILD_TARGET=personal editions:check`（`passed: true`，134 文件 / 316 模块）、`BUILD_TARGET=personal budgets:check`（`passed: true`，`violations: []`）。
+- 体积预算实测：entryJs 194,226 / 210,000（gzip 61,385 / 66,000）、initialJs 468,873 / 480,000（gzip 159,406 / 160,000）、CSS 198,195 / 199,500（gzip 30,543 / 31,744）、PWA 预缓存 92 项 / 2,068,676 字节（上限 92 项 / 2,150,000）。**initialJs gzip 只剩 594 字节余量**，下一轮应回收而不是再抬。
+- **本轮只发布个人版。** 参赛版未构建、未上传、未切换；切换后重新读取 `https://cup.dyp02.vip/version.json`，实测仍为 `4.61.11 / contest:three-shores-v1:contest:09a59843ae00b449ef53a63c3bef59530d90c687`，`/healthz` 仍返回 `football-contest-ok`，参赛版 `current` 软链保持 `v4.61.11-09a5984-20260925`（时间戳仍为 2026-09-25 19:25）未变。参赛版不随本轮升级仍是刻意的：它停在存档 schema 25，升到 26 会让参赛版旧存档被版本门禁拒绝，而参赛版按现有规则关闭手动导入，玩家无法自救。
+- 个人版 `current`：`v4.76.0-194877f-20261119`；`previous`：`v4.73.0-3ef5bb9-20261117`。实际切换 2026-11-19 00:13:02。
+- 本机 Node 22.22.2 / pnpm 10.34.5 构建，ICP 开启、audit 关闭：`PERSONAL_SITE_URL=https://football.dyp02.vip`、`ENABLE_ICP_FILING=true`、`VITE_ENABLE_AUDIT=false`、`VERCEL_GIT_COMMIT_SHA` 取自 `git rev-parse HEAD`。产物身份 `personal:personal-v1:personal:194877f73bd4695407a503642f90eb8a8ffdb5ad`，134 文件 / 316 模块。上传后在服务器端复算 SHA-256 与本地一致，再原子切换；脚本切换前执行 `nginx -t` 并通过。旧 release 与旧哈希资源保留（`releases` 15 个、`shared/assets` 809 个）。
+- `SAVE_SCHEMA_VERSION` 保持 26，未升版，没有新增或改名单制存档字段（`game-store.ts` 本轮只加了推进循环的 yield，`match-presentation.ts` 新增的 `MatchBallTouchCue` 是不落盘的瞬时呈现类型），4.73.0 存档可直接继续。**同一种子仍然复现 4.73.0 的世界**：4.74.0 至 4.76.0 全部是演出层与界面层改动，不读取也不消耗模拟随机数。旧存档里已有的球员、名次与历史随存档保存、不受影响。
+- 发布前资源记录：`/www/backups/football-deploy/20261119-001303-130745-activate-personal`。
+- 私有上传目录：`/www/server/football-deploy/incoming/v4.76.0-194877f-20261119/`（`mkdir -m 700`），只含 `personal.tar.gz`（4,901,860 字节，SHA-256 `57a19ae168ef56b41121127d7a3ff68a0a282e9b746c24bab6c6261bb1fc4d08`），不上传源码、凭据或数据库。
+- 发布后线上核验：`/healthz` 返回 `football-personal-ok`；`/version.json` 为 4.76.0 且 buildId 与构建身份一致；`index.html` 的 `last-modified` 为 2026-11-18 16:13:02 GMT（= 北京时间 2026-11-19 00:13:02，与切换时刻对应）；HTTP→HTTPS 301、SPA 深链接 `/settings` 200、缺失资产 404、`.vite/manifest.json` 404、`sw.js` 200 均通过。
+- 产物一致性比对：在服务器 release 目录对全部 **134 个文件**逐个复算 SHA-256，与打包前的本地清单排序后 `diff` **零差异**。确认线上就是本次构建的产物，没有旧缓存或混包。
+- **试玩边界：本轮在发布前用生产包做过桌面浏览器冒烟试玩**（`vite preview` 起 `dist/personal` 于 4191 端口，绑 IPv6，须用 `localhost` 访问）：欢迎页 → 选「挑战者 · 大同」→ 建宇宙 → 赛季开幕窗口，全程控制台零 warning 零 error；随后巡检 `/search`、`/players`、`/transfers`、`/history` 四条路由，均正常渲染且横向溢出为 0。**本轮三项改动的运行态证据**：构建产物中 `.focus\:outline-none` 出现 **0 次**（上一轮为 12 次）；按压规则 `.app-route-content :where(a,button,[role=button],summary):not(:disabled):active{filter:brightness(1.13)}` 在产物中且**不在任何 `@media (hover: none)` 内**（该媒体查询在 CSS 中已 0 次）；赛季进度条实测 `transform: matrix(0, 0, 0, 1, 0, 0)`、`transform-origin: 0px 1.5px`、`transition-property: transform`、`width: 1032px`（满宽 + scaleX；赛季刚开始，进度为 0 正确）。线上域名另做只读复核：CSS 191,645 字节与本地逐字节一致，三条规则同样在位，控制台零错误。**仍未做真机试玩**，也没有在线上域名上推进完整赛季。
+- **本轮遗留、已记录待下一轮处理**：焦点环颜色统一到 `var(--focus-ring)` 时漏掉三处——`NewsTicker.tsx:85` 与 `:111` 的 `focus-visible:outline-emerald-400`（硬编码翠绿），`AchievementToast.tsx:84` 的 `focus-visible:outline-none` + `focus-visible:ring-amber-300`（琥珀 box-shadow 环）。三处的焦点指示都存在、键盘可用，只是不走令牌；CSSOM 中因此仍残留 1 条 `outline-style: none` 规则。
+- 同机其他站未受影响：参赛版 `current` 软链与时间戳未变。没有修改 Nginx 配置、DNS、证书、续签任务、博客、history-war、office-signal-relay 或 Vercel。发布脚本在切换前执行 `nginx -t` 并通过。腾讯云仍为手动部署。
 
 ## 当前发布来源（4.73.0，仅个人版）
 
@@ -328,7 +348,15 @@ curl --fail https://cup.dyp02.vip/version.json
 
 ## 怎么回滚
 
-当前个人版为 4.73.0，上一版为 4.67.0。把个人版回滚到上一版的命令如下，在服务器执行。
+当前个人版为 4.76.0，上一版为 4.73.0。把个人版回滚到上一版的命令如下，在服务器执行。
+
+**回滚到 4.73.0 不触发存档版本门禁**：4.76.0 与 4.73.0 同为 `SAVE_SCHEMA_VERSION` 26，4.74.0 至 4.76.0 没有新增或改名单制存档字段，4.73.0 的存档可以继续用。回滚的真实代价是三个版本的界面与交互改动全部退回：换页重新重置页面状态（焦点掉回 `body`、滚动清零、十九个页面自留的筛选与展开状态被清空）、浮层只剩移动抽屉有焦点陷阱、桌面端浮动推进按钮重新压住联赛表第 8、9 行、积分榜「形势」列重新显示模拟从未产出的安全/危险百分比、球员中心在达标球员不足五人时重新隐藏整张表、新闻条目的十四种颜色与三处玻璃拟态回来、8–11 px 辅助文字重新出现。焦点环会重新被 12 处 `focus:outline-none` 压掉，桌面端按压反馈消失，赛季进度条回到 `transition: width`。**种子口径不变**：4.74.0 至 4.76.0 不消耗模拟随机数，所以 4.76.0 下开的新档回到 4.73.0 后仍然复现同一个世界。**本轮没有做回滚演练，也没有实测跨版本回滚后的存档表现。** 参赛版本轮未变更，无需回滚。
+
+```sh
+python3 /www/server/football-deploy/bin/manage-static.py rollback personal v4.73.0-3ef5bb9-20261117
+curl --fail https://football.dyp02.vip/version.json
+```
+
 
 **回滚到 4.67.0 不触发存档版本门禁**：4.73.0 与 4.67.0 同为 `SAVE_SCHEMA_VERSION` 26，本轮没有新增或改名单制存档字段，4.67.0 的存档可以继续用。回滚的真实代价是六个版本的演出层回退：直播会退回 4.67.0 的样子——门将扑救不再有专门的呈现、紧张感与危险度重新混在一起、观众和 tifo 不再动（4.68.0）；仪式层、语义色板、四层助威声、联赛垫乐、红黄牌与换人的转播镜头一并消失（4.69.0）；无球时段重新被整段跳过、传球高度重新变成距离的阶跃函数（4.70.0）；进球重新变成两脚传球加一秒足球、射门前重新干等约 2.6 秒（4.71.0）；球员重新瞬移、速度回到 23.9 米/秒巡航的假区间、射门球速回到 111 米/秒（4.72.0）；射手不再跑进禁区、球重新从没人站的地方打出去、远射重新变多、长传重新以 82 米/秒飞过球场（4.73.0）。**另外引擎侧那条修复也会一并消失**：精英互换重新只写转入腿，世界校验器会重新报 `transfer_latest_squad_mismatch`（3 种子 × 25 赛季实测 16 个赛季告警），转出球员的生涯线、俱乐部故事与转会页会重新丢掉这笔交易。**种子口径不变**：4.68.0 至 4.73.0 不消耗模拟随机数，所以 4.73.0 下开的新档回到 4.67.0 后仍然复现同一个世界。**本轮没有做回滚演练，也没有实测跨版本回滚后的存档表现。** 参赛版本轮未变更，无需回滚。
 
