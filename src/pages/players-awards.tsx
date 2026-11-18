@@ -98,8 +98,10 @@ export default function PlayersAwardsPanel({
   return (
     <section aria-labelledby="player-awards-heading" className="space-y-2">
       <div>
-        <h2 id="player-awards-heading" className="text-sm font-semibold text-slate-100">奖项</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        {/* 奖项是球员页内的一个分区而非独立页面，用分区标题原语，
+            避免和 Players 自己的 PageHeader 撞出第二个 h1。 */}
+        <h2 id="player-awards-heading" className="ui-section-title">奖项</h2>
+        <p className="ui-section-description">
           {view === 'records'
             ? `${records.length} 条获奖记录 · 档案仅保留最近 50 季`
             : `${leaders.length} 名球员获奖`}

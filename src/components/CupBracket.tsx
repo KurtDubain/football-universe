@@ -616,7 +616,7 @@ function ChampionCell({ teamId, tb, style }: {
   const team = teamId ? tb[teamId] : undefined;
   return (
     <div className="cup-bracket-champion" style={style} data-decided={Boolean(team)}>
-      <Icon name="trophy" size={22} accent={team ? '#d7ad55' : undefined} />
+      <Icon name="trophy" size={22} accent={team ? 'var(--competition-gold)' : undefined} />
       {team ? <TeamBadge teamId={team.id} shortName={team.shortName} color={team.color} size={28} /> : null}
       <strong title={team?.name}>{team ? getTeamShortName(team.id, tb) : '等待决赛'}</strong>
     </div>

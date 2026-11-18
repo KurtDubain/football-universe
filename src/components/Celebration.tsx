@@ -9,8 +9,9 @@ interface CelebrationProps {
   seed?: number;
 }
 
-const CONFETTI_COLORS = ['#fbbf24', '#f8fafc', '#3fb978', '#7ea6d8', '#df5d62'];
-const FIREWORK_COLORS = ['#fbbf24', '#f8fafc', '#43d49e', '#ef7377'];
+/* 庆祝色取年鉴色阶，不取 Tailwind 默认色：纸白代替纯白，金/绿/红用令牌。 */
+const CONFETTI_COLORS = ['var(--competition-gold)', 'var(--paper)', 'var(--success)', 'var(--info)', 'var(--danger)'];
+const FIREWORK_COLORS = ['var(--competition-gold)', 'var(--paper)', 'var(--success)', 'var(--danger)'];
 
 export default function Celebration({
   active,
@@ -154,7 +155,7 @@ function TrophyCelebration({ seed }: { seed: number }) {
       aria-hidden="true"
     >
       <div className="animate-trophy-reveal flex h-24 w-24 items-center justify-center rounded-full border border-amber-300/55 bg-slate-950/90 shadow-2xl shadow-amber-500/20 motion-reduce:animate-none">
-        <Icon name="trophy" size={58} accent="#fbbf24" />
+        <Icon name="trophy" size={58} accent="var(--competition-gold)" />
       </div>
       <FireworksCelebration seed={seed} />
       <ConfettiCelebration count={54} seed={seed + 31} />

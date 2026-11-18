@@ -6,6 +6,7 @@ import { buildCareerArc, type CareerArcPoint } from '../engine/players/career-ar
 import { computePlayerCareerTotals } from '../engine/players/career-totals';
 import { playerCareerAwards } from '../engine/players/player-honors';
 import TrophyBreakdown from '../components/TrophyBreakdown';
+import { POSITION_CHIP } from '../components/position-chip';
 import type { PlayerPosition, PlayerRetirement } from '../types/player';
 import type { CoachCandidate, CoachRetirement } from '../types/coach';
 import { useUiSessionState } from '../app/ui-session-state';
@@ -18,12 +19,6 @@ type LegendTab = 'players' | 'coaches';
 type CoachSortKey = 'recent' | 'trophies' | 'tenure';
 
 const POS_LABEL: Record<PlayerPosition, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
-const POS_CHIP: Record<PlayerPosition, string> = {
-  GK: 'bg-amber-900/40 text-amber-400 border-amber-700/30',
-  DF: 'bg-blue-900/40 text-blue-400 border-blue-700/30',
-  MF: 'bg-green-900/40 text-green-400 border-green-700/30',
-  FW: 'bg-red-900/40 text-red-400 border-red-700/30',
-};
 
 const STYLE_CHIP: Record<string, string> = {
   attacking: 'text-red-400 bg-red-900/30 border-red-700/30',
@@ -274,7 +269,7 @@ function RetireeCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`text-[10px] px-1.5 py-0.5 rounded border ${POS_CHIP[retiree.position]}`}
+              className={`text-[10px] px-1.5 py-0.5 rounded ${POSITION_CHIP[retiree.position]}`}
             >
               {POS_LABEL[retiree.position]}
             </span>
@@ -484,11 +479,11 @@ function CareerArcChart({
       aria-label={`Career trajectory peak ${maxRating}`}
     >
       {/* Grid lines at 50 / 75 */}
-      <line x1={padX} x2={W - padX} y1={grid50} y2={grid50} stroke="#334155" strokeWidth="0.5" strokeDasharray="2 2" />
-      <line x1={padX} x2={W - padX} y1={grid75} y2={grid75} stroke="#334155" strokeWidth="0.5" strokeDasharray="2 2" />
+      <line x1={padX} x2={W - padX} y1={grid50} y2={grid50} stroke="var(--border-strong)" strokeWidth="0.5" strokeDasharray="2 2" />
+      <line x1={padX} x2={W - padX} y1={grid75} y2={grid75} stroke="var(--border-strong)" strokeWidth="0.5" strokeDasharray="2 2" />
       {/* Grid labels (left side) */}
-      <text x={padX} y={grid50 - 1} fontSize="7" fill="#475569">50</text>
-      <text x={padX} y={grid75 - 1} fontSize="7" fill="#475569">75</text>
+      <text x={padX} y={grid50 - 1} fontSize="7" fill="var(--text-disabled)">50</text>
+      <text x={padX} y={grid75 - 1} fontSize="7" fill="var(--text-disabled)">75</text>
       {/* Peak vertical guide */}
       {peakXY && (
         <line
@@ -496,7 +491,7 @@ function CareerArcChart({
           x2={peakXY.x}
           y1={padY}
           y2={H - padY}
-          stroke="#f59e0b"
+          stroke="var(--competition-gold)"
           strokeWidth="0.5"
           strokeDasharray="1 2"
           opacity="0.6"
@@ -506,20 +501,20 @@ function CareerArcChart({
       <polyline
         points={polyline}
         fill="none"
-        stroke="#60a5fa"
+        stroke="var(--info)"
         strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
       {/* Peak dot */}
       {peakXY && (
-        <circle cx={peakXY.x} cy={peakXY.y} r={2.5} fill="#f59e0b" stroke="#1e293b" strokeWidth="0.5" />
+        <circle cx={peakXY.x} cy={peakXY.y} r={2.5} fill="var(--competition-gold)" stroke="var(--surface-page)" strokeWidth="0.5" />
       )}
       {/* Retirement dot (star-ish: outline ring) */}
       {endXY && (
         <>
-          <circle cx={endXY.x} cy={endXY.y} r={3} fill="#ef4444" stroke="#1e293b" strokeWidth="0.75" />
-          <circle cx={endXY.x} cy={endXY.y} r={1.2} fill="#fee2e2" />
+          <circle cx={endXY.x} cy={endXY.y} r={3} fill="var(--danger)" stroke="var(--surface-page)" strokeWidth="0.75" />
+          <circle cx={endXY.x} cy={endXY.y} r={1.2} fill="var(--danger-text)" />
         </>
       )}
     </svg>

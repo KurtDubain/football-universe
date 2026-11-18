@@ -23,7 +23,7 @@
   --ink: #14130f;
   --paper: #efe7d6;
   --edge: #d9cdb2;
-  --foil: #cfa94f;
+  --foil: var(--competition-gold);
   --cyan: #1f9bb5;
   --magenta: #c2407a;
   --stamp: #a32d3c;
@@ -73,7 +73,7 @@
 .ceremony-eyebrow,
 .ceremony-colophon {
   text-align: center;
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: rgba(62, 52, 32, 0.72);
@@ -86,7 +86,7 @@
 
 .ceremony-colophon {
   margin: 18px 0 0;
-  font-size: 10px;
+  font-size: 0.625rem;
   color: rgba(62, 52, 32, 0.58);
 }
 
@@ -95,7 +95,7 @@
   position: relative;
   margin: 0;
   text-align: center;
-  font-size: clamp(22px, 6vw, 34px);
+  font-size: clamp(1.375rem, 6vw, 2.125rem);
   font-weight: 800;
   line-height: 1.2;
   color: var(--ink);
@@ -134,14 +134,14 @@
 
 .ceremony-line {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.7;
   color: rgba(32, 28, 18, 0.86);
 }
 
 .ceremony-line--lead {
   text-align: center;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .ceremony-chips,
@@ -163,7 +163,7 @@
 .ceremony-chips li {
   padding: 3px 9px;
   border: 1px solid rgba(62, 52, 32, 0.3);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: rgba(42, 36, 22, 0.8);
 }
 
@@ -173,14 +173,14 @@
 
 .ceremony-champion-name {
   margin: 0;
-  font-size: clamp(24px, 7vw, 38px);
+  font-size: clamp(1.5rem, 7vw, 2.375rem);
   font-weight: 800;
   line-height: 1.15;
 }
 
 /* Foil, not glow: one warm sweep across the letters, then still. */
 .ceremony-foil {
-  background-image: linear-gradient(100deg, #7d5f26, #cfa94f 26%, #f6e6b4 44%, #cfa94f 64%, #7d5f26);
+  background-image: linear-gradient(100deg, #7d5f26, var(--foil) 26%, #f6e6b4 44%, var(--foil) 64%, #7d5f26);
   background-size: 210% 100%;
   background-position: 50% 0;
   -webkit-background-clip: text;
@@ -197,13 +197,13 @@
 }
 
 .ceremony-score {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
 .ceremony-versus {
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.14em;
   color: rgba(62, 52, 32, 0.66);
 }
@@ -216,20 +216,20 @@
   margin-top: 4px;
   padding: 8px 20px;
   border: 3px double var(--stamp);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--stamp);
   opacity: 0.9;
   transform: rotate(-7deg);
 }
 
 .ceremony-stamp span {
-  font-size: 10px;
+  font-size: 0.625rem;
   letter-spacing: 0.26em;
   opacity: 0.82;
 }
 
 .ceremony-stamp-label {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 800;
   letter-spacing: 0.16em;
   opacity: 1;
@@ -250,7 +250,7 @@
 }
 
 .ceremony-podium li {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ceremony-rank {
@@ -274,7 +274,7 @@
   gap: 14px;
   padding-bottom: 3px;
   border-bottom: 1px dotted rgba(62, 52, 32, 0.32);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .ceremony-honours span:first-child {
@@ -286,7 +286,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: 3px 10px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .ceremony-entrants span:last-child {
@@ -295,21 +295,23 @@
   white-space: nowrap;
 }
 
+/* index.html 声明了 viewport-fit=cover，手势条会盖住贴边的按钮，
+   所以偏移要在 12px 与安全区之间取大者。 */
 .ceremony-skip {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: max(12px, calc(env(safe-area-inset-right) + 8px));
+  bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
   min-height: 44px;
   min-width: 44px;
   padding: 0 18px;
   border: 1px solid rgba(228, 220, 198, 0.34);
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   background: rgba(12, 14, 20, 0.62);
   color: #e7e0cd;
-  font-size: 12px;
+  font-size: 0.75rem;
   letter-spacing: 0.2em;
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
 }
 
 .ceremony-skip:hover {

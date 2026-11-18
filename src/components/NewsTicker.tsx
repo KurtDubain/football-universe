@@ -10,11 +10,13 @@ const typeIcon: Record<string, IconName> = {
   rumor: 'megaphone', intervention: 'sparkle', storyline: 'eye',
 };
 
+/* 事件色按语义收敛到年鉴的五个令牌，不再逐条挑 Tailwind 默认色：
+   荣誉归金、警示归琥珀、负面归红、利好归绿、中性信息归蓝。 */
 const typeAccent: Record<string, string> = {
-  trophy: '#fbbf24', upset: '#f97316', coach_fired: '#ef4444', coach_hired: '#3b82f6',
-  promotion: '#10b981', relegation: '#f87171', streak: '#0ea5e9', match_result: '#10b981',
-  retirement: '#fcd34d', injury: '#fca5a5', fire_sale: '#fb923c', prize_money: '#eab308',
-  rumor: '#c084fc', intervention: '#d8b4fe', storyline: '#34d399',
+  trophy: 'var(--competition-gold)', upset: 'var(--danger)', coach_fired: 'var(--danger)', coach_hired: 'var(--info)',
+  promotion: 'var(--success)', relegation: 'var(--danger)', streak: 'var(--info)', match_result: 'var(--success)',
+  retirement: 'var(--competition-gold)', injury: 'var(--danger)', fire_sale: 'var(--warning)', prize_money: 'var(--competition-gold)',
+  rumor: 'var(--info)', intervention: 'var(--warning)', storyline: 'var(--success)',
 };
 
 const typeBg: Record<string, string> = {
@@ -80,7 +82,7 @@ export default function NewsTicker({
         data-fixture-id={item.fixtureId}
         aria-expanded={expanded}
         aria-controls="global-news-list"
-        className="w-full h-8 bg-slate-800/90 backdrop-blur border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+        className="w-full h-8 bg-[var(--surface-floating)] border-b border-slate-700/40 flex items-center px-3 sm:px-5 gap-2 cursor-pointer hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
         onClick={() => setExpanded(previous => !previous)}
       >
         <span className="text-xs shrink-0 text-slate-300">

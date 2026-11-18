@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMoney } from '../engine/economy/finance';
 import { Icon } from '../components/Icon';
+import { EmptyState, PageHeader } from '../components/ui';
+import { POSITION_CHIP } from '../components/position-chip';
 import { pickTransferReleaseCandidate } from '../engine/transfers/transfer-application';
 import {
   counterAcceptanceProbability,
@@ -21,15 +23,16 @@ import {
  *   - Free agent pool (market-value-scaled signing premium)
  * Plus action buttons. Closing commits the staged decisions and returns to S2.
  *
- * Auto-redirects to / if no window is open.
+ * With no open window the page explains itself instead of bouncing to /.
  */
 const POS_LABEL: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
-const POS_COLOR: Record<string, string> = {
-  GK: 'bg-amber-900/40 text-amber-300',
-  DF: 'bg-blue-900/40 text-blue-300',
-  MF: 'bg-emerald-900/40 text-emerald-300',
-  FW: 'bg-red-900/40 text-red-300',
-};
+
+/** 现金三档语义与 Dashboard 一致；呈现交给 index.css 的 .finance-* 工具类。 */
+function financeTone(cash: number): string {
+  if (cash < 0) return 'finance-negative';
+  if (cash < 10) return 'finance-warning';
+  return 'finance-positive';
+}
 
 export default function Market() {
   const world = useGameStore((s) => s.world);
@@ -44,13 +47,33 @@ export default function Market() {
   const [bidValues, setBidValues] = useState<Record<string, number>>({});
   const [freeAgentTeamId, setFreeAgentTeamId] = useState(favoriteTeamIds[0] ?? '');
 
-  useEffect(() => {
-    if (!world?.transferWindow) {
-      navigate('/');
-    }
-  }, [world?.transferWindow, navigate]);
+  if (!world) return null;
 
-  if (!world || !world.transferWindow) return null;
+  // 窗口关闭后不能先渲染一帧空白再把玩家弹走：说明发生了什么，让他自己选去处。
+  if (!world.transferWindow) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-5">
+        <EmptyState
+          icon={<Icon name="cart" size={28} />}
+          title="本赛季转会窗口已结束"
+          description="窗口关闭后不再受理新的报价与签约。本赛季已完成的转会与荣誉仍记录在编年史和历史页中。"
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={() => navigate('/')}
+                className="text-xs px-4 py-2.5 min-h-[40px] bg-[var(--action)] hover:bg-[var(--action-hover)] rounded text-white font-semibold"
+              >返回主页</button>
+              <button
+                onClick={() => navigate('/history')}
+                className="text-xs px-4 py-2.5 min-h-[40px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200"
+              >查看历史荣誉</button>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
+
   const tw = world.transferWindow;
   const selectedFreeAgentTeamId = favoriteTeamIds.includes(freeAgentTeamId)
     ? freeAgentTeamId
@@ -67,27 +90,24 @@ export default function Market() {
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       {/* Header */}
-      <div className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl border border-amber-700/40 p-5">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h1 className="text-2xl font-bold text-amber-300 inline-flex items-center gap-2"><Icon name="stadium" size={26} accent="#fbbf24" /> 转会窗口 S{tw.season}</h1>
-            <p className="text-xs text-slate-400 mt-1">仅你的收藏球队需要决策，其他球队已自动处理</p>
+      <PageHeader
+        title={`转会窗口 S${tw.season}`}
+        icon={<Icon name="stadium" size={26} accent="var(--competition-gold)" />}
+        description="仅你的收藏球队需要决策，其他球队已自动处理"
+        actions={favTeamFinances && (
+          <div className="text-right">
+            <div className={`text-2xl font-bold ${financeTone(favTeamFinances.cash)}`}>{formatMoney(favTeamFinances.cash)}</div>
+            <div className="text-[10px] text-slate-500">现金</div>
           </div>
-          {favTeamFinances && (
-            <div className="text-right">
-              <div className="text-2xl font-bold text-emerald-300">{formatMoney(favTeamFinances.cash)}</div>
-              <div className="text-[10px] text-slate-500">现金</div>
-            </div>
-          )}
-        </div>
-      </div>
+        )}
+      />
 
       {/* Incoming offers */}
       <Section title={<><Icon name="inbox" size={14} className="inline-block mr-1" /> 收到的报价 ({pendingOffers.length})</>} emptyMessage={tw.incomingOffers.length === 0 ? '本赛季无人向你的球队报价' : undefined}>
         {pendingOffers.map(o => (
           <div key={o.id} className="bg-slate-800 rounded-lg border border-slate-700/60 p-3">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[o.playerPosition] ?? ''}`}>{POS_LABEL[o.playerPosition]}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${POSITION_CHIP[o.playerPosition] ?? ''}`}>{POS_LABEL[o.playerPosition]}</span>
               <span className="text-sm font-semibold text-slate-100">{o.playerName}</span>
               <span className="text-[10px] text-slate-500">能力 {o.playerRating}</span>
               {o.playerAge !== undefined && <span className="text-[10px] text-slate-500">{o.playerAge}岁</span>}
@@ -150,7 +170,7 @@ export default function Market() {
           return (
             <div key={t.id} className="bg-slate-800 rounded-lg border border-slate-700/60 p-3">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[t.playerPosition] ?? ''}`}>{POS_LABEL[t.playerPosition]}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${POSITION_CHIP[t.playerPosition] ?? ''}`}>{POS_LABEL[t.playerPosition]}</span>
                 <span className="text-sm font-semibold text-slate-100">{t.playerName}</span>
                 <span className="text-[10px] text-slate-500">能力 {t.playerRating}</span>
                 {t.playerAge !== undefined && <span className="text-[10px] text-slate-500">{t.playerAge}岁</span>}
@@ -222,7 +242,7 @@ export default function Market() {
           const canAfford = !!signingTeamId && (world.teamFinances[signingTeamId]?.cash ?? 0) >= signingCost;
           return (
             <div key={p.uuid} className="flex items-center gap-2 p-2 bg-slate-800 rounded text-xs flex-wrap">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${POS_COLOR[p.position] ?? ''}`}>{POS_LABEL[p.position]}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${POSITION_CHIP[p.position] ?? ''}`}>{POS_LABEL[p.position]}</span>
               <span className="text-slate-100 font-medium">{p.name ?? `${p.number}号`}</span>
               <span className="text-[10px] text-slate-500">能力 {p.rating} · {p.age ?? '?'}岁</span>
               <span className="text-amber-300 ml-auto">签字费 {formatMoney(signingCost)}</span>
@@ -246,12 +266,12 @@ export default function Market() {
         <div className="flex gap-2 w-full sm:w-auto">
           {(pendingOffers.length + pendingTargets.length > 0) && (
             <button
-              onClick={() => closeTransferWindow(true)}
+              onClick={() => { closeTransferWindow(true); navigate('/', { state: { transferWindowClosed: 'auto' } }); }}
               className="text-xs px-3 py-2.5 min-h-[40px] bg-slate-700 hover:bg-slate-600 rounded text-slate-200 flex-1 sm:flex-none inline-flex items-center justify-center gap-1"
             ><Icon name="bolt" size={12} /> 全自动剩余</button>
           )}
           <button
-            onClick={() => closeTransferWindow(false)}
+            onClick={() => { closeTransferWindow(false); navigate('/', { state: { transferWindowClosed: 'manual' } }); }}
             disabled={pendingOffers.length + pendingTargets.length > 0}
             title={pendingOffers.length + pendingTargets.length > 0 ? '先逐项处理，或使用全自动剩余' : '按当前决定完成转会窗口'}
             className="text-xs px-4 py-2.5 min-h-[40px] bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded text-white font-semibold flex-1 sm:flex-none inline-flex items-center justify-center gap-1"

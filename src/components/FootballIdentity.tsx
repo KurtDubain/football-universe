@@ -9,10 +9,10 @@ export type StoryStampKind = 'derby' | 'upset' | 'goalfest' | 'final' | 'penalti
 export type OutcomeMarkKind = 'champion' | 'promotion' | 'relegation';
 
 const COMPETITION_TONES: Record<CompetitionIdentityKey, { primary: string; secondary: string }> = {
-  league1: { primary: '#d7ad55', secondary: '#734d1d' },
+  league1: { primary: 'var(--competition-gold)', secondary: '#734d1d' },
   league2: { primary: '#86abd7', secondary: '#264760' },
   league3: { primary: '#61bd8c', secondary: '#1f5840' },
-  league_cup: { primary: '#d7ad55', secondary: '#4c5f70' },
+  league_cup: { primary: 'var(--competition-gold)', secondary: '#4c5f70' },
   super_cup: { primary: '#efc96f', secondary: '#8b493f' },
   world_cup: { primary: '#87d9bc', secondary: '#355f7a' },
   mainland_cup: { primary: '#dda860', secondary: '#6c4933' },
@@ -78,7 +78,7 @@ function TrophyGlyph({ type, color }: { type: CompetitionIdentityKey; color: str
 }
 
 export function OutcomeMark({ kind, size = 18 }: { kind: OutcomeMarkKind; size?: number }) {
-  const color = kind === 'champion' ? '#d7ad55' : kind === 'promotion' ? '#3fb978' : '#df5d62';
+  const color = kind === 'champion' ? 'var(--competition-gold)' : kind === 'promotion' ? 'var(--success)' : 'var(--danger)';
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" className="shrink-0" aria-hidden="true">
       {kind === 'champion' ? (

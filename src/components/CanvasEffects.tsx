@@ -1,5 +1,12 @@
 import { useEffect, useRef } from 'react';
 
+/** Canvas 不解析 CSS 变量，绘制前必须把令牌读成实际色值。 */
+function readToken(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 /**
  * Floating football particles background — used on Welcome page.
  * Soft glowing orbs + tiny football icons drifting slowly.
@@ -28,7 +35,15 @@ export function ParticleBackground() {
       type: 'orb' | 'icon';
       glyph: string;
     }[] = [];
-    const colors = ['#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4'];
+    // 年鉴色阶：玫红 / 陶土 / 青 / 赛事金 / 成功 / 危机，不再用蓝紫霓虹。
+    const colors = [
+      readToken('--rose', '#c26a86'),
+      readToken('--clay', '#b5714a'),
+      readToken('--teal', '#4fa3a0'),
+      readToken('--competition-gold', '#c9a25c'),
+      readToken('--success', '#3fb978'),
+      readToken('--danger', '#d45a55'),
+    ];
     const icons = ['⚽', '🏆', '⭐', '🥅'];
 
     function resize() {
@@ -112,7 +127,7 @@ export function ParticleBackground() {
  * Energy wave effect — pulsing rings that expand from center.
  * Used during match result reveal for key matches.
  */
-export function EnergyWave({ color = '#3b82f6', active = true }: { color?: string; active?: boolean }) {
+export function EnergyWave({ color, active = true }: { color?: string; active?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -126,6 +141,7 @@ export function EnergyWave({ color = '#3b82f6', active = true }: { color?: strin
     const w = canvas.width = canvas.parentElement?.clientWidth ?? 300;
     const h = canvas.height = canvas.parentElement?.clientHeight ?? 80;
     const cx = w / 2, cy = h / 2;
+    const stroke = color ?? readToken('--info', '#5d87a8');
 
     const rings: { r: number; alpha: number; speed: number }[] = [];
     let animId: number;
@@ -149,7 +165,7 @@ export function EnergyWave({ color = '#3b82f6', active = true }: { color?: strin
 
         ctx!.beginPath();
         ctx!.arc(cx, cy, ring.r, 0, Math.PI * 2);
-        ctx!.strokeStyle = color;
+        ctx!.strokeStyle = stroke;
         ctx!.globalAlpha = ring.alpha;
         ctx!.lineWidth = 1.5;
         ctx!.stroke();
@@ -181,6 +197,7 @@ export function AmbientGlow({ height = 200 }: { height?: number }) {
 
     const w = canvas.width = canvas.parentElement?.clientWidth ?? 200;
     const h = canvas.height = height;
+    const dotColor = readToken('--info', '#5d87a8');
 
     const dots: { x: number; y: number; vy: number; r: number; alpha: number }[] = [];
     for (let i = 0; i < 12; i++) {
@@ -202,7 +219,7 @@ export function AmbientGlow({ height = 200 }: { height?: number }) {
         ctx!.globalAlpha = d.alpha;
         ctx!.beginPath();
         ctx!.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-        ctx!.fillStyle = '#3b82f6';
+        ctx!.fillStyle = dotColor;
         ctx!.fill();
       }
       ctx!.globalAlpha = 1;

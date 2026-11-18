@@ -4,6 +4,7 @@ import { useGameStore } from '../store/game-store';
 import { defaultTeams } from '../config/teams';
 import type { TeamBase, TeamTier } from '../types/team';
 import { parseCustomTeams } from '../engine/validation/custom-teams';
+import { PageHeader } from '../components/ui';
 
 const TIER_LABELS: Record<TeamTier, string> = {
   elite: '豪门', strong: '劲旅', mid: '中游', lower: '平民', underdog: '草根'
@@ -112,18 +113,18 @@ export default function TeamEditor() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-4 sm:p-6 tabular-nums">
       <div className="max-w-5xl mx-auto space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">球队编辑器</h1>
-            <p className="text-xs text-slate-500 mt-1">自定义球队属性，使用「沙盒模式」开局</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={resetToDefault} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">重置默认</button>
-            <button onClick={importJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导入</button>
-            <button onClick={exportJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导出</button>
-            <button onClick={saveTemplate} data-ui-feedback="confirm" className="px-3 py-1.5 text-xs bg-[var(--action)] hover:bg-[var(--action-hover)] text-white rounded-md cursor-pointer">保存模板</button>
-          </div>
-        </div>
+        <PageHeader
+          title="球队编辑器"
+          description="自定义球队属性，使用「沙盒模式」开局"
+          actions={
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={resetToDefault} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">重置默认</button>
+              <button onClick={importJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导入</button>
+              <button onClick={exportJson} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg cursor-pointer">导出</button>
+              <button onClick={saveTemplate} data-ui-feedback="confirm" className="px-3 py-1.5 text-xs bg-[var(--action)] hover:bg-[var(--action-hover)] text-white rounded-md cursor-pointer">保存模板</button>
+            </div>
+          }
+        />
 
         <div className="flex gap-2 flex-wrap items-center">
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}

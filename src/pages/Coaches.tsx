@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { getCoachStyleLabel } from '../utils/format';
 import TrophyBreakdown from '../components/TrophyBreakdown';
-import { SegmentedControl } from '../components/ui';
+import { PageHeader, SegmentedControl } from '../components/ui';
 import { derivePreferredFormation } from '../engine/coaches/tactics';
 
 type SortKey = 'rating' | 'name' | 'trophies' | 'pressure';
@@ -59,14 +59,10 @@ export default function Coaches() {
   return (
     <div className="max-w-5xl space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">教练中心</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {employed.length} 名在职 · {unemployed.length} 名空闲
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="教练中心"
+        description={`${employed.length} 名在职 · ${unemployed.length} 名空闲`}
+        actions={
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortKey)}
@@ -77,8 +73,8 @@ export default function Coaches() {
             <option value="pressure">按压力</option>
             <option value="name">按姓名</option>
           </select>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filter tabs */}
       <SegmentedControl

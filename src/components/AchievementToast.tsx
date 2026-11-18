@@ -81,10 +81,10 @@ export default function AchievementToast({ achievements, onDismiss }: Props) {
           ? `本季解锁${achievements.length}项成就，关闭提示`
           : `成就解锁：${achievement.title}，关闭提示`}
         onClick={onDismiss}
-        className="w-full sm:w-[22rem] bg-slate-950/95 backdrop-blur-md border border-amber-500/60 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer animate-glow-pulse hover:border-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        className="w-full sm:w-[22rem] bg-[var(--surface-floating)] border border-amber-500/60 rounded-lg shadow-2xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer animate-glow-pulse hover:border-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
       >
         <span className="shrink-0 text-amber-300">
-          <Icon name={iconName} size={32} accent="#fbbf24" />
+          <Icon name={iconName} size={32} accent="var(--competition-gold)" />
         </span>
         <span className="min-w-0">
           <span className="block text-[10px] text-amber-300 font-semibold uppercase tracking-wider">

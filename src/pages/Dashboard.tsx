@@ -408,7 +408,7 @@ function DashboardContent({ world }: { world: GameWorld }) {
             const nextFixture = currentWindow?.fixtures.find(f => f.homeTeamId === tid || f.awayTeamId === tid);
             const opponentId = nextFixture ? (nextFixture.homeTeamId === tid ? nextFixture.awayTeamId : nextFixture.homeTeamId) : null;
             const cash = world.teamFinances?.[tid]?.cash ?? 0;
-            const cashTone = cash < 0 ? 'text-red-300' : cash < 10 ? 'text-amber-300' : 'text-emerald-300';
+            const cashTone = cash < 0 ? 'finance-negative' : cash < 10 ? 'finance-warning' : 'finance-positive';
 
             const isPrimary = tid === favoriteTeamId;
             return (
@@ -613,7 +613,7 @@ function DashboardMasthead({
         <div className="ui-eyebrow text-[10px] text-[var(--competition-gold)]">
           OBSERVATION DESK · {currentWindow ? getWindowTypeLabel(currentWindow.type) : 'SEASON FILED'}
         </div>
-        <h1 id="season-desk-title" className="mt-1 text-base font-bold text-[var(--text-primary)] sm:text-lg">
+        <h1 id="season-desk-title" className="ui-page-title pt-1">
           第 {world.seasonState.seasonNumber} 赛季观察台
         </h1>
         <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]" title={currentWindow?.label}>

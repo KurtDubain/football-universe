@@ -198,7 +198,7 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
             <TeamBadge
               teamId={honor.league1Champion}
               shortName={tb[honor.league1Champion]?.shortName ?? honor.league1Champion}
-              color={tb[honor.league1Champion]?.color ?? '#d7ad55'}
+              color={tb[honor.league1Champion]?.color ?? 'var(--competition-gold)'}
               size={42}
             />
             <div className="min-w-0">

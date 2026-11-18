@@ -22,6 +22,13 @@ const PADDING = 120;
 const FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
 let archiveFramePromise: Promise<HTMLImageElement | null> | null = null;
 
+/** Canvas 只能吃实际色值，导出前先把设计令牌读出来，避免档案图脱离主题。 */
+function readToken(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 async function loadArchiveFrame(): Promise<HTMLImageElement | null> {
   if (archiveFramePromise) return archiveFramePromise;
   archiveFramePromise = (async () => {
@@ -79,8 +86,8 @@ function drawWrappedText(
   return y + lines.length * lineHeight;
 }
 
-function drawRule(context: CanvasRenderingContext2D, y: number): void {
-  context.strokeStyle = '#334155';
+function drawRule(context: CanvasRenderingContext2D, y: number, color: string): void {
+  context.strokeStyle = color;
   context.lineWidth = 2;
   context.beginPath();
   context.moveTo(PADDING, y);
@@ -110,43 +117,53 @@ export async function downloadSeasonArchiveImage(
   const context = canvas.getContext('2d');
   if (!context) throw new Error('当前浏览器不支持图片导出');
 
-  context.fillStyle = '#0f172a';
+  const palette = {
+    page: readToken('--surface-page', '#0b0f0d'),
+    rule: readToken('--border-strong', '#3d4941'),
+    accent: readToken('--success', '#3fb978'),
+    heading: readToken('--text-primary', '#f2efe5'),
+    body: readToken('--text-secondary', '#c9cbc1'),
+    muted: readToken('--text-muted', '#909a91'),
+    faint: readToken('--text-disabled', '#626b64'),
+  };
+
+  context.fillStyle = palette.page;
   context.fillRect(0, 0, WIDTH, HEIGHT);
   const archiveFrame = await loadArchiveFrame();
   if (archiveFrame) context.drawImage(archiveFrame, 0, 0, WIDTH, HEIGHT);
   context.fillStyle = input.teamColor;
   context.fillRect(74, 76, 10, HEIGHT - 152);
 
-  context.fillStyle = '#34d399';
+  context.fillStyle = palette.accent;
   context.font = `600 28px ${FONT}`;
   context.fillText(`${__APP_BRAND__.fullName} · S${input.seasonNumber}`, PADDING, 144);
-  context.fillStyle = '#f8fafc';
+  context.fillStyle = palette.heading;
   context.font = `800 64px ${FONT}`;
   let y = drawWrappedText(context, input.teamName, PADDING, 238, WIDTH - PADDING * 2, 78, 2);
   y += 42;
 
-  context.fillStyle = '#94a3b8';
+  context.fillStyle = palette.muted;
   context.font = `500 26px ${FONT}`;
   context.fillText('最终命运', PADDING, y);
-  context.fillStyle = '#f8fafc';
+  context.fillStyle = palette.heading;
   context.font = `800 50px ${FONT}`;
   context.fillText(input.fateLabel, PADDING, y + 66);
-  context.fillStyle = '#cbd5e1';
+  context.fillStyle = palette.body;
   context.font = `400 28px ${FONT}`;
   y = drawWrappedText(context, input.fateDetail, PADDING, y + 116, WIDTH - PADDING * 2, 42, 3) + 36;
 
-  drawRule(context, y);
+  drawRule(context, y, palette.rule);
   y += 58;
-  context.fillStyle = '#94a3b8';
+  context.fillStyle = palette.muted;
   context.font = `500 26px ${FONT}`;
   context.fillText('观察印象', PADDING, y);
-  context.fillStyle = '#34d399';
+  context.fillStyle = palette.accent;
   context.font = `800 44px ${FONT}`;
   context.fillText(input.impressionLabel, PADDING, y + 60);
-  context.fillStyle = '#cbd5e1';
+  context.fillStyle = palette.body;
   context.font = `400 27px ${FONT}`;
   y = drawWrappedText(context, input.impressionDetail, PADDING, y + 108, WIDTH - PADDING * 2, 41, 3) + 22;
-  context.fillStyle = '#94a3b8';
+  context.fillStyle = palette.muted;
   context.font = `500 25px ${FONT}`;
   context.fillText(input.judgmentLine, PADDING, y);
   y += 54;
@@ -157,30 +174,30 @@ export async function downloadSeasonArchiveImage(
     input.deviationLine,
     input.cupLine,
   ].filter((line): line is string => Boolean(line));
-  drawRule(context, y);
+  drawRule(context, y, palette.rule);
   y += 52;
-  context.fillStyle = '#94a3b8';
+  context.fillStyle = palette.muted;
   context.font = `600 25px ${FONT}`;
   context.fillText('本季证据', PADDING, y);
   y += 50;
   context.font = `400 26px ${FONT}`;
   for (const line of evidence) {
-    context.fillStyle = '#34d399';
+    context.fillStyle = palette.accent;
     context.fillRect(PADDING, y - 18, 8, 8);
-    context.fillStyle = '#e2e8f0';
+    context.fillStyle = palette.heading;
     y = drawWrappedText(context, line, PADDING + 28, y, WIDTH - PADDING * 2 - 28, 40, 2) + 24;
   }
 
-  drawRule(context, y);
+  drawRule(context, y, palette.rule);
   y += 56;
-  context.fillStyle = '#94a3b8';
+  context.fillStyle = palette.muted;
   context.font = `600 25px ${FONT}`;
   context.fillText('下一季悬念', PADDING, y);
-  context.fillStyle = '#f8fafc';
+  context.fillStyle = palette.heading;
   context.font = `600 32px ${FONT}`;
   drawWrappedText(context, input.nextWatch, PADDING, y + 58, WIDTH - PADDING * 2, 48, 3);
 
-  context.fillStyle = '#64748b';
+  context.fillStyle = palette.faint;
   context.font = `400 22px ${FONT}`;
   context.fillText('一段历史，不是一项任务。', PADDING, HEIGHT - 76);
 
