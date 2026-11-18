@@ -32,19 +32,67 @@ describe('pitch player movement', () => {
   });
 
   it('keeps an aerial pass on its ground path while reporting visual elevation separately', () => {
-    const ball = computeBallPosition({
+    const at = (phaseFrame: number) => computeBallPosition({
       passing: true,
-      phaseFrame: 30,
+      phaseFrame,
       duration: 60,
       arc: 1,
       source: { x: 10, y: 40 },
       target: { x: 110, y: 80 },
-      frame: 30,
+      frame: phaseFrame,
     });
 
+    const ball = at(30);
     expect(ball.bx).toBe(60);
     expect(ball.by).toBe(60);
-    expect(ball.arcLift).toBeCloseTo(22);
+    // The horizontal path is untouched by any of this: the ball still arrives
+    // exactly where the model said it would.
+    expect(at(60).bx).toBe(110);
+    expect(at(60).by).toBe(80);
+  });
+
+  it('lands a lofted ball short of the target and skips it the rest of the way', () => {
+    const liftAt = (t: number) => computeBallPosition({
+      passing: true,
+      phaseFrame: Math.round(t * 60),
+      duration: 60,
+      arc: 1,
+      source: { x: 10, y: 40 },
+      target: { x: 110, y: 80 },
+      frame: 0,
+    }).arcLift;
+
+    // A single sine arc lands the ball and stops, which is a balloon. A ball
+    // that has been in the air arrives with pace still in it.
+    const samples = Array.from({ length: 61 }, (_, i) => liftAt(i / 60));
+    const peak = Math.max(...samples);
+    expect(peak).toBeCloseTo(22, 0);
+    // It touches down before the target: somewhere in the last third of the
+    // flight the ball is on the grass, not still descending toward it.
+    const lateFlight = samples.slice(36, 55);
+    const touchdown = 36 + lateFlight.indexOf(Math.min(...lateFlight));
+    expect(samples[touchdown]).toBeLessThan(1);
+    expect(touchdown / 60).toBeGreaterThan(0.7);
+    expect(touchdown / 60).toBeLessThan(0.82);
+    // ...and skips back up rather than arriving dead.
+    expect(liftAt(0.88)).toBeGreaterThan(6);
+    expect(liftAt(0.88)).toBeLessThan(peak * 0.5);
+    expect(liftAt(1)).toBeCloseTo(0, 1);
+  });
+
+  it('leaves a driven ball on the ground with the arc it always had', () => {
+    const driven = (t: number) => computeBallPosition({
+      passing: true,
+      phaseFrame: Math.round(t * 60),
+      duration: 60,
+      arc: 0.06,
+      source: { x: 10, y: 40 },
+      target: { x: 110, y: 80 },
+      frame: 0,
+    }).arcLift;
+
+    expect(driven(0.5)).toBeCloseTo(0.06 * 22, 6);
+    expect(driven(0.25)).toBeCloseTo(Math.sin(0.25 * Math.PI) * 0.06 * 22, 6);
   });
 
   it('gives ground passes an early roll advantage while shots wait for the kicking motion', () => {

@@ -646,6 +646,9 @@ export function drawBroadcastBall(
 
   ctx.save();
   ctx.translate(ground.x, ground.y - lift);
+
+  // The panels turn with the ball.
+  ctx.save();
   ctx.rotate(spin * 0.15);
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -666,6 +669,11 @@ export function drawBroadcastBall(
   }
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+
+  // The highlight does not. It is the light, not the ball: a specular that
+  // orbits with the panels reads as a sixth panel, and once the ball is
+  // spinning it stops looking like a sphere at all.
   ctx.beginPath();
   ctx.arc(-radius * 0.3, -radius * 0.3, radius * 0.3, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.75)';

@@ -301,6 +301,34 @@ export function decayBallLiftCarry(carry: number): { applied: number; remaining:
   return { applied: carry, remaining: carry * LIFT_CARRY_DECAY };
 }
 
+/** Peak lift of a struck ball, in drawing units, at an arc of 1. */
+const ARC_LIFT_SCALE = 22;
+
+/** Where through the flight a lofted ball first touches down. */
+const BALL_BOUNCE_AT = 0.76;
+
+/** How much of its height a ball keeps on the skip. */
+const BALL_RESTITUTION = 0.42;
+
+/** Below this arc the ball is driven along the ground and never leaves it. */
+const BALL_BOUNCE_MIN_ARC = 0.12;
+
+/**
+ * A lift curve that touches down and skips once before settling.
+ *
+ * A single sine arc lands the ball and stops, which is a balloon rather than a
+ * football: a ball that has been in the air arrives with pace still in it. The
+ * skip is a second, smaller arc, so the higher the ball went the further it
+ * carries — which is most of what makes a clipped cross read as a clipped
+ * cross rather than as a pass that happened to go up.
+ */
+function bouncingLift(t: number, peak: number): number {
+  if (peak <= 0) return 0;
+  if (t <= BALL_BOUNCE_AT) return Math.sin((t / BALL_BOUNCE_AT) * Math.PI) * peak;
+  const settle = (t - BALL_BOUNCE_AT) / (1 - BALL_BOUNCE_AT);
+  return Math.sin(settle * Math.PI) * peak * BALL_RESTITUTION;
+}
+
 export function computeBallPosition(input: BallComputeInput): BallComputeResult {
   const {
     passing, phaseFrame, duration, arc, source, target, frame,
@@ -316,8 +344,12 @@ export function computeBallPosition(input: BallComputeInput): BallComputeResult 
     const bx = lerp(source.x, target.x, eased);
     const by = lerp(source.y, target.y, eased)
       + (flightKind === 'shot' ? Math.sin(t * Math.PI) * swerve * 9 : 0);
-    const arcLift = Math.sin(t * Math.PI) * arc * 22;
-    const spinDelta = 0.4 + arc * 0.3;
+    // A driven ball keeps the plain arc; a lofted one comes down and skips.
+    const arcLift = arc < BALL_BOUNCE_MIN_ARC
+      ? Math.sin(t * Math.PI) * arc * ARC_LIFT_SCALE
+      : bouncingLift(t, arc * ARC_LIFT_SCALE);
+    // The skip puts pace back into the ball, so it spins up off the bounce.
+    const spinDelta = 0.4 + arc * 0.3 + (t > BALL_BOUNCE_AT ? 0.45 : 0);
     return { bx, by, arcLift, spinDelta };
   }
   // Holding, and the run-up before a dead ball is struck. Both keep the ball
@@ -365,7 +397,7 @@ export function computePostShotBallPosition(input: PostShotBallInput): BallCompu
     return {
       bx: input.target.x - attackDirection * 3 * travel,
       by: input.target.y + Math.sin(progress * Math.PI) * 1.5,
-      arcLift: Math.sin(progress * Math.PI) * 1.5,
+      arcLift: bouncingLift(progress, 1.5),
       spinDelta: 0.16 * (1 - progress),
     };
   }
@@ -383,7 +415,7 @@ export function computePostShotBallPosition(input: PostShotBallInput): BallCompu
   return {
     bx: input.target.x + fieldDirection * distance * travel,
     by: input.target.y + sideDirection * lateral * travel,
-    arcLift: Math.sin(progress * Math.PI) * lift,
+    arcLift: bouncingLift(progress, lift),
     spinDelta: 0.5 + (1 - progress) * 0.35,
   };
 }
