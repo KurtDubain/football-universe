@@ -148,6 +148,7 @@ export function applyCameraShake(
   orientation: PitchOrientation = 'landscape',
   canvasWidth = W,
   canvasHeight = H,
+  frameScale = 1,
 ): BroadcastCameraTransform {
   let offX = 0, offY = 0;
   if (shakeRef.current > 0) {
@@ -156,7 +157,10 @@ export function applyCameraShake(
     const phase = (shakeMaxRef.current - shakeRef.current) * 0.85;
     offX = Math.sin(phase) * 0.9 * decay;
     offY = Math.cos(phase * 1.3) * 0.55 * decay;
-    shakeRef.current--;
+    // A shake is a duration, not a frame count. Decrementing by one per frame
+    // stretched a 300 ms impact to 600 ms the moment the budget dropped to
+    // 30 fps, which is the worst possible time for it to last longer.
+    shakeRef.current = Math.max(0, shakeRef.current - frameScale);
   }
   ctx.save();
   ctx.fillStyle = PITCH_SURROUND_COLOR;
@@ -200,11 +204,13 @@ export function applyWhiteFlash(
   ctx: CanvasRenderingContext2D,
   flashRef: MutNum,
   W: number, H: number,
+  frameScale = 1,
 ): void {
   if (flashRef.current > 0) {
     const fa = flashRef.current / FLASH_MAX_FRAMES;
     ctx.fillStyle = `rgba(255,255,255,${fa * 0.18})`;
     ctx.fillRect(0, 0, W, H);
-    flashRef.current--;
+    // Same reason as the shake: 8 frames is 133 ms at 60 fps and 267 ms at 30.
+    flashRef.current = Math.max(0, flashRef.current - frameScale);
   }
 }

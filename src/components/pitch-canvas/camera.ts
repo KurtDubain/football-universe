@@ -1,25 +1,16 @@
-import type { PlaybackMode } from '../match-live/playback-mode';
-import { PENALTY_AREA_DEPTH_METERS, STANDARD_PITCH_LENGTH_METERS } from './geometry';
-import { clamp, lerp } from './math';
-import type { RenderQuality } from './render-budget';
+// Framing is owned by the rig system in projection.ts: `rigForMoment` picks a
+// lens and `createBroadcastView` builds the projection from it. What is left
+// here is the pan solver that transform still runs through, plus the ceilings
+// it clamps against.
+//
+// A zoom-and-focus director used to live here too, with a per-moment table
+// running 1.004 at wide to 1.72 at a goal. It was never executed: the render
+// loop parks the legacy camera at the centre of the canvas at 1x every frame,
+// so the table, its easing curve and its focus weights were dead weight that
+// read as though they were in charge of the shot.
+import { clamp } from './math';
 
 export type BroadcastCameraMoment = 'wide' | 'build' | 'attack' | 'set_piece' | 'finish' | 'outcome';
-
-export interface BroadcastCameraTargetInput {
-  moment: BroadcastCameraMoment;
-  quality: RenderQuality;
-  playbackMode: PlaybackMode;
-  reducedMotion: boolean;
-  ballX: number;
-  ballY: number;
-  canvasWidth: number;
-  canvasHeight: number;
-  padding: number;
-  fieldWidth: number;
-  fieldHeight: number;
-  /** How far the goal is drawn past its goal line, from `createPitchGeometry`. */
-  goalDepth: number;
-}
 
 /**
  * The world-space span the shot exists to show.
@@ -38,14 +29,6 @@ export interface BroadcastCameraFrame {
   maxY: number;
 }
 
-export interface BroadcastCameraTarget {
-  focusX: number;
-  focusY: number;
-  zoom: number;
-  settle: number;
-  frame: BroadcastCameraFrame;
-}
-
 /**
  * Hard ceilings. renderer.ts clamps against MAX_BROADCAST_ZOOM as well, so a
  * stale camera state can never scale the pitch past it.
@@ -57,7 +40,6 @@ export interface BroadcastCameraTarget {
  * directly per frame instead of from the cache is the fix if it ever bothers.
  */
 export const MAX_BROADCAST_ZOOM = 1.8;
-export const MAX_COMPACT_BROADCAST_ZOOM = 1.56;
 
 /**
  * Screen-space gap kept between the framed subject and the edge of the canvas.
@@ -88,63 +70,6 @@ export const CAMERA_FRAME_BLEED = 24;
  * the viewport is narrower than the pitch and the constraint starts to matter.
  */
 export const CAMERA_FRAME_MIN_ZOOM_SLACK = 0.06;
-
-/**
- * Framing per moment.
- *
- * The old table ran 1.004 → 1.115, an 11.5% push from the widest shot to a
- * goal. Measured against a real goal frame, that was indistinguishable from
- * the resting shot: the physics layer already differentiates six attacking
- * patterns and cross arcs, and none of it was legible at that scale.
- *
- * Wide and build stay near 1 — a broadcast camera does not creep in while play
- * is circulation — and the push is concentrated where the ball is actually
- * being struck. Compact tops out lower because its canvas is smaller and its
- * markers are already drawn 12% larger.
- */
-const DESKTOP_ZOOM: Record<BroadcastCameraMoment, number> = {
-  wide: 1.004,
-  build: 1.034,
-  attack: 1.12,
-  set_piece: 1.36,
-  finish: 1.62,
-  outcome: 1.72,
-};
-
-const COMPACT_ZOOM: Record<BroadcastCameraMoment, number> = {
-  wide: 1,
-  build: 1.022,
-  attack: 1.08,
-  set_piece: 1.22,
-  finish: 1.42,
-  outcome: 1.5,
-};
-
-const FOCUS_WEIGHT: Record<BroadcastCameraMoment, number> = {
-  wide: 0.1,
-  build: 0.24,
-  attack: 0.48,
-  set_piece: 0.68,
-  finish: 0.82,
-  outcome: 0.86,
-};
-
-/**
- * Per-frame easing toward the target.
- *
- * Raised for the tight moments because the zoom gaps they now have to cross
- * are far larger: at the old 0.032 a 1.12 → 1.62 push needed about 70 frames
- * to close 90% of the gap, which is longer than the shot it was framing. At
- * 0.075 it lands in roughly 30 frames.
- */
-const SETTLE: Record<BroadcastCameraMoment, number> = {
-  wide: 0.014,
-  build: 0.018,
-  attack: 0.032,
-  set_piece: 0.05,
-  finish: 0.075,
-  outcome: 0.085,
-};
 
 /**
  * Loose-follow pan with a visibility floor.
@@ -230,68 +155,5 @@ export function broadcastCameraPan(
       frame ? frame.minY : focusY,
       frame ? frame.maxY : focusY,
     ),
-  };
-}
-
-export function broadcastCameraTarget(input: BroadcastCameraTargetInput): BroadcastCameraTarget {
-  const {
-    moment,
-    quality,
-    playbackMode,
-    reducedMotion,
-    ballX,
-    ballY,
-    canvasWidth,
-    canvasHeight,
-    padding,
-    fieldWidth,
-    fieldHeight,
-    goalDepth,
-  } = input;
-
-  /**
-   * What the shot owes the viewer.
-   *
-   * The ball always. Plus the goal it is attacking, once the ball is close
-   * enough that the goal is the point of the frame — the penalty area is the
-   * same 16.5 m the pitch geometry draws its box from. Outside that the goal
-   * is scenery the wide shot already shows, and dragging it into frame would
-   * only pull the camera off the ball.
-   */
-  const attackingRight = ballX >= canvasWidth / 2;
-  const goalLine = attackingRight ? padding + fieldWidth : padding;
-  const goalBack = attackingRight ? goalLine + goalDepth : goalLine - goalDepth;
-  const penaltyDepth = fieldWidth * (PENALTY_AREA_DEPTH_METERS / STANDARD_PITCH_LENGTH_METERS);
-  const goalInFrame = Math.abs(ballX - goalLine) <= penaltyDepth;
-  const frame: BroadcastCameraFrame = {
-    minX: goalInFrame ? Math.min(ballX, goalBack) : ballX,
-    maxX: goalInFrame ? Math.max(ballX, goalBack) : ballX,
-    minY: ballY,
-    maxY: ballY,
-  };
-
-  if (reducedMotion) {
-    return { focusX: canvasWidth / 2, focusY: canvasHeight / 2, zoom: 1, settle: 1, frame };
-  }
-
-  const compact = quality !== 'full';
-  const zoomTable = compact ? COMPACT_ZOOM : DESKTOP_ZOOM;
-  // Multiplicative rather than the old flat +0.008: an additive lift that was
-  // sized for a 1.1x ceiling is invisible against a 1.7x framing, which would
-  // have quietly made immersive mode identical to live at the tight moments.
-  const immersiveLift = playbackMode === 'immersive' && moment !== 'wide'
-    ? (compact ? 1.02 : 1.035)
-    : 1;
-  const maxZoom = compact ? MAX_COMPACT_BROADCAST_ZOOM : MAX_BROADCAST_ZOOM;
-  const safeBallX = clamp(ballX, padding + fieldWidth * 0.1, padding + fieldWidth * 0.9);
-  const safeBallY = clamp(ballY, padding + fieldHeight * 0.1, padding + fieldHeight * 0.9);
-  const focusWeight = FOCUS_WEIGHT[moment];
-
-  return {
-    focusX: lerp(canvasWidth / 2, safeBallX, focusWeight),
-    focusY: lerp(canvasHeight / 2, safeBallY, focusWeight),
-    zoom: clamp(zoomTable[moment] * immersiveLift, 1, maxZoom),
-    settle: SETTLE[moment],
-    frame,
   };
 }

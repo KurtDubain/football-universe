@@ -4,7 +4,7 @@
 import { clamp, dist, lerp, seededRand } from './math';
 import { NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 import { setPiecePlayerTarget } from './set-pieces';
-import { keeperSetPosition } from './keeper-action';
+import { KEEPER_SET_SPAN, keeperSetPosition } from './keeper-action';
 import {
   BASE_FORMATION,
   type FormationSlot,
@@ -461,7 +461,7 @@ export function computeAttackingShapeTarget(input: AttackingShapeInput): Attacki
   if (slot.role === 'GK') {
     return {
       x: clamp(ahead(slot.x, 0.012), 0.03, 0.97),
-      y: clamp(0.5 + (ballNY - 0.5) * 0.12, 0.45, 0.55),
+      y: clamp(0.5 + (ballNY - 0.5) * 0.12, 0.5 - KEEPER_SET_SPAN, 0.5 + KEEPER_SET_SPAN),
       sprint: 0,
     };
   }
@@ -905,7 +905,7 @@ export function updatePlayerPositions(
       // The goalkeeper narrows the angle as the ball enters the final third,
       // while still protecting the goal line on distant possession.
       if (slot.role === 'GK') {
-        targetY_n = clamp(0.5 + (ballNY - 0.5) * 0.3, 0.42, 0.58);
+        targetY_n = clamp(0.5 + (ballNY - 0.5) * 0.3, 0.5 - KEEPER_SET_SPAN, 0.5 + KEEPER_SET_SPAN);
         const ownGoalX = isHomeTeam ? 0.03 : 0.97;
         const threatDistance = Math.abs(ballNX - ownGoalX);
         const stepOut = clamp((0.42 - threatDistance) * 0.16, 0, 0.055);

@@ -3,6 +3,7 @@ import {
   GOAL_MOUTH_SPAN,
   IDLE_DIVE,
   KEEPER_REACH,
+  KEEPER_SET_SPAN,
   keeperCanReach,
   keeperDivePlan,
   keeperSetPosition,
@@ -104,14 +105,25 @@ describe('keeper set position', () => {
   });
 
   it('always leaves a dive the keeper can actually make', () => {
-    // The engine has already credited the save; a drawn keeper who cannot get
-    // there would be the animation contradicting the simulation.
-    for (const offset of [-3, -1.2, -0.5, -0.25, 0.25, 0.5, 1.2, 3]) {
+    // A shot inside the frame is one the engine has already credited, so a
+    // drawn keeper who cannot get there would be the animation contradicting
+    // the simulation.
+    for (const offset of [-0.5, -0.25, 0.25, 0.5]) {
       const target = CENTRE + GOAL_MOUTH_SPAN * offset;
       const set = keeperSetPosition(CENTRE, target);
       expect(keeperCanReach(target, set)).toBe(true);
       // ...and it is a real dive, not a keeper standing next to the ball.
       expect(Math.abs(target - set) / GOAL_MOUTH_SPAN).toBeGreaterThan(0.1);
+    }
+  });
+
+  it('stays in the goal when the shot is going wide', () => {
+    // A shot 8.8 m off the middle of the goal is not a save. The keeper has to
+    // stay in the frame — the unclamped formula walked them 25 m out to it —
+    // and come up short, which is exactly what a beaten keeper looks like.
+    for (const offset of [-3, -1.2, 1.2, 3]) {
+      const set = keeperSetPosition(CENTRE, CENTRE + GOAL_MOUTH_SPAN * offset);
+      expect(Math.abs(set - CENTRE)).toBeLessThanOrEqual(KEEPER_SET_SPAN + 1e-9);
     }
   });
 

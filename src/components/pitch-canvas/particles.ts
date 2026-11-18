@@ -252,21 +252,31 @@ export function updateAndCullParticles(
   extent: number,
   particleCap: number = PARTICLE_CAP,
   portrait = false,
+  frameScale = 1,
 ): Particle[] {
   const live: Particle[] = [];
+  // Every constant below was per rendered frame, so a machine that degraded to
+  // 30 fps ran the whole particle system at half speed: turf spray hung in the
+  // air twice as long and drifted half as far. The player positions beside it
+  // were already scaled, which made the mismatch obvious rather than subtle.
+  //
+  // Drag is the one that is not a plain multiply: it is a per-frame survival
+  // ratio, so raising it to the frame scale is what keeps the decay curve the
+  // same shape at either cadence.
   for (const ptcl of particles) {
-    ptcl.life--;
+    ptcl.life -= frameScale;
     if (ptcl.life <= 0) continue;
-    // Air drag (per-frame velocity decay)
-    ptcl.vx *= (1 - ptcl.drag);
-    ptcl.vy *= (1 - ptcl.drag);
+    // Air drag (velocity decay per unit of time)
+    const survival = Math.pow(1 - ptcl.drag, frameScale);
+    ptcl.vx *= survival;
+    ptcl.vy *= survival;
     // Gravity, the floor and the cull bounds all live on the screen-vertical
     // axis. In portrait that axis is drawing -x rather than drawing +y.
-    if (portrait) ptcl.vx -= ptcl.gravity;
-    else ptcl.vy += ptcl.gravity;
-    ptcl.x += ptcl.vx;
-    ptcl.y += ptcl.vy;
-    ptcl.rotation += ptcl.angularVel;
+    if (portrait) ptcl.vx -= ptcl.gravity * frameScale;
+    else ptcl.vy += ptcl.gravity * frameScale;
+    ptcl.x += ptcl.vx * frameScale;
+    ptcl.y += ptcl.vy * frameScale;
+    ptcl.rotation += ptcl.angularVel * frameScale;
     // Floor bounce
     if (portrait) {
       if (ptcl.bounces > 0 && ptcl.x <= ptcl.bounceY && ptcl.vx < 0) {

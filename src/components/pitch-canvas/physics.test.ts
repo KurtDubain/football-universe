@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildTacticalAssignments, computeAttackingShapeTarget, computeBallPosition, computeCarryTarget, computeDefensiveReactionProgress, computePostShotBallPosition, computeReceptionTouchOffset, defensiveReactionDelay, getBaseSlot, idleDriftOffset, pursuitSpeed, selectDefensiveRoles, selectMarkingTarget, separateActivePlayers, updatePlayerPositions } from './physics';
 import { setPiecePlayerTarget } from './set-pieces';
-import { keeperCanReach } from './keeper-action';
+import { KEEPER_SET_SPAN, keeperCanReach } from './keeper-action';
 import { BASE_FORMATION, getFormationSlots, type PassPhase, type PlayerState } from './types';
 import { createPitchGeometry, NORMALIZED_PITCH_SCREEN_ASPECT, playerSeparationDistance } from './geometry';
 
@@ -611,7 +611,7 @@ describe('pitch player movement', () => {
     }
 
     expect(players[0].y).toBeLessThan(0.5);
-    expect(players[0].y).toBeGreaterThan(0.42);
+    expect(players[0].y).toBeGreaterThan(0.5 - KEEPER_SET_SPAN);
     expect(players[0].x).toBeGreaterThanOrEqual(0.03);
   });
 

@@ -32,6 +32,18 @@ export const GOAL_MOUTH_SPAN = 7.32 / 68;
  */
 export const KEEPER_REACH = 2.6 / 7.32;
 
+/**
+ * How far off the middle of the goal a keeper may set themselves, as a
+ * fraction of the pitch width.
+ *
+ * Half the mouth is 0.0538. A keeper does stand a step outside a post — that
+ * is what narrowing the angle means — so this allows about half a metre past
+ * it. The clamps this replaces ran to 0.08 and 0.55 in three different places,
+ * which put a keeper 5.4 m off centre: nearly two metres outside the frame,
+ * guarding nothing, and free to walk 25 m out to a shot going wide.
+ */
+export const KEEPER_SET_SPAN = 0.062;
+
 /** Inside this the shot is at the keeper and nobody leaves their feet. */
 const DEAD_ZONE = 0.06;
 
@@ -201,7 +213,12 @@ export function keeperSetPosition(
   const side = currentY === targetY
     ? (targetY >= 0.5 ? -1 : 1)
     : Math.sign(currentY - targetY);
-  return targetY + side * clamp(gap, minDive, reach);
+  // ...and never outside their own goal. A shot heading wide pulls the
+  // unclamped result 25 m off the middle of the pitch, which is not a keeper
+  // narrowing an angle, it is a keeper abandoning the goal. Staying in the
+  // frame means the dive visibly comes up short, which is what a beaten
+  // keeper is supposed to look like.
+  return clamp(targetY + side * clamp(gap, minDive, reach), 0.5 - KEEPER_SET_SPAN, 0.5 + KEEPER_SET_SPAN);
 }
 
 function parseHex(hex: string): [number, number, number] | null {

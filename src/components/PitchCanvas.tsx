@@ -500,6 +500,20 @@ function PitchCanvas(props: Props) {
   const stridePhaseRef = useRef<number[]>([]);
   /** Id of the last open-play strike reported, so a replayed frame cannot double it. */
   const lastBallTouchIdRef = useRef('');
+  /**
+   * Wall-clock animation time, in 60 fps frames.
+   *
+   * Everything that is a function of time rather than of the render cadence
+   * reads this instead of the frame counter. A stride, a shake, a trail sample
+   * and a pulse all used to advance once per rendered frame, so the moment the
+   * budget dropped to 30 fps they all slowed to half speed together — on the
+   * machine that could least afford to look wrong.
+   */
+  const animClockRef = useRef(0);
+  /** Trail sampling is a period, not a frame index, so it needs its own clock. */
+  const trailClockRef = useRef(0);
+  const lastTrailPushRef = useRef(0);
+  const lastTrailShiftRef = useRef(0);
   const debugStateRef = useRef<PitchDebugState>({
     coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
     minute,
@@ -998,7 +1012,6 @@ function PitchCanvas(props: Props) {
     function renderFrame() {
       const renderStarted = performance.now();
       frameRef.current++;
-      const f = frameRef.current;
       // Every match-tempo counter below advances once per rendered frame, but
       // the render budget drops the cadence from 60 to 30 fps under sustained
       // frame pressure. Without this the whole match plays at half speed on a
@@ -1007,6 +1020,7 @@ function PitchCanvas(props: Props) {
       // Tempo is a function of wall-clock time; the cadence only decides how
       // smoothly that time is drawn.
       const frameScale = frameTempoScale(renderBudget.frameStepMs);
+      const clock = (animClockRef.current += frameScale);
       // Read live props from ref (no closure capture → no rAF restart on prop change)
       const live = liveRef.current;
       const {
@@ -1199,7 +1213,10 @@ function PitchCanvas(props: Props) {
         viewRigIdRef.current = baseRig.id;
         viewCenterXRef.current = followTargetX;
       } else {
-        viewCenterXRef.current += (followTargetX - viewCenterXRef.current) * RIG_SETTLE[baseRig.id];
+        // Easing is per unit of time, not per frame: the same constant settles
+        // in half the wall-clock time once the cadence drops.
+        const settle = 1 - Math.pow(1 - RIG_SETTLE[baseRig.id], frameScale);
+        viewCenterXRef.current += (followTargetX - viewCenterXRef.current) * settle;
       }
       const rig: CameraRig = { ...baseRig, centerX: viewCenterXRef.current };
       const view = createBroadcastView(rig, W, H, orientationRef.current);
@@ -1226,9 +1243,10 @@ function PitchCanvas(props: Props) {
         orientationRef.current,
         frameCanvasSize.width,
         frameCanvasSize.height,
+        frameScale,
       );
 
-      shiftRef.current = lerp(shiftRef.current, targetShift, 0.03);
+      shiftRef.current = lerp(shiftRef.current, targetShift, 1 - Math.pow(0.97, frameScale));
 
       // How loud the ground is right now. A goal floods it; a dangerous attack
       // gets a scatter of phones out on its own.
@@ -1270,7 +1288,7 @@ function PitchCanvas(props: Props) {
           home: homeCrest,
           away: awayCrest,
         },
-        frame: f,
+        frame: clock,
         seed: 20260722,
       });
       drawBroadcastPitch(ctx, view, {
@@ -1292,7 +1310,7 @@ function PitchCanvas(props: Props) {
       const stoppagePlan = stoppageForBeat(live.routineBeat);
       const runningStoppage = stoppageRef.current;
       if (runningStoppage) {
-        runningStoppage.frame++;
+        runningStoppage.frame += frameScale;
         if (runningStoppage.frame >= runningStoppage.plan.holdFrames) stoppageRef.current = null;
       } else if (
         stoppagePlan
@@ -1669,7 +1687,7 @@ function PitchCanvas(props: Props) {
         arc: currentPhase.arc,
         source: ballSourceRef.current,
         target: { x: finalTargetX, y: finalTargetY },
-        frame: f,
+        frame: clock,
         flightKind: currentPhase.kind,
         releaseDelayFrames,
         swerve: currentPhase.swerve,
@@ -1689,7 +1707,7 @@ function PitchCanvas(props: Props) {
         by += receptionOffset.y;
       }
       ballArcLiftRef.current = ballResult.arcLift;
-      ballSpinRef.current += ballResult.spinDelta;
+      ballSpinRef.current += ballResult.spinDelta * frameScale;
 
       ballPos.current.x = bx;
       ballPos.current.y = by;
@@ -1729,15 +1747,26 @@ function PitchCanvas(props: Props) {
         displayBy = rebound.by;
         displayArcLift = rebound.arcLift + liftCarry;
         postShotRestingBallRef.current = { x: rebound.bx, y: rebound.by };
-        ballSpinRef.current += rebound.spinDelta;
+        ballSpinRef.current += rebound.spinDelta * frameScale;
       }
 
-      // Ball trail (motion blur)
-      if (phaseStateRef.current !== 'holding' && f % 2 === 0) {
-        pushBallTrail(displayBx, displayBy, displayArcLift);
-      } else if (shotOutcomeFrameRef.current > 0 && f % 3 === 0) {
-        pushBallTrail(displayBx, displayBy, displayArcLift);
-      } else if (ballHistory.current.length > 0 && f % 3 === 0) {
+      // Ball trail (motion blur). A `frame % 2` gate samples half as often per
+      // second once the cadence drops, which silently doubles the length of
+      // the trail on a machine that is already struggling.
+      trailClockRef.current += frameScale;
+      const trailNow = trailClockRef.current;
+      if (phaseStateRef.current !== 'holding') {
+        if (trailNow - lastTrailPushRef.current >= 2) {
+          lastTrailPushRef.current = trailNow;
+          pushBallTrail(displayBx, displayBy, displayArcLift);
+        }
+      } else if (shotOutcomeFrameRef.current > 0) {
+        if (trailNow - lastTrailPushRef.current >= 3) {
+          lastTrailPushRef.current = trailNow;
+          pushBallTrail(displayBx, displayBy, displayArcLift);
+        }
+      } else if (ballHistory.current.length > 0 && trailNow - lastTrailShiftRef.current >= 3) {
+        lastTrailShiftRef.current = trailNow;
         ballHistory.current.shift();
       }
 
@@ -1780,8 +1809,8 @@ function PitchCanvas(props: Props) {
         || atmosphere.setPiece !== previousAtmosphere.setPiece
         || atmosphere.inFlight !== previousAtmosphere.inFlight
         || Math.abs(atmosphere.danger - previousAtmosphere.danger) >= 0.08;
-      if (atmosphereChanged || f - previousAtmosphere.frame >= 12) {
-        lastAtmosphereRef.current = { ...atmosphere, frame: f };
+      if (atmosphereChanged || clock - previousAtmosphere.frame >= 12) {
+        lastAtmosphereRef.current = { ...atmosphere, frame: clock };
         live.onPresentationAtmosphereChange?.(atmosphere);
       }
       const assignmentKey = `${sequenceSeedRef.current}:${phaseIdxRef.current}:${tacticalMoment}:${isAttHome ? 'H' : 'A'}:${activeHome.length}:${activeAway.length}`;
@@ -1824,7 +1853,7 @@ function PitchCanvas(props: Props) {
         phaseProgress,
         tacticalAssignmentsRef.current ?? undefined,
         liveFormationLayouts,
-        f,
+        clock,
         releaseDelayFrames > 0
           ? clamp(phaseFrameRef.current / releaseDelayFrames, 0, 1)
           : 1,
@@ -2004,7 +2033,7 @@ function PitchCanvas(props: Props) {
             color,
             number: player.playerNumber,
             seed: stateIndex,
-            frame: f,
+            frame: clock,
             stridePhase,
             speed: groundSpeed,
             hasBall,
@@ -2136,6 +2165,7 @@ function PitchCanvas(props: Props) {
         portraitMode ? W : H,
         renderBudget.particleCap,
         portraitMode,
+        frameScale,
       );
       renderParticles(ctx, particlesRef.current);
 
@@ -2152,7 +2182,7 @@ function PitchCanvas(props: Props) {
           teamColor: goalCelebColor.current,
           ballGround: view.fromDrawing(bx, by),
           ballArcLift: ballArcLiftRef.current,
-          animFrame: f,
+          animFrame: clock,
           orientation: orientationRef.current,
         });
       }
@@ -2236,7 +2266,7 @@ function PitchCanvas(props: Props) {
       }
 
       // ── White flash on goal (drawn on top of everything, no shake) ──
-      applyWhiteFlash(ctx, flashWhiteRef, frameCanvasSize.width, frameCanvasSize.height);
+      applyWhiteFlash(ctx, flashWhiteRef, frameCanvasSize.width, frameCanvasSize.height, frameScale);
       recordRenderDuration(performance.now() - renderStarted);
 
     }
