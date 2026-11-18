@@ -201,7 +201,7 @@ export default function Welcome() {
                     id="favorite-team"
                     value={favoriteTeam}
                     onChange={event => setFavoriteTeamChoice(event.target.value)}
-                    className="min-h-11 w-full rounded border border-slate-700 bg-slate-800 px-3 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                    className="min-h-11 w-full rounded border border-slate-700 bg-slate-800 px-3 text-sm text-slate-100 focus:border-[var(--focus-ring)]"
                   >
                     <option value="">纯观察，不绑定球队</option>
                     {defaultTeams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
@@ -245,7 +245,7 @@ export default function Welcome() {
                         value={seed}
                     onChange={event => setSeed(event.target.value)}
                     placeholder="留空则自动生成"
-                    className="min-h-11 w-full rounded border border-slate-700 bg-slate-900/80 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                    className="min-h-11 w-full rounded border border-slate-700 bg-slate-900/80 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-[var(--focus-ring)]"
                   />
                     </div>
                   </div>

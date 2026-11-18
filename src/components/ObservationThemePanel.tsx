@@ -49,7 +49,7 @@ export default function ObservationThemePanel({
           aria-label="选择本赛季观察主题"
           value={preference}
           onChange={event => onPreferenceChange(event.target.value as ObservationThemePreference)}
-          className="min-h-9 max-w-32 rounded border border-slate-700 bg-slate-800 px-2 text-xs text-slate-200 focus:border-emerald-600 focus:outline-none sm:max-w-none"
+          className="min-h-9 max-w-32 rounded border border-slate-700 bg-slate-800 px-2 text-xs text-slate-200 focus:border-[var(--focus-ring)] sm:max-w-none"
         >
           {OBSERVATION_THEME_OPTIONS.map(option => (
             <option

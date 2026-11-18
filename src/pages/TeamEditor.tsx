@@ -129,7 +129,7 @@ export default function TeamEditor() {
         <div className="flex gap-2 flex-wrap items-center">
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="搜索球队..."
-            className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm focus:outline-none focus:border-[var(--focus-ring)]" />
+            className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm focus:border-[var(--focus-ring)]" />
           <span className="text-xs text-slate-500">{teams.length}/32 支球队</span>
         </div>
 
@@ -220,7 +220,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
     <div>
       <label className="block text-[10px] text-slate-500 mb-0.5">{label}</label>
       <input type="text" value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-[var(--focus-ring)]" />
+        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:border-[var(--focus-ring)]" />
     </div>
   );
 }
@@ -230,7 +230,7 @@ function NumField({ label, value, onChange, max }: { label: string; value: numbe
     <div>
       <label className="block text-[10px] text-slate-500 mb-0.5">{label}</label>
       <input type="number" value={value} min={1} max={max} onChange={e => onChange(parseInt(e.target.value) || 0)}
-        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:outline-none focus:border-[var(--focus-ring)]" />
+        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs focus:border-[var(--focus-ring)]" />
     </div>
   );
 }

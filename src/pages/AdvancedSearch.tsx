@@ -390,7 +390,7 @@ function NumberRange({
           value={min ?? ''}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined, max)}
           placeholder="最小"
-          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:border-[var(--focus-ring)]"
         />
         <span className="text-slate-500">—</span>
         <input
@@ -398,7 +398,7 @@ function NumberRange({
           value={max ?? ''}
           onChange={(e) => onChange(min, e.target.value ? Number(e.target.value) : undefined)}
           placeholder="最大"
-          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:border-[var(--focus-ring)]"
         />
       </div>
     </div>
@@ -413,7 +413,7 @@ function NumberInput({ label, value, onChange }: { label: string; value?: number
         type="number"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-        className="w-full min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+        className="w-full min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:border-[var(--focus-ring)]"
       />
     </div>
   );

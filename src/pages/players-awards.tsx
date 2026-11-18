@@ -49,7 +49,7 @@ const rankBadge = (rank: number) => {
 };
 
 const selectClass =
-  'min-h-9 rounded border border-slate-700 bg-slate-900 px-2 text-xs text-slate-200 focus:border-sky-600 focus:outline-none';
+  'min-h-9 rounded border border-slate-700 bg-slate-900 px-2 text-xs text-slate-200 focus:border-[var(--focus-ring)]';
 
 /**
  * 奖项 group of the player centre: a season-descending record feed and a

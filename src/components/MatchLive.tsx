@@ -530,13 +530,13 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
             {/* Score */}
             <div className="flex items-center gap-2 px-2 min-w-[76px] justify-center sm:gap-3 sm:px-4 sm:min-w-[90px]">
-              <span aria-label="主队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-all duration-300 sm:text-5xl ${
+              <span aria-label="主队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-[transform,color] duration-300 sm:text-5xl ${
                 playback.homeScore > playback.awayScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'home' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.homeScore}
               </span>
               <span className="text-2xl text-slate-700 font-light">-</span>
-              <span aria-label="客队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-all duration-300 sm:text-5xl ${
+              <span aria-label="客队比分" className={`broadcast-score-type text-3xl font-black tabular-nums transition-[transform,color] duration-300 sm:text-5xl ${
                 playback.awayScore > playback.homeScore ? 'text-green-400' : 'text-white'
               } ${playback.goalFlash === 'away' ? 'animate-score-pop scale-110' : ''}`}>
                 {playback.awayScore}
@@ -726,7 +726,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               <div className="px-3 pb-1 pt-0.5 sm:px-4 sm:pb-3">
                 <div className="relative h-2 overflow-hidden rounded-full bg-slate-800">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300 motion-reduce:transition-none"
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-300 motion-reduce:transition-none"
                     style={{ width: `${(Math.min(playback.minute, maxMin) / maxMin) * 100}%` }}
                   />
                   <div className="absolute inset-y-0 w-px bg-slate-600" style={{ left: `${(45 / maxMin) * 100}%` }} />

@@ -43,32 +43,40 @@ function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favorite
 
   const honors = world.honorHistory;
 
-  // All-time trophy leaders
-  const trophyCounts: { teamId: string; name: string; count: number; color: string }[] = [];
-  for (const [teamId, trophies] of Object.entries(world.teamTrophies)) {
-    if (trophies.length > 0) {
-      trophyCounts.push({
-        teamId,
-        name: getTeamName(teamId, world.teamBases),
-        count: trophies.length,
-        color: world.teamBases[teamId]?.color ?? '#666',
-      });
+  // All-time trophy leaders.
+  // 此前在渲染体里直接构建 + 排序，每次无关的 state 变更（切 tab、改赛季范围）
+  // 都会重跑一遍；同文件其他派生都用了 useMemo，这两处是遗漏。
+  const trophyCounts = useMemo(() => {
+    const rows: { teamId: string; name: string; count: number; color: string }[] = [];
+    for (const [teamId, trophies] of Object.entries(world.teamTrophies)) {
+      if (trophies.length > 0) {
+        rows.push({
+          teamId,
+          name: getTeamName(teamId, world.teamBases),
+          count: trophies.length,
+          color: world.teamBases[teamId]?.color ?? '#666',
+        });
+      }
     }
-  }
-  trophyCounts.sort((a, b) => b.count - a.count);
+    rows.sort((a, b) => b.count - a.count);
+    return rows;
+  }, [world.teamTrophies, world.teamBases]);
 
   // Phase H — wealth leaderboard (current cash by team).
   // Cash CAN go negative — separate richest / poorest views.
-  const wealthRanking: { teamId: string; name: string; cash: number; color: string }[] = [];
-  for (const [teamId, fin] of Object.entries(world.teamFinances ?? {})) {
-    wealthRanking.push({
-      teamId,
-      name: getTeamName(teamId, world.teamBases),
-      cash: fin.cash,
-      color: world.teamBases[teamId]?.color ?? '#666',
-    });
-  }
-  wealthRanking.sort((a, b) => b.cash - a.cash);
+  const wealthRanking = useMemo(() => {
+    const rows: { teamId: string; name: string; cash: number; color: string }[] = [];
+    for (const [teamId, fin] of Object.entries(world.teamFinances ?? {})) {
+      rows.push({
+        teamId,
+        name: getTeamName(teamId, world.teamBases),
+        cash: fin.cash,
+        color: world.teamBases[teamId]?.color ?? '#666',
+      });
+    }
+    rows.sort((a, b) => b.cash - a.cash);
+    return rows;
+  }, [world.teamFinances, world.teamBases]);
 
   const coefficientRanking = useMemo(
     () => rankClubCoefficients(world.teamBases, world.teamSeasonRecords),

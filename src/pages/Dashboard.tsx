@@ -641,7 +641,7 @@ function DashboardMasthead({
         </div>
       </div>
       <div className="season-progress-track" aria-hidden="true">
-        <span style={{ width: `${progress}%` }} />
+        <span style={{ transform: `scaleX(${progress / 100})` }} />
       </div>
     </section>
   );

@@ -145,6 +145,8 @@ export default function League() {
 
   // Collect league round data
   const leagueWindows = world.seasonState.calendar.filter((w) => w.type === 'league');
+  // 下面按窗口循环时原本每个窗口都 indexOf 一次整个赛历，是 O(n²)。一次性建表。
+  const calendarIndexByWindow = new Map(world.seasonState.calendar.map((w, i) => [w, i]));
 
   type RoundData = {
     windowId: number;
@@ -157,7 +159,7 @@ export default function League() {
 
   const rounds: RoundData[] = [];
   for (const win of leagueWindows) {
-    const winIdx = world.seasonState.calendar.indexOf(win);
+    const winIdx = calendarIndexByWindow.get(win) ?? -1;
     const levelFixtures = win.fixtures.filter((f) => {
       const homeState = world.teamStates[f.homeTeamId];
       return homeState && homeState.leagueLevel === leagueLevel;
@@ -387,7 +389,7 @@ export default function League() {
                             const played = entry.played;
                             const remaining = totalRounds - played;
                             if (remaining <= 0 || played < 3) return null;
-                            const myIdx = standings.indexOf(entry);
+                            const myIdx = i; // 行索引就是名次下标，indexOf 是 O(n²) 的多余查找
                             const leaderPts = standings[0]?.points ?? 0;
                             const myMaxPts = entry.points + remaining * 3;
                             const relegZone = config?.directRelegation ?? 2;

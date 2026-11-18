@@ -1151,7 +1151,10 @@ body {
 .season-window-counter strong small { color: var(--text-muted); font-size: 0.7rem; }
 
 .season-progress-track { position: absolute; inset: auto 0 0; z-index: 2; height: 3px; background: rgb(255 255 255 / 4%); }
-.season-progress-track span { display: block; height: 100%; background: var(--action); transition: width var(--motion-slow) var(--ease-out); }
+/* 此前是 transition: width，是全表唯一一处动布局属性的动画——而它恰好出现在
+   「推进赛季」这个高频操作上，同一时刻主线程正在跑模拟。改成 scaleX 后完全
+   走合成层。这条只有 3px 高且没有圆角端头，所以没有形变代价。 */
+.season-progress-track span { display: block; width: 100%; height: 100%; background: var(--action); transform-origin: left center; transition: transform var(--motion-slow) var(--ease-out); }
 
 .observer-club-strip {
   display: grid;
@@ -1716,10 +1719,12 @@ body {
   to { transform: translateX(365%); }
 }
 
-@media (hover: none) {
-  .app-route-content :where(a, button):not(:disabled):active {
-    filter: brightness(1.13);
-  }
+/* 按压反馈此前只在 (hover: none) 下生效，等于只有触屏设备有。桌面端按下去
+   除了 hover 变色之外没有任何确认，而一次点击到界面响应之间可能隔着一整场
+   模拟。去掉媒体查询让两端一致；带 .ui-action-feedback / .press-scale /
+   .ui-segmented-option 的元素在此之上还有 scale。 */
+.app-route-content :where(a, button, [role='button'], summary):not(:disabled):active {
+  filter: brightness(1.13);
 }
 
 @keyframes action-feedback-scan {

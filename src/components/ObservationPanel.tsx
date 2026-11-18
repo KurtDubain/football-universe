@@ -157,7 +157,7 @@ export default function ObservationPanel({
               playUiFeedback('selection');
               setFixtureId(event.target.value);
             }}
-            className="min-h-11 w-full rounded border border-slate-700 bg-slate-900 px-3 text-xs text-slate-200 focus:border-sky-600 focus:outline-none"
+            className="min-h-11 w-full rounded border border-slate-700 bg-slate-900 px-3 text-xs text-slate-200 focus:border-[var(--focus-ring)]"
           >
             {fixtures.map(entry => (
               <option key={entry.id} value={entry.id}>
