@@ -20,6 +20,17 @@ export interface SetPieceSequenceOptions {
  */
 const SET_PIECE_DELIVERY_CEILING_MPS = 20;
 
+/**
+ * Frames a set piece spends forming before the run-up begins.
+ *
+ * The renderer used to write every player straight to their set-piece position
+ * on the frame the scene loaded, so a corner could move a defender the length
+ * of the pitch between two frames. The players now walk to their marks, and
+ * this is the time they are given. It is added to the release delay and to the
+ * duration together, so the delivery itself takes exactly as long as it did.
+ */
+export const SET_PIECE_SETUP_FRAMES = 90;
+
 function closestSlot(formation: FormationSlot[], role: Role, targetY: number): number {
   return formation
     .map((slot, index) => ({ slot, index }))
@@ -46,8 +57,8 @@ export function generateSetPieceSequence(
         receiverIdx: shooterIdx,
         attackingHome: options.attackingHome,
         kind: 'shot',
-        duration: 72,
-        releaseDelayFrames: 48,
+        duration: 72 + SET_PIECE_SETUP_FRAMES,
+        releaseDelayFrames: 48 + SET_PIECE_SETUP_FRAMES,
         hold: 20,
         arc: 0.05,
         swerve: (r(34) - 0.5) * 0.25,
@@ -79,8 +90,8 @@ export function generateSetPieceSequence(
         receiverIdx: takerIdx,
         attackingHome: options.attackingHome,
         kind: options.forceShot ? 'shot' : 'pass',
-        duration: options.forceShot ? 112 : 104,
-        releaseDelayFrames: 84,
+        duration: (options.forceShot ? 112 : 104) + SET_PIECE_SETUP_FRAMES,
+        releaseDelayFrames: 84 + SET_PIECE_SETUP_FRAMES,
         hold: options.forceShot ? 20 : 26,
         arc: options.forceShot ? 0.2 : 0.35,
         swerve: options.forceShot ? (r(5) - 0.5) * 1.1 : undefined,
@@ -117,8 +128,8 @@ export function generateSetPieceSequence(
     receiverIdx: shooterIdx,
     attackingHome: options.attackingHome,
     kind: 'pass',
-    duration: isCorner ? 102 : 92,
-    releaseDelayFrames: isCorner ? 70 : 62,
+    duration: (isCorner ? 102 : 92) + SET_PIECE_SETUP_FRAMES,
+    releaseDelayFrames: (isCorner ? 70 : 62) + SET_PIECE_SETUP_FRAMES,
     hold: options.forceShot ? 8 : 24,
     arc: isCorner ? 0.92 : 0.76,
     intercepted: false,

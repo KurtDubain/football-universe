@@ -20,9 +20,12 @@ describe('set-piece presentation sequences', () => {
       setPiece: 'corner',
       passerIdx: 7,
       receiverIdx: 9,
-      releaseDelayFrames: 70,
+      releaseDelayFrames: 160,
       sourceOverride: { x: 0.965, y: 0.055 },
     });
+    // The setup window is added to the delay and to the duration together, so
+    // the delivery itself still takes the 32 frames it always took.
+    expect(result.phases[0].duration - result.phases[0].releaseDelayFrames!).toBe(32);
     expect(result.phases[0].arc).toBeGreaterThan(0.8);
     expect(result.phases[1].kind).toBe('shot');
     expect(result.phases[1].sourceOverride).toEqual(result.phases[0].targetOverride);
@@ -42,8 +45,9 @@ describe('set-piece presentation sequences', () => {
       kind: 'pass',
       setPiece: 'direct_free_kick',
       passerIdx: 6,
-      releaseDelayFrames: 84,
+      releaseDelayFrames: 174,
     });
+    expect(result.phases[0].duration - result.phases[0].releaseDelayFrames!).toBe(20);
   });
 
   it('places a defending wall between a direct free kick and goal', () => {

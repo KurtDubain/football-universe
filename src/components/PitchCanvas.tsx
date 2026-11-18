@@ -89,9 +89,9 @@ import {
   shouldEmitContactCue,
   shouldEmitSetupCue,
 } from './pitch-canvas/cue-timing';
+import { SET_PIECE_SETUP_FRAMES, setPiecePlayerTarget } from './pitch-canvas/set-pieces';
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
-import { setPiecePlayerTarget } from './pitch-canvas/set-pieces';
 import { isWaitingForEvent, shouldHoldClock } from './pitch-canvas/playback-gates';
 import {
   decayBallLiftCarry,
@@ -449,6 +449,20 @@ function PitchCanvas(props: Props) {
     inFlight: false,
     frame: -100,
   });
+  /**
+   * The atmosphere as computed this frame, for the renderer only.
+   *
+   * `lastAtmosphereRef` is throttled to a 0.08 change or twelve frames because
+   * it feeds a React callback, but the grade, the stand brightness and the
+   * tension curve are continuous functions of it. Reading the throttled copy
+   * made all three move in steps, and the write happens after they are read,
+   * so every frame was a step behind as well.
+   */
+  const renderAtmosphereRef = useRef<MatchPresentationAtmosphere>({
+    danger: 0,
+    attackingHome: true,
+    inFlight: false,
+  });
   const wakeRenderLoopRef = useRef<() => void>(() => undefined);
 
   // Per-player live positions (smoothed) — 22 players (11 home + 11 away)
@@ -666,6 +680,19 @@ function PitchCanvas(props: Props) {
     let visualBallScale = initialVisualScale.ball;
     let currentDpr = 1;
     const renderMetrics = createRenderMetricsTracker();
+    // The active roster only changes when the minute or the squad does, but it
+    // was rebuilt — two filters, two maps and a Set — on every rendered frame.
+    let rosterCache: {
+      minute: number;
+      homeRoster: PitchRosterPlayer[];
+      awayRoster: PitchRosterPlayer[];
+      activeHome: PitchRosterPlayer[];
+      activeAway: PitchRosterPlayer[];
+      activePlayerIndices: Set<number>;
+    } | null = null;
+    // Emptied each frame rather than reallocated. The draw closures inside it
+    // are still per-frame, but the array that holds them is not.
+    const drawables: { depth: number; draw: () => void }[] = [];
 
     function updateRenderingDebug(
       activeNow: boolean,
@@ -893,32 +920,30 @@ function PitchCanvas(props: Props) {
       const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh, layout);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
+      // Only the taker is placed. The simulation names who took the corner, so
+      // that player has to be at the ball when it leaves their foot and cannot
+      // be swapped for someone closer. The other twenty-one used to be written
+      // there as well, which put a whole team tens of metres away on one frame
+      // and on their mark the next; they now walk to `setPiecePlayerTarget`
+      // during the setup window, and the taker's target stays put for that
+      // window so the walk has something fixed to aim at.
       if (firstPhase.setPiece) {
-        // A dead-ball scene starts after the referee has allowed both teams
-        // to take their positions. Stage that omitted setup immediately so a
-        // wall or penalty shape is formed before the visible run-up begins.
-        for (let playerIndex = 0; playerIndex < 22; playerIndex++) {
-          const isHomeTeam = playerIndex < 11;
-          const playerFormation = isHomeTeam
-            ? liveRef.current.formationLayouts.home
-            : liveRef.current.formationLayouts.away;
-          const formIdx = playerIndex % 11;
-          const target = setPiecePlayerTarget(
-            playerIndex,
-            isHomeTeam,
-            playerFormation[formIdx].role,
-            firstPhase,
-            playerFormation,
-            // Scene start: the taker belongs at the back of their run-up, not
-            // already standing on the ball.
-            0,
-          );
-          if (!target) continue;
-          const player = playerPosRef.current[playerIndex];
-          player.x = target.x;
-          player.y = target.y;
-          player.vx = 0;
-          player.vy = 0;
+        const takerOffset = firstPhase.attackingHome ? 0 : 11;
+        const takerIndex = takerOffset + firstPhase.passerIdx;
+        const runUp = setPiecePlayerTarget(
+          takerIndex,
+          firstPhase.attackingHome,
+          layout[firstPhase.passerIdx].role,
+          firstPhase,
+          layout,
+          0,
+        );
+        const taker = playerPosRef.current[takerIndex];
+        if (taker && runUp) {
+          taker.x = runUp.x;
+          taker.y = runUp.y;
+          taker.vx = 0;
+          taker.vy = 0;
         }
       } else if (firstPhase.restart && firstPhase.sourceOverride) {
         const takerOffset = firstPhase.attackingHome ? 0 : 11;
@@ -1253,7 +1278,7 @@ function PitchCanvas(props: Props) {
       const goalFlash = goalCelebFrame.current > 0
         ? clamp((goalCelebFrame.current / GOAL_CELEB_MAX_FRAMES) * 1.6, 0, 1)
         : 0;
-      const crowdFlash = Math.max(goalFlash, lastAtmosphereRef.current.danger * 0.2);
+      const crowdFlash = Math.max(goalFlash, renderAtmosphereRef.current.danger * 0.2);
       // Whoever scored, not whoever is nominally at home. On a neutral ground
       // there is no home colour to wash the frame in at all.
       const celebrationColor = goalFlash > 0.02
@@ -1265,7 +1290,7 @@ function PitchCanvas(props: Props) {
       // ten minutes of a level game and the same shot in a settled one are
       // identical to it and nothing like identical to a viewer.
       const tension = matchTension({
-        danger: lastAtmosphereRef.current.danger,
+        danger: renderAtmosphereRef.current.danger,
         minute,
         homeScore: liveScore.home,
         awayScore: liveScore.away,
@@ -1277,7 +1302,7 @@ function PitchCanvas(props: Props) {
         awayColor,
         venue,
         density: renderBudget.quality === 'full' ? 1 : 0.55,
-        excitement: lastAtmosphereRef.current.danger,
+        excitement: renderAtmosphereRef.current.danger,
         tension,
         flash: crowdFlash,
         celebrationColor,
@@ -1608,6 +1633,7 @@ function PitchCanvas(props: Props) {
         dy: (holdFacingTarget.y - ballTarget.y) * fh,
       };
       const releaseDelayFrames = releaseDelayFramesFor(currentPhase);
+      const setupFrames = currentPhase.setPiece ? SET_PIECE_SETUP_FRAMES : 0;
       if (
         directedShotScene
         && shouldEmitSetupCue({
@@ -1778,12 +1804,35 @@ function PitchCanvas(props: Props) {
       const ballHolderId = phaseStateRef.current === 'holding' && currentPhase.kind === 'pass'
         ? ballHolderRoster.find(player => player.slotIndex === ballHolderIdx)?.playerId ?? null
         : null;
-      const activeHome = activePitchPlayers(homeRoster, minute, maxMinute);
-      const activeAway = activePitchPlayers(awayRoster, minute, maxMinute);
-      const activePlayerIndices = new Set([
-        ...activeHome.map(player => player.slotIndex),
-        ...activeAway.map(player => 11 + player.slotIndex),
-      ]);
+      const cachedRoster = rosterCache
+        && rosterCache.minute === minute
+        && rosterCache.homeRoster === homeRoster
+        && rosterCache.awayRoster === awayRoster
+        ? rosterCache
+        : null;
+      let activeHome: PitchRosterPlayer[];
+      let activeAway: PitchRosterPlayer[];
+      let activePlayerIndices: Set<number>;
+      if (cachedRoster) {
+        activeHome = cachedRoster.activeHome;
+        activeAway = cachedRoster.activeAway;
+        activePlayerIndices = cachedRoster.activePlayerIndices;
+      } else {
+        activeHome = activePitchPlayers(homeRoster, minute, maxMinute);
+        activeAway = activePitchPlayers(awayRoster, minute, maxMinute);
+        activePlayerIndices = new Set([
+          ...activeHome.map(player => player.slotIndex),
+          ...activeAway.map(player => 11 + player.slotIndex),
+        ]);
+        rosterCache = {
+          minute,
+          homeRoster,
+          awayRoster,
+          activeHome,
+          activeAway,
+          activePlayerIndices,
+        };
+      }
 
       // Normalize ball + override to 0-1 for AI calcs
       const ballNX = (bx - P) / fw;
@@ -1803,6 +1852,9 @@ function PitchCanvas(props: Props) {
         clamp(ballNX, 0, 1),
         phaseStateRef.current !== 'holding',
       );
+      // The renderer reads this one every frame; the throttled copy below is
+      // only for the React callback.
+      renderAtmosphereRef.current = atmosphere;
       const previousAtmosphere = lastAtmosphereRef.current;
       const atmosphereChanged = atmosphere.attackingHome !== previousAtmosphere.attackingHome
         || atmosphere.stage !== previousAtmosphere.stage
@@ -1854,8 +1906,17 @@ function PitchCanvas(props: Props) {
         tacticalAssignmentsRef.current ?? undefined,
         liveFormationLayouts,
         clock,
+        // A set piece holds the run-up at zero through its setup window, so
+        // every target on the pitch is a fixed point while the players walk to
+        // it. Ramping from the first frame instead gave them a target that moved
+        // as fast as they did, and nobody ever arrived.
         releaseDelayFrames > 0
-          ? clamp(phaseFrameRef.current / releaseDelayFrames, 0, 1)
+          ? clamp(
+              (phaseFrameRef.current - setupFrames)
+                / Math.max(1, releaseDelayFrames - setupFrames),
+              0,
+              1,
+            )
           : 1,
         frameScale,
       );
@@ -1904,20 +1965,31 @@ function PitchCanvas(props: Props) {
           directedShotScene.event.shootout.goalkeeperId,
         ].filter((playerId): playerId is string => Boolean(playerId)))
         : null;
-      const visibleHome = activeHome
-        .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
-      const visibleAway = activeAway
-        .filter(player => !visiblePlayerIds || visiblePlayerIds.size === 0 || visiblePlayerIds.has(player.playerId));
+      // Outside a shootout every active player is on the pitch, so the filter
+      // was copying a list that had not changed, sixty times a second.
+      const shootoutOnly = visiblePlayerIds && visiblePlayerIds.size > 0 ? visiblePlayerIds : null;
+      const visibleHome = shootoutOnly
+        ? activeHome.filter(player => shootoutOnly.has(player.playerId))
+        : activeHome;
+      const visibleAway = shootoutOnly
+        ? activeAway.filter(player => shootoutOnly.has(player.playerId))
+        : activeAway;
       const targetVisualScale = visualScaleForQuality(renderBudget.quality);
-      visualPlayerScale += (targetVisualScale.player - visualPlayerScale) * VISUAL_SCALE_EASE;
-      visualBallScale += (targetVisualScale.ball - visualBallScale) * VISUAL_SCALE_EASE;
+      // Eased per unit of match tempo, not per rendered frame. Every other
+      // ease in this file already scales by frameScale; this one did not, so a
+      // tier change on a machine that had just dropped to the 30fps cadence
+      // took twice the wall-clock time to settle — the quality change was
+      // stretched out exactly when the machine was least able to hide it.
+      const scaleEase = 1 - Math.pow(1 - VISUAL_SCALE_EASE, frameScale);
+      visualPlayerScale += (targetVisualScale.player - visualPlayerScale) * scaleEase;
+      visualBallScale += (targetVisualScale.ball - visualBallScale) * scaleEase;
       const playerVisualScale = visualPlayerScale;
       const ballVisualScale = visualBallScale;
       // Everything that stands on the pitch goes into one list and is drawn
       // from the far touchline forward. The ball belongs in that list: a
       // defender standing in front of it is the strongest depth cue a flat
       // pitch cannot give, and it is free once the sort exists.
-      const drawables: { depth: number; draw: () => void }[] = [];
+      drawables.length = 0;
 
       const ballGround = view.fromDrawing(displayBx, displayBy);
       drawables.push({
@@ -2245,7 +2317,7 @@ function PitchCanvas(props: Props) {
       // The nameplate label is drawn after `restore()` and stays ungraded: it
       // is an overlay, not part of the picture.
       drawBroadcastGrade(ctx, view, {
-        danger: lastAtmosphereRef.current.danger,
+        danger: renderAtmosphereRef.current.danger,
         tension,
         flash: goalFlash,
         celebrationColor,

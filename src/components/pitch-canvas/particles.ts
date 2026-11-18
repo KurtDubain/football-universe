@@ -344,16 +344,26 @@ export function renderParticles(ctx: CanvasRenderingContext2D, particles: Partic
         const dirX = ptcl.vx / speed, dirY = ptcl.vy / speed;
         const tailX = ptcl.x - dirX * trailLen;
         const tailY = ptcl.y - dirY * trailLen;
-        const grad = ctx.createLinearGradient(tailX, tailY, ptcl.x, ptcl.y);
-        grad.addColorStop(0, 'rgba(255,255,255,0)');
-        grad.addColorStop(1, ptcl.color);
-        ctx.strokeStyle = grad;
+        // 拖尾拆成两段实线：远半段压暗、近半段保持中段亮度，最亮的那一点交给
+        // 下面本来就有的头部亮圆。进球爆发固定带来 14 条 additive streak，渐变
+        // 写法意味着每帧几十个一次性对象，而"尾部淡、头部亮"用两段 alpha 就读
+        // 出来了。globalAlpha 用完立刻还原成 a，头部亮圆还要按它画。
+        const midX = (tailX + ptcl.x) / 2;
+        const midY = (tailY + ptcl.y) / 2;
+        ctx.strokeStyle = ptcl.color;
         ctx.lineWidth = sz;
         ctx.lineCap = 'round';
+        ctx.globalAlpha = a * 0.28;
         ctx.beginPath();
         ctx.moveTo(tailX, tailY);
+        ctx.lineTo(midX, midY);
+        ctx.stroke();
+        ctx.globalAlpha = a * 0.62;
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
         ctx.lineTo(ptcl.x, ptcl.y);
         ctx.stroke();
+        ctx.globalAlpha = a;
       }
       // Bright head
       ctx.beginPath();

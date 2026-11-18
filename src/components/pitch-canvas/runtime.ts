@@ -1,5 +1,19 @@
 export type PitchRuntimePauseReason = 'none' | 'hidden' | 'covered' | 'completed' | 'break' | 'paused';
 
+/**
+ * How much match time one stalled frame is allowed to owe the next one.
+ *
+ * A tab that was backgrounded, a garbage collection, or a long task can leave
+ * the broadcast hundreds of milliseconds behind the wall clock. Paying all of
+ * that back at once would mean rendering a burst of frames the viewer never
+ * asked for; paying none of it means the match quietly runs long. This ceiling
+ * splits the difference, and anything past it is dropped on purpose.
+ */
+const MAX_CATCHUP_MS = 250;
+
+/** Rendered frames one animation-frame callback may run. 6 x 16.67ms = 100ms. */
+const MAX_STEPS_PER_FRAME = 6;
+
 interface RuntimeDocument {
   visibilityState: DocumentVisibilityState;
   addEventListener(type: 'visibilitychange', listener: () => void): void;
@@ -79,17 +93,25 @@ export function mountPitchRuntime(options: PitchRuntimeOptions): PitchRuntime {
       return;
     }
     lastPauseReason = 'none';
-    const elapsed = Math.min(100, Math.max(0, timestamp - lastTimestamp));
+    const rawElapsed = Math.max(0, timestamp - lastTimestamp);
     lastTimestamp = timestamp;
-    accumulator += elapsed;
-    options.recordFrameInterval(elapsed);
+    // Report the interval that actually happened. This used to be the clamped
+    // value, which capped p95FrameIntervalMs at the clamp and hid the worst
+    // stalls from the very heuristics that are supposed to catch them.
+    options.recordFrameInterval(rawElapsed);
+    // A long stall must not cost the match time forever, but an unbounded
+    // catch-up turns one stall into a spiral, so the debt is capped.
+    accumulator += Math.min(rawElapsed, MAX_CATCHUP_MS);
     let steps = 0;
     const frameStepMs = options.getFrameStepMs();
-    while (accumulator >= frameStepMs && steps < 6) {
+    while (accumulator >= frameStepMs && steps < MAX_STEPS_PER_FRAME) {
       options.renderFrame();
       accumulator -= frameStepMs;
       steps++;
     }
+    // Whatever is still owed once the step cap is reached is dropped rather
+    // than carried: an accumulator that never drains grows every frame.
+    if (accumulator >= frameStepMs) accumulator %= frameStepMs;
     scheduleFrame();
   }
 

@@ -64,14 +64,33 @@ function parseHexColor(hex: string): [number, number, number] | null {
   return [r, g, b];
 }
 
+/**
+ * 整场比赛喂进 `shadeColor` 的只有两队队色、门将色和几档肤色，而
+ * `drawBroadcastPlayer` 每帧要为 22 名球员各跑六次：解析十六进制、拼字符串，
+ * 再把结果交给 canvas 的解析器过一遍。键只有 (hex, amount)，实际取值是个位数，
+ * 所以这张表不会长起来，命中率却接近 100%。
+ */
+const shadeCache = new Map<string, string>();
+
 /** Blend a colour toward white (positive) or black (negative). */
 function shadeColor(hex: string, amount: number): string {
+  const key = hex + '|' + amount;
+  const cached = shadeCache.get(key);
+  if (cached !== undefined) return cached;
   const parsed = parseHexColor(hex);
-  if (!parsed) return hex;
+  // 解析不出来就原样返回，返回值照样进表：表里存的是「这个键算出来的那个字符串」，
+  // 不是 null。`shadeColor(socks, -0.3)` 走的正是这条路 —— socks 已经是 rgb() 串而
+  // 不是十六进制 —— 22 名球员每帧各一次的无谓解析就是从这儿来的。
+  if (!parsed) {
+    shadeCache.set(key, hex);
+    return hex;
+  }
   const target = amount >= 0 ? 255 : 0;
   const t = Math.abs(amount);
   const mix = (channel: number) => Math.round(channel + (target - channel) * t);
-  return 'rgb(' + mix(parsed[0]) + ',' + mix(parsed[1]) + ',' + mix(parsed[2]) + ')';
+  const shaded = 'rgb(' + mix(parsed[0]) + ',' + mix(parsed[1]) + ',' + mix(parsed[2]) + ')';
+  shadeCache.set(key, shaded);
+  return shaded;
 }
 
 /**
@@ -339,7 +358,13 @@ export function drawBroadcastPlayer(
     // Both arms travel with the ball. A dive with the arms still hanging
     // reads as a player falling over rather than a keeper reaching for
     // something, which is the exact confusion this pose exists to remove.
-    armRaise = Math.max(armRaise, 0.82 + 0.18 * (divePlan?.reach ?? 0));
+    //
+    // 抬臂要跟 `extension` 一起爬：`travel`/`lift`/`reach`/`rotation` 在
+    // keeper-action 里都已经乘过它，只有这里是二值的，于是闸门一开手臂就在一帧
+    // 里跳掉三分之一个身高，正好落在全场最被盯着的那一帧。`reach` 本身已含
+    // extension，所以满伸时括号里的终值和从前完全一致。
+    const extension = divePlan?.extension ?? 0;
+    armRaise = Math.max(armRaise, (0.82 + 0.18 * (divePlan?.reach ?? 0)) * extension);
     legSwing *= 0.3;
     legDepth *= 0.3;
     crouch = 0;
