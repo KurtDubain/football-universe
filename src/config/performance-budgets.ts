@@ -19,8 +19,20 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // cap, and gzip stays at roughly 30.1 KB against 30 KiB, so the initial
     // critical path is unchanged. Inlining the sheet into index.css would
     // move the same bytes onto the critical path rather than remove them.
-    bytes: 197_000,
-    gzipBytes: 30 * KiB,
+    //
+    // 197,000 → 199,500 for v4.76.0, and the gzip cap 30 KiB → 31 KiB with it.
+    // The interaction round adds tokens and utilities rather than components:
+    // three text-colour tokens (--gold-text / --success-text / --danger-text)
+    // that replace eight scattered hex values, --text-micro as the 11 px floor
+    // for the 8–11 px helper classes, --radius-chip, --pitch-chrome-budget, the
+    // three .finance-* utilities and the seven [data-tone]::before glyphs that
+    // give every status colour a shape as well as a hue. Measured total is
+    // 198,273 bytes / 30,577 gzipped, so the raw cap clears it by 1.2 KB and
+    // the gzip cap by 1.1 KB. The gzip figure is the one to watch: it had 143
+    // bytes of headroom left, which is not a margin, so the next round that
+    // adds a stylesheet rule should expect to trim rather than to raise again.
+    bytes: 199_500,
+    gzipBytes: 31 * KiB,
   },
   images: {
     appBytes: 1_050_000,
@@ -65,7 +77,18 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // shared React shard cannot be, because it is also an initial dependency
     // and omitting it would fail the initial-precache assertion. Measured
     // precache bytes are 1,976,573 against the 2,150,000 cap.
-    entries: 90,
+    //
+    // 90 → 92 for v4.76.0, and both new entries are the same phenomenon as
+    // the four moves above: a module reachable from several route chunks is
+    // extracted as a shared chunk instead of being inlined into each of them.
+    // use-focus-trap-DadOs6Jq.js (1,339 bytes) is imported by MobileDrawer,
+    // MatchDetailModal and MatchLive; position-chip-vFrpiTJP.js (235 bytes) by
+    // Transfers, TeamDetail, Players and PlayerDetail. Inlining either one
+    // would put a second copy of the focus-trap logic or of the position
+    // palette in four different route chunks, which is exactly the drift this
+    // round was written to remove. Measured precache bytes are 2,068,231
+    // against the 2,150,000 cap, so only the entry count moved.
+    entries: 92,
     bytes: 2_150_000,
   },
 } as const;
