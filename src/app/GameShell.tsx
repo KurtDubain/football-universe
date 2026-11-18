@@ -1,11 +1,36 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Layout from './Layout';
+import AppErrorBoundary from './AppErrorBoundary';
 import { RecoverableRoute } from './route-resource';
 import { routeImporters } from './route-modules';
+
+/**
+ * A page that throws while rendering used to take the whole application with
+ * it: the only boundary was global, so the sidebar, the header and the advance
+ * button were all replaced by the error screen and the sole escape was a full
+ * reload. This one sits inside the shell, keeps the navigation alive, and
+ * clears itself when the location changes.
+ */
+function RouteErrorBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <AppErrorBoundary
+      variant="inline"
+      resetKeys={[location.key]}
+      onHome={() => navigate('/')}
+      onReload={() => navigate(0)}
+    >
+      {children}
+    </AppErrorBoundary>
+  );
+}
 
 export default function GameShell() {
   return (
     <Layout>
+      <RouteErrorBoundary>
       <Routes>
         <Route path="/" element={<RecoverableRoute routeId="dashboard" importer={routeImporters.dashboard} />} />
         <Route path="/calendar" element={<RecoverableRoute routeId="calendar" importer={routeImporters.calendar} />} />
@@ -29,6 +54,7 @@ export default function GameShell() {
         <Route path="/settings" element={<RecoverableRoute routeId="settings" importer={routeImporters.settings} />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      </RouteErrorBoundary>
     </Layout>
   );
 }

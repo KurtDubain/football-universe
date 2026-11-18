@@ -1,5 +1,6 @@
 import { ALLOW_CUSTOM_CONTENT, EDITION_LABEL, PRESET_ID } from '../edition/policy';
 import { lazy, Suspense, useState, useMemo, useSyncExternalStore } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useGameStore } from '../store/game-store';
 import { exportCurrentSave, importCurrentSave } from '../store/save-backup';
@@ -147,6 +148,28 @@ function SettingsContent({ world }: { world: GameWorld }) {
         </div>
         <p className="text-[10px] text-slate-500 mt-2">部分内容（球队名称、新闻文案）暂时仅支持中文</p>
       </div>
+
+      {/*
+        The team editor was only reachable from the welcome screen, so once a
+        world existed the feature was effectively gone — the mobile return
+        target even pointed back here, at a page with no such entry.
+      */}
+      {ALLOW_CUSTOM_CONTENT && (
+        <section className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">球队编辑</h3>
+          <Link
+            to="/team-editor"
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md bg-[var(--surface-raised)] px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-700"
+          >
+            <span className="flex items-center gap-2">
+              <Icon name="building" size={15} />
+              自定义球队
+            </span>
+            <span aria-hidden="true" className="text-slate-500">→</span>
+          </Link>
+          <p className="mt-2 text-[10px] text-slate-500">编辑球队名称、颜色与队徽，开始观察后仍可随时修改。</p>
+        </section>
+      )}
 
       <section
         data-testid="feedback-settings"

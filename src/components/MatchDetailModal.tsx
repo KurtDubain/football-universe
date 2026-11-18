@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useSwipe } from '../utils/use-swipe';
+import { useFocusTrap } from './use-focus-trap';
 import type { MatchFixture, MatchResult, MatchEvent } from '../types/match';
 import type { GameWorld } from '../engine/season/season-manager';
 import type { TeamBase, TeamState } from '../types/team';
@@ -41,6 +42,10 @@ export interface MatchDetailModalProps {
 
 // ── Component ──────────────────────────────────────────────────────
 
+// 弹窗走 portal 挂到 body 上，页面根节点可以安全地整体置 inert，
+// 让键盘 Tab 和读屏都不会穿透到浮层背后的内容。
+const MODAL_BACKGROUND_SELECTORS: readonly string[] = ['#root'];
+
 export default function MatchDetailModal({
   isOpen,
   onClose,
@@ -49,20 +54,15 @@ export default function MatchDetailModal({
   world,
 }: MatchDetailModalProps) {
   // Hooks must run even while the controlled modal is closed.
+  const panelRef = useRef<HTMLDivElement>(null);
+  // 下滑手势绑在滚动容器而不是遮罩上：配合 use-swipe 里「内容已滚下去就不判下滑」，
+  // 长赛后报告里快速下拉才不会被当成关闭整个弹窗。
   const swipeRef = useSwipe<HTMLDivElement>({ onSwipeDown: onClose, threshold: 60 });
-  useEffect(() => {
-    if (!isOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onClose]);
+  useFocusTrap(panelRef, {
+    active: isOpen,
+    onEscape: onClose,
+    inertSelectors: MODAL_BACKGROUND_SELECTORS,
+  });
 
   if (!isOpen || !fixture) return null;
 
@@ -79,54 +79,59 @@ export default function MatchDetailModal({
 
   return createPortal(
     <div
-      ref={swipeRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label={result ? '比赛详情' : '赛前预测'}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] flex items-end sm:items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-2xl w-full sm:mx-4 max-h-[calc(100dvh-16px)] sm:max-h-[90vh] overflow-y-auto"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={result ? '比赛详情' : '赛前预测'}
+        className="relative flex max-h-[calc(100dvh-16px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-slate-800 shadow-2xl sm:mx-4 sm:max-h-[90vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          aria-label="关闭比赛详情"
-          className="text-slate-400 hover:text-slate-200 text-xl leading-none cursor-pointer z-10 w-11 h-11 inline-flex items-center justify-center"
-          style={{ position: 'sticky', float: 'right', marginTop: '4px', marginRight: '4px' }}
-        >
-          &#x2715;
-        </button>
+        {/* 关闭键放在滚动容器之外的固定头部：原来的 position: sticky 没有设任何 inset，
+            按规范等同于普通定位会随内容滚走，而移动端底部对齐后顶部只剩 16px 遮罩可关。 */}
+        <div className="flex shrink-0 items-center justify-end px-1 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭比赛详情"
+            className="inline-flex h-11 w-11 cursor-pointer items-center justify-center text-xl leading-none text-slate-400 hover:text-slate-200"
+          >
+            &#x2715;
+          </button>
+        </div>
 
-        {result ? (
-          <PostMatchView
-            fixture={fixture}
-            result={result}
-            world={world}
-            homeTeam={homeTeam}
-            awayTeam={awayTeam}
-          />
-        ) : (
-          <PreMatchView
-            fixture={fixture}
-            homeTeam={homeTeam}
-            awayTeam={awayTeam}
-            homeState={homeState}
-            awayState={awayState}
-            homeCoach={homeCoach}
-            awayCoach={awayCoach}
-            homeSquad={world.squads[fixture.homeTeamId]}
-            awaySquad={world.squads[fixture.awayTeamId]}
-            globalWindowIdx={world.totalElapsedWindows}
-            playerStats={world.playerStats}
-            playerStatSegments={world.playerStatSegments}
-            playerAwardsHistory={world.playerAwardsHistory}
-            seasonNumber={world.seasonState.seasonNumber}
-            seasonStartLevels={world.seasonStartLevels}
-          />
-        )}
+        <div ref={swipeRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {result ? (
+            <PostMatchView
+              fixture={fixture}
+              result={result}
+              world={world}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+            />
+          ) : (
+            <PreMatchView
+              fixture={fixture}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+              homeState={homeState}
+              awayState={awayState}
+              homeCoach={homeCoach}
+              awayCoach={awayCoach}
+              homeSquad={world.squads[fixture.homeTeamId]}
+              awaySquad={world.squads[fixture.awayTeamId]}
+              globalWindowIdx={world.totalElapsedWindows}
+              playerStats={world.playerStats}
+              playerStatSegments={world.playerStatSegments}
+              playerAwardsHistory={world.playerAwardsHistory}
+              seasonNumber={world.seasonState.seasonNumber}
+              seasonStartLevels={world.seasonStartLevels}
+            />
+          )}
+        </div>
       </div>
     </div>,
     document.body,
@@ -195,7 +200,7 @@ function PreMatchView({
     <div>
       {/* ──── Header with team colors ──── */}
       <div
-        className="flex items-stretch rounded-t-2xl overflow-hidden"
+        className="flex items-stretch overflow-hidden"
         style={{
           background: `linear-gradient(135deg, ${homeTeam.color}22 0%, transparent 40%, transparent 60%, ${awayTeam.color}22 100%)`,
         }}
@@ -307,7 +312,8 @@ function PreMatchView({
               <span className="font-mono text-sm font-bold text-slate-100">{tactics.formation}</span>
               <span className="text-xs font-semibold" style={{ color }}>{APPROACH_LABELS[tactics.approach]}</span>
             </div>
-            <p className="mt-1 truncate text-[10px] text-slate-500" title={`${TACTICS_REASON_LABELS[tactics.reason]} · ${tactics.tags.join(' · ')}`}>
+            {/* 触屏没有 hover：战术理由和标签必须常驻换行展示，不能只挂在 title 上。 */}
+            <p className="mt-1 break-words text-[10px] leading-4 text-slate-500">
               {TACTICS_REASON_LABELS[tactics.reason]} · {tactics.tags.join(' · ')}
             </p>
           </div>
@@ -562,7 +568,7 @@ function PostMatchView({
     <div>
       {/* ──── Score header ──── */}
       <div
-        className="rounded-t-2xl overflow-hidden"
+        className="overflow-hidden"
         style={{
           background: `linear-gradient(135deg, ${homeTeam.color}22 0%, transparent 40%, transparent 60%, ${awayTeam.color}22 100%)`,
         }}

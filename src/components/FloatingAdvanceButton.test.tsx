@@ -85,4 +85,36 @@ describe('FloatingAdvanceButton', () => {
     expect(floating.className).toContain('floating-advance-docked');
     expect(localStorage.getItem('floating-advance-position-v2')).toBeNull();
   });
+
+  it('steps aside on desktop when the header already offers the same advance action', () => {
+    const headerAdvance = document.createElement('button');
+    headerAdvance.setAttribute('data-testid', 'header-advance');
+    document.body.appendChild(headerAdvance);
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('min-width'),
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+
+    try {
+      act(() => root.render(
+        <FloatingAdvanceButton
+          stageLabel="联赛"
+          isAdvancing={false}
+          disabled={false}
+          onAdvance={() => undefined}
+        />,
+      ));
+      expect(container.querySelector('[data-testid="floating-advance"]')).toBeNull();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      headerAdvance.remove();
+    }
+  });
 });

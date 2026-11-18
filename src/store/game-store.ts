@@ -387,6 +387,10 @@ export const useGameStore = create<GameStore>()(
             allNews = [...allNews, ...result.news];
             observationSettlements = [...observationSettlements, ...result.observationSettlements];
             outcomes.push(result.outcome);
+            // Ten windows is a full afternoon of match simulation. Without a
+            // yield the progress line and the button's spinner freeze for its
+            // whole duration and the screen reads as hung.
+            if (outcomes.length % 4 === 0) await yieldAdvanceChunk();
             // A fixed batch may finish this season, but must not consume the
             // next season's opening windows before its archive is seen.
             if (world.seasonState.seasonNumber !== startingSeason) break;
@@ -645,6 +649,11 @@ export const useGameStore = create<GameStore>()(
             observationSettlements = [...observationSettlements, ...result.observationSettlements];
             outcomes.push(result.outcome);
             safety++;
+
+            // Same reason as the fixed batch: the loop can run sixty windows,
+            // and the key-node plan is the one the user is most likely to fire
+            // on a slow phone.
+            if (outcomes.length % 4 === 0) await yieldAdvanceChunk();
 
             const reachedStoryClimax = result.news.some(
               item => item.type === 'storyline' && item.importance === 'major',

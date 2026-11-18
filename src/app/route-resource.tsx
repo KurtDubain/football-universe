@@ -7,6 +7,7 @@ import {
   RouteResourceError,
   loadRouteModuleWithRecovery,
 } from './route-resource-loader';
+import { peekResolvedRouteModule, rememberResolvedRouteModule } from './route-modules';
 
 export function RouteLoading({ fullPage = false }: { fullPage?: boolean }) {
   return <LoadingSkeleton fullPage={fullPage} className="route-loading" data-route-loading="true" />;
@@ -100,11 +101,19 @@ export function RecoverableRoute({
   const navigate = useNavigate();
   const location = useLocation();
   const [generation, setGeneration] = useState(0);
-  const [loadState, setLoadState] = useState<RouteLoadState>({ status: 'loading' });
+  // A hover- or focus-preloaded route is already in memory. Starting in `ready`
+  // is what keeps the skeleton from flashing for a frame on every navigation
+  // that the preload actually covered.
+  const [loadState, setLoadState] = useState<RouteLoadState>(() => {
+    const preloaded = peekResolvedRouteModule(importer) as RouteModule | null;
+    return preloaded ? { status: 'ready', component: preloaded.default } : { status: 'loading' };
+  });
 
   useEffect(() => {
+    if (loadState.status === 'ready') return;
     let active = true;
     void loadRouteModuleWithRecovery(importer, { routeId }).then(module => {
+      rememberResolvedRouteModule(importer, module);
       if (active) setLoadState({ status: 'ready', component: module.default });
     }).catch(error => {
       if (!active) return;
@@ -117,7 +126,7 @@ export function RecoverableRoute({
     return () => {
       active = false;
     };
-  }, [generation, importer, routeId]);
+  }, [generation, importer, routeId, loadState.status]);
 
   useEffect(() => {
     if (loadState.status === 'loading') return;

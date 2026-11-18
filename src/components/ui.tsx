@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { playUiFeedback } from '../feedback/game-feedback';
 
 function cx(...classes: Array<string | false | null | undefined>): string {
@@ -129,6 +137,7 @@ export function SegmentedControl<T extends string>({
   scrollable = false,
 }: SegmentedControlProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [scrollEdges, setScrollEdges] = useState({ atStart: true, atEnd: true });
 
   const updateScrollEdges = useCallback(() => {
@@ -139,6 +148,45 @@ export function SegmentedControl<T extends string>({
       atEnd: element.scrollLeft + element.clientWidth >= element.scrollWidth - 2,
     });
   }, [scrollable]);
+
+  // tab 模式下整个 tablist 只占一个 Tab 停靠点，方向键在选项间移动。
+  // 之前每个选项各自是一个停靠点，一屏十几个分段控件会把键盘用户困在原地。
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const enabled = options.filter(option => !option.disabled);
+    if (enabled.length === 0) return;
+    const currentIndex = enabled.findIndex(option => option.value === value);
+    const lastIndex = enabled.length - 1;
+    let nextIndex: number;
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        nextIndex = currentIndex >= lastIndex ? 0 : currentIndex + 1;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        nextIndex = currentIndex <= 0 ? lastIndex : currentIndex - 1;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = lastIndex;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const next = enabled[nextIndex];
+    optionRefs.current.get(next.value)?.focus();
+    if (next.value === value) return;
+    playUiFeedback('selection');
+    onChange(next.value);
+  }, [onChange, options, value]);
+
+  // 受控值不在选项里时退回第一个可用项，否则整个控件会从 Tab 序列里消失。
+  const tabbableValue = options.some(option => option.value === value)
+    ? value
+    : options.find(option => !option.disabled)?.value;
 
   useEffect(() => {
     const element = containerRef.current;
@@ -164,6 +212,7 @@ export function SegmentedControl<T extends string>({
       data-scroll-start={scrollEdges.atStart}
       data-scroll-end={scrollEdges.atEnd}
       onScroll={updateScrollEdges}
+      onKeyDown={handleKeyDown}
       className={cx(
         'ui-segmented',
         stretch && 'ui-segmented-stretch',
@@ -176,9 +225,14 @@ export function SegmentedControl<T extends string>({
         return (
           <button
             key={option.value}
+            ref={(element) => {
+              if (element) optionRefs.current.set(option.value, element);
+              else optionRefs.current.delete(option.value);
+            }}
             type="button"
             role="tab"
             aria-selected={selected}
+            tabIndex={option.value === tabbableValue ? 0 : -1}
             disabled={option.disabled}
             onClick={() => {
               if (selected) return;

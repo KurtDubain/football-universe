@@ -2317,9 +2317,11 @@ function PitchCanvas(props: Props) {
         // which hid the toggle completely. The cap is expressed as a width so
         // `aspect-ratio` still governs the height and the canvas keeps matching
         // the pitch exactly; a `max-height` here would break that invariant and
-        // the single uniform drawing scale that depends on it.
+        // the single uniform drawing scale that depends on it. The chrome
+        // budget itself lives in index.css as --pitch-chrome-budget so that
+        // MatchLive growing its header cannot silently invalidate it.
         maxWidth: orientation === 'portrait'
-          ? `calc((100dvh - 23rem) * ${canvasAspectRatio(orientation)})`
+          ? `calc((100dvh - var(--pitch-chrome-budget, 24rem)) * ${canvasAspectRatio(orientation)})`
           : undefined,
       }}
       className="mx-auto w-full rounded-md border border-emerald-900/30"

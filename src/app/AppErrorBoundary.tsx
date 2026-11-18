@@ -6,6 +6,17 @@ interface AppErrorBoundaryProps {
   onReload?: () => void;
   onHome?: () => void;
   onReset?: () => void;
+  /**
+   * Changing any entry clears the error. A route-level boundary uses the
+   * location key here so navigating away recovers the page instead of forcing
+   * a full reload, which is the only escape the old single global boundary had.
+   */
+  resetKeys?: unknown[];
+  /**
+   * `inline` keeps the navigation shell alive. A page that fails to render
+   * should not take the sidebar, the header and the advance button with it.
+   */
+  variant?: 'fullscreen' | 'inline';
 }
 
 interface AppErrorBoundaryState {
@@ -23,6 +34,15 @@ export default class AppErrorBoundary extends Component<AppErrorBoundaryProps, A
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[app-error-boundary]', error, info.componentStack);
+  }
+
+  componentDidUpdate(previousProps: AppErrorBoundaryProps): void {
+    if (!this.state.error) return;
+    const previous = previousProps.resetKeys;
+    const next = this.props.resetKeys;
+    if (!previous || !next || previous.length !== next.length) return;
+    if (previous.every((value, index) => Object.is(value, next[index]))) return;
+    this.setState({ error: null });
   }
 
   private reload = (): void => {
@@ -55,17 +75,29 @@ export default class AppErrorBoundary extends Component<AppErrorBoundaryProps, A
   render() {
     if (!this.state.error) return this.props.children;
 
+    const inline = this.props.variant === 'inline';
+    // A nested `<main>` would be a second landmark inside the shell's own one,
+    // so the inline variant renders a plain container.
+    const Container = inline ? 'div' : 'main';
+
     return (
-      <main className="flex min-h-[100dvh] items-center justify-center bg-[var(--surface-page)] px-4 py-10 text-[var(--text-primary)]">
+      <Container className={inline
+        ? 'flex min-h-72 items-center justify-center px-4 py-10 text-[var(--text-primary)]'
+        : 'flex min-h-[100dvh] items-center justify-center bg-[var(--surface-page)] px-4 py-10 text-[var(--text-primary)]'}
+      >
         <section
           role="alert"
           aria-labelledby="app-error-title"
           className="w-full max-w-lg rounded-lg border border-red-900/70 bg-[var(--surface-panel)] p-5 shadow-xl sm:p-6"
         >
           <p className="text-xs font-semibold text-red-400">运行恢复</p>
-          <h1 id="app-error-title" className="mt-2 text-xl font-bold">下一季见暂时无法继续</h1>
+          <h1 id="app-error-title" className="mt-2 text-xl font-bold">
+            {inline ? '这个页面暂时无法显示' : '下一季见暂时无法继续'}
+          </h1>
           <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-            页面资源或存档状态出现异常。你可以重新加载、返回主页，或在问题持续时清除当前存档。
+            {inline
+              ? '其他页面仍然可用。你可以重试当前页面、返回主页，或在问题持续时清除当前存档。'
+              : '页面资源或存档状态出现异常。你可以重新加载、返回主页，或在问题持续时清除当前存档。'}
           </p>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -98,7 +130,7 @@ export default class AppErrorBoundary extends Component<AppErrorBoundaryProps, A
             <p className="break-words font-mono leading-5">{this.state.error.message}</p>
           </details>
         </section>
-      </main>
+      </Container>
     );
   }
 }

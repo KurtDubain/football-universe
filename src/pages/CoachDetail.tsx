@@ -9,6 +9,7 @@ import {
   derivePreferredFormation,
 } from '../engine/coaches/tactics';
 import NarrativeThread from '../components/NarrativeThread';
+import { EmptyState } from '../components/ui';
 import { buildCoachNarrativeThread } from '../engine/observation/narrative-threads';
 
 export default function CoachDetail() {
@@ -22,7 +23,25 @@ export default function CoachDetail() {
   const career = world.coachCareers[id] ?? [];
   const trophies = world.coachTrophies[id] ?? [];
 
-  if (!base || !state) return <div className="text-slate-400">未找到教练: {id}</div>;
+  // A bare line of grey text left the reader with nothing to click, and on a
+  // desktop viewport there is no in-app back control at all. Old bookmarks and
+  // cross-season share links land here, so the page has to offer a way out.
+  if (!base || !state) {
+    return (
+      <EmptyState
+        title="未找到这位教练"
+        description={`链接指向的教练「${id}」不在当前世界里。分享链接与旧书签会在赛季更替后失效。`}
+        action={(
+          <Link
+            to="/coaches"
+            className="inline-flex min-h-11 items-center rounded-md bg-[var(--action)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--action-hover)]"
+          >
+            返回教练中心
+          </Link>
+        )}
+      />
+    );
+  }
 
   const team = state.currentTeamId ? world.teamBases[state.currentTeamId] : null;
   const teamState = state.currentTeamId ? world.teamStates[state.currentTeamId] : null;

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useFocusTrap } from './use-focus-trap';
 import type { MatchResult } from '../types/match';
 import type { TeamBase } from '../types/team';
 import PitchCanvas from './PitchCanvas';
@@ -73,6 +74,9 @@ export default function MatchLive(props: Props) {
   return <MatchLiveSession key={`${playbackKey(props.result)}:${props.featured ? 'featured' : 'standard'}`} {...props} />;
 }
 
+// 模块级常量：内联数组每次渲染都是新引用，会让 focus trap 的 effect 反复重绑。
+const LIVE_INERT_SELECTORS: readonly string[] = ['#root'];
+
 function MatchLiveSession({ result, teamBases, onClose, featured = false }: Props) {
   const [locallyMuted, setLocallyMuted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -114,6 +118,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
   const [matchMusicHoldOwner] = useState(() => `match-live-${result.fixtureId}`);
   const closeTimerRef = useRef<number | null>(null);
   const closingRef = useRef(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
@@ -274,18 +279,15 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
     soundscapeRef.current?.updatePresentation(snapshot);
   }, []);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') requestClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [requestClose]);
+  // The broadcast is a modal dialog rendered through a portal, so Tab used to
+  // walk straight out of it into the page behind. The shared trap adds the
+  // wrap-around, the initial focus and the background inert, and it takes over
+  // the scroll lock and the Escape handler that used to live here.
+  useFocusTrap(overlayRef, {
+    active: true,
+    onEscape: requestClose,
+    inertSelectors: LIVE_INERT_SELECTORS,
+  });
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -379,6 +381,8 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
   return createPortal(
     <div
+      ref={overlayRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="比赛直播回放"
@@ -486,7 +490,12 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
 
         {/* Scoreboard with team colors */}
         <div className="live-scoreboard broadcast-scoreboard relative overflow-hidden"
-          style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}18 0%, #0f172a 40%, #0f172a 60%, ${at?.color ?? '#333'}18 100%)` }}
+          // The middle stops used to be a hard-coded slate-900 (#0f172a), which
+          // is bluer than the shell it sits in — the shell's own `bg-slate-900`
+          // is remapped to `--surface-floating`, so the scoreboard read as a
+          // slightly different panel. The fallback keeps the gradient valid if
+          // the token is ever missing.
+          style={{ background: `linear-gradient(90deg, ${ht?.color ?? '#333'}18 0%, var(--surface-floating, #101512) 40%, var(--surface-floating, #101512) 60%, ${at?.color ?? '#333'}18 100%)` }}
         >
           <DecorativeImage
             src={liveScoreboardArtwork}
@@ -576,6 +585,10 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   {result.homeTactics ? APPROACH_LABELS[result.homeTactics.approach] : '历史比赛'}
                 </span>
               </div>
+              {/* 战术理由此前只挂在 title 上，触屏永远看不到，这里常驻一行（标签固定 6 字，320px 也不会换行）。 */}
+              <div className="mt-0.5 text-[9px] leading-tight text-slate-500">
+                {result.homeTactics ? TACTICS_REASON_LABELS[result.homeTactics.reason] : '旧比赛未保存战术快照'}
+              </div>
             </div>
             <div className="border-x border-slate-700/70 px-2 text-center text-[8px] font-semibold text-slate-500">
               战术部署
@@ -594,6 +607,10 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                   {result.awayTactics ? APPROACH_LABELS[result.awayTactics.approach] : '历史比赛'}
                 </span>
               </div>
+              {/* 同主队：战术理由必须常驻，不能只靠 hover 的 title。 */}
+              <div className="mt-0.5 text-[9px] leading-tight text-slate-500">
+                {result.awayTactics ? TACTICS_REASON_LABELS[result.awayTactics.reason] : '旧比赛未保存战术快照'}
+              </div>
             </div>
           </div>
         )}
@@ -611,10 +628,14 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
               <span
                 key={player.playerId}
                 className="shrink-0 text-slate-300"
-                title={`${FEATURED_PLAYER_REASON_LABELS[player.reason]} · 赛前边际影响 ${player.marginalUnitImpact >= 0 ? '+' : ''}${player.marginalUnitImpact.toFixed(1)} ${PLAYER_IMPACT_UNIT_LABELS[player.impactUnit]}`}
               >
                 <span className="text-amber-300/80">{index + 1}</span> {player.playerName}
                 <span className="ml-1 text-slate-600">{player.position}</span>
+                <span className="ml-1 text-emerald-300/70">
+                  {FEATURED_PLAYER_REASON_LABELS[player.reason]}
+                  {' '}{player.marginalUnitImpact >= 0 ? '+' : ''}{player.marginalUnitImpact.toFixed(1)}
+                  {' '}{PLAYER_IMPACT_UNIT_LABELS[player.impactUnit]}
+                </span>
               </span>
             ))}
           </div>
@@ -766,7 +787,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
           data-testid="live-controls"
           aria-hidden={showOpener || undefined}
           inert={showOpener || undefined}
-          className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-800/60 bg-slate-900 px-3 py-2 sm:px-4 sm:py-2.5"
+          className="grid shrink-0 grid-cols-1 items-stretch gap-1.5 border-t border-slate-800/60 bg-slate-900 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2 sm:px-4 sm:py-2.5"
         >
           <div className="flex min-w-0 items-center gap-1">
             <div

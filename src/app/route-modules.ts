@@ -27,6 +27,25 @@ export type RouteModuleKey = keyof typeof routeImporters;
 
 const preloadCache = new Map<RouteModuleKey, Promise<unknown>>();
 
+/**
+ * Modules that have already finished loading, keyed by their importer.
+ *
+ * The preload cache only ever saved the network request: the route component
+ * still started in its `loading` state and rendered a skeleton for at least one
+ * frame even when the module was sitting in the browser's module cache. Keeping
+ * the resolved value lets the route start in `ready` and skip the skeleton
+ * entirely on a hover-preloaded navigation.
+ */
+const resolvedRouteModules = new WeakMap<RouteImporter, unknown>();
+
+export function rememberResolvedRouteModule(importer: RouteImporter, module: unknown): void {
+  resolvedRouteModules.set(importer, module);
+}
+
+export function peekResolvedRouteModule(importer: RouteImporter): unknown | null {
+  return resolvedRouteModules.get(importer) ?? null;
+}
+
 export function routeModuleKeyForPath(pathname: string): RouteModuleKey | null {
   if (pathname === '/') return 'dashboard';
   if (pathname === '/calendar') return 'calendar';
@@ -65,7 +84,11 @@ export function preloadRouteForPath(pathname: string): Promise<unknown> | null {
   if (!key) return null;
   const existing = preloadCache.get(key);
   if (existing) return existing;
-  const pending = routeImporters[key]().catch((error) => {
+  const importer = routeImporters[key];
+  const pending = importer().then((module) => {
+    rememberResolvedRouteModule(importer, module);
+    return module;
+  }).catch((error) => {
     preloadCache.delete(key);
     throw error;
   });

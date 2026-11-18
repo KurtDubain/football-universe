@@ -175,6 +175,43 @@ function getMobileReturnTarget(pathname: string): { to: string; label: string } 
   return { to: '/', label: '主页' };
 }
 
+/**
+ * What a screen reader hears when the route changes.
+ *
+ * The content region used to be remounted on every navigation, which threw
+ * away the focused element; with the remount gone, a route change is otherwise
+ * completely silent. The nav groups only cover the entries that are always
+ * present, so the archive routes are named here directly.
+ */
+const ROUTE_ANNOUNCEMENTS: Record<string, string> = {
+  '/': '主页',
+  '/calendar': '赛历',
+  '/teams': '球队中心',
+  '/coaches': '教练中心',
+  '/players': '球员中心',
+  '/history': '历史荣誉',
+  '/chronicle': '编年史',
+  '/legends': '传奇名人堂',
+  '/transfers': '转会窗口',
+  '/market': '转会市场',
+  '/memorable': '经典战役',
+  '/search': '高级搜索',
+  '/compare': '球队对比',
+  '/team-editor': '自定义球队',
+  '/settings': '设置',
+};
+
+function routeAnnouncementFor(pathname: string): string {
+  const named = ROUTE_ANNOUNCEMENTS[pathname];
+  if (named) return `已进入${named}`;
+  if (pathname.startsWith('/league/')) return '已进入联赛积分榜';
+  if (pathname.startsWith('/cup/')) return '已进入杯赛';
+  if (pathname.startsWith('/team/')) return '已进入球队详情';
+  if (pathname.startsWith('/player/')) return '已进入球员详情';
+  if (pathname.startsWith('/coach/')) return '已进入教练详情';
+  return '页面已切换';
+}
+
 export default function Layout({ children }: LayoutProps) {
   const world = useGameStore((s) => s.world);
   const lastWorldResponse = useGameStore((s) => s.lastWorldResponse);
@@ -205,6 +242,7 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const mobileReturnTarget = getMobileReturnTarget(location.pathname);
+  const routeAnnouncement = routeAnnouncementFor(location.pathname);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFastMenu, setShowFastMenu] = useState(false);
   const [confirmSkipSeason, setConfirmSkipSeason] = useState(false);
@@ -213,9 +251,22 @@ export default function Layout({ children }: LayoutProps) {
   const mainRef = useRef<HTMLElement>(null);
   const routeScrollSaveTimerRef = useRef<number | null>(null);
   const routeRestoreRef = useRef({ identity: '', target: 0, active: false });
+  // The scroll cleanup used to read `main.scrollTop`, but React detaches the
+  // node before the layout effect's destroy runs, so it always read 0 and
+  // overwrote the remembered position. Tracking it on every scroll event keeps
+  // the value valid no matter when the route changes.
+  const lastScrollTopRef = useRef(0);
+  // The first render is a page load, not a navigation: moving focus into the
+  // content region there would steal it from whatever the browser restored.
+  const hasNavigatedRef = useRef(false);
+  const fastMenuRef = useRef<HTMLDivElement>(null);
+  const fastMenuButtonRef = useRef<HTMLButtonElement>(null);
   const routeIdentity = `${location.key}:${location.pathname}`;
   if (routeRestoreRef.current.identity !== routeIdentity) {
-    const target = readRouteScroll(location.key, location.pathname);
+    // An in-page anchor is an explicit destination. Restoring a remembered
+    // scroll position on top of it made the jump silently do nothing, because
+    // the restore chain re-applied its own target after the page had scrolled.
+    const target = location.hash ? 0 : readRouteScroll(location.key, location.pathname);
     routeRestoreRef.current = { identity: routeIdentity, target, active: target > 0 };
   }
   const [saveNearCapacity, setSaveNearCapacity] = useState(() => {
@@ -265,6 +316,7 @@ export default function Layout({ children }: LayoutProps) {
     let restoreRetry = 0;
     const applyRestore = () => {
       element.scrollTop = targetScroll;
+      lastScrollTopRef.current = targetScroll;
       if (targetScroll === 0 || Math.abs(element.scrollTop - targetScroll) <= 2) {
         routeRestoreRef.current.active = false;
         observer?.disconnect();
@@ -284,9 +336,59 @@ export default function Layout({ children }: LayoutProps) {
       observer?.disconnect();
       if (restoreTimeout) window.clearTimeout(restoreTimeout);
       if (restoreRetry) window.clearTimeout(restoreRetry);
-      rememberRouteScroll(location.key, location.pathname, element.scrollTop);
+      // Not `element.scrollTop`: by the time this destroy runs React has
+      // already swapped the content out, so the node reports 0 and the
+      // remembered position for this path is overwritten with the top.
+      rememberRouteScroll(location.key, location.pathname, lastScrollTopRef.current);
     };
   }, [location.key, location.pathname]);
+
+  // Move focus into the content region after a navigation, so keyboard and
+  // screen-reader users land in the new page instead of back at the document
+  // root. The first run is a page load rather than a navigation, and taking
+  // focus there would fight whatever the browser restored.
+  useEffect(() => {
+    const element = mainRef.current;
+    if (!element) return;
+    if (!hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      return;
+    }
+    // `route-enter` used to replay for free because the subtree remounted.
+    // With the remount gone the animation has to be restarted by hand.
+    element.classList.remove('route-enter');
+    void element.offsetWidth;
+    element.classList.add('route-enter');
+    element.focus({ preventScroll: true });
+  }, [location.key]);
+
+  // The fast-forward sheet is the only way to reach batch advance and season
+  // skip, so leaving it keyboard-trappable is expensive. Escape closes it and
+  // returns focus to the trigger; a pointer press anywhere else dismisses it.
+  useEffect(() => {
+    if (!showFastMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      setShowFastMenu(false);
+      setConfirmSkipSeason(false);
+      fastMenuButtonRef.current?.focus();
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (fastMenuRef.current?.contains(target)) return;
+      if (fastMenuButtonRef.current?.contains(target)) return;
+      setShowFastMenu(false);
+      setConfirmSkipSeason(false);
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [showFastMenu]);
 
   useEffect(() => {
     const handleSaveSize = (event: Event) => {
@@ -691,13 +793,14 @@ export default function Layout({ children }: LayoutProps) {
             )}
             {currentWindow && (
               <button
+                ref={fastMenuButtonRef}
                 onClick={() => {
                   setShowFastMenu(value => !value);
                   setConfirmSkipSeason(false);
                 }}
                 disabled={isAdvancing}
                 aria-expanded={showFastMenu}
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
                 aria-label="打开快进菜单"
                 title="推进选项"
                 className={`inline-flex h-[44px] w-[44px] items-center justify-center text-white transition-colors disabled:bg-[var(--surface-raised)] disabled:text-[var(--text-disabled)] sm:h-8 sm:w-8 ${
@@ -711,8 +814,10 @@ export default function Layout({ children }: LayoutProps) {
             )}
             {showFastMenu && currentWindow && (
               <div
+                ref={fastMenuRef}
                 data-testid="advance-menu"
-                role="menu"
+                role="dialog"
+                aria-label="推进选项"
                 className="advance-menu-sheet absolute right-0 top-full z-[60] mt-1 max-h-[calc(100dvh-4rem)] w-[min(19rem,calc(100vw-24px))] overflow-y-auto border border-[var(--border-strong)] bg-[var(--surface-raised)] shadow-xl"
               >
                 <div className="border-b border-slate-700/70 p-2">
@@ -852,6 +957,7 @@ export default function Layout({ children }: LayoutProps) {
             restoration.active = false;
             if (routeScrollSaveTimerRef.current !== null) window.clearTimeout(routeScrollSaveTimerRef.current);
             const scrollTop = event.currentTarget.scrollTop;
+            lastScrollTopRef.current = scrollTop;
             const routeKey = location.key;
             const pathname = location.pathname;
             routeScrollSaveTimerRef.current = window.setTimeout(
@@ -866,9 +972,17 @@ export default function Layout({ children }: LayoutProps) {
             }
           }}
           className="app-route-content app-workspace tabular-nums flex-1 overflow-auto p-3 sm:p-5 route-enter"
-          key={location.key}
+          tabIndex={-1}
         >
           {children}
+          {/*
+            A route change is invisible to a screen reader unless something says
+            so. The old `key={location.key}` on this element remounted the whole
+            subtree on every navigation, which destroyed the focused element and
+            reset every page's local state; the remount is gone, so the
+            announcement and the focus move have to be explicit.
+          */}
+          <p className="sr-only" role="status" aria-live="polite">{routeAnnouncement}</p>
         </main>
         <AchievementToastContainer />
         <div className="mobile-advance-dock">
@@ -886,13 +1000,13 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {saveError && (
-        <div role="alert" className="fixed left-3 right-3 bottom-3 sm:left-auto sm:w-96 z-[120] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
+        <div role="alert" className="fixed left-3 right-3 bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+3.5rem))] sm:bottom-3 sm:left-auto sm:w-96 z-[120] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
           <span className="text-xs flex-1">存档写入失败，当前进度仍保留在本页内存中。请先释放浏览器存储空间，再继续操作。</span>
           <button aria-label="关闭存档错误提示" onClick={() => setSaveError(false)} className="w-8 h-8 shrink-0 text-red-300 hover:text-white">×</button>
         </div>
       )}
       {advanceError && (
-        <div role="alert" className="fixed left-3 right-3 bottom-3 sm:left-auto sm:w-96 z-[121] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
+        <div role="alert" className="fixed left-3 right-3 bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+3.5rem))] sm:bottom-3 sm:left-auto sm:w-96 z-[121] bg-red-950 border border-red-700 text-red-100 px-3 py-3 rounded-lg shadow-xl flex items-start gap-3">
           <span className="text-xs flex-1">{advanceError}</span>
           <button
             type="button"

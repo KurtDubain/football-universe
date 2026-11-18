@@ -167,6 +167,7 @@ export default function FloatingAdvanceButton({
   const latestPositionRef = useRef<FloatingPosition | null>(position);
   const [dragging, setDragging] = useState(false);
   const [mobileDocked, setMobileDocked] = useState(isMobileDocked);
+  const [headerAdvanceCovers, setHeaderAdvanceCovers] = useState(false);
 
   const updatePosition = useCallback((next: FloatingPosition | null) => {
     latestPositionRef.current = next;
@@ -272,6 +273,27 @@ export default function FloatingAdvanceButton({
     return () => media.removeEventListener('change', updateDockMode);
   }, []);
 
+  // 桌面端顶栏已经有一个功能相同的「推进」按钮，浮动按钮再固定压在视口右下角，
+  // 既冗余又会盖住积分榜这类宽表格的最右列（避让只认 data-floating-advance-obstacle，宽表格一个都没标）。
+  // 顶栏按钮在场时桌面端就不再渲染它；移动端它停靠在 .mobile-advance-dock 里，不受影响。
+  useEffect(() => {
+    const media = window.matchMedia?.('(min-width: 640px)');
+    const update = () => {
+      const desktop = media ? media.matches : window.innerWidth >= 640;
+      setHeaderAdvanceCovers(
+        desktop && document.querySelector('[data-testid="header-advance"]') !== null,
+      );
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    media?.addEventListener('change', update);
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener('change', update);
+    };
+  }, []);
+
   const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
     if (isMobileDocked()) return;
     const rect = containerRef.current?.getBoundingClientRect();
@@ -359,6 +381,8 @@ export default function FloatingAdvanceButton({
     updatePosition(next);
     persistPosition(next, containerRef.current);
   }, [clampCurrentPosition, updatePosition]);
+
+  if (headerAdvanceCovers) return null;
 
   return (
     <button

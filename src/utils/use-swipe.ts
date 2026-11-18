@@ -74,7 +74,12 @@ export function useSwipe<T extends HTMLElement = HTMLDivElement>(
       }
       // Vertical-dominant swipe
       if (!ignoreVertical && ady > adx * 1.5) {
-        if (dy > threshold && h.onSwipeDown) h.onSwipeDown();
+        if (dy > threshold && h.onSwipeDown) {
+          // 内容已经滚下去时下滑只是继续阅读；不判断滚动位置的话，
+          // 快速下拉会把整个浮层误关掉。
+          if (el.scrollTop > 0) return;
+          h.onSwipeDown();
+        }
         else if (dy < -threshold && h.onSwipeUp) h.onSwipeUp();
       }
     };

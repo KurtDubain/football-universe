@@ -336,10 +336,14 @@ describe('MatchLive playback state machine', () => {
     expect(score('主队比分')).toBe('0');
   });
 
-  it('clears every playback timer on unmount', () => {
+  it('clears every playback timer on unmount', async () => {
     render(<MatchLive result={makeResult('live-e', goalEvents)} teamBases={teamBases} onClose={() => undefined} />);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     act(() => root.unmount());
+    // 焦点陷阱打开浮层时会 focus 第一个控件，而 jsdom 的 focus() 会顺带折叠选区、
+    // 自己排一个 selectionchange 任务。那不是播放定时器，先把它排掉再计数，
+    // 否则这条断言测的是 jsdom 而不是 MatchLive。
+    await vi.advanceTimersByTimeAsync(0);
     expect(vi.getTimerCount()).toBe(0);
     root = createRoot(container);
   });
