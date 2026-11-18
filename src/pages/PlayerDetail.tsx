@@ -20,6 +20,7 @@ import {
 import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
 import type { GameWorld } from '../engine/season/season-manager';
 import { EmptyState, Panel } from '../components/ui';
+import { POSITION_CHIP, POSITION_CHIP_BASE } from '../components/position-chip';
 import { getPositionHeadlineMetrics } from './player-detail-metrics';
 import TransferTeamLink from '../components/TransferTeamLink';
 import {
@@ -42,7 +43,6 @@ const TAG_HINT: Record<PlayerTag, string> = {
 };
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
-const posColor: Record<string, string> = { GK: 'bg-amber-900/40 text-amber-400', DF: 'bg-blue-900/40 text-blue-400', MF: 'bg-green-900/40 text-green-400', FW: 'bg-red-900/40 text-red-400' };
 
 /**
  * Walk every squad to find a player by uuid. Returns the player and their
@@ -219,7 +219,22 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
     if (retired) {
       return <RetiredPlayerView retired={retired} world={world} stats={stats} />;
     }
-    return <div className="text-slate-400">未找到球员: {uuid}</div>;
+    // 旧书签（v8 前的 `${teamId}-${number}` URL）、跨赛季失效的 uuid 与分享链接都会
+    // 落到这里。桌面端没有顶栏返回箭头，页面必须自己给一条出路。
+    return (
+      <EmptyState
+        title="未找到该球员"
+        description={`标识 ${uuid} 不在任何现役阵容或退役档案中。`}
+        action={(
+          <Link
+            to="/players"
+            className="inline-flex min-h-11 items-center rounded-md bg-[var(--action)] px-4 text-xs font-semibold text-white transition-colors hover:bg-[var(--action-hover)]"
+          >
+            返回球员中心
+          </Link>
+        )}
+      />
+    );
   }
 
   // Efficiency
@@ -259,7 +274,7 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
                 {team.name}
               </Link>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-mono">#{player.number}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${posColor[player.position] ?? ''}`}>
+              <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[player.position]}`}>
                 {posLabel[player.position] ?? player.position}
               </span>
               {player.tag && TAG_META[player.tag] && (
@@ -584,10 +599,10 @@ function PositionPerformanceCard({
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider inline-flex items-center gap-1">
           <Icon name="chart" size={13} /> 赛季综合评分
         </h3>
-        <span className={`text-2xl font-black ${gradeColor}`}>{result.seasonScore.toFixed(0)} <span className="text-sm">{result.grade}</span></span>
+        <span className={`text-2xl font-black ${gradeColor}`}>{result.seasonScore.toFixed(1)} <span className="text-sm">{result.grade}</span></span>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-2 text-center">
-        <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">位置表现</div><div className="font-bold text-slate-200">{result.positionQuality.toFixed(0)}</div></div>
+        <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">位置表现</div><div className="font-bold text-slate-200">{result.positionQuality.toFixed(1)}</div></div>
         <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">出勤可靠性</div><div className="font-bold text-slate-200">{result.availabilityScore.toFixed(0)}</div></div>
         <div className="rounded bg-slate-900/40 px-2 py-1.5"><div className="text-[10px] text-slate-500">赛事强度</div><div className="font-bold text-slate-200">{leagueLabel}</div></div>
       </div>
@@ -662,8 +677,18 @@ function CareerHistorySection({ world, playerUuid }: { world: ReturnType<typeof 
                   <td className="py-1 text-slate-400">S{h.season}</td>
                   <td className="py-1 text-slate-300 truncate max-w-[80px]" title={teamName}>{teamName}</td>
                   <td className="py-1 text-right text-slate-400 tabular-nums">{rank}</td>
-                  <td className="py-1 text-right text-slate-300 tabular-nums">{h.appearances}({h.starts ?? h.appearances}/{h.substituteAppearances ?? 0})</td>
-                  <td className="py-1 text-right text-slate-400 tabular-nums">{h.minutesPlayed ?? h.appearances * 90}</td>
+                  <td
+                    className="py-1 text-right text-slate-300 tabular-nums"
+                    title={h.starts === undefined ? '该赛季未记录首发明细' : undefined}
+                  >
+                    {h.appearances}({h.starts ?? '—'}/{h.substituteAppearances ?? '—'})
+                  </td>
+                  <td
+                    className="py-1 text-right text-slate-400 tabular-nums"
+                    title={h.minutesPlayed === undefined ? '该赛季未记录分钟明细' : undefined}
+                  >
+                    {h.minutesPlayed ?? '—'}
+                  </td>
                   <td className="py-1 text-right text-amber-300 font-semibold tabular-nums" title={h.seasonScore === undefined ? '旧赛季缺少完整评分字段，不补造历史评分' : `位置表现 ${h.positionQuality?.toFixed(1)} · 出勤 ${h.availabilityScore?.toFixed(1)}`}>
                     {h.seasonScore?.toFixed(1) ?? '旧口径'}
                   </td>

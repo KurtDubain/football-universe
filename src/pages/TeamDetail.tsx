@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
+import { useUiSessionState } from '../app/ui-session-state';
 import {
   getCoachName,
   getLeagueName,
@@ -18,6 +19,8 @@ import {
   FIRE_SALE_PRICE_MAX,
   FIRE_SALE_PRICE_MIN,
 } from '../engine/economy/finance';
+import { formatMarketValue } from '../engine/economy/market-value';
+import { POSITION_CHIP, POSITION_CHIP_BASE } from '../components/position-chip';
 import {
   DOCTRINE_AXES,
   deriveDoctrineTags,
@@ -38,7 +41,7 @@ import type { Player, PlayerPosition } from '../types/player';
 import TeamBadge from '../components/TeamBadge';
 import { Icon, type IconName } from '../components/Icon';
 import { OutcomeMark, TrophyMark, type CompetitionIdentityKey } from '../components/FootballIdentity';
-import { PageShell, Panel, SegmentedControl } from '../components/ui';
+import { EmptyState, PageShell, Panel, SegmentedControl } from '../components/ui';
 import NarrativeThread from '../components/NarrativeThread';
 import { buildTeamNarrativeThread } from '../engine/observation/narrative-threads';
 
@@ -54,7 +57,7 @@ type TeamSection = 'overview' | 'squad' | 'history';
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
   const world = useGameStore((s) => s.world);
-  const [section, setSection] = useState<TeamSection>('overview');
+  const [section, setSection] = useUiSessionState<TeamSection>('ui.teamDetail.section', 'overview');
 
   if (!world || !id) {
     return <div className="text-slate-400">正在加载...</div>;
@@ -64,7 +67,22 @@ export default function TeamDetail() {
   const state = world.teamStates[id];
 
   if (!base || !state) {
-    return <div className="text-slate-400">未找到球队: {id}</div>;
+    // 旧书签与分享链接都可能指向一支已不存在的球队。桌面端没有顶栏返回箭头，
+    // 页面必须自己给一条出路。
+    return (
+      <EmptyState
+        title="未找到该球队"
+        description={`标识 ${id} 不在本世界的球队名单中。`}
+        action={(
+          <Link
+            to="/teams"
+            className="inline-flex min-h-11 items-center rounded-md bg-[var(--action)] px-4 text-xs font-semibold text-white transition-colors hover:bg-[var(--action-hover)]"
+          >
+            返回球队列表
+          </Link>
+        )}
+      />
+    );
   }
 
   const trophies = world.teamTrophies[id] ?? [];
@@ -825,13 +843,6 @@ const posLabel: Record<PlayerPosition, string> = {
   FW: '前锋',
 };
 
-const posBgColor: Record<PlayerPosition, string> = {
-  GK: 'bg-amber-900/40 text-amber-300',
-  DF: 'bg-blue-900/40 text-blue-300',
-  MF: 'bg-green-900/40 text-green-300',
-  FW: 'bg-red-900/40 text-red-300',
-};
-
 const posBarColor: Record<PlayerPosition, string> = {
   GK: 'bg-amber-500',
   DF: 'bg-blue-500',
@@ -898,7 +909,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
             <div key={pos}>
               {/* Position group header */}
               <div className="px-4 py-1.5 bg-slate-750 border-b border-slate-700/30">
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${posBgColor[pos]}`}>
+                <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[pos]} font-semibold`}>
                   {posLabel[pos]}
                 </span>
               </div>
@@ -944,7 +955,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                         <span className={`min-w-0 break-words text-sm font-medium leading-5 ${isInjured ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
                           {player.name ?? `${player.number}号`}
                         </span>
-                        <span className={`shrink-0 rounded px-1 py-0.5 text-[11px] font-medium ${posBgColor[player.position]}`}>
+                        <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[player.position]} shrink-0 font-medium`}>
                           {posLabel[player.position]}
                         </span>
                         {isStar && <span className="shrink-0 text-xs text-amber-400" title="球队核心">★</span>}
@@ -974,7 +985,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                     <div className="hidden max-w-[26rem] shrink-0 flex-wrap items-center justify-end gap-2 text-xs sm:flex">
                       {player.marketValue !== undefined && player.marketValue > 0 && (
                         <span className="text-emerald-400">
-                          €{player.marketValue >= 10 ? Math.round(player.marketValue) : player.marketValue.toFixed(1)}M
+                          {formatMarketValue(player.marketValue)}
                         </span>
                       )}
                       {stats && stats.appearances > 0 ? (
@@ -1288,7 +1299,7 @@ function FinancePanel({ teamId }: { teamId: string }) {
         </div>
         <div>
           <span className="text-slate-500">本季支出累计:</span>{' '}
-          <span className="text-red-300">-{formatMoney(fin.totalExpense)}</span>
+          <span className="text-red-300">{formatMoney(-fin.totalExpense, { zero: '—' })}</span>
         </div>
       </div>
       {reversed.length === 0 ? (
@@ -1320,18 +1331,20 @@ function FinancePanel({ teamId }: { teamId: string }) {
                 return (
                   <tr key={rec.season} className="border-t border-slate-700/40">
                     <td className="px-2 py-1.5 text-slate-300">S{rec.season}</td>
+                    {/* 符号一律由 formatMoney 产出：手写前缀时负值会渲染成 `--€X`，
+                        零值则统一显示 '—'，不再出现「+€0M」。 */}
                     <td className="px-2 py-1.5 text-right text-slate-400">{formatMoney(rec.startCash)}</td>
-                    <td className="px-2 py-1.5 text-right text-amber-300">+{formatMoney(rec.prizeMoney)}</td>
-                    <td className="px-2 py-1.5 text-right text-blue-300">+{formatMoney(rec.tvSponsor)}</td>
-                    <td className="px-2 py-1.5 text-right text-emerald-300">+{formatMoney(rec.transferIncome)}</td>
-                    <td className="px-2 py-1.5 text-right text-rose-300">-{formatMoney(rec.salaries)}</td>
-                    <td className="px-2 py-1.5 text-right text-red-400">-{formatMoney(rec.transferExpense)}</td>
+                    <td className="px-2 py-1.5 text-right text-amber-300">{formatMoney(rec.prizeMoney, { signed: true, zero: '—' })}</td>
+                    <td className="px-2 py-1.5 text-right text-blue-300">{formatMoney(rec.tvSponsor, { signed: true, zero: '—' })}</td>
+                    <td className="px-2 py-1.5 text-right text-emerald-300">{formatMoney(rec.transferIncome, { signed: true, zero: '—' })}</td>
+                    <td className="px-2 py-1.5 text-right text-rose-300">{formatMoney(-rec.salaries, { zero: '—' })}</td>
+                    <td className="px-2 py-1.5 text-right text-red-400">{formatMoney(-rec.transferExpense, { zero: '—' })}</td>
                     <td className="px-2 py-1.5 text-right text-teal-300">
-                      {rec.academy ? '-' + formatMoney(rec.academy) : '—'}
+                      {formatMoney(-(rec.academy ?? 0), { zero: '—' })}
                     </td>
                     <td className={`px-2 py-1.5 text-right font-semibold ${endTone}`}>{formatMoney(rec.endCash)}</td>
                     <td className={`px-2 py-1.5 text-right ${deltaTone}`}>
-                      {delta >= 0 ? '+' : ''}{formatMoney(delta)}
+                      {formatMoney(delta, { signed: true, zero: '—' })}
                     </td>
                   </tr>
                 );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/game-store';
+import { useUiSessionState } from '../app/ui-session-state';
 import { predictMatch } from '../engine/match/prediction';
 import type { MatchFixture, MatchResult } from '../types/match';
 import MatchDetailModal from '../components/MatchDetailModal';
@@ -11,11 +12,12 @@ import {
   getTeamShortName,
   getWindowTypeColor,
   getWindowTypeLabel,
+  formatScoreline,
 } from '../utils/format';
 
 export default function Calendar() {
   const world = useGameStore((s) => s.world);
-  const [expandedWindow, setExpandedWindow] = useState<number | null>(null);
+  const [expandedWindow, setExpandedWindow] = useUiSessionState<number | null>('ui.calendar.expandedWindow', null);
   const [selectedFixture, setSelectedFixture] = useState<MatchFixture | null>(null);
   const [selectedResult, setSelectedResult] = useState<MatchResult | null>(null);
 
@@ -63,9 +65,10 @@ export default function Calendar() {
         </div>
       </div>
 
-      {/* Type legend */}
+      {/* Type legend — derived from this season's calendar so it never promises a
+          stage the reader cannot find in the timeline below. */}
       <div className="flex flex-wrap gap-2 mb-4 text-xs">
-        {(['pre_season', 'league', 'league_cup', 'super_cup_group', 'super_cup', 'continental_cup', 'world_cup_group', 'world_cup', 'relegation_playoff', 'season_end'] as const).map(type => (
+        {[...new Set(calendar.map(w => w.type))].map(type => (
           <span key={type} className={`px-2 py-0.5 rounded text-white/80 ${getWindowTypeColor(type)}`}>
             {getWindowTypeLabel(type)}
           </span>
@@ -135,6 +138,8 @@ export default function Calendar() {
                       {isCompleted && win.results.map(r => {
                         const homeTeam = world.teamBases[r.homeTeamId];
                         const awayTeam = world.teamBases[r.awayTeamId];
+                        // 常规时间比分是唯一决定胜负的比分，加时与点球只作标注。
+                        const line = formatScoreline(r);
                         return (
                           <button
                             key={r.fixtureId}
@@ -147,14 +152,10 @@ export default function Calendar() {
                             </div>
                             <div className="flex items-center gap-1.5 px-3 shrink-0">
                               <span className={`font-bold text-base ${r.homeGoals > r.awayGoals ? 'text-green-400' : r.homeGoals < r.awayGoals ? 'text-red-400' : 'text-slate-300'}`}>
-                                {r.homeGoals}
+                                {line.score}
                               </span>
-                              <span className="text-slate-600">-</span>
-                              <span className={`font-bold text-base ${r.awayGoals > r.homeGoals ? 'text-green-400' : r.awayGoals < r.homeGoals ? 'text-red-400' : 'text-slate-300'}`}>
-                                {r.awayGoals}
-                              </span>
-                              {r.extraTime && (
-                                <span className="text-[10px] text-amber-400">{r.penalties ? '点球' : '加时'}</span>
+                              {line.detail && (
+                                <span className="text-[10px] text-amber-400">{line.detail}</span>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">

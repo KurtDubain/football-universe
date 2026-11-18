@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useGameStore } from '../store/game-store';
-import { getTeamName, getTeamShortName, getCoachName, formatForm } from '../utils/format';
+import { useUiSessionState } from '../app/ui-session-state';
+import { getTeamName, getTeamShortName, getCoachName, formatForm, formatScoreline } from '../utils/format';
 import { getTeamCoachId } from '../engine/coaches/coach-lookup';
 import TeamBadge from '../components/TeamBadge';
 import type { GameWorld } from '../engine/season/season-manager';
@@ -17,8 +18,10 @@ export default function Compare() {
 }
 
 function CompareContent({ world }: { world: GameWorld }) {
-  const [teamA, setTeamA] = useState('');
-  const [teamB, setTeamB] = useState('');
+  // 观察者的核心动作是「在列表里挑一支 → 进去看 → 回来继续挑」，所以两个
+  // 选择框必须活过一次导航，否则每次点进球队再返回都要从头选。
+  const [teamA, setTeamA] = useUiSessionState('ui.compare.teamA', '');
+  const [teamB, setTeamB] = useUiSessionState('ui.compare.teamB', '');
 
   const allTeamIds = Object.keys(world.teamBases).sort((a, b) => (world.teamBases[b]?.overall ?? 0) - (world.teamBases[a]?.overall ?? 0));
 
@@ -54,7 +57,16 @@ function CompareContent({ world }: { world: GameWorld }) {
     const bChampions = bRecords.filter(r => r.leaguePosition === 1).length;
 
     // Scan matchHistory (past seasons) + current season calendar
-    const matches: { season: number; home: string; away: string; homeGoals: number; awayGoals: number; comp: string; round: string; et?: boolean; pen?: string }[] = [];
+    // 交手记录与赛历、详情弹窗共用一个比分口径：常规时间比分 + 加时/点球标注。
+    const matches: {
+      season: number; home: string; away: string;
+      homeGoals: number; awayGoals: number;
+      comp: string; round: string;
+      etHomeGoals?: number; etAwayGoals?: number;
+      extraTime?: boolean; penalties?: boolean;
+      penaltyHome?: number; penaltyAway?: number;
+      et?: boolean; pen?: string;
+    }[] = [];
 
     // Past seasons from matchHistory
     for (const m of (world.matchHistory ?? [])) {
@@ -84,17 +96,24 @@ function CompareContent({ world }: { world: GameWorld }) {
             season: world.seasonState.seasonNumber,
             home: r.homeTeamId,
             away: r.awayTeamId,
-            homeGoals: r.homeGoals + (r.etHomeGoals ?? 0),
-            awayGoals: r.awayGoals + (r.etAwayGoals ?? 0),
+            // 加时进球不再并入比分：并入后同一场比赛在这里显示 2-1，
+            // 在赛历与详情弹窗里却是 1-1。
+            homeGoals: r.homeGoals,
+            awayGoals: r.awayGoals,
             comp: r.competitionName,
             round: r.roundLabel,
-            et: r.extraTime || undefined,
-            pen: r.penalties ? `${r.penaltyHome}-${r.penaltyAway}` : undefined,
+            etHomeGoals: r.etHomeGoals,
+            etAwayGoals: r.etAwayGoals,
+            extraTime: r.extraTime || undefined,
+            penalties: r.penalties || undefined,
+            penaltyHome: r.penaltyHome,
+            penaltyAway: r.penaltyAway,
           });
         }
       }
     }
 
+    // 胜负计数跟着展示的比分走，即常规时间比分；点球决出的胜负由标注说明。
     let aWins = 0, bWins = 0, draws = 0, aGoals = 0, bGoals = 0;
     for (const m of matches) {
       const aIsHome = m.home === teamA;
@@ -230,17 +249,19 @@ function CompareContent({ world }: { world: GameWorld }) {
                   const aScore = aIsHome ? m.homeGoals : m.awayGoals;
                   const bScore = aIsHome ? m.awayGoals : m.homeGoals;
                   const resultColor = aScore > bScore ? a.color : bScore > aScore ? b.color : '#94a3b8';
+                  const line = formatScoreline(m);
                   return (
                     <div key={i} className="flex items-center gap-2 px-4 py-2 text-xs">
                       <span className="text-[10px] text-slate-600 w-8 shrink-0">S{m.season}</span>
                       <span className="flex-1 whitespace-nowrap text-slate-400" title={getTeamName(m.home, world.teamBases)}>{getTeamShortName(m.home, world.teamBases)}</span>
                       <span className="font-bold tabular-nums px-2 py-0.5 rounded" style={{ color: resultColor }}>
-                        {m.homeGoals} - {m.awayGoals}
+                        {line.score}
                       </span>
                       <span className="flex-1 whitespace-nowrap text-slate-400 text-right" title={getTeamName(m.away, world.teamBases)}>{getTeamShortName(m.away, world.teamBases)}</span>
                       <span className="text-[10px] text-slate-600 w-12 text-right shrink-0 truncate" title={m.comp}>{m.comp}</span>
-                      {m.et && <span className="text-[9px] text-amber-500">ET</span>}
-                      {m.pen && <span className="text-[9px] text-amber-500">P{m.pen}</span>}
+                      {line.detail && (
+                        <span className="text-[9px] text-amber-500 shrink-0 whitespace-nowrap">{line.detail}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -249,7 +270,7 @@ function CompareContent({ world }: { world: GameWorld }) {
           )}
 
           {h2h && h2h.matches.length === 0 && (
-            <div className="text-center text-xs text-slate-500 py-4">本赛季暂无交手记录</div>
+            <div className="text-center text-xs text-slate-500 py-4">两队暂无交手记录</div>
           )}
         </>
         );

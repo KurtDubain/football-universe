@@ -36,6 +36,7 @@ export default function History() {
 
 function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favoriteTeamIds: string[] }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
+  const [expandedCoefficient, setExpandedCoefficient] = useState<string | null>(null);
   const [detailedSeason, setDetailedSeason] = useState<number | null>(null);
   const [seasonRange, setSeasonRange] = useUiSessionState<'recent10' | 'recent40' | 'all'>('ui.history.range', 'recent10');
   const [tab, setTab] = useUiSessionState<'seasons' | 'coefficient' | 'records' | 'coaches' | 'hall'>('ui.history.tab', 'seasons');
@@ -430,22 +431,47 @@ function HistoryContent({ world, favoriteTeamIds }: { world: GameWorld; favorite
             {coefficientRanking.map(entry => {
               const team = world.teamBases[entry.teamId];
               const hasHistory = entry.seasons.length > 0;
+              const isExpanded = expandedCoefficient === entry.teamId;
               return (
-                <div key={entry.teamId} data-testid="club-coefficient-row" className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 sm:grid-cols-[2.5rem_minmax(10rem,1fr)_minmax(12rem,auto)_4.5rem] sm:px-4">
-                  <span className={`text-center text-sm font-bold ${entry.rank <= 3 ? 'text-amber-300' : 'text-slate-500'}`}>{entry.rank}</span>
-                  <Link to={`/team/${entry.teamId}`} className="min-w-0 text-sm font-medium text-slate-200 hover:text-emerald-300">
-                    <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: team?.color ?? '#64748b' }} />
-                    {team?.name ?? entry.teamId}
-                    <span className="ml-2 text-[11px] font-normal text-slate-600">{team?.region?.split('+')[0]}</span>
-                  </Link>
-                  <div className="hidden justify-end gap-1 sm:flex" title={entry.seasons.map(season => `S${season.seasonNumber}: ${season.rawPoints} × ${season.weight} = ${season.points}`).join('\n')}>
-                    {entry.seasons.length > 0 ? entry.seasons.map(season => (
-                      <span key={season.seasonNumber} className="rounded border border-slate-700 bg-slate-900/50 px-1.5 py-0.5 text-[10px] text-slate-500">
-                        S{season.seasonNumber} {season.points}
-                      </span>
-                    )) : <span className="text-[11px] text-slate-600">暂无赛季积分</span>}
+                <div key={entry.teamId}>
+                  <div
+                    data-testid="club-coefficient-row"
+                    className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-3 py-2.5 sm:grid-cols-[2.5rem_minmax(10rem,1fr)_minmax(12rem,auto)_4.5rem] sm:px-4"
+                  >
+                    <span className={`col-start-1 row-start-1 text-center text-sm font-bold ${entry.rank <= 3 ? 'text-amber-300' : 'text-slate-500'}`}>{entry.rank}</span>
+                    <Link to={`/team/${entry.teamId}`} className="col-start-2 row-start-1 min-w-0 text-sm font-medium text-slate-200 hover:text-emerald-300">
+                      <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: team?.color ?? '#64748b' }} />
+                      {team?.name ?? entry.teamId}
+                      <span className="ml-2 text-[11px] font-normal text-slate-600">{team?.region?.split('+')[0]}</span>
+                    </Link>
+                    <span className={`col-start-3 row-start-1 text-right text-sm font-bold sm:col-start-4 ${hasHistory ? 'text-emerald-300' : 'text-slate-500'}`}>{entry.points.toFixed(1)}</span>
+                    {/* 逐季拆解此前整块 hidden，详细算式又只挂在 title 上——移动端看不到、
+                        触屏也点不出来。现在芯片换行到队名下方，算式改为点击展开的面板。 */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCoefficient(isExpanded ? null : entry.teamId)}
+                      aria-expanded={isExpanded}
+                      aria-label={`${team?.name ?? entry.teamId} 逐季积分算式`}
+                      className="col-span-3 row-start-2 flex flex-wrap justify-start gap-1 text-left sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:justify-end"
+                    >
+                      {entry.seasons.length > 0 ? entry.seasons.map(season => (
+                        <span key={season.seasonNumber} className="rounded border border-slate-700 bg-slate-900/50 px-1.5 py-0.5 text-[10px] text-slate-400">
+                          S{season.seasonNumber} {season.points}
+                        </span>
+                      )) : <span className="text-[11px] text-slate-600">暂无赛季积分</span>}
+                    </button>
                   </div>
-                  <span className={`text-right text-sm font-bold ${hasHistory ? 'text-emerald-300' : 'text-slate-500'}`}>{entry.points.toFixed(1)}</span>
+                  {isExpanded && entry.seasons.length > 0 && (
+                    <div className="px-3 pb-3 sm:px-4">
+                      <ul className="space-y-0.5 rounded border border-slate-700/70 bg-slate-900/40 px-3 py-2 text-[11px] tabular-nums text-slate-400">
+                        {entry.seasons.map(season => (
+                          <li key={season.seasonNumber}>
+                            S{season.seasonNumber}：{season.rawPoints} × {season.weight} = {season.points}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
-import { formatLeagueTransition, getTeamName, getTeamShortName, getCoachName } from '../utils/format';
+import { formatLeagueTransition, getTeamName, getTeamShortName, getCoachName, formatScoreline } from '../utils/format';
 import type { GameWorld, MatchHistoryEntry } from '../engine/season/season-manager';
 import type { TeamBase, SeasonRecord } from '../types/team';
 import { SegmentedControl } from '../components/ui';
 import SeasonAwardsBlock from '../components/SeasonAwardsBlock';
+import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 import {
   countTopFlightChampionTitles,
   formatSeasonCompetitionStats,
@@ -31,10 +32,13 @@ export default function Chronicle() {
   const honors = world.honorHistory;
   if (honors.length === 0) {
     return (
-      <div className="max-w-4xl">
-        <h2 className="text-xl font-bold text-slate-100 mb-4">编年史</h2>
-        <p className="text-sm text-slate-500">完成至少一个赛季后显示</p>
-      </div>
+      <WorldProgressEmptyState
+        world={world}
+        title="编年史尚未开篇"
+        description="完成至少一个赛季后，每个赛季的冠军、升降级与关键比赛都会在这里归档。"
+        actionLabel="查看当前赛季"
+        actionTo="/"
+      />
     );
   }
 
@@ -697,15 +701,28 @@ function StandingsTable({ title, records, tb }: { title: string; records: Season
       <div className="px-3 py-2 border-b border-slate-700/60">
         <h3 className="text-xs font-semibold text-slate-400">{title}</h3>
       </div>
+      {/* 列标题：这张表原本没有任何列标签，读者只能靠数字形状猜列义。
+          净胜球已并入"进失"——它就等于进失之差，单列一栏只是重复。 */}
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700/40">
+        <span className="w-4 text-center">#</span>
+        <span className="w-2 shrink-0" aria-hidden="true" />
+        <span className="flex-1">球队</span>
+        <span className="hidden w-24 text-right sm:inline">胜平负</span>
+        <span className="w-14 text-right">进失</span>
+        <span className="w-8 text-right">分</span>
+      </div>
       <div className="divide-y divide-slate-700/30">
         {records.map((r, i) => (
           <div key={r.teamId} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i === 0 ? 'bg-amber-900/10' : r.relegated ? 'bg-red-900/10' : r.promoted ? 'bg-green-900/10' : ''}`}>
             <span className={`w-4 text-center font-bold ${i === 0 ? 'text-amber-400' : r.relegated ? 'text-red-400' : r.promoted ? 'text-green-400' : 'text-slate-500'}`}>{i + 1}</span>
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[r.teamId]?.color ?? '#666' }} />
-            <Link to={`/team/${r.teamId}`} className="flex-1 whitespace-nowrap text-slate-200 hover:text-blue-400" title={getTeamName(r.teamId, tb)}>{getTeamShortName(r.teamId, tb)}</Link>
-            <span className="text-slate-500 hidden sm:inline">{r.leagueWon}胜 {r.leagueDrawn}平 {r.leagueLost}负</span>
-            <span className="text-slate-500 text-[10px]">{r.leagueGF}-{r.leagueGA}</span>
-            <span className="text-slate-400 w-8 text-right">{r.leagueGF - r.leagueGA > 0 ? '+' : ''}{r.leagueGF - r.leagueGA}</span>
+            <div className="flex-1 min-w-0">
+              <Link to={`/team/${r.teamId}`} className="block whitespace-nowrap text-slate-200 hover:text-blue-400" title={getTeamName(r.teamId, tb)}>{getTeamShortName(r.teamId, tb)}</Link>
+              {/* 移动端把 W/D/L 折到队名下方，而不是整列消失。 */}
+              <span className="block text-[10px] text-slate-500 sm:hidden">{r.leagueWon}胜 {r.leagueDrawn}平 {r.leagueLost}负</span>
+            </div>
+            <span className="hidden w-24 text-right text-slate-500 sm:inline">{r.leagueWon}胜 {r.leagueDrawn}平 {r.leagueLost}负</span>
+            <span className="w-14 text-right text-slate-500 text-[10px]">{r.leagueGF}:{r.leagueGA}</span>
             <span className="font-bold text-slate-200 w-8 text-right">{r.leaguePoints}</span>
           </div>
         ))}
@@ -719,13 +736,15 @@ function MemMatch({ m, tb }: { m: MatchHistoryEntry; tb: Record<string, TeamBase
   const awayName = getTeamName(m.awayId, tb);
   const homeShortName = getTeamShortName(m.homeId, tb);
   const awayShortName = getTeamShortName(m.awayId, tb);
+  const line = formatScoreline(m);
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.homeId]?.color ?? '#666' }} />
       <span className="flex-1 whitespace-nowrap text-slate-300 text-right" title={homeName}>{homeShortName}</span>
-      <span className="font-bold tabular-nums text-amber-400 px-2">{m.homeGoals}-{m.awayGoals}</span>
+      <span className="font-bold tabular-nums text-amber-400 px-2">{line.score}</span>
       <span className="flex-1 whitespace-nowrap text-slate-300" title={awayName}>{awayShortName}</span>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tb[m.awayId]?.color ?? '#666' }} />
+      {line.detail && <span className="text-[9px] text-amber-500 shrink-0 whitespace-nowrap">{line.detail}</span>}
       <span className="text-[11px] sm:text-[9px] text-slate-600 ml-1">{m.comp}</span>
     </div>
   );

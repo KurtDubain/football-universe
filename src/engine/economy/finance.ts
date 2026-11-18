@@ -567,13 +567,25 @@ export function initTeamFinances(
   return out;
 }
 
+export interface FormatMoneyOptions {
+  /**
+   * Prefix positive amounts with `+`. Callers used to hand-write the sign,
+   * which turned a negative input into `--€X` because the sign is already
+   * inside this function — so the sign belongs here and nowhere else.
+   */
+  signed?: boolean;
+  /** Rendered instead of the amount when the value is exactly 0. */
+  zero?: string;
+}
+
 /**
  * Format a money amount as `€XXM` (millions). Uses 0 decimals when ≥ 10,
  * 1 decimal below — keeps small numbers readable while big ones stay crisp.
  */
-export function formatMoney(n: number): string {
-  if (n === 0) return '€0M';
-  const sign = n < 0 ? '-' : '';
+export function formatMoney(n: number, options: FormatMoneyOptions = {}): string {
+  const { signed = false, zero } = options;
+  if (n === 0) return zero ?? '€0M';
+  const sign = n < 0 ? '-' : signed ? '+' : '';
   const abs = Math.abs(n);
   if (abs >= 10) return `${sign}€${Math.round(abs)}M`;
   return `${sign}€${abs.toFixed(1)}M`;

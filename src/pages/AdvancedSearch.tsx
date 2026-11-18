@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
+import { useUiSessionState } from '../app/ui-session-state';
 import {
   executeSearch,
   type SearchEntity,
@@ -12,7 +13,20 @@ import {
   type PlayerSearchResult,
   type CoachSearchResult,
 } from '../engine/search/query-engine';
+import { formatMarketValue } from '../engine/economy/market-value';
 import { SegmentedControl } from '../components/ui';
+
+/** Remove one value from an optional multi-select filter, collapsing empties to undefined. */
+function dropValue<T>(list: T[] | undefined, value: T): T[] | undefined {
+  const next = (list ?? []).filter((entry) => entry !== value);
+  return next.length > 0 ? next : undefined;
+}
+
+interface ConditionChip {
+  key: string;
+  label: string;
+  clear: () => void;
+}
 
 const tierOptions: { value: string; label: string }[] = [
   { value: 'elite', label: '豪门' },
@@ -31,10 +45,12 @@ const positionOptions: { value: 'GK' | 'DF' | 'MF' | 'FW'; label: string }[] = [
 
 export default function AdvancedSearch() {
   const world = useGameStore((s) => s.world);
-  const [entity, setEntity] = useState<SearchEntity>('team');
-  const [teamFilter, setTeamFilter] = useState<TeamFilters>({});
-  const [playerFilter, setPlayerFilter] = useState<PlayerFilters>({});
-  const [coachFilter, setCoachFilter] = useState<CoachFilters>({});
+  // 三组 filter 都留在会话里：点进一条结果再返回时，读者不该重填一遍条件。
+  // 切换实体不清空——被保留的条件会在「当前条件」里显式列出并可单独移除。
+  const [entity, setEntity] = useUiSessionState<SearchEntity>('ui.search.entity', 'team');
+  const [teamFilter, setTeamFilter] = useUiSessionState<TeamFilters>('ui.search.teamFilter', {});
+  const [playerFilter, setPlayerFilter] = useUiSessionState<PlayerFilters>('ui.search.playerFilter', {});
+  const [coachFilter, setCoachFilter] = useUiSessionState<CoachFilters>('ui.search.coachFilter', {});
 
   const results = useMemo(() => {
     if (!world) return [];
@@ -48,6 +64,60 @@ export default function AdvancedSearch() {
   }, [world, entity, teamFilter, playerFilter, coachFilter]);
 
   if (!world) return <div className="text-slate-400">正在加载...</div>;
+
+  const tierLabelOf = new Map(tierOptions.map((option) => [option.value, option.label]));
+  const positionLabelOf = new Map(positionOptions.map((option) => [option.value, option.label]));
+  const leagueLabelOf: Record<string, string> = { '1': '顶级', '2': '甲级', '3': '乙级' };
+
+  const teamChips = (filter: TeamFilters): ConditionChip[] => {
+    const chips: ConditionChip[] = [];
+    for (const value of filter.tier ?? []) {
+      chips.push({ key: `tier:${value}`, label: `等级 · ${tierLabelOf.get(value) ?? value}`, clear: () => setTeamFilter({ ...filter, tier: dropValue(filter.tier, value) }) });
+    }
+    for (const value of filter.continent ?? []) {
+      chips.push({ key: `continent:${value}`, label: `大洲 · ${value}`, clear: () => setTeamFilter({ ...filter, continent: dropValue(filter.continent, value) }) });
+    }
+    for (const value of filter.leagueLevel ?? []) {
+      chips.push({ key: `league:${value}`, label: `联赛 · ${leagueLabelOf[String(value)] ?? value}`, clear: () => setTeamFilter({ ...filter, leagueLevel: dropValue(filter.leagueLevel, value) }) });
+    }
+    if (filter.minOverall !== undefined) chips.push({ key: 'minOverall', label: `实力 ≥ ${filter.minOverall}`, clear: () => setTeamFilter({ ...filter, minOverall: undefined }) });
+    if (filter.maxOverall !== undefined) chips.push({ key: 'maxOverall', label: `实力 ≤ ${filter.maxOverall}`, clear: () => setTeamFilter({ ...filter, maxOverall: undefined }) });
+    if (filter.minLeagueChampionships !== undefined) chips.push({ key: 'minChamp', label: `联赛冠军 ≥ ${filter.minLeagueChampionships}`, clear: () => setTeamFilter({ ...filter, minLeagueChampionships: undefined }) });
+    return chips;
+  };
+
+  const playerChips = (filter: PlayerFilters): ConditionChip[] => {
+    const chips: ConditionChip[] = [];
+    for (const value of filter.position ?? []) {
+      chips.push({ key: `position:${value}`, label: `位置 · ${positionLabelOf.get(value) ?? value}`, clear: () => setPlayerFilter({ ...filter, position: dropValue(filter.position, value) }) });
+    }
+    if (filter.minRating !== undefined) chips.push({ key: 'minRating', label: `能力 ≥ ${filter.minRating}`, clear: () => setPlayerFilter({ ...filter, minRating: undefined }) });
+    if (filter.maxRating !== undefined) chips.push({ key: 'maxRating', label: `能力 ≤ ${filter.maxRating}`, clear: () => setPlayerFilter({ ...filter, maxRating: undefined }) });
+    if (filter.minGoals !== undefined) chips.push({ key: 'minGoals', label: `进球 ≥ ${filter.minGoals}`, clear: () => setPlayerFilter({ ...filter, minGoals: undefined }) });
+    if (filter.minAssists !== undefined) chips.push({ key: 'minAssists', label: `助攻 ≥ ${filter.minAssists}`, clear: () => setPlayerFilter({ ...filter, minAssists: undefined }) });
+    if (filter.minMarketValue !== undefined) chips.push({ key: 'minMarketValue', label: `市值 ≥ €${filter.minMarketValue}M`, clear: () => setPlayerFilter({ ...filter, minMarketValue: undefined }) });
+    if (filter.maxAge !== undefined) chips.push({ key: 'maxAge', label: `年龄 ≤ ${filter.maxAge}`, clear: () => setPlayerFilter({ ...filter, maxAge: undefined }) });
+    return chips;
+  };
+
+  const coachChips = (filter: CoachFilters): ConditionChip[] => {
+    const chips: ConditionChip[] = [];
+    if (filter.minTrophies !== undefined) chips.push({ key: 'minTrophies', label: `冠军 ≥ ${filter.minTrophies}`, clear: () => setCoachFilter({ ...filter, minTrophies: undefined }) });
+    if (filter.minTeamsManaged !== undefined) chips.push({ key: 'minTeamsManaged', label: `执教球队 ≥ ${filter.minTeamsManaged}`, clear: () => setCoachFilter({ ...filter, minTeamsManaged: undefined }) });
+    return chips;
+  };
+
+  const activeChips = entity === 'team'
+    ? teamChips(teamFilter)
+    : entity === 'player'
+      ? playerChips(playerFilter)
+      : coachChips(coachFilter);
+  // 切换对象不清空条件——被保留的那几组在这里显式列出，读者不会以为它们消失了。
+  const retainedChips = [
+    ...(entity === 'team' ? [] : teamChips(teamFilter).map((chip) => ({ ...chip, key: `team-${chip.key}`, label: `球队 · ${chip.label}` }))),
+    ...(entity === 'player' ? [] : playerChips(playerFilter).map((chip) => ({ ...chip, key: `player-${chip.key}`, label: `球员 · ${chip.label}` }))),
+    ...(entity === 'coach' ? [] : coachChips(coachFilter).map((chip) => ({ ...chip, key: `coach-${chip.key}`, label: `教练 · ${chip.label}` }))),
+  ];
 
   const presetQueries: { label: string; apply: () => void }[] = [
     {
@@ -121,7 +191,7 @@ export default function AdvancedSearch() {
             <button
               key={q.label}
               onClick={q.apply}
-              className="text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-blue-700 text-slate-200 transition-colors cursor-pointer"
+              className="inline-flex min-h-11 items-center rounded-lg bg-slate-700 px-3 text-xs text-slate-200 transition-colors hover:bg-blue-700 cursor-pointer"
             >
               {q.label}
             </button>
@@ -135,7 +205,7 @@ export default function AdvancedSearch() {
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">筛选条件</h3>
           <button
             onClick={() => { setTeamFilter({}); setPlayerFilter({}); setCoachFilter({}); }}
-            className="text-[10px] text-slate-500 hover:text-red-400 cursor-pointer"
+            className="inline-flex min-h-11 items-center rounded-md px-3 text-xs text-slate-400 transition-colors hover:text-red-400 cursor-pointer"
           >
             清空
           </button>
@@ -206,6 +276,51 @@ export default function AdvancedSearch() {
         )}
       </div>
 
+      {/* 当前条件：此前唯一的反馈是右上角的结果条数，读者无法确认筛选是否生效；
+          切换搜索对象后上一个对象的条件还会被静默保留。这里逐条列出并可单独移除。 */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700/60 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">当前条件</h3>
+          <span className="text-xs tabular-nums text-slate-500">{results.length} 条结果</span>
+        </div>
+        {activeChips.length === 0 && retainedChips.length === 0 ? (
+          <p className="text-xs text-slate-500">未设置任何筛选条件</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {activeChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.clear}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-blue-600/20 px-3 text-xs text-blue-200 transition-colors hover:bg-blue-600/30 cursor-pointer"
+                >
+                  {chip.label}
+                  <span aria-hidden="true">×</span>
+                  <span className="sr-only">移除该条件</span>
+                </button>
+              ))}
+              {retainedChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.clear}
+                  title="属于其他搜索对象，切换过去后仍会生效"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs text-slate-400 transition-colors hover:text-slate-200 cursor-pointer"
+                >
+                  {chip.label}
+                  <span aria-hidden="true">×</span>
+                  <span className="sr-only">移除该条件</span>
+                </button>
+              ))}
+            </div>
+            {retainedChips.length > 0 && (
+              <p className="mt-2 text-[11px] text-slate-500">描边条件属于其他搜索对象，切换过去后仍会生效。</p>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Results */}
       <div className="bg-slate-800 rounded-xl border border-slate-700/60 overflow-hidden">
         <div className="overflow-x-auto">
@@ -242,7 +357,7 @@ function FilterChips<V extends string>({
                 const next = isSel ? selected.filter((v) => v !== o.value) : [...selected, o.value];
                 onChange(next as V[]);
               }}
-              className={`text-[11px] px-2 py-1 rounded transition-colors cursor-pointer ${
+              className={`inline-flex min-h-11 items-center rounded px-3 text-xs transition-colors cursor-pointer ${
                 isSel ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -275,7 +390,7 @@ function NumberRange({
           value={min ?? ''}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined, max)}
           placeholder="最小"
-          className="w-20 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
         />
         <span className="text-slate-500">—</span>
         <input
@@ -283,7 +398,7 @@ function NumberRange({
           value={max ?? ''}
           onChange={(e) => onChange(min, e.target.value ? Number(e.target.value) : undefined)}
           placeholder="最大"
-          className="w-20 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          className="w-20 min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
         />
       </div>
     </div>
@@ -298,7 +413,7 @@ function NumberInput({ label, value, onChange }: { label: string; value?: number
         type="number"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
-        className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+        className="w-full min-h-11 px-3 bg-slate-700 border border-slate-600 rounded text-xs text-slate-200 focus:outline-none focus:border-blue-500"
       />
     </div>
   );
@@ -312,11 +427,11 @@ function TeamResults({ rows, world }: { rows: TeamSearchResult[]; world: NonNull
         <tr className="text-xs text-slate-400 border-b border-slate-700">
           <th className="px-3 py-2 text-left">球队</th>
           <th className="px-3 py-2 text-left">大洲</th>
-          <th className="px-3 py-2 text-center">联赛</th>
-          <th className="px-3 py-2 text-center">OVR</th>
-          <th className="px-3 py-2 text-center">联赛冠军</th>
-          <th className="px-3 py-2 text-center">杯赛冠军</th>
-          <th className="px-3 py-2 text-center">当前排名</th>
+          <th className="px-3 py-2 text-right">联赛</th>
+          <th className="px-3 py-2 text-right">OVR</th>
+          <th className="px-3 py-2 text-right">联赛冠军</th>
+          <th className="px-3 py-2 text-right">杯赛冠军</th>
+          <th className="px-3 py-2 text-right">当前排名</th>
         </tr>
       </thead>
       <tbody>
@@ -329,11 +444,11 @@ function TeamResults({ rows, world }: { rows: TeamSearchResult[]; world: NonNull
               </Link>
             </td>
             <td className="px-3 py-2 text-slate-400 text-xs">{r.region.split('+')[0]}</td>
-            <td className="px-3 py-2 text-center text-slate-400 text-xs">L{r.leagueLevel}</td>
-            <td className="px-3 py-2 text-center font-bold text-slate-100">{r.overall}</td>
-            <td className="px-3 py-2 text-center text-amber-400">{r.championships}</td>
-            <td className="px-3 py-2 text-center text-emerald-400">{r.cupTrophies}</td>
-            <td className="px-3 py-2 text-center text-slate-400">{r.currentRank < 99 ? `#${r.currentRank}` : '-'}</td>
+            <td className="px-3 py-2 text-right text-slate-400 text-xs">L{r.leagueLevel}</td>
+            <td className="px-3 py-2 text-right font-bold text-slate-100">{r.overall}</td>
+            <td className="px-3 py-2 text-right text-amber-400">{r.championships}</td>
+            <td className="px-3 py-2 text-right text-emerald-400">{r.cupTrophies}</td>
+            <td className="px-3 py-2 text-right text-slate-400">{r.currentRank < 99 ? `#${r.currentRank}` : '-'}</td>
           </tr>
         ))}
       </tbody>
@@ -350,11 +465,11 @@ function PlayerResults({ rows, world }: { rows: PlayerSearchResult[]; world: Non
           <th className="px-3 py-2 text-left">球员</th>
           <th className="px-3 py-2 text-left">球队</th>
           <th className="px-3 py-2 text-center">位置</th>
-          <th className="px-3 py-2 text-center">能力</th>
-          <th className="px-3 py-2 text-center">年龄</th>
-          <th className="px-3 py-2 text-center" title="当前赛季全赛事">赛季进球</th>
-          <th className="px-3 py-2 text-center" title="当前赛季全赛事">赛季助攻</th>
-          <th className="px-3 py-2 text-center">市值</th>
+          <th className="px-3 py-2 text-right">能力</th>
+          <th className="px-3 py-2 text-right">年龄</th>
+          <th className="px-3 py-2 text-right" title="当前赛季全赛事">赛季进球</th>
+          <th className="px-3 py-2 text-right" title="当前赛季全赛事">赛季助攻</th>
+          <th className="px-3 py-2 text-right">市值</th>
         </tr>
       </thead>
       <tbody>
@@ -372,11 +487,11 @@ function PlayerResults({ rows, world }: { rows: PlayerSearchResult[]; world: Non
               </Link>
             </td>
             <td className="px-3 py-2 text-center text-slate-400 text-xs">{r.position}</td>
-            <td className="px-3 py-2 text-center font-bold text-slate-100">{r.rating}</td>
-            <td className="px-3 py-2 text-center text-slate-400">{r.age}</td>
-            <td className="px-3 py-2 text-center text-amber-400">{r.goals}</td>
-            <td className="px-3 py-2 text-center text-blue-400">{r.assists}</td>
-            <td className="px-3 py-2 text-center text-emerald-400 text-xs">€{r.marketValue >= 10 ? Math.round(r.marketValue) : r.marketValue.toFixed(1)}M</td>
+            <td className="px-3 py-2 text-right font-bold text-slate-100">{r.rating}</td>
+            <td className="px-3 py-2 text-right text-slate-400">{r.age}</td>
+            <td className="px-3 py-2 text-right text-amber-400">{r.goals}</td>
+            <td className="px-3 py-2 text-right text-blue-400">{r.assists}</td>
+            <td className="px-3 py-2 text-right text-emerald-400 text-xs">{formatMarketValue(r.marketValue)}</td>
           </tr>
         ))}
         {rows.length > 100 && (
@@ -395,9 +510,9 @@ function CoachResults({ rows }: { rows: CoachSearchResult[] }) {
         <tr className="text-xs text-slate-400 border-b border-slate-700">
           <th className="px-3 py-2 text-left">教练</th>
           <th className="px-3 py-2 text-center">风格</th>
-          <th className="px-3 py-2 text-center">能力</th>
-          <th className="px-3 py-2 text-center">冠军</th>
-          <th className="px-3 py-2 text-center">执教过</th>
+          <th className="px-3 py-2 text-right">能力</th>
+          <th className="px-3 py-2 text-right">冠军</th>
+          <th className="px-3 py-2 text-right">执教过</th>
           <th className="px-3 py-2 text-left">现任</th>
         </tr>
       </thead>
@@ -410,9 +525,9 @@ function CoachResults({ rows }: { rows: CoachSearchResult[] }) {
               </Link>
             </td>
             <td className="px-3 py-2 text-center text-slate-400 text-xs">{r.style}</td>
-            <td className="px-3 py-2 text-center font-bold text-slate-100">{r.rating}</td>
-            <td className="px-3 py-2 text-center text-amber-400">{r.trophies}</td>
-            <td className="px-3 py-2 text-center text-slate-400">{r.teamsManaged}支</td>
+            <td className="px-3 py-2 text-right font-bold text-slate-100">{r.rating}</td>
+            <td className="px-3 py-2 text-right text-amber-400">{r.trophies}</td>
+            <td className="px-3 py-2 text-right text-slate-400">{r.teamsManaged}支</td>
             <td className="px-3 py-2 text-slate-400 text-xs">
               {r.currentTeamId ? (
                 <Link to={`/team/${r.currentTeamId}`} className="hover:text-blue-300">{r.currentTeamName}</Link>

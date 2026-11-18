@@ -85,6 +85,61 @@ export function cnRoundLabel(name: string): string {
   return token ? `${map[token]}${name.slice(token.length)}` : name;
 }
 
+/**
+ * Minimal shape both `MatchResult` and the archived `MatchHistoryEntry` already
+ * satisfy, so every scoreline in the app reads from one formatter.
+ */
+export interface ScorelineSource {
+  /** Goals after 90 minutes — the only score a league result is decided on. */
+  homeGoals: number;
+  awayGoals: number;
+  /** Extra-time goals, deliberately kept apart from the 90-minute score. */
+  etHomeGoals?: number;
+  etAwayGoals?: number;
+  /** Live results flag extra time; archived rows only carry `et`. */
+  extraTime?: boolean;
+  et?: boolean;
+  penalties?: boolean;
+  penaltyHome?: number;
+  penaltyAway?: number;
+  /** Archived rows store the shootout score pre-formatted, e.g. `4-3`. */
+  pen?: string;
+}
+
+export interface ScorelineDisplay {
+  /** Regular-time score, always separated by `:`. */
+  score: string;
+  /** Extra-time / shootout annotation; empty when the tie ended in 90 minutes. */
+  detail: string;
+}
+
+/**
+ * Render a scoreline without folding extra time into it.
+ *
+ * Adding ET goals to the score made one match read 2-1 on one page and 1-1 on
+ * another, so the 90-minute score stays the headline and extra time / shootouts
+ * are annotated separately — the same split MatchDetailModal already shows.
+ */
+export function formatScoreline(result: ScorelineSource): ScorelineDisplay {
+  const score = `${result.homeGoals}:${result.awayGoals}`;
+  const wentToExtraTime = result.extraTime === true || result.et === true;
+  const hasEtGoals = result.etHomeGoals !== undefined || result.etAwayGoals !== undefined;
+  const shootout = result.penalties && result.penaltyHome !== undefined && result.penaltyAway !== undefined
+    ? `${result.penaltyHome}:${result.penaltyAway}`
+    : result.pen
+      ? result.pen.replace('-', ':')
+      : null;
+
+  const parts: string[] = [];
+  if (hasEtGoals) {
+    parts.push(`加时 ${result.etHomeGoals ?? 0}:${result.etAwayGoals ?? 0}`);
+  } else if (wentToExtraTime) {
+    parts.push('加时');
+  }
+  if (shootout) parts.push(`点球 ${shootout}`);
+  return { score, detail: parts.join(' · ') };
+}
+
 export function formatForm(form: ('W' | 'D' | 'L')[]): { label: string; color: string }[] {
   return form.map((r) => {
     switch (r) {

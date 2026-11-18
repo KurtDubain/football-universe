@@ -2,18 +2,14 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import type { TransferRecord } from '../types/transfer';
+import { formatMoney } from '../engine/economy/finance';
+import { POSITION_CHIP, POSITION_CHIP_BASE } from '../components/position-chip';
 import { PageHeader, PageShell, Panel, SectionHeader, SegmentedControl, StatusBadge } from '../components/ui';
 import TransferTeamLink from '../components/TransferTeamLink';
 import { useUiSessionState } from '../app/ui-session-state';
 import WorldProgressEmptyState from '../components/WorldProgressEmptyState';
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
-const posColor: Record<string, string> = {
-  GK: 'text-amber-400 bg-amber-900/30',
-  DF: 'text-blue-400 bg-blue-900/30',
-  MF: 'text-green-400 bg-green-900/30',
-  FW: 'text-red-400 bg-red-900/30',
-};
 
 /**
  * Detect the two legs of a swap deal.
@@ -96,12 +92,15 @@ export default function Transfers() {
     const bySeasons = [...grouped.entries()]
       .sort((a, b) => b[0] - a[0])
       .map(([season, records]) => {
+        // 组内按窗口排序：同一赛季的流动可能横跨多个窗口，不排序读者就分不出先后。
+        // swapKey 按记录身份匹配，所以先排序再检测不会错配互换的两条腿。
+        const ordered = [...records].sort((a, b) => a.windowIndex - b.windowIndex);
         const swapIndices = new Set<number>();
-        records.forEach((r, i) => {
+        ordered.forEach((r, i) => {
           const k = `${r.season}|${r.windowIndex}|${r.playerId}|${r.fromTeamId}|${r.toTeamId}`;
           if (swapKey.has(k)) swapIndices.add(i);
         });
-        return { season, records, swapIndices };
+        return { season, records: ordered, swapIndices };
       });
     return { bySeasons, total: filtered.length };
   }, [world, filter]);
@@ -188,8 +187,13 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
     <div className="px-3 py-2 hover:bg-slate-700/20 transition-colors">
       <div className="flex items-center gap-2">
         {/* Position */}
-        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${posColor[record.position]}`}>
+        <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[record.position]} shrink-0 font-medium`}>
           {posLabel[record.position]}
+        </span>
+
+        {/* Window — 这笔流动发生在赛季的哪个窗口；此前整页没有任何时间字段 */}
+        <span className="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-300">
+          S{record.season}·窗口{record.windowIndex + 1}
         </span>
 
         {/* Player */}
@@ -218,11 +222,12 @@ function TransferRow({ record, world, isSwap }: { record: TransferRecord; world:
 
         {/* Fee */}
         {record.fee && (
-          <span className="text-xs text-emerald-400 font-bold shrink-0">€{record.fee}M</span>
+          <span className="text-xs text-emerald-400 font-bold shrink-0">{formatMoney(record.fee)}</span>
         )}
       </div>
+      {/* reason 是整行唯一的语义信息（为什么发生这笔流动），权重不该低于金额 */}
       {record.reason && (
-        <div className="text-[10px] text-slate-500 ml-12 mt-0.5 truncate" title={record.reason}>{record.reason}</div>
+        <div className="ml-12 mt-1 text-xs text-slate-300 truncate" title={record.reason}>{record.reason}</div>
       )}
     </div>
   );

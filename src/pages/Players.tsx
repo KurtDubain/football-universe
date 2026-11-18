@@ -22,6 +22,7 @@ import {
 import type { PlayerPosition } from '../types/player';
 import { PLAYER_STAT_SCOPE_TOOLTIPS } from '../engine/players/player-performance';
 import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
+import { POSITION_CHIP, POSITION_CHIP_BASE } from '../components/position-chip';
 import { Icon } from '../components/Icon';
 import AwardBuzzPanel from '../components/AwardBuzzPanel';
 import {
@@ -58,13 +59,6 @@ const positionLabel: Record<PlayerPosition, string> = {
   DF: '后卫',
   MF: '中场',
   FW: '前锋',
-};
-
-const positionColor: Record<PlayerPosition, string> = {
-  GK: 'text-amber-400',
-  DF: 'text-blue-400',
-  MF: 'text-green-400',
-  FW: 'text-red-400',
 };
 
 const rankBadge = (rank: number) => {
@@ -214,7 +208,7 @@ export default function Players() {
       <div key={player.uuid} className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-slate-700/45 px-3 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1.4fr)_minmax(7rem,0.7fr)_auto]">
         <Link to={entry.factTarget} className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]">
           <span className="flex min-w-0 items-center gap-2">
-            <span className={`text-xs font-semibold ${positionColor[player.position]}`}>{player.position}</span>
+            <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[player.position]} font-semibold`}>{player.position}</span>
             <span className="truncate text-sm font-semibold text-slate-100">{player.name}</span>
             <span className="shrink-0 text-xs font-bold text-amber-300">{player.rating}</span>
           </span>
@@ -294,7 +288,7 @@ export default function Players() {
         </td>
 
         {/* Number */}
-        <td className="px-2 py-2 text-center text-sm text-slate-300 font-mono hidden sm:table-cell">
+        <td className="px-2 py-2 text-right text-sm text-slate-300 font-mono hidden sm:table-cell">
           {playerNumber !== undefined ? `${playerNumber}号` : '-'}
         </td>
 
@@ -339,7 +333,7 @@ export default function Players() {
         {/* Position */}
         <td className="px-2 py-2 text-center hidden sm:table-cell">
           {position ? (
-            <span className={`text-xs font-medium ${positionColor[position]}`}>
+            <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[position]} font-medium`}>
               {positionLabel[position]}
             </span>
           ) : (
@@ -350,103 +344,103 @@ export default function Players() {
         {/* Stats columns depend on mode */}
         {mode === 'overall' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-base text-amber-300 font-black">{performance?.seasonScore.toFixed(1)}</span>
               <span className="block text-[10px] text-slate-500">
                 {performance?.grade} · {performance?.confidenceLabel === 'high' ? '高可信' : performance?.confidenceLabel === 'medium' ? '中可信' : '低可信'}
               </span>
             </td>
-            <td className="px-2 py-2 text-center text-xs text-slate-300">
-              {(performance?.positionQuality ?? 0).toFixed(0)} / {(performance?.availabilityScore ?? 0).toFixed(0)}
+            <td className="px-2 py-2 text-right text-xs text-slate-300">
+              {(performance?.positionQuality ?? 0).toFixed(1)} / {(performance?.availabilityScore ?? 0).toFixed(0)}
             </td>
-            <td className="px-2 py-2 text-center text-xs text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-xs text-slate-400 hidden sm:table-cell">
               <span className="block">{stat.appearances}/{performance?.metrics.teamMatchesAllCompetitions ?? stat.appearances} · {performance?.metrics.minutes ?? 0}分</span>
               <span className="block text-[10px] text-slate-500">{world.seasonStartLevels?.[stat.teamId] ?? 1}级联赛</span>
             </td>
           </>
         ) : mode === 'discipline' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-yellow-400 font-semibold">
                 {stat.yellowCards}
               </span>
             </td>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span
                 className={`text-sm font-semibold ${stat.redCards > 0 ? 'text-red-400' : 'text-slate-500'}`}
               >
                 {stat.redCards}
               </span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : mode === 'defense' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-blue-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.interceptions ?? 0}/{stat.clearances ?? 0}</td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-300">{stat.interceptions ?? 0}/{stat.clearances ?? 0}</td>
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.keyBlocks}/{performance?.metrics.goalsConcededPer90.toFixed(2)}
             </td>
           </>
         ) : mode === 'keepers' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-amber-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.routineSaves ?? 0}/{stat.saves}</td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-300">{stat.routineSaves ?? 0}/{stat.saves}</td>
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {((performance?.metrics.savePercentage ?? 0) * 100).toFixed(1)}%/{performance?.metrics.goalsConcededPer90.toFixed(2)}
             </td>
           </>
         ) : mode === 'forwards' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-red-300 font-semibold">{performance?.positionQuality.toFixed(1)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.goals}/{stat.bigChances}</td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-300">{stat.goals}/{stat.bigChances}</td>
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.keyPasses}/{stat.assists}
             </td>
           </>
         ) : mode === 'creation' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-emerald-300 font-semibold">{Math.max(0, stat.keyPasses - stat.assists)}</span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-300">{stat.assists}</td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-300">{stat.assists}</td>
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.goals + stat.assists}
             </td>
           </>
         ) : mode === 'careerScorers' || mode === 'careerAssists' ? (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-slate-100 font-bold">
                 {mode === 'careerScorers' ? stat.goals : stat.assists}
               </span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400">
+            <td className="px-2 py-2 text-right text-sm text-slate-400">
               {mode === 'careerScorers' ? stat.assists : stat.goals}
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
         ) : (
           <>
-            <td className="px-2 py-2 text-center">
+            <td className="px-2 py-2 text-right">
               <span className="text-sm text-slate-100 font-bold">
                 {mode === 'scorers' ? stat.goals : stat.assists}
               </span>
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400">
+            <td className="px-2 py-2 text-right text-sm text-slate-400">
               {mode === 'scorers' ? stat.assists : stat.goals}
             </td>
-            <td className="px-2 py-2 text-center text-sm text-slate-400 hidden sm:table-cell">
+            <td className="px-2 py-2 text-right text-sm text-slate-400 hidden sm:table-cell">
               {stat.appearances}/{stat.starts ?? 0}
             </td>
           </>
@@ -469,9 +463,9 @@ export default function Players() {
   };
   const currentData = dataByTab[tab];
   const isSeasonBoard = rankingGroup === 'season';
-  // A table thinned to a couple of rows by the minutes floor reads as broken
-  // data, so say what happened instead of rendering a near-empty grid.
-  const belowRowFloor = isSeasonBoard && currentData.length < 5;
+  // 达标人数少不等于数据坏了：1–4 人达标时照样渲染表格，只在表上方说明人数。
+  // 把整张表换成一句「尚无达标球员」，等于当着那几名球员的面说他们不存在。
+  const showThinBoardNote = isSeasonBoard && currentData.length > 0 && currentData.length < 5;
   const showPositionFilter = isSeasonBoard && MIXED_POSITION_TABS.includes(tab);
 
   return (
@@ -612,22 +606,19 @@ export default function Players() {
             {isSeasonBoard ? ` ${MINUTES_THRESHOLD_NOTE}` : ''}
           </p>
 
-          {belowRowFloor ? (
-            <Panel className="overflow-hidden">
-              <div className="py-10 text-center text-sm text-slate-500">
-                {hasCompletedMatches
-                  ? '本季尚无达到出场门槛的球员'
-                  : '赛季尚未开始，完成首场比赛后生成当前赛季数据'}
-              </div>
-            </Panel>
-          ) : (
+          {showThinBoardNote && (
+            <p className="text-xs text-amber-300/90">
+              当前仅 {currentData.length} 人达到出场门槛
+            </p>
+          )}
+
       <Panel padded={false} className="overflow-hidden tabular-nums">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-400 border-b border-slate-700">
                 <th className="px-1 sm:px-2 py-2 text-center w-10">#</th>
-                <th className="px-2 py-2.5 text-center hidden sm:table-cell">号码</th>
+                <th className="px-2 py-2.5 text-right hidden sm:table-cell">号码</th>
                 <th className="px-2 py-2.5 text-left">球员</th>
                 <th className="px-2 py-2.5 text-left">球队</th>
                 <th className="px-2 py-2.5 text-center hidden sm:table-cell">
@@ -635,65 +626,65 @@ export default function Players() {
                 </th>
                 {tab === 'overall' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>综合评分</th>
-                    <th className="px-2 py-2.5 text-center" title="固定位置标尺得分 / 当前赛季全赛事出勤可靠性">表现/出勤</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">出场/分钟 · 级别</th>
+                    <th className="px-2 py-2.5 text-right" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>综合评分</th>
+                    <th className="px-2 py-2.5 text-right" title="固定位置标尺得分 / 当前赛季全赛事出勤可靠性">表现/出勤</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell">出场/分钟 · 级别</th>
                   </>
                 ) : tab === 'discipline' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">黄牌</th>
-                    <th className="px-2 py-2.5 text-center">红牌</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                    <th className="px-2 py-2.5 text-right">黄牌</th>
+                    <th className="px-2 py-2.5 text-right">红牌</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell">
                       出场/首发
                     </th>
                   </>
                 ) : tab === 'defense' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
-                    <th className="px-2 py-2.5 text-center" title="当前赛季全赛事拦截/解围">拦截/解围</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="门线封堵/在场失球每90分钟">门线/失球90</th>
+                    <th className="px-2 py-2.5 text-right" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-right" title="当前赛季全赛事拦截/解围">拦截/解围</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell" title="门线封堵/在场失球每90分钟">门线/失球90</th>
                   </>
                 ) : tab === 'keepers' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
-                    <th className="px-2 py-2.5 text-center" title="普通扑救/关键扑救，两者不重复">扑救 普/关键</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="扑救率/在场失球每90分钟">扑救率/失球90</th>
+                    <th className="px-2 py-2.5 text-right" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-right" title="普通扑救/关键扑救，两者不重复">扑救 普/关键</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell" title="扑救率/在场失球每90分钟">扑救率/失球90</th>
                   </>
                 ) : tab === 'forwards' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
-                    <th className="px-2 py-2.5 text-center" title="全赛事进球/大机会（进球 + 被封堵的必进球机会）">进球/大机会</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell" title="关键传球/助攻">关键传球/助攻</th>
+                    <th className="px-2 py-2.5 text-right" title={PLAYER_STAT_SCOPE_TOOLTIPS.leagueContext}>评分</th>
+                    <th className="px-2 py-2.5 text-right" title="全赛事进球/大机会（进球 + 被封堵的必进球机会）">进球/大机会</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell" title="关键传球/助攻">关键传球/助攻</th>
                   </>
                 ) : tab === 'creation' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center" title="keyPasses 减去 assists，避免重复计算助攻">额外创造</th>
-                    <th className="px-2 py-2.5 text-center">助攻</th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                    <th className="px-2 py-2.5 text-right" title="keyPasses 减去 assists，避免重复计算助攻">额外创造</th>
+                    <th className="px-2 py-2.5 text-right">助攻</th>
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell">
                       传射
                     </th>
                   </>
                 ) : tab === 'careerScorers' || tab === 'careerAssists' ? (
                   <>
-                    <th className="px-2 py-2.5 text-center">
+                    <th className="px-2 py-2.5 text-right">
                       {tab === 'careerScorers' ? '生涯进球' : '生涯助攻'}
                     </th>
-                    <th className="px-2 py-2.5 text-center">
+                    <th className="px-2 py-2.5 text-right">
                       {tab === 'careerScorers' ? '生涯助攻' : '生涯进球'}
                     </th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell">
                       生涯出场/首发
                     </th>
                   </>
                 ) : (
                   <>
-                    <th className="px-2 py-2.5 text-center">
+                    <th className="px-2 py-2.5 text-right">
                       {tab === 'scorers' ? '进球' : '助攻'}
                     </th>
-                    <th className="px-2 py-2.5 text-center">
+                    <th className="px-2 py-2.5 text-right">
                       {tab === 'scorers' ? '助攻' : '进球'}
                     </th>
-                    <th className="px-2 py-2.5 text-center hidden sm:table-cell">
+                    <th className="px-2 py-2.5 text-right hidden sm:table-cell">
                       出场/首发
                     </th>
                   </>
@@ -723,7 +714,6 @@ export default function Players() {
           </table>
         </div>
       </Panel>
-          )}
         </>
       )}
     </PageShell>

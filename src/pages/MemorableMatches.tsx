@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
+import { useUiSessionState } from '../app/ui-session-state';
 import MatchLive from '../components/MatchLive';
 import type { MatchResult } from '../types/match';
 import type { MemorableType } from '../types/memorable';
 import { SegmentedControl } from '../components/ui';
+import { formatScoreline } from '../utils/format';
 
 const TYPE_META: Record<MemorableType, { emoji: string; label: string; color: string }> = {
   blowout: { emoji: '💥', label: '大屠杀', color: 'text-red-400 bg-red-900/30 border-red-700/40' },
@@ -19,7 +21,7 @@ export default function MemorableMatches() {
   const world = useGameStore((s) => s.world);
   const [searchParams] = useSearchParams();
   const requestedFixture = searchParams.get('fixture');
-  const [filter, setFilter] = useState<MemorableType | 'all'>('all');
+  const [filter, setFilter] = useUiSessionState<MemorableType | 'all'>('ui.memorable.filter', 'all');
   const [replay, setReplay] = useState<MatchResult | null>(() => {
     if (!requestedFixture || !world) return null;
     return world.memorableMatches?.find(entry => entry.result.fixtureId === requestedFixture)?.result ?? null;
@@ -93,8 +95,8 @@ export default function MemorableMatches() {
                   const meta = TYPE_META[m.type];
                   const ht = world.teamBases[m.result.homeTeamId];
                   const at = world.teamBases[m.result.awayTeamId];
-                  const totalH = m.result.homeGoals + (m.result.etHomeGoals ?? 0);
-                  const totalA = m.result.awayGoals + (m.result.etAwayGoals ?? 0);
+                  // 常规时间比分是唯一决定胜负的比分，加时与点球只作标注。
+                  const line = formatScoreline(m.result);
                   return (
                     <div key={m.result.fixtureId || i} className="px-3 py-2.5 hover:bg-slate-700/20 transition-colors">
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
@@ -107,17 +109,15 @@ export default function MemorableMatches() {
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: ht?.color ?? '#666' }} />
                               <span className="truncate font-medium text-slate-200">{ht?.shortName ?? m.result.homeTeamId}</span>
                             </span>
-                            <span className="text-center text-sm font-bold text-slate-100 tabular-nums">{totalH}-{totalA}</span>
+                            <span className="text-center text-sm font-bold text-slate-100 tabular-nums">{line.score}</span>
                             <span className="flex min-w-0 items-center justify-end gap-1.5 text-right" title={at?.name ?? m.result.awayTeamId}>
                               <span className="truncate font-medium text-slate-200">{at?.shortName ?? m.result.awayTeamId}</span>
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: at?.color ?? '#666' }} />
                             </span>
                           </div>
                           <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px]">
-                            {m.result.penalties && (
-                              <span className="shrink-0 text-amber-400">
-                                点球 {m.result.penaltyHome ?? 0}-{m.result.penaltyAway ?? 0}
-                              </span>
+                            {line.detail && (
+                              <span className="shrink-0 text-amber-400">{line.detail}</span>
                             )}
                             <span className="truncate text-slate-600" title={`${m.result.competitionName} · ${m.result.roundLabel}`}>
                               {m.result.competitionName} · {m.result.roundLabel}

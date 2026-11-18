@@ -12,11 +12,12 @@ import {
   getTeamName,
   getTeamShortName,
   formatForm,
+  formatScoreline,
   getLeagueName,
   getStandingRank,
 } from '../utils/format';
 import { leagueConfigs } from '../config/competitions';
-import { PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
+import { EmptyState, PageHeader, PageShell, Panel, SegmentedControl } from '../components/ui';
 import TeamBadge from '../components/TeamBadge';
 import { CompetitionMark } from '../components/FootballIdentity';
 import { VenueTag } from '../components/VenueTag';
@@ -52,7 +53,22 @@ export default function League() {
 
   const config = leagueConfigs.find((c) => c.level === leagueLevel);
   if (!config) {
-    return <div className="text-slate-400">未找到联赛配置</div>;
+    // A stale bookmark can name a league level this build no longer has, so the
+    // page has to offer its own way out — the desktop layout has no back arrow.
+    return (
+      <EmptyState
+        title="未找到联赛配置"
+        description={`联赛等级 ${level ?? ''} 在当前版本中不存在。`}
+        action={(
+          <Link
+            to="/"
+            className="inline-flex min-h-11 items-center rounded-md bg-[var(--action)] px-4 text-xs font-semibold text-white transition-colors hover:bg-[var(--action-hover)]"
+          >
+            返回当前赛季
+          </Link>
+        )}
+      />
+    );
   }
 
   const standingsMap: Record<number, StandingEntry[]> = {
@@ -89,6 +105,8 @@ export default function League() {
     return 'mid';
   }
 
+  // 升级附加赛与降级附加赛曾经同色，读者只能靠名次猜自己在哪一侧。
+  // 现在整条阶梯可读：绿(直接升级) → 琥珀(升级附加赛) → 中性 → 玫红(降级附加赛) → 红(直接降级)。
   function getRowBgClass(zone: string): string {
     switch (zone) {
       case 'promo':
@@ -98,7 +116,7 @@ export default function League() {
       case 'releg':
         return 'bg-red-900/20';
       case 'playoff-releg':
-        return 'bg-amber-900/15';
+        return 'bg-rose-900/20';
       default:
         return '';
     }
@@ -113,7 +131,7 @@ export default function League() {
       case 'releg':
         return 'bg-red-600 text-white';
       case 'playoff-releg':
-        return 'bg-amber-600 text-white';
+        return 'bg-rose-600 text-white';
       default:
         return 'bg-slate-700 text-slate-400';
     }
@@ -220,9 +238,14 @@ export default function League() {
             <span className="w-3 h-3 rounded bg-green-600 inline-block" /> 直接升级
           </span>
         )}
-        {(playoffPromo > 0 || playoffReleg > 0) && (
+        {playoffPromo > 0 && (
           <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-amber-600 inline-block" /> 附加赛
+            <span className="w-3 h-3 rounded bg-amber-600 inline-block" /> 升级附加赛
+          </span>
+        )}
+        {playoffReleg > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded bg-rose-600 inline-block" /> 降级附加赛
           </span>
         )}
         {leagueLevel < 3 && directReleg > 0 && (
@@ -271,16 +294,16 @@ export default function League() {
                   <tr className="text-xs text-slate-400 border-b border-slate-700">
                     <th className="text-center px-1.5 sm:px-2 py-2 w-8 sm:w-10">#</th>
                     <th className="text-left px-1.5 sm:px-2 py-2">球队</th>
-                    <th className="text-center px-1 sm:px-2 py-2">赛</th>
-                    <th className="text-center px-1 sm:px-2 py-2">胜</th>
-                    <th className="text-center px-1 sm:px-2 py-2">平</th>
-                    <th className="text-center px-1 sm:px-2 py-2">负</th>
-                    <th className="hidden md:table-cell text-center px-2 py-2">进</th>
-                    <th className="hidden sm:table-cell text-center px-2 py-2">失</th>
-                    <th className="text-center px-1 sm:px-2 py-2"><span className="sm:hidden">净</span><span className="hidden sm:inline">净胜</span></th>
+                    <th className="text-right px-1 sm:px-2 py-2">赛</th>
+                    <th className="text-right px-1 sm:px-2 py-2">胜</th>
+                    <th className="text-right px-1 sm:px-2 py-2">平</th>
+                    <th className="text-right px-1 sm:px-2 py-2">负</th>
+                    <th className="hidden md:table-cell text-right px-2 py-2">进</th>
+                    <th className="hidden sm:table-cell text-right px-2 py-2">失</th>
+                    <th className="text-right px-1 sm:px-2 py-2"><span className="sm:hidden">净</span><span className="hidden sm:inline">净胜</span></th>
                     <th className="hidden md:table-cell text-left px-2 py-2">全赛事队内射手</th>
-                    <th className="text-center px-1.5 sm:px-2 py-2 font-semibold">分</th>
-                    <th className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">形势</th>
+                    <th className="text-right px-1.5 sm:px-2 py-2 font-semibold">分</th>
+                    <th className="hidden sm:table-cell text-left px-1 sm:px-2 py-2">形势</th>
                     <th className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">近况</th>
                   </tr>
                 </thead>
@@ -329,13 +352,13 @@ export default function League() {
                             )}
                           </div>
                         </td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.won}</td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.drawn}</td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.lost}</td>
-                        <td className="hidden md:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsFor}</td>
-                        <td className="hidden sm:table-cell text-center px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
-                        <td className="text-center px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
+                        <td className="text-right px-1 sm:px-2 py-2 text-slate-400 text-xs sm:text-sm">{entry.played}</td>
+                        <td className="text-right px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.won}</td>
+                        <td className="text-right px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.drawn}</td>
+                        <td className="text-right px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">{entry.lost}</td>
+                        <td className="hidden md:table-cell text-right px-2 py-2 text-slate-300">{entry.goalsFor}</td>
+                        <td className="hidden sm:table-cell text-right px-2 py-2 text-slate-300">{entry.goalsAgainst}</td>
+                        <td className="text-right px-1 sm:px-2 py-2 text-slate-300 text-xs sm:text-sm">
                           {entry.goalDifference > 0 ? `+${entry.goalDifference}` : entry.goalDifference}
                         </td>
                         <td className="hidden md:table-cell text-left px-2 py-2">
@@ -357,8 +380,8 @@ export default function League() {
                             );
                           })()}
                         </td>
-                        <td className="text-center px-1.5 sm:px-2 py-2 font-bold text-sm sm:text-lg text-slate-100">{entry.points}</td>
-                        <td className="hidden sm:table-cell text-center px-1 py-2">
+                        <td className="text-right px-1.5 sm:px-2 py-2 font-bold text-sm text-slate-100">{entry.points}</td>
+                        <td className="hidden sm:table-cell text-left px-1 py-2">
                           {(() => {
                             const totalRounds = config?.rounds ?? 30;
                             const played = entry.played;
@@ -371,42 +394,54 @@ export default function League() {
                             const playoffZone = config?.playoffRelegation ?? 1;
                             const relegIdx = standings.length - relegZone - playoffZone;
 
-                            // Champion probability
+                            // 形势列只陈述积分事实。剩余轮次、对手强度与赛程难度都不在模拟
+                            // 结果里，把分差折算成百分比只会是编造的概率；只有能证明的锁定态
+                            // 才配做成徽章，其余一律给原始分差。
+                            // 排名只可能被身后的球队追上，所以"数学锁定"只需比较相邻名次的
+                            // 可达上限：chaser 是身后最近的球队，rivalAbove 是身前最近的。
+                            const chaser = standings[myIdx + 1];
+                            const chaserMax = chaser ? chaser.points + remaining * 3 : null;
+                            const rivalAbove = myIdx > 0 ? standings[myIdx - 1]?.points ?? null : null;
+
+                            const badge = (text: string, cls: string) => (
+                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ${cls}`}>{text}</span>
+                            );
+                            const gap = (label: string, diff: number) => (
+                              <span className="text-[11px] text-slate-300">
+                                {label} {diff > 0 ? '+' : ''}{diff} 分
+                              </span>
+                            );
+
+                            if (chaserMax !== null && myIdx === 0 && entry.points > chaserMax) {
+                              return badge('冠 ✓', 'bg-amber-500/20 text-amber-300');
+                            }
+                            if (chaserMax !== null && myIdx < relegIdx && entry.points > chaserMax) {
+                              return badge('保级锁定', 'bg-emerald-500/15 text-emerald-300');
+                            }
+                            if (rivalAbove !== null && myIdx >= relegIdx && rivalAbove > myMaxPts) {
+                              return badge('降级锁定', 'bg-red-500/20 text-red-300');
+                            }
+
                             if (myIdx === 0) {
-                              const secondMax = (standings[1]?.points ?? 0) + remaining * 3;
-                              if (entry.points > secondMax) return <span className="text-[11px] text-amber-400 font-bold">冠 ✓</span>;
-                              const gap = entry.points - (standings[1]?.points ?? 0);
-                              const pct = Math.min(95, Math.max(10, 50 + gap * 3));
-                              return <span className="text-[11px] text-emerald-400">{pct}%冠</span>;
+                              return (
+                                <span className="text-[11px] text-slate-300">
+                                  领先 {entry.points - (standings[1]?.points ?? 0)} 分
+                                </span>
+                              );
                             }
-                            // Title contender (can still mathematically catch leader)
                             if (myMaxPts >= leaderPts && myIdx <= 3) {
-                              const gap = leaderPts - entry.points;
-                              const pct = Math.max(5, Math.min(45, 40 - gap * 3));
-                              return <span className="text-[11px] text-blue-400">{pct}%冠</span>;
+                              return gap('距榜首', entry.points - leaderPts);
                             }
-                            // Relegation danger
                             if (myIdx >= relegIdx) {
-                              const safePos = relegIdx - 1;
-                              const safePts = standings[safePos]?.points ?? 0;
-                              const gap = safePts - entry.points;
-                              const pct = Math.min(90, Math.max(10, 40 + gap * 5));
-                              return <span className="text-[11px] text-red-400">{pct}%降</span>;
+                              return gap('距安全线', entry.points - (rivalAbove ?? 0));
                             }
-                            // Safe but could still drop
-                            if (myIdx >= relegIdx - 2) {
-                              const bottomPts = standings[relegIdx]?.points ?? 0;
-                              const gap = entry.points - bottomPts;
-                              if (gap <= remaining * 2) {
-                                return <span className="text-[11px] text-orange-400">有风险</span>;
+                            if (leagueLevel > 1 && directPromo > 0) {
+                              const promoLinePts = standings[directPromo - 1]?.points ?? 0;
+                              if (myMaxPts >= promoLinePts) {
+                                return gap('距升级线', entry.points - promoLinePts);
                               }
                             }
-                            // Mathematically safe
-                            const bottomMaxPts = (standings[standings.length - 1]?.points ?? 0) + remaining * 3;
-                            if (entry.points > bottomMaxPts && myIdx < relegIdx - 2) {
-                              return <span className="text-[11px] text-slate-500">安全</span>;
-                            }
-                            return null;
+                            return gap('距降级线', entry.points - (standings[relegIdx]?.points ?? 0));
                           })()}
                         </td>
                         <td className="hidden sm:table-cell text-center px-1 sm:px-2 py-2">
@@ -504,6 +539,8 @@ export default function League() {
                           const awayTeam = world.teamBases[r.awayTeamId];
                           const homeWon = r.homeGoals > r.awayGoals;
                           const awayWon = r.awayGoals > r.homeGoals;
+                          // 常规时间比分是唯一决定胜负的比分，加时与点球只作标注。
+                          const line = formatScoreline(r);
 
                           return (
                             <div
@@ -539,25 +576,11 @@ export default function League() {
                                       : 'text-slate-300'
                                   }`}
                                 >
-                                  {r.homeGoals}
+                                  {line.score}
                                 </span>
-                                <span className="text-slate-600">:</span>
-                                <span
-                                  className={`font-bold text-lg ${
-                                    awayWon
-                                      ? 'text-green-400'
-                                      : homeWon
-                                      ? 'text-red-400'
-                                      : 'text-slate-300'
-                                  }`}
-                                >
-                                  {r.awayGoals}
-                                </span>
-                                {r.extraTime && (
+                                {line.detail && (
                                   <span className="text-xs text-amber-400 ml-1">
-                                    {r.penalties
-                                      ? `(P ${r.penaltyHome}-${r.penaltyAway})`
-                                      : '(加时)'}
+                                    ({line.detail})
                                   </span>
                                 )}
                               </div>
