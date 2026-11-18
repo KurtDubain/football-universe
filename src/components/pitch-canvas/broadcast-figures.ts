@@ -74,6 +74,56 @@ function shadeColor(hex: string, amount: number): string {
   return 'rgb(' + mix(parsed[0]) + ',' + mix(parsed[1]) + ',' + mix(parsed[2]) + ')';
 }
 
+/**
+ * Ground speed that reads as a full sprint, in normalized pitch units per
+ * 60 fps frame.
+ *
+ * The movement layer tops a forward out at 0.00098 * 1.55 (sprint) * 1.15
+ * (directed recovery) = 0.00175, so this puts a full sprint at the top of the
+ * swing range and a midfielder's 0.00094 jog a little past half. The 0.0055
+ * it replaces is 34.6 m/s, three times what that layer can produce, so
+ * `moving` never passed 0.32: a sprinting ten-pixel figure swung its legs
+ * 0.65 px, which is narrower than the line the leg is drawn with.
+ */
+export const SPRINT_REFERENCE_SPEED = 0.0016;
+
+/**
+ * Stride cycle rate, in radians per 60 fps frame. One cycle is two steps.
+ *
+ * A footballer takes roughly two steps a second at a walk and four and a half
+ * at a sprint, so the cycle runs from about 1.1 Hz to 2.3 Hz. The single fixed
+ * 0.44 this replaces was 4.2 Hz — eight steps a second — at every pace, which
+ * is what made a jog read as a buzz rather than a run.
+ */
+export const STRIDE_RATE_WALK = 0.115;
+export const STRIDE_RATE_SPRINT = 0.24;
+
+/** How far a forward-swinging foot rises, as a share of its own travel. */
+const FOOT_LIFT_RATIO = 0.55;
+
+/**
+ * Drawn height of a figure standing on a projected ground point, in drawing
+ * units. Exported so a test can state an expectation in the same units the
+ * renderer draws in instead of re-deriving the projection.
+ */
+export function broadcastPlayerHeight(
+  view: BroadcastView,
+  ground: ProjectedPoint,
+  visualScale = 1,
+): number {
+  return PLAYER_HEIGHT_METERS
+    * view.unitsPerMeter
+    * ground.scale
+    * FIGURE_EXAGGERATION
+    * visualScale;
+}
+
+/** Stride cycle rate for a given ground speed, in radians per 60 fps frame. */
+export function strideRateFor(speed: number): number {
+  const moving = clamp(speed / SPRINT_REFERENCE_SPEED, 0, 1);
+  return STRIDE_RATE_WALK + (STRIDE_RATE_SPRINT - STRIDE_RATE_WALK) * moving;
+}
+
 export type BroadcastPlayerAction = 'receive' | 'shot' | 'save' | 'catch' | 'block';
 
 export interface BroadcastPlayerOptions {
@@ -88,7 +138,22 @@ export interface BroadcastPlayerOptions {
   /** Stable per-player integer: skin, hair and stride phase all derive from it. */
   seed: number;
   frame: number;
-  /** Flat-drawing speed, roughly 0..0.006. */
+  /**
+   * Integrated stride cycle, in radians.
+   *
+   * Cadence depends on pace and pace changes, so the phase cannot be derived
+   * from the frame counter: `frame * rate(speed)` snaps the legs to a new
+   * place every time the rate moves. The caller integrates it with
+   * `strideRateFor`; `frame` still drives the pulses below, which do not care.
+   */
+  stridePhase?: number;
+  /**
+   * Ground speed in normalized pitch units per 60 fps frame, 0..0.0018.
+   *
+   * A caller running a longer frame step has to divide its per-frame
+   * displacement back down, or a degraded 30 fps renderer reports every
+   * player at double pace and they all sprint while standing still.
+   */
   speed: number;
   hasBall: boolean;
   highlighted: boolean;
@@ -156,11 +221,7 @@ export function drawBroadcastPlayer(
   const actionProgress = clamp(options.actionProgress ?? 0, 0, 1);
   const visualScale = options.visualScale ?? 1;
 
-  const height = PLAYER_HEIGHT_METERS
-    * view.unitsPerMeter
-    * ground.scale
-    * FIGURE_EXAGGERATION
-    * visualScale;
+  const height = broadcastPlayerHeight(view, ground, visualScale);
   if (height < 2.5) return;
 
   // Facing arrives in drawing space. Inside the upright group below the local
@@ -176,7 +237,7 @@ export function drawBroadcastPlayer(
   // the lens. This single number is what narrows the body, and it is the whole
   // reason a figure reads as a person instead of a disc with a highlight.
   const profile = Math.abs(fx);
-  const moving = clamp(speed / 0.0055, 0, 1);
+  const moving = clamp(speed / SPRINT_REFERENCE_SPEED, 0, 1);
 
   const actionWave = action === 'shot' || action === 'receive'
     ? Math.sin(actionProgress * Math.PI)
@@ -201,7 +262,7 @@ export function drawBroadcastPlayer(
   const headRadius = height * 0.082;
   const footY = ground.y;
   const gx = ground.x;
-  const stridePhase = frame * 0.44 + seed * 1.7;
+  const stridePhase = options.stridePhase ?? (frame * STRIDE_RATE_WALK + seed * 1.7);
   const bob = Math.abs(Math.cos(stridePhase)) * height * 0.02 * moving;
 
   // A dive is planned in pitch space, but under a touchline camera the goal
@@ -243,20 +304,30 @@ export function drawBroadcastPlayer(
     };
   })();
 
-  let legSwing = Math.sin(stridePhase) * height * 0.2 * moving;
+  // The legs swing along the screen's x axis, so a player running at or away
+  // from the lens has almost none of that motion to show. The torso already
+  // narrows by `profile`; without the same factor here the figure reads as a
+  // body facing one way with its legs scissoring sideways. What replaces the
+  // lost motion is depth: the foot nearer the lens rises in frame.
+  const stride = Math.sin(stridePhase);
+  let legSwing = stride * height * 0.2 * moving * profile;
+  let legDepth = stride * height * 0.13 * moving * (1 - profile);
   let armSwing = -legSwing * 0.7;
   let armRaise = 0;
   let crouch = 0;
 
   if (action === 'shot') {
     legSwing = fx * height * 0.38 * actionWave + legSwing * (1 - actionWave);
+    legDepth *= 1 - actionWave;
     armSwing = -legSwing * 0.55;
   } else if (action === 'save' || action === 'catch') {
     armRaise = actionWave;
     legSwing = legSwing * (1 - actionWave) + height * 0.14 * actionWave;
+    legDepth *= 1 - actionWave;
     crouch = actionWave * height * 0.05;
   } else if (action === 'block') {
     legSwing = height * 0.18 * actionWave * (Math.abs(seed) % 2 === 0 ? 1 : -1);
+    legDepth = 0;
     armRaise = actionWave * 0.5;
     crouch = actionWave * height * 0.03;
   } else if (action === 'receive') {
@@ -270,6 +341,7 @@ export function drawBroadcastPlayer(
     // something, which is the exact confusion this pose exists to remove.
     armRaise = Math.max(armRaise, 0.82 + 0.18 * (divePlan?.reach ?? 0));
     legSwing *= 0.3;
+    legDepth *= 0.3;
     crouch = 0;
   }
 
@@ -310,11 +382,15 @@ export function drawBroadcastPlayer(
   const legWidth = Math.max(0.8, height * 0.075);
   const legSpread = hipHalf * 0.55;
   const forwardSign = fx >= 0 ? 1 : -1;
-  const drawLeg = (side: number, swing: number, tone: string): void => {
+  const drawLeg = (side: number, lateral: number, depth: number, tone: string): void => {
     const hipX = gx + side * legSpread;
-    const footX = hipX + swing;
-    const forwardness = swing * forwardSign;
-    const legFootY = footY - Math.max(0, forwardness) * 0.24;
+    const footX = hipX + lateral;
+    // A foot swinging toward the lens rises in frame and one swinging away
+    // sinks behind the body. Scaled off the swing itself, because the flat
+    // 0.24 this replaces lifted a ten-pixel player's foot 0.16 px — less than
+    // the width of the leg it belongs to, so the stride had no vertical half.
+    const forwardness = lateral * forwardSign + depth;
+    const legFootY = footY - Math.max(0, forwardness) * FOOT_LIFT_RATIO;
     ctx.strokeStyle = tone;
     ctx.lineWidth = legWidth;
     ctx.lineCap = 'round';
@@ -324,7 +400,7 @@ export function drawBroadcastPlayer(
     ctx.stroke();
     ctx.beginPath();
     ctx.ellipse(
-      footX + forwardness * 0.1,
+      footX + lateral * 0.1,
       legFootY,
       legWidth * 0.7,
       legWidth * 0.42,
@@ -336,7 +412,7 @@ export function drawBroadcastPlayer(
     ctx.fill();
   };
 
-  drawLeg(-1, -legSwing, shadeColor(socks, -0.3));
+  drawLeg(-1, -legSwing, -legDepth, shadeColor(socks, -0.3));
 
   ctx.beginPath();
   ctx.moveTo(gx + lean - hipHalf, hipY - height * 0.11);
@@ -402,7 +478,7 @@ export function drawBroadcastPlayer(
   ctx.lineWidth = Math.max(0.4, height * 0.023);
   ctx.stroke();
 
-  drawLeg(1, legSwing, socks);
+  drawLeg(1, legSwing, legDepth, socks);
 
   const armWidth = Math.max(0.7, height * 0.055);
   const armDrop = height * 0.25;

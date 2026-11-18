@@ -37,6 +37,7 @@ import {
   drawBroadcastBall,
   drawBroadcastGoalCelebration,
   drawBroadcastShotOutcome,
+  strideRateFor,
 } from './pitch-canvas/broadcast-figures';
 import {
   canvasAspectRatio,
@@ -486,6 +487,13 @@ function PitchCanvas(props: Props) {
   const tacticalAssignmentKeyRef = useRef('');
   const playbackHoldRef = useRef(false);
   const ballSpinRef = useRef(0);
+  /**
+   * Per-player stride cycle, integrated at the rate that player's own pace
+   * asks for. It lives here rather than being derived from the frame counter
+   * because cadence depends on speed and speed changes every frame, so
+   * `frame * rate(speed)` would snap the legs to a new place on every change.
+   */
+  const stridePhaseRef = useRef<number[]>([]);
   const debugStateRef = useRef<PitchDebugState>({
     coordinateSystem: 'normalized pitch: origin top-left, x right, y down',
     minute,
@@ -1869,6 +1877,17 @@ function PitchCanvas(props: Props) {
         hasBall: boolean,
       ): void => {
         const playerState = playerPosRef.current[stateIndex];
+        // Per-frame displacement is a function of the frame step, so a
+        // renderer that degraded to 30 fps reports every player at double
+        // pace. Normalize back to a 60 fps frame before anything reads it as
+        // a speed, or a slow machine shows the whole team sprinting on the
+        // spot.
+        const groundSpeed = Math.hypot(playerState.vx, playerState.vy)
+          / Math.max(0.25, frameScale);
+        const stridePhases = stridePhaseRef.current;
+        const stridePhase = (stridePhases[stateIndex] ?? (stateIndex * 1.7) % (Math.PI * 2))
+          + strideRateFor(groundSpeed) * frameScale;
+        stridePhases[stateIndex] = stridePhase;
         const isEventPlayer = directedActors.attackerId === player.playerId
           || directedActors.defenderId === player.playerId;
         const highlighted = isEventPlayer || directedActors.creatorId === player.playerId;
@@ -1946,7 +1965,8 @@ function PitchCanvas(props: Props) {
             number: player.playerNumber,
             seed: stateIndex,
             frame: f,
-            speed: Math.hypot(playerState.vx, playerState.vy),
+            stridePhase,
+            speed: groundSpeed,
             hasBall,
             highlighted,
             featured: liveFeaturedPlayerIds.has(player.playerId),
