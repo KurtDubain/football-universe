@@ -12,6 +12,14 @@ export interface SetPieceSequenceOptions {
   formation?: FormationSlot[];
 }
 
+/**
+ * A corner or a free kick is lofted and hangs, so it covers the ground slower
+ * than a driven pass of the same length. At the thirty metres a delivery
+ * actually travels this lands beside the hand-tuned 92-102 frames the phase is
+ * built with, so a re-aim keeps the ball in the air for the time it should.
+ */
+const SET_PIECE_DELIVERY_CEILING_MPS = 20;
+
 function closestSlot(formation: FormationSlot[], role: Role, targetY: number): number {
   return formation
     .map((slot, index) => ({ slot, index }))
@@ -115,6 +123,7 @@ export function generateSetPieceSequence(
     arc: isCorner ? 0.92 : 0.76,
     intercepted: false,
     setPiece: options.setPiece,
+    speedCeilingMps: SET_PIECE_DELIVERY_CEILING_MPS,
     sourceOverride: { x: sourceX, y: sourceY },
     targetOverride: deliveryTarget,
   };

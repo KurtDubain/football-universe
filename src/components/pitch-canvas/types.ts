@@ -139,6 +139,16 @@ export interface PassPhase {
   kind: 'pass' | 'shot';
   duration: number;
   hold: number;
+  /**
+   * How hard this pass is struck, as the speed it tends towards with distance.
+   *
+   * Flight time is derived from the distance the ball actually travels, so
+   * when a pass is re-aimed at the receiver's live position the time has to be
+   * derived again — from the new distance and from the same speed. Carrying
+   * the ceiling on the phase is what lets the re-aim use the model the pass was
+   * built with instead of guessing one.
+   */
+  speedCeilingMps?: number;
   arc: number;
   /** Signed top-down bend applied during flight; visual only. */
   swerve?: number;

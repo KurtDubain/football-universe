@@ -462,15 +462,11 @@ export function passArc(
  * 60% longer to arrive — a ball that changes speed in a jump reads as a cut.
  */
 function openPlayDuration(travelMeters: number, roll: number): number {
-  // Short and medium passes keep the tempo the match is already paced at.
-  // A ball that is genuinely long is lofted, and it has to take the time a
-  // lofted ball takes: the old curve ramped over a normalized hypotenuse
-  // and topped out near ninety frames, so an eighty-metre ball crossed the
-  // pitch in a second and a half — fifty metres a second, which reads as a
-  // cut rather than as a pass.
-  const speed = travelMeters <= 30
-    ? OPEN_PLAY_BALL_SPEED_MPS
-    : Math.max(LONG_BALL_SPEED_MPS, OPEN_PLAY_BALL_SPEED_MPS - (travelMeters - 30) * 0.14);
+  // The speed comes from the pass itself rather than from a flat tempo, for
+  // the same reason the arc does: a six-metre touch and a forty-metre switch
+  // are not the same ball. The ceiling is 2.6 s, which is what a ball sent the
+  // length of the pitch actually spends in the air.
+  const speed = passSpeedMps(travelMeters, OPEN_PLAY_PASS_CEILING_MPS);
   return clamp(travelMeters / speed * 60, 24, 156) * (0.92 + roll * 0.16);
 }
 
@@ -483,15 +479,42 @@ function openPlayDuration(travelMeters: number, roll: number): number {
  * touch is short. At the open-play tempo an eight-pass move ran past 24
  * seconds, which is longer than the passage it exists to depict.
  */
-const DIRECTED_BALL_SPEED_MPS = 17;
-/** The tempo ordinary open-play circulation is already paced at. */
-const OPEN_PLAY_BALL_SPEED_MPS = 30;
-/** A ball that is actually launched travels slower through the air. */
-const LONG_BALL_SPEED_MPS = 23;
-const CROSS_BALL_SPEED_MPS = 13;
+/** A pass that is only a touch: the ball is rolled a few metres. */
+const TOUCH_SPEED_MPS = 11;
+/** How quickly a pass firms up towards its ceiling as it gets longer. */
+const SPEED_RAMP_METERS = 20;
+/** A firm pass inside a move that is going somewhere. */
+const DIRECTED_PASS_CEILING_MPS = 28;
+/** The ball that creates the chance is struck harder than any other pass. */
+const DELIVERY_CEILING_MPS = 31;
+/** Ordinary circulation: a shade calmer than a move that ends in a shot. */
+const OPEN_PLAY_PASS_CEILING_MPS = 27;
+/** A cross is lofted, so it covers the same ground slower than a driven ball. */
+const CROSS_CEILING_MPS = 22;
 /** A struck shot leaves the boot at roughly 28 m/s; a header is slower. */
 const STRIKE_SPEED_MPS = 28;
 const HEADER_SPEED_MPS = 19;
+
+/**
+ * How fast a pass is actually struck.
+ *
+ * Speed is a property of the pass, not of the passage it happens in. A
+ * four-metre lay-off is rolled; a thirty-metre switch is driven; a ball that has
+ * to cover half the pitch is hit as hard as a player can hit it.
+ *
+ * One flat speed for a whole move is what made a goalscoring move read as slow
+ * motion. Every one of its passes ran at 17 m/s — a training-ground tempo —
+ * while the ordinary circulation around it ran at 30, so the least urgent
+ * football on the pitch was the fastest thing on it. That inversion is what a
+ * viewer feels before they can name it.
+ *
+ * The curve rises towards the ceiling and never reaches it, so a pass keeps
+ * firming up with distance and there is no step anywhere to read as a cut.
+ */
+function passSpeedMps(travelMeters: number, ceilingMps: number): number {
+  const reach = 1 - Math.exp(-travelMeters / SPEED_RAMP_METERS);
+  return TOUCH_SPEED_MPS + (ceilingMps - TOUCH_SPEED_MPS) * reach;
+}
 
 /**
  * Pass flight time from the distance the ball actually travels.
@@ -778,8 +801,17 @@ export function retargetPassToReceiver(
         (adjusted.x - releasePoint.x) * 105,
         (adjusted.y - releasePoint.y) * 68,
       );
-      const needed = passFlightFrames(metres, DIRECTED_BALL_SPEED_MPS * 1.3, 0.5);
-      if (needed > duration) duration = needed;
+      // Derived again from the distance the ball now actually travels, in both
+      // directions. Only ever lengthening was the mirror image of the bug it
+      // fixed: a pass re-aimed at a receiver who had dropped back kept the
+      // flight time of the longer planned ball and then crawled the last few
+      // metres. Measured across 300 attacks, passes under ten metres ran at a
+      // median of 3.5 m/s — a ball being pushed along the grass.
+      duration = passFlightFrames(
+        metres,
+        passSpeedMps(metres, phase.speedCeilingMps ?? DELIVERY_CEILING_MPS),
+        0.5,
+      );
     }
     return { ...phase, targetOverride: adjusted, receiverIdx, duration };
   }
@@ -1141,7 +1173,10 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
     const directedSetup = Boolean(options.forceShot && chanceStyle && i === route.length - 3);
     const directedDuration = passFlightFrames(
       travelMeters,
-      chanceStyle === 'cross' ? CROSS_BALL_SPEED_MPS : DIRECTED_BALL_SPEED_MPS,
+      passSpeedMps(
+        travelMeters,
+        chanceStyle === 'cross' ? CROSS_CEILING_MPS : DELIVERY_CEILING_MPS,
+      ),
       r(i + 10),
     );
     // Only the delivery keeps a hand-tuned arc. Every other pass in the
@@ -1173,12 +1208,19 @@ export function generateSequence(seed: number, options: SequenceOptions = {}): {
       pattern,
       stage: stageForPass(pattern, i, route.length - 1),
       chanceStyle,
+      speedCeilingMps: options.forceShot
+        ? directedDelivery
+          ? (chanceStyle === 'cross' ? CROSS_CEILING_MPS : DELIVERY_CEILING_MPS)
+          : DIRECTED_PASS_CEILING_MPS
+        : OPEN_PLAY_PASS_CEILING_MPS,
       duration: options.forceShot
         ? directedDelivery
           ? directedDuration
-          : directedSetup
-            ? passFlightFrames(travelMeters, DIRECTED_BALL_SPEED_MPS, r(i + 10))
-            : passFlightFrames(travelMeters, DIRECTED_BALL_SPEED_MPS, r(i + 11))
+          : passFlightFrames(
+              travelMeters,
+              passSpeedMps(travelMeters, DIRECTED_PASS_CEILING_MPS),
+              directedSetup ? r(i + 10) : r(i + 11),
+            )
         : openPlayDuration(travelMeters, r(i + 11)),
       hold: options.forceShot
         ? directedDelivery

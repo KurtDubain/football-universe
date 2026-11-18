@@ -837,4 +837,110 @@ describe('pass reachability', () => {
     // pass crossed the pitch at eighty-two metres a second.
     expect(worstSpeed).toBeLessThan(40);
   });
+
+  it('plays a move at a football tempo, and at the tempo each pass deserves', () => {
+    const move: number[] = [];
+    const circulation: number[] = [];
+    const shortPasses: number[] = [];
+    const longPasses: number[] = [];
+    const all: number[] = [];
+
+    const median = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    const percentile = (values: number[], p: number) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+    };
+
+    for (let seed = 1; seed <= 80; seed++) {
+      for (const forceShot of [true, false]) {
+        const players = livePlayers();
+        const { phases } = generateSequence(seed * 977, {
+          attackingHome: seed % 2 === 0,
+          forceShot,
+          playerPositions: players,
+        });
+        let ballX = players[phases[0].passerIdx].x;
+        let ballY = players[phases[0].passerIdx].y;
+
+        for (let index = 0; index < phases.length; index++) {
+          const live = players[phases[index].receiverIdx];
+          const mates = players.slice(0, 11).map(p => ({ x: p.x, y: p.y }));
+          const phase = retargetPassToReceiver(
+            phases[index],
+            { x: live.x, y: live.y },
+            { teammates: mates, ball: { x: ballX, y: ballY } },
+          );
+          phases[index] = phase;
+          const isShot = phase.kind === 'shot';
+          const source = phase.sourceOverride ?? { x: ballX, y: ballY };
+          const target = isShot
+            ? { x: phase.attackingHome ? 1 : 0, y: 0.5 }
+            : (phase.targetOverride ?? { x: 0.5, y: 0.5 });
+          const metres = Math.hypot(
+            (target.x - source.x) * LENGTH_METERS,
+            (target.y - source.y) * WIDTH_METERS,
+          );
+
+          if (!isShot) {
+            const speed = metres / (phase.duration / FRAMES_PER_SECOND);
+            all.push(speed);
+            (forceShot ? move : circulation).push(speed);
+            if (metres < 10) shortPasses.push(speed);
+            if (metres >= 25) longPasses.push(speed);
+          }
+
+          const total = phase.duration + phase.hold;
+          for (let frame = 0; frame < total; frame++) {
+            const t = Math.min(1, frame / phase.duration);
+            const state = frame < phase.duration ? 'passing' : 'holding';
+            updatePlayerPositions(
+              players,
+              source.x + (target.x - source.x) * t,
+              source.y + (target.y - source.y) * t,
+              phase.attackingHome ? 'home' : 'away',
+              phase.passerIdx,
+              phase,
+              state,
+              null,
+              0,
+              undefined,
+              undefined,
+              t,
+              undefined,
+              undefined,
+              frame,
+              1,
+            );
+          }
+          ballX = isShot ? source.x : target.x;
+          ballY = isShot ? source.y : target.y;
+        }
+      }
+    }
+
+    // The regression this guards: every pass in a goalscoring move ran at a
+    // flat 17 m/s, and once re-aiming was applied the median measured 12.8 —
+    // a training-ground tempo, and what made the broadcast read as slow
+    // motion. A move that ends in a shot is the most urgent football on the
+    // pitch and it has to be played like it.
+    expect(median(move)).toBeGreaterThan(18);
+
+    // ...and it is never the slowest thing on the pitch, which it used to be:
+    // the move ran at 12.8 m/s while the ordinary circulation around it ran
+    // at 22.1, so the least urgent football was the fastest thing in view.
+    expect(median(move) / median(circulation)).toBeGreaterThan(0.9);
+
+    // Speed is a property of the pass, not of the passage. A ball that has to
+    // cross the pitch is hit; a ball that only has to reach a team-mate's foot
+    // is rolled.
+    expect(median(longPasses)).toBeGreaterThan(median(shortPasses) + 6);
+
+    // ...and nothing crawls. A pass re-aimed shorter used to keep the flight
+    // time of the longer planned ball, so passes under ten metres travelled at
+    // a median of 3.9 m/s — a ball being pushed along the grass.
+    expect(percentile(all, 0.05)).toBeGreaterThan(6);
+  });
 });
