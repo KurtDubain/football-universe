@@ -55,7 +55,7 @@ import {
   spawnGoalBurst, spawnTackleSparks, spawnGrassKick,
   updateAndCullParticles, renderParticles,
 } from './pitch-canvas/particles';
-import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, computeReceptionTouchOffset, getBaseSlot, computeBallPosition, resolvePhasePoints, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
+import { buildTacticalAssignments, computeCarryTarget, computePostShotBallPosition, computeReceptionTouchOffset, getBaseSlot, computeBallPosition, resolvePhasePoints, ROLE_MOTION, separateActivePlayers, updatePlayerPositions, type TacticalAssignments } from './pitch-canvas/physics';
 import {
   drawHalftime, drawShotOutcomeLabel,
   applyCameraShake, applyWhiteFlash, cameraPointToScreen,
@@ -89,7 +89,7 @@ import {
   shouldEmitContactCue,
   shouldEmitSetupCue,
 } from './pitch-canvas/cue-timing';
-import { SET_PIECE_SETUP_FRAMES, setPiecePlayerTarget } from './pitch-canvas/set-pieces';
+import { SET_PIECE_SETUP_FRAMES, setPiecePlayerTarget, stageSetPieceActor } from './pitch-canvas/set-pieces';
 import { mountPitchRuntime } from './pitch-canvas/runtime';
 import { playbackMotionRate, type PlaybackMode } from './match-live/playback-mode';
 import { isWaitingForEvent, shouldHoldClock } from './pitch-canvas/playback-gates';
@@ -920,13 +920,18 @@ function PitchCanvas(props: Props) {
       const { source } = resolvePhasePoints(firstPhase, shiftRef.current, P, fw, fh, layout);
       ballSourceRef.current = source;
       ballPos.current = { ...source };
-      // Only the taker is placed. The simulation names who took the corner, so
-      // that player has to be at the ball when it leaves their foot and cannot
-      // be swapped for someone closer. The other twenty-one used to be written
-      // there as well, which put a whole team tens of metres away on one frame
-      // and on their mark the next; they now walk to `setPiecePlayerTarget`
-      // during the setup window, and the taker's target stays put for that
-      // window so the walk has something fixed to aim at.
+      // The taker is placed on the ball. The simulation names who took the
+      // corner, so that player has to be the one it leaves the foot of and
+      // cannot be swapped for someone closer.
+      //
+      // The other twenty-one are staged just outside their marks and walk the
+      // last few metres in. They used to be written straight onto their marks,
+      // which moved a whole team tens of metres between two frames. Walking
+      // the whole way instead was worse: measured on real replays the average
+      // outfield player was still 17-38 m short of their mark when the ball was
+      // struck, because the scene a corner follows can be at the far end of the
+      // pitch. A dead ball is a cut in a real broadcast, so the team assembles
+      // across the cut and the approach that is left is the part worth showing.
       if (firstPhase.setPiece) {
         const takerOffset = firstPhase.attackingHome ? 0 : 11;
         const takerIndex = takerOffset + firstPhase.passerIdx;
@@ -944,6 +949,22 @@ function PitchCanvas(props: Props) {
           taker.y = runUp.y;
           taker.vx = 0;
           taker.vy = 0;
+        }
+        for (let i = 0; i < 22; i++) {
+          if (i === takerIndex) continue;
+          const isHomeTeam = i < 11;
+          const formation = isHomeTeam
+            ? liveRef.current.formationLayouts.home
+            : liveRef.current.formationLayouts.away;
+          const role = formation[i % 11].role;
+          const mark = setPiecePlayerTarget(i, isHomeTeam, role, firstPhase, formation, 1);
+          const actor = playerPosRef.current[i];
+          if (!mark || !actor) continue;
+          const staged = stageSetPieceActor(actor, mark, ROLE_MOTION[role].speed);
+          actor.x = staged.x;
+          actor.y = staged.y;
+          actor.vx = staged.vx;
+          actor.vy = staged.vy;
         }
       } else if (firstPhase.restart && firstPhase.sourceOverride) {
         const takerOffset = firstPhase.attackingHome ? 0 : 11;

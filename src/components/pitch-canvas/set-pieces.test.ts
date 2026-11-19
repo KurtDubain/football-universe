@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { generateSetPieceSequence, setPiecePlayerTarget } from './set-pieces';
+import {
+  SET_PIECE_STAGE_RADIUS,
+  generateSetPieceSequence,
+  setPiecePlayerTarget,
+  stageSetPieceActor,
+} from './set-pieces';
 
 describe('set-piece presentation sequences', () => {
   it('builds a corner setup, aerial delivery, and authoritative shot', () => {
@@ -61,5 +66,42 @@ describe('set-piece presentation sequences', () => {
 
     expect(wall.every(target => target.x > phase.sourceOverride!.x)).toBe(true);
     expect(new Set(wall.map(target => target.y)).size).toBe(4);
+  });
+
+  it('stages a distant actor just outside their mark, already moving toward it', () => {
+    const staged = stageSetPieceActor({ x: 0.2, y: 0.5 }, { x: 0.9, y: 0.5 }, 0.001);
+
+    expect(Math.hypot(staged.x - 0.9, staged.y - 0.5)).toBeCloseTo(SET_PIECE_STAGE_RADIUS, 6);
+    expect(staged.vx).toBeCloseTo(0.001, 6);
+    expect(staged.vy).toBeCloseTo(0, 6);
+  });
+
+  it('leaves an actor who is already close exactly where they are', () => {
+    const staged = stageSetPieceActor({ x: 0.895, y: 0.5 }, { x: 0.9, y: 0.5 }, 0.001);
+
+    expect(staged.x).toBe(0.895);
+    expect(staged.y).toBe(0.5);
+    expect(staged.vx).toBeGreaterThan(0);
+  });
+
+  it('never leaves a staged actor further from their mark than the radius', () => {
+    const mark = { x: 0.965, y: 0.055 };
+    const origins = [
+      { x: 0.05, y: 0.95 },
+      { x: 0.5, y: 0.5 },
+      { x: 1.2, y: -0.3 },
+      { x: 0.965, y: 0.055 },
+      { x: 0.97, y: 0.05 },
+    ];
+
+    for (const origin of origins) {
+      const staged = stageSetPieceActor(origin, mark, 0.001);
+      const distance = Math.hypot(staged.x - mark.x, staged.y - mark.y);
+      expect(distance).toBeLessThanOrEqual(SET_PIECE_STAGE_RADIUS + 1e-9);
+      expect(staged.x).toBeGreaterThanOrEqual(0.03);
+      expect(staged.x).toBeLessThanOrEqual(0.97);
+      expect(staged.y).toBeGreaterThanOrEqual(0.05);
+      expect(staged.y).toBeLessThanOrEqual(0.95);
+    }
   });
 });

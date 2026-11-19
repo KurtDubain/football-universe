@@ -673,6 +673,22 @@ export const PURSUIT_GAIN = 0.11;
 export const MIN_CRUISE_FRACTION = 0.35;
 
 /**
+ * Jog pace and acceleration per role, in normalized pitch-length units per
+ * 60 fps frame.
+ *
+ * Exported so a set-piece scene can hand an actor the pace they would already
+ * be carrying into a dead ball, rather than starting every walk from a dead
+ * stop. A player at rest needs 84 frames to reach their own top speed, which
+ * is most of the setup window spent accelerating rather than arriving.
+ */
+export const ROLE_MOTION: Record<Role, { speed: number; acceleration: number }> = {
+  GK: { speed: 0.00054, acceleration: 0.0000079 },
+  DF: { speed: 0.00089, acceleration: 0.0000106 },
+  MF: { speed: 0.00094, acceleration: 0.0000111 },
+  FW: { speed: 0.00098, acceleration: 0.0000116 },
+};
+
+/**
  * Speed a pursuer should hold at `distance` from its target.
  *
  * The old `Math.min(maxSpeed, distance * 0.11)` was a pure proportional
@@ -1072,13 +1088,7 @@ export function updatePlayerPositions(
     // 0.00098 * 105 * 60 = 6.2 m/s for a forward, reaching 9.6 m/s at full
     // sprint. Acceleration is 4.4 m/s^2 rather than the old 174, which is why
     // a player now takes two seconds to reach top speed instead of 0.14.
-    const baseMotion = slot.role === 'GK'
-      ? { speed: 0.00054, acceleration: 0.0000079 }
-      : slot.role === 'DF'
-        ? { speed: 0.00089, acceleration: 0.0000106 }
-        : slot.role === 'MF'
-          ? { speed: 0.00094, acceleration: 0.0000111 }
-          : { speed: 0.00098, acceleration: 0.0000116 };
+    const baseMotion = ROLE_MOTION[slot.role];
     // Both are per-frame quantities, so a renderer running a 33 ms step must
     // move a player twice as far per call as one running a 16.7 ms step, or the
     // same player covers the same ground in half the wall-clock speed. The

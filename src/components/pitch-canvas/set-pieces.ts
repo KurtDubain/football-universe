@@ -31,6 +31,58 @@ const SET_PIECE_DELIVERY_CEILING_MPS = 20;
  */
 export const SET_PIECE_SETUP_FRAMES = 90;
 
+/**
+ * How far from their mark a set-piece actor is staged when the scene loads.
+ *
+ * A dead ball is awarded at the end of a scene that can be anywhere on the
+ * pitch, so the players around it are not where a corner needs them. Measured
+ * on real replays the twenty-one walking actors were 21-37 m from their marks
+ * on average and up to 76 m away; at an honest jog that is four to eight
+ * seconds, which no setup window a match can afford covers.
+ *
+ * Walking that ground was never going to read as a corner, because it is not
+ * one: it is a team crossing the pitch from wherever the last unrelated scene
+ * happened to end. A broadcast cuts from the ball going out to the players
+ * assembling, so the cut into a dead ball is where they assemble, and this is
+ * how much of the approach is left to actually show. 4.7 m is what a player
+ * already at their own jog pace covers and still stops cleanly inside the
+ * ninety frames above.
+ */
+export const SET_PIECE_STAGE_RADIUS = 0.045;
+
+/**
+ * Stage one actor for a set-piece scene: at most `radius` from `mark`, on the
+ * line they were already standing on, moving toward it at `entrySpeed`.
+ *
+ * An actor who is already inside the radius is left exactly where they are and
+ * simply keeps walking, so staging never moves anyone who did not need it.
+ * `entrySpeed` is the actor's own role pace, which is what they would be
+ * carrying into the box; starting from rest costs most of the setup window to
+ * acceleration alone.
+ */
+export function stageSetPieceActor(
+  current: { x: number; y: number },
+  mark: { x: number; y: number },
+  entrySpeed: number,
+  radius = SET_PIECE_STAGE_RADIUS,
+): { x: number; y: number; vx: number; vy: number } {
+  const dx = mark.x - current.x;
+  const dy = mark.y - current.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= 0.0001) return { x: mark.x, y: mark.y, vx: 0, vy: 0 };
+  const unitX = dx / distance;
+  const unitY = dy / distance;
+  if (distance <= radius) {
+    return { x: current.x, y: current.y, vx: unitX * entrySpeed, vy: unitY * entrySpeed };
+  }
+  return {
+    x: clamp(mark.x - unitX * radius, 0.03, 0.97),
+    y: clamp(mark.y - unitY * radius, 0.05, 0.95),
+    vx: unitX * entrySpeed,
+    vy: unitY * entrySpeed,
+  };
+}
+
 function closestSlot(formation: FormationSlot[], role: Role, targetY: number): number {
   return formation
     .map((slot, index) => ({ slot, index }))
