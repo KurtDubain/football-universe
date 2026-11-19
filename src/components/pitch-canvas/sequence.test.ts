@@ -1,12 +1,78 @@
 import { describe, expect, it } from 'vitest';
-import { buildPassTarget, generateSequence, restartReleaseDelay, retargetPassToReceiver } from './sequence';
+import { buildPassTarget, generateSequence, rerouteOffFieldPhases, restartReleaseDelay, retargetPassToReceiver } from './sequence';
 import { passArc } from './sequence';
 import { decayBallLiftCarry, LIFT_CARRY_FLOOR, updatePlayerPositions } from './physics';
 import { getFormationSlots, getTacticalFormationSlots, type PassPhase, type PlayerState } from './types';
 import { rigForMoment } from './projection';
 import type { BroadcastCameraMoment } from './camera';
 
+function shotPhase(overrides: Partial<PassPhase> = {}): PassPhase {
+  return {
+    passerIdx: 9,
+    receiverIdx: 9,
+    attackingHome: true,
+    kind: 'shot',
+    duration: 34,
+    hold: 20,
+    arc: 0.08,
+    intercepted: false,
+    sourceOverride: { x: 0.88, y: 0.5 },
+    ...overrides,
+  };
+}
+
 describe('pitch possession sequences', () => {
+  it('strikes a set piece from the mark the referee gave, not from the taker', () => {
+    // The penalty spot and the free-kick mark are facts the engine produced.
+    // Re-aiming the origin at the taker's live position moved a penalty
+    // 40.7 m when they were standing at the halfway line and 65.5 m from
+    // their own half, so the kick was taken from 76.9 m out.
+    const spot = { x: 0.88, y: 0.5 };
+
+    for (const setPiece of ['penalty', 'direct_free_kick'] as const) {
+      const phase = shotPhase({ setPiece, sourceOverride: spot });
+      expect(retargetPassToReceiver(phase, { x: 0.5, y: 0.5 }, undefined).sourceOverride)
+        .toEqual(spot);
+      expect(retargetPassToReceiver(phase, { x: 0.2, y: 0.62 }, undefined).sourceOverride)
+        .toEqual(spot);
+    }
+  });
+
+  it('still pulls an open-play shot back to the striker taking it', () => {
+    const origin = { x: 0.88, y: 0.42 };
+    const phase = shotPhase({ sourceOverride: origin });
+
+    expect(retargetPassToReceiver(phase, { x: 0.6, y: 0.5 }, undefined).sourceOverride)
+      .not.toEqual(origin);
+  });
+
+  it('moves a generated move off a slot whose player has been sent off', () => {
+    const formation = getFormationSlots();
+    const phases: PassPhase[] = [
+      {
+        passerIdx: 4, receiverIdx: 7, attackingHome: true, kind: 'pass',
+        duration: 30, hold: 12, arc: 0.1, intercepted: false,
+        targetOverride: { x: 0.6, y: 0.4 },
+      },
+      {
+        passerIdx: 7, receiverIdx: 9, attackingHome: true, kind: 'pass',
+        duration: 30, hold: 12, arc: 0.1, intercepted: false,
+        targetOverride: { x: 0.8, y: 0.5 },
+      },
+      shotPhase({ lockedReceiver: true }),
+    ];
+
+    const rerouted = rerouteOffFieldPhases(phases, new Set([7]), formation);
+
+    expect(rerouted[0].receiverIdx).not.toBe(7);
+    // The passer's slot and the receiver's slot are the same number on
+    // consecutive phases, so remapping them apart would hand the ball to a
+    // different player than the one who received it.
+    expect(rerouted[1].passerIdx).toBe(rerouted[0].receiverIdx);
+    // The shot the event names keeps its player.
+    expect(rerouted[2]).toBe(phases[2]);
+  });
+
   it('creates deterministic, bounded receiving points rather than fixed formation coordinates', () => {
     const first = buildPassTarget(9, true, 0.82, false);
     const repeat = buildPassTarget(9, true, 0.82, false);

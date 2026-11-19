@@ -99,7 +99,18 @@ export function nextPlaybackStep(
   const target = nextHighlight
     ? Math.max(minute + 1, nextHighlight.minute - preludeMinutes)
     : maxMinute;
-  return Math.max(1, Math.min(5, target - minute, maxMinute - minute));
+  const step = Math.max(1, Math.min(5, target - minute, maxMinute - minute));
+  // A card or a substitution is committed without a presentation, so the
+  // only way the canvas ever shows one is the clock landing on its minute.
+  // A five-minute step walked straight over them: the player was replaced,
+  // the shape on the pitch changed, and nothing was ever shown. Land on
+  // the minute instead and the beat gets its frame.
+  const nextBeat = events.find(event =>
+    event.minute > minute
+    && event.minute <= minute + step
+    && (event.type === 'substitution' || event.type === 'yellow_card')
+  );
+  return nextBeat ? Math.max(1, nextBeat.minute - minute) : step;
 }
 
 /**

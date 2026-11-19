@@ -1,5 +1,6 @@
 import type { MatchEvent } from '../../types/match';
 import { eventAttacksForHome, isDefendingShotEvent, isShotEvent } from '../../engine/match/event-taxonomy';
+import { GOAL_MOUTH_SPAN } from './keeper-action';
 import { seededRand } from './math';
 
 export type ShotOutcome = 'goal' | 'save' | 'block' | 'miss';
@@ -103,11 +104,17 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
   const attackingHome = eventAttacksForHome(event, homeTeamId);
   const outcome = outcomeFor(event);
   const seed = hashText(key);
+  // A goal ends up in the net. The net back sits 2 m beyond the goal line at
+  // u = 1.019 and the canvas leaves 10 px of surround past the line at 510,
+  // so 1.01 is halfway into the goal and still on screen. Saves and blocks keep
+  // stopping in front of the line, which is where a keeper meets a ball.
   const attackGoalX = outcome === 'delivery'
     ? (attackingHome ? 0.89 : 0.11)
     : outcome === 'miss'
     ? (attackingHome ? 1.008 : -0.008)
-    : (attackingHome ? 0.985 : 0.015);
+    : outcome === 'goal'
+      ? (attackingHome ? 1.01 : -0.01)
+      : (attackingHome ? 0.985 : 0.015);
   const targetY = outcome === 'delivery'
     ? event.setPiece?.delivery === 'near_post'
       ? (event.setPiece.side === 'left' ? 0.39 : 0.61)
@@ -127,7 +134,13 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
       // reach the simulation did not produce.
       : outcome === 'save'
         ? 0.46 + seededRand(seed + 3) * 0.08
-        : 0.4 + seededRand(seed + 3) * 0.2;
+        // A goal is a ball that crossed the line between the posts, so its
+        // target has to be inside the mouth. It used to be drawn from
+        // 0.4-0.6, which is wider than the 0.446-0.554 frame: measured over
+        // 3600 sampled goals, 59.1% of them finished outside a post, up to
+        // 3.14 m beyond it, and the ball was then celebrated in a goal it had
+        // never entered. The 0.94 inset keeps the ball off the woodwork.
+        : 0.5 + (seededRand(seed + 3) - 0.5) * GOAL_MOUTH_SPAN * 0.94;
 
   return {
     key,
@@ -139,26 +152,30 @@ export function sceneForEvent(event: MatchEvent, homeTeamId: string, ordinal?: n
   };
 }
 
-export function findEventScene(
+/**
+ * Every scene the given minute can show, best first.
+ *
+ * Only the minute the event belongs to. A scene used to be prepared up to
+ * five minutes early, which meant the move played out, ran out of phases
+ * and then sat on its hold frame waiting for the clock to reach the goal —
+ * two and a half seconds of a frozen pitch before every finish. The
+ * playback clock stops at the event minute anyway, so starting there is
+ * both the honest moment and the one with no dead air in it.
+ */
+function rankMinuteScenes(
   events: MatchEvent[],
   minute: number,
   homeTeamId: string,
-  flashEvent?: MatchEvent | null,
-): EventScene | null {
-  const flashIndex = flashEvent ? events.indexOf(flashEvent) : -1;
-  const flashScene = flashEvent ? sceneForEvent(flashEvent, homeTeamId, flashIndex >= 0 ? flashIndex : undefined) : null;
-  if (flashScene) return flashScene;
-
-  // Only the minute the event belongs to. A scene used to be prepared up to
-  // five minutes early, which meant the move played out, ran out of phases
-  // and then sat on its hold frame waiting for the clock to reach the goal —
-  // two and a half seconds of a frozen pitch before every finish. The
-  // playback clock stops at the event minute anyway, so starting there is
-  // both the honest moment and the one with no dead air in it.
-  const nearby = events
-    .filter(event => event.minute === minute)
-    .map(event => sceneForEvent(event, homeTeamId, events.indexOf(event)))
-    .filter((scene): scene is EventScene => scene !== null);
+): EventScene[] {
+  const ordinals = new Map<EventScene, number>();
+  const nearby: EventScene[] = [];
+  events.forEach((event, index) => {
+    if (event.minute !== minute) return;
+    const scene = sceneForEvent(event, homeTeamId, index);
+    if (!scene) return;
+    ordinals.set(scene, index);
+    nearby.push(scene);
+  });
 
   // A card or a substitution is a beat, not a highlight. It gets its moment
   // when nothing is being struck nearby, and steps aside the instant a shot
@@ -174,14 +191,49 @@ export function findEventScene(
     ))
   ));
 
-  const ranked = available.sort(
+  return available.sort(
     (a, b) => (
       a.event.minute - b.event.minute
       || scenePriority(a) - scenePriority(b)
-      || a.key.localeCompare(b.key)
+      // Position in the event list, compared as a number. The scene key
+      // carries that index as text, so comparing keys put "10:..." ahead of
+      // "2:..." and the winner of a busy minute was not even the earliest
+      // event in it.
+      || (ordinals.get(a) ?? 0) - (ordinals.get(b) ?? 0)
     ),
   );
-  return ranked[0] ?? null;
+}
+
+/**
+ * Every scene worth showing for a minute, in the order they should play.
+ *
+ * A minute can carry more than one shot and the scoreline counts all of
+ * them, so handing back only the first left minutes where the ball went in
+ * and the picture showed the miss beside it. The caller plays the list in
+ * order; the event the playback is actually waiting on leads it.
+ */
+export function findEventScenes(
+  events: MatchEvent[],
+  minute: number,
+  homeTeamId: string,
+  flashEvent?: MatchEvent | null,
+): EventScene[] {
+  const flashIndex = flashEvent ? events.indexOf(flashEvent) : -1;
+  const flashScene = flashEvent
+    ? sceneForEvent(flashEvent, homeTeamId, flashIndex >= 0 ? flashIndex : undefined)
+    : null;
+  const ranked = rankMinuteScenes(events, minute, homeTeamId);
+  if (!flashScene) return ranked;
+  return [flashScene, ...ranked.filter(scene => scene.key !== flashScene.key)];
+}
+
+export function findEventScene(
+  events: MatchEvent[],
+  minute: number,
+  homeTeamId: string,
+  flashEvent?: MatchEvent | null,
+): EventScene | null {
+  return findEventScenes(events, minute, homeTeamId, flashEvent)[0] ?? null;
 }
 
 export function actorsForEvent(event: MatchEvent, events: MatchEvent[]): EventActors {

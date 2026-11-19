@@ -3,8 +3,8 @@ import type { MatchdaySnapshot, MatchEvent } from '../types/match';
 import type { CoachFormation, MatchApproach } from '../types/coach';
 import { isSetPieceOrigin, playOriginForEvent } from '../engine/match/event-taxonomy';
 import { clamp, lerp, seededRand } from './pitch-canvas/math';
-import { generateSequence, retargetPassToReceiver, type SequenceOptions } from './pitch-canvas/sequence';
-import { actorsForEvent, findEventScene, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
+import { generateSequence, rerouteOffFieldPhases, retargetPassToReceiver, type SequenceOptions } from './pitch-canvas/sequence';
+import { actorsForEvent, findEventScene, findEventScenes, sceneForEvent, type EventActors, type EventScene, type SceneOutcome, type ShotOutcome } from './pitch-canvas/event-scene';
 import { BEAT_MAX_FRAMES, drawBroadcastBeat } from './pitch-canvas/broadcast-beat';
 import { activePitchPlayers, buildPitchRoster, type PitchRosterPlayer } from './pitch-canvas/lineup';
 import { presentationAtmosphereForPhase } from './pitch-canvas/presentation';
@@ -27,9 +27,9 @@ import {
 import { drawBroadcastPitch } from './pitch-canvas/broadcast-pitch';
 import { drawBroadcastStadium, SEAT_BLOCKS } from './pitch-canvas/broadcast-stadium';
 import { drawBroadcastGrade } from './pitch-canvas/broadcast-grade';
-import { scoreAtMinute } from './pitch-canvas/live-score';
+import { scoreAfterEvents } from './pitch-canvas/live-score';
 import { matchTension } from './pitch-canvas/tension';
-import { keeperDivePlan, keeperKitColor } from './pitch-canvas/keeper-action';
+import { keeperCommitProgress, keeperDivePlan, keeperKitColor, keeperSetPosition } from './pitch-canvas/keeper-action';
 import { celebrationColorFor, venueIdentity } from './pitch-canvas/venue-identity';
 import { teamBadgeParts } from './team-badge-geometry';
 import {
@@ -171,6 +171,16 @@ interface Props {
   hostTeamId?: string;
   flashEvent: MatchEvent | null;
   allEvents: MatchEvent[];
+  /**
+   * How many events the playback has committed.
+   *
+   * The scoreboard on the stadium screen is cut from this rather than from
+   * the match minute, so it moves at the instant the ball crosses the line
+   * — the same instant the scoreboard in the page chrome moves. Slicing by
+   * minute had the two disagreeing for six to ten seconds on every goal,
+   * with both numbers on screen at once.
+   */
+  consumedEventCount: number;
   /**
    * The routine beat landing on the current minute, if the mode plays one.
    * Only a foul uses it: it is the one beat that stops the match.
@@ -342,6 +352,7 @@ const FIXED_FRAME_MS = 1000 / 60;
 function PitchCanvas(props: Props) {
   const {
     minute, maxMinute, homeColor, awayColor, homeTeamId, awayTeamId, flashEvent, allEvents,
+    consumedEventCount,
     routineBeat = null,
     homeShortName, awayShortName, isNeutralVenue = false, hostTeamId,
     homeMatchday, awayMatchday, halftime, breakLabel, finished, active, playbackMode, shootout = false,
@@ -388,8 +399,8 @@ function PitchCanvas(props: Props) {
     [awayCrest, awayTeamId, homeCrest, homeTeamId, hostTeamId, isNeutralVenue],
   );
   const liveScore = useMemo(
-    () => scoreAtMinute(allEvents, homeTeamId, minute),
-    [allEvents, homeTeamId, minute],
+    () => scoreAfterEvents(allEvents, homeTeamId, consumedEventCount),
+    [allEvents, consumedEventCount, homeTeamId],
   );
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -488,7 +499,20 @@ function PitchCanvas(props: Props) {
   const sequenceSeedRef = useRef(0);
   const activeSceneKeyRef = useRef<string | null>(null);
   const sequenceSceneRef = useRef<EventScene | null>(null);
+  /**
+   * How many scenes the queue holds before the oldest is dropped.
+   *
+   * Sized to clear a busy minute rather than to bound memory: the played
+   * set stops anything being queued twice, so the queue only ever holds one
+   * minute's scenes, and dropping one of those loses an event the scoreline
+   * has already counted.
+   */
+  const QUEUED_SCENE_CAP = 8;
   const queuedScenesRef = useRef<EventScene[]>([]);
+  /** Scenes already played, so a minute holding two shots plays each once. */
+  const playedSceneKeysRef = useRef<Set<string>>(new Set());
+  /** Slots whose player is on the pitch, for the ball layer to respect. */
+  const activeIndicesRef = useRef<ReadonlySet<number> | null>(null);
   const ballSourceRef = useRef({ x: 0.5, y: 0.5 });
   const ballArcLiftRef = useRef(0);
   /**
@@ -567,6 +591,35 @@ function PitchCanvas(props: Props) {
       : allEvents.filter(event => event.minute <= maxMinute);
     return findEventScene(stageEvents, minute, homeTeamId, flashEvent);
   }, [allEvents, flashEvent, homeTeamId, maxMinute, minute, shootout]);
+
+  /**
+   * Every scene this minute can show, best first.
+   *
+   * A minute can carry more than one shot and the scoreline counts all of
+   * them, so the ones behind the first are queued rather than dropped —
+   * which is how a minute where the ball went in came to be drawn as the
+   * miss beside it. The frame loop drains the queue one scene at a time.
+   */
+  const minuteScenes = useMemo(() => {
+    const stageEvents = shootout
+      ? allEvents
+      : allEvents.filter(event => event.minute <= maxMinute);
+    return findEventScenes(stageEvents, minute, homeTeamId, flashEvent);
+  }, [allEvents, flashEvent, homeTeamId, maxMinute, minute, shootout]);
+
+  useEffect(() => {
+    for (const scene of minuteScenes) {
+      if (playedSceneKeysRef.current.has(scene.key)) continue;
+      if (activeSceneKeyRef.current === scene.key) continue;
+      if (queuedScenesRef.current.some(queued => queued.key === scene.key)) continue;
+      queuedScenesRef.current.push(scene);
+      // The cap has to clear a whole minute's worth of scenes. At three, a
+      // minute carrying four events pushed the first one straight back off
+      // the queue, and nothing ever played it — the scoreboard counted the
+      // goal and the picture never showed it.
+      if (queuedScenesRef.current.length > QUEUED_SCENE_CAP) queuedScenesRef.current.shift();
+    }
+  }, [minuteScenes]);
   const homeRoster = useMemo(() => buildPitchRoster(homeMatchday), [homeMatchday]);
   const awayRoster = useMemo(() => buildPitchRoster(awayMatchday), [awayMatchday]);
 
@@ -882,9 +935,16 @@ function PitchCanvas(props: Props) {
     function retargetPhase(phase: PassPhase): PassPhase {
       const offset = phase.attackingHome ? 0 : 11;
       const live = playerPosRef.current[offset + phase.receiverIdx];
+      // A player who has been sent off is not on the pitch to receive a
+      // pass. The roster and the drawing layer both know that; the ball
+      // layer has to as well, or a move is re-aimed at a slot with nobody
+      // standing in it and the next pass leaves from that patch of grass.
+      const onField = activeIndicesRef.current;
       const teammates = playerPosRef.current
         .slice(offset, offset + 11)
-        .map(entry => ({ x: entry.x, y: entry.y }));
+        .map((entry, index) => (
+          onField && !onField.has(offset + index) ? null : { x: entry.x, y: entry.y }
+        ));
       const ball = {
         x: clamp((ballPos.current.x - P) / fw, 0.03, 0.97),
         y: clamp((ballPos.current.y - P) / fh, 0.05, 0.95),
@@ -894,6 +954,28 @@ function PitchCanvas(props: Props) {
         live ? { x: live.x, y: live.y } : null,
         { teammates, ball },
       );
+    }
+
+    /**
+     * Keep a generated move away from slots whose player has left the pitch.
+     *
+     * A route is picked from formation slots and live positions, and neither
+     * of those knows about a red card: a sent-off player keeps their slot in
+     * both. The passes the event names keep their players — those are facts.
+     */
+    function offFieldAware(phases: PassPhase[], attackingHome: boolean): PassPhase[] {
+      const active = activeIndicesRef.current;
+      if (!active) return phases;
+      const offset = attackingHome ? 0 : 11;
+      const offField = new Set<number>();
+      for (let slot = 0; slot < 11; slot++) {
+        if (!active.has(offset + slot)) offField.add(slot);
+      }
+      if (offField.size === 0) return phases;
+      const layout = attackingHome
+        ? liveRef.current.formationLayouts.home
+        : liveRef.current.formationLayouts.away;
+      return rerouteOffFieldPhases(phases, offField, layout, playerPosRef.current);
     }
 
     function loadSequence(phases: PassPhase[], seed: number): void {
@@ -1050,7 +1132,10 @@ function PitchCanvas(props: Props) {
           homeApproach: initialLive.homeApproach,
           awayApproach: initialLive.awayApproach,
         });
-      loadSequence(generated.phases, initialSeed);
+      loadSequence(
+        offFieldAware(generated.phases, generated.phases[0]?.attackingHome ?? true),
+        initialSeed,
+      );
       activeSceneKeyRef.current = initialScene?.key ?? null;
       sequenceSceneRef.current = initialScene;
     }
@@ -1102,11 +1187,17 @@ function PitchCanvas(props: Props) {
         && !queuedScenesRef.current.some(scene => scene.key === eventScene.key)
       ) {
         queuedScenesRef.current.push(eventScene);
-        if (queuedScenesRef.current.length > 3) queuedScenesRef.current.shift();
+        if (queuedScenesRef.current.length > QUEUED_SCENE_CAP) queuedScenesRef.current.shift();
       }
       const canStartScene = !activeDirectedPhase && !resultPresentationBusy;
       const queuedScene = canStartScene ? queuedScenesRef.current[0] : undefined;
-      const sceneToStart = queuedScene ?? (canStartScene ? eventScene : undefined);
+      const candidateScene = queuedScene ?? (canStartScene ? eventScene : undefined);
+      // Each scene is played once. Without this the queue hands the first
+      // scene of a two-shot minute straight back as soon as the second one
+      // finishes, and the minute replays.
+      const sceneToStart = candidateScene && !playedSceneKeysRef.current.has(candidateScene.key)
+        ? candidateScene
+        : undefined;
       // A beat has no ball path, so it never enters the sequence machinery:
       // it takes the frame for its own length and then gets out of the way.
       if (
@@ -1116,6 +1207,7 @@ function PitchCanvas(props: Props) {
         beatSceneRef.current = sceneToStart;
         beatFrameRef.current = BEAT_MAX_FRAMES;
         activeSceneKeyRef.current = sceneToStart.key;
+        playedSceneKeysRef.current.add(sceneToStart.key);
         sequenceSceneRef.current = null;
         emitPresentationCue(sceneToStart, 'outcome', { action: 'beat' });
         if (queuedScenesRef.current[0]?.key === sceneToStart.key) queuedScenesRef.current.shift();
@@ -1165,8 +1257,9 @@ function PitchCanvas(props: Props) {
             playerPosRef.current,
           ),
         );
-        loadSequence(directed.phases, sceneToStart.seed);
+        loadSequence(offFieldAware(directed.phases, sceneToStart.attackingHome), sceneToStart.seed);
         activeSceneKeyRef.current = sceneToStart.key;
+        playedSceneKeysRef.current.add(sceneToStart.key);
         sequenceSceneRef.current = sceneToStart;
         if (
           sceneToStart.outcome !== 'delivery'
@@ -1568,6 +1661,18 @@ function PitchCanvas(props: Props) {
             phaseIdxRef.current++;
             phaseFrameRef.current = 0;
             if (newPhase) {
+              // Whoever actually received the last ball plays the next one.
+              // The previous phase may have been re-aimed at a different
+              // player when it started, and this phase's passer was written
+              // from the plan — so without this the ball leaves one player's
+              // foot while the picture credits another twenty metres away.
+              // Set before the retarget, which excludes the passer from its
+              // own receiver search.
+              const previousPhase = sequenceRef.current[phaseIdxRef.current - 1];
+              if (previousPhase?.kind === 'pass'
+                && previousPhase.receiverIdx !== newPhase.passerIdx) {
+                newPhase = { ...newPhase, passerIdx: previousPhase.receiverIdx };
+              }
               newPhase = retargetPhase(newPhase);
               sequenceRef.current[phaseIdxRef.current] = newPhase;
               phaseStateRef.current = newPhase.kind === 'shot' ? 'shooting' : 'passing';
@@ -1820,11 +1925,6 @@ function PitchCanvas(props: Props) {
       // ── Update player positions with tactical AI ──
       const ballHolderTeamSide: 'home' | 'away' = isAttHome ? 'home' : 'away';
       const ballHolderIdx = phaseStateRef.current === 'holding' ? currentPhase.receiverIdx : currentPhase.passerIdx;
-      const ballHolderRoster = isAttHome ? homeRoster : awayRoster;
-      const lastTouchPlayerId = ballHolderRoster.find(player => player.slotIndex === currentPhase.passerIdx)?.playerId ?? null;
-      const ballHolderId = phaseStateRef.current === 'holding' && currentPhase.kind === 'pass'
-        ? ballHolderRoster.find(player => player.slotIndex === ballHolderIdx)?.playerId ?? null
-        : null;
       const cachedRoster = rosterCache
         && rosterCache.minute === minute
         && rosterCache.homeRoster === homeRoster
@@ -1854,6 +1954,21 @@ function PitchCanvas(props: Props) {
           activePlayerIndices,
         };
       }
+      // The ball layer reads this from outside the frame loop: a sequence is
+      // built and re-aimed between frames, and both have to know who is
+      // actually on the pitch.
+      activeIndicesRef.current = activePlayerIndices;
+
+      // The on-field roster, not the full one. A substitute inherits the slot
+      // of the player they replaced and the outgoing player keeps it too, so
+      // searching the full roster for a slot returned whichever of the two
+      // came first — usually the one who had already left the pitch, which
+      // left the ball glow and the receiving touch with nobody to attach to.
+      const ballHolderRoster = isAttHome ? activeHome : activeAway;
+      const lastTouchPlayerId = ballHolderRoster.find(player => player.slotIndex === currentPhase.passerIdx)?.playerId ?? null;
+      const ballHolderId = phaseStateRef.current === 'holding' && currentPhase.kind === 'pass'
+        ? ballHolderRoster.find(player => player.slotIndex === ballHolderIdx)?.playerId ?? null
+        : null;
 
       // Normalize ball + override to 0-1 for AI calcs
       const ballNX = (bx - P) / fw;
@@ -2060,17 +2175,35 @@ function PitchCanvas(props: Props) {
         // where the shot is going and where this keeper is standing — so a
         // beaten keeper comes up short instead of the save silently
         // happening off screen.
-        const keeperDive = isKeeper && isDefender && directedShotScene?.outcome === 'save'
+        const saveScene = isKeeper && isDefender && directedShotScene
+          && directedShotScene.outcome === 'save'
+          ? directedShotScene
+          : null;
+        // The dive is planned from where the keeper is going, not from where
+        // the movement layer has got to. A shot is eighteen to fifty frames
+        // and a keeper needs sixty-eight to reach top speed, so they were
+        // still a metre or two short of their set position when the ball
+        // arrived and the reach was measured from there — a save the engine
+        // credited, drawn as a keeper who never got to it. Closing that gap
+        // on the dive's own schedule puts the drawn save back on the ball.
+        const keeperSetY = saveScene
+          ? keeperSetPosition(playerState.y, saveScene.target.y)
+          : null;
+        const keeperDrawY = keeperSetY === null
+          ? playerState.y
+          : playerState.y
+            + (keeperSetY - playerState.y) * keeperCommitProgress(phaseProgress);
+        const keeperDive = saveScene
           ? keeperDivePlan({
-            targetY: directedShotScene.target.y,
-            keeperY: playerState.y,
+            targetY: saveScene.target.y,
+            keeperY: keeperDrawY,
             progress: phaseProgress,
-            action: directedShotScene.event.type === 'save' ? 'catch' : 'save',
+            action: saveScene.event.type === 'save' ? 'catch' : 'save',
           })
           : undefined;
         const receivingTouch = hasBall && currentPhase.kind === 'pass'
           && phaseStateRef.current === 'holding' && phaseFrameRef.current <= receptionFrames;
-        const ground = view.fromDrawing(P + playerState.x * fw, P + playerState.y * fh);
+        const ground = view.fromDrawing(P + playerState.x * fw, P + keeperDrawY * fh);
 
         // Facing is resolved in screen space, not drawing space. Under a
         // camera those are not the same direction, and a player running at the
@@ -2117,7 +2250,7 @@ function PitchCanvas(props: Props) {
               : undefined;
         const labelPlacement = resolveLabelPlacement(ground, W, H, cameraTransform);
         drawables.push({
-          depth: clamp(playerState.y, 0, 1),
+          depth: clamp(keeperDrawY, 0, 1),
           draw: () => drawBroadcastPlayer(ctx, {
             view,
             ground,
@@ -2140,7 +2273,7 @@ function PitchCanvas(props: Props) {
             isKeeper,
             keeperColor: teamSide === 'home' ? homeKeeperColor : awayKeeperColor,
             dive: keeperDive,
-            diveWidthFraction: playerState.y,
+            diveWidthFraction: keeperDrawY,
             lengthFraction: playerState.x,
             diveTargetWidthFraction: directedShotScene?.target.y,
             diveTargetLengthFraction: directedShotScene?.target.x,

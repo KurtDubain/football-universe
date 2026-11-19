@@ -671,6 +671,7 @@ function MatchLiveSession({ result, teamBases, onClose, featured = false }: Prop
                 hostTeamId={result.tournamentHostTeamId}
                 flashEvent={pendingPresentationEvent}
                 allEvents={allEvents}
+                consumedEventCount={playback.consumedEventCount}
                 routineBeat={routineBeat}
                 homeMatchday={result.homeMatchday}
                 awayMatchday={result.awayMatchday}

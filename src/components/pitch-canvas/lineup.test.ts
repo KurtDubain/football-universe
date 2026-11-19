@@ -73,6 +73,28 @@ describe('pitch lineup projection', () => {
     expect(activePitchPlayers(roster, 90)).toHaveLength(10);
   });
 
+  it('keeps a player sent off on the pitch for the minute the card is shown', () => {
+    const roster = buildPitchRoster(fullSnapshot());
+    const dismissed = roster.find(player => player.playerId === 'p2');
+
+    expect(dismissed?.dismissed).toBe(true);
+    // The card itself steps aside whenever a shot lands on the same minute,
+    // so dropping the player the instant the clock reached 52 was the only
+    // thing a viewer ever saw of the sending-off.
+    expect(activePitchPlayers(roster, 51).map(player => player.playerId)).toContain('p2');
+    expect(activePitchPlayers(roster, 52).map(player => player.playerId)).toContain('p2');
+    expect(activePitchPlayers(roster, 53).map(player => player.playerId)).not.toContain('p2');
+  });
+
+  it('still takes a substitute off the pitch on the minute they are replaced', () => {
+    const roster = buildPitchRoster(fullSnapshot());
+    const outgoing = roster.find(player => player.playerId === 'p9');
+
+    expect(outgoing?.dismissed).toBe(false);
+    expect(activePitchPlayers(roster, 60).map(player => player.playerId)).not.toContain('p9');
+    expect(activePitchPlayers(roster, 60).map(player => player.playerId)).toContain('p12');
+  });
+
   it('falls back to a complete visible formation when no snapshot is available', () => {
     expect(activePitchPlayers(buildPitchRoster(), 90)).toHaveLength(11);
   });

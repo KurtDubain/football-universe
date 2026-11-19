@@ -116,6 +116,21 @@ function smoothstep(t: number): number {
 }
 
 /**
+ * How far through the flight the keeper has committed, 0..1.
+ *
+ * Exported because the movement layer has to close the same gap on the
+ * same schedule. A keeper is driven toward their set position while the
+ * ball travels, but a shot is eighteen to fifty frames and a keeper
+ * needs sixty-eight to reach top speed, so they were still short of it
+ * when the ball arrived — and the dive was then planned from where they
+ * had actually got to, which is how a credited save came up a metre or
+ * two short of the ball it stopped.
+ */
+export function keeperCommitProgress(progress: number): number {
+  return clamp((progress - REACTION_DELAY) / REACTION_SPAN, 0, 1);
+}
+
+/**
  * The dive one save produces.
  *
  * `progress` is the ball's flight, not the keeper's: the keeper is still set
@@ -129,7 +144,7 @@ export function keeperDivePlan(input: KeeperDiveInput): KeeperDivePlan {
   const distance = Math.abs(gap) / mouth;
   if (distance < DEAD_ZONE) return IDLE_DIVE;
 
-  const committed = clamp((input.progress - REACTION_DELAY) / REACTION_SPAN, 0, 1);
+  const committed = keeperCommitProgress(input.progress);
   if (committed <= 0) return IDLE_DIVE;
   const extension = smoothstep(committed);
 

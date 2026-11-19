@@ -778,10 +778,11 @@ function PostMatchView({
             {[...goalEvents]
               .sort((a, b) => a.minute - b.minute)
               .map((event, i) => {
-                const isHomeGoal =
-                  event.type === 'own_goal'
-                    ? event.teamId !== fixture.homeTeamId
-                    : event.teamId === fixture.homeTeamId;
+                // `own_goal` carries the club that benefited, not the
+                // defender who put it in — the same rule `live-score` and
+                // `goal-facts` use. Inverting it put an own goal on the
+                // wrong side of the timeline.
+                const isHomeGoal = event.teamId === fixture.homeTeamId;
                 return (
                   <div key={i} className="flex items-center text-sm">
                     {isHomeGoal ? (

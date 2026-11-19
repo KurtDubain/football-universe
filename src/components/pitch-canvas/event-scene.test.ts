@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchEvent } from '../../types/match';
-import { actorsForEvent, findEventScene, sceneForEvent } from './event-scene';
+import { actorsForEvent, findEventScene, findEventScenes, sceneForEvent } from './event-scene';
+import { GOAL_MOUTH_SPAN } from './keeper-action';
 import { generateSequence } from './sequence';
 
 function event(type: MatchEvent['type'], teamId: string, minute = 30): MatchEvent {
@@ -34,6 +35,51 @@ describe('event-directed pitch scenes', () => {
       expect(scene?.target.y).toBeGreaterThanOrEqual(0.446);
       expect(scene?.target.y).toBeLessThanOrEqual(0.554);
     }
+  });
+
+  it('keeps every goal inside the frame and past the goal line', () => {
+    // A goal is a ball that crossed the line between the posts. The old
+    // 0.4-0.6 spread is wider than the 0.446-0.554 mouth: sampled over 3600
+    // goals, 59.1% finished outside a post, up to 3.14 m beyond it. The ball
+    // also stopped at 0.985, which is 1.575 m short of the line, so it was
+    // celebrated in a goal it had never entered.
+    const half = GOAL_MOUTH_SPAN / 2;
+    for (let ordinal = 0; ordinal < 400; ordinal++) {
+      const home = sceneForEvent(event('goal', 'HOME'), 'HOME', ordinal);
+      expect(home?.outcome).toBe('goal');
+      expect(home!.target.y).toBeGreaterThanOrEqual(0.5 - half);
+      expect(home!.target.y).toBeLessThanOrEqual(0.5 + half);
+      expect(home!.target.x).toBeGreaterThan(1);
+
+      const away = sceneForEvent(event('goal', 'AWAY'), 'HOME', ordinal);
+      expect(away!.target.y).toBeGreaterThanOrEqual(0.5 - half);
+      expect(away!.target.y).toBeLessThanOrEqual(0.5 + half);
+      expect(away!.target.x).toBeLessThan(0);
+    }
+  });
+
+  it('plays every shot a minute holds, earliest first', () => {
+    const events = [
+      event('miss', 'HOME', 40),
+      event('goal', 'AWAY', 40),
+      event('gk_save', 'HOME', 40),
+    ];
+
+    expect(findEventScenes(events, 40, 'HOME').map(scene => scene.event.type))
+      .toEqual(['miss', 'goal', 'gk_save']);
+    expect(findEventScene(events, 40, 'HOME')?.event.type).toBe('miss');
+  });
+
+  it('orders a busy minute by position in the event list, not by key text', () => {
+    // The scene key is prefixed with the event index as text, so comparing
+    // keys put "10:..." ahead of "2:..." and the winner of a busy minute was
+    // not even the earliest event in it.
+    const events = Array.from({ length: 12 }, () => event('miss', 'HOME', 40));
+    const order = findEventScenes(events, 40, 'HOME')
+      .map(scene => Number(scene.key.split(':')[0]));
+
+    expect(order).toHaveLength(12);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
   it('maps structured corner and free-kick events to delivery scenes', () => {

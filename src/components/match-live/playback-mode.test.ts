@@ -27,6 +27,25 @@ describe('match live playback modes', () => {
     expect(nextPlaybackStep(20, 90, events, 'highlights')).toBe(5);
   });
 
+  it('lands on a card or a substitution instead of stepping over it', () => {
+    // A beat is committed without a presentation, so the only way the canvas
+    // ever shows one is the clock reaching its minute. A five-minute step
+    // used to walk straight over them: the player was replaced, the shape on
+    // the pitch changed, and nothing was ever shown.
+    const withSubstitution: MatchEvent[] = [
+      { minute: 3, type: 'substitution', teamId: 'home', description: '换人' },
+      { minute: 20, type: 'goal', teamId: 'home', description: '进球' },
+    ];
+    expect(nextPlaybackStep(0, 90, withSubstitution, 'highlights')).toBe(3);
+    expect(nextPlaybackStep(3, 90, withSubstitution, 'highlights')).toBe(5);
+
+    const withCard: MatchEvent[] = [
+      { minute: 2, type: 'yellow_card', teamId: 'away', description: '黄牌' },
+      { minute: 40, type: 'goal', teamId: 'home', description: '进球' },
+    ];
+    expect(nextPlaybackStep(0, 90, withCard, 'highlights')).toBe(2);
+  });
+
   it('keeps live modes at one simulated minute per tick', () => {
     expect(nextPlaybackStep(0, 90, events, 'live')).toBe(1);
     expect(nextPlaybackStep(0, 90, events, 'immersive')).toBe(1);

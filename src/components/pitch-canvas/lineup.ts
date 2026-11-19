@@ -9,6 +9,12 @@ export interface PitchRosterPlayer {
   slotIndex: number;
   enteredMinute: number;
   exitedMinute: number;
+  /**
+   * Sent off, as opposed to substituted. The two leave the pitch on
+   * different schedules: a substitute's replacement is already on the
+   * field, a dismissed player has to be seen walking off.
+   */
+  dismissed?: boolean;
 }
 
 function roleSlots(snapshot?: MatchdaySnapshot): Record<Role, number[]> {
@@ -47,9 +53,11 @@ export function buildPitchRoster(snapshot?: MatchdaySnapshot): PitchRosterPlayer
     slotByPlayer.set(starter.playerId, slot);
   }
 
+  const substitutedOut = new Set<string>();
   for (const substitution of snapshot.substitutions ?? []) {
     const outgoingSlot = slotByPlayer.get(substitution.playerOutId);
     if (outgoingSlot !== undefined) slotByPlayer.set(substitution.playerInId, outgoingSlot);
+    substitutedOut.add(substitution.playerOutId);
   }
 
   for (const player of snapshot.players) {
@@ -69,6 +77,7 @@ export function buildPitchRoster(snapshot?: MatchdaySnapshot): PitchRosterPlayer
       slotIndex,
       enteredMinute: player.enteredMinute,
       exitedMinute: player.exitedMinute,
+      dismissed: Number.isFinite(player.exitedMinute) && !substitutedOut.has(player.playerId),
     }];
   });
 }
@@ -79,7 +88,14 @@ export function activePitchPlayers(
   durationMinutes = 90,
 ): PitchRosterPlayer[] {
   const observedMinute = Math.min(minute, Math.max(0, durationMinutes - 0.001));
-  return roster.filter(player =>
-    player.enteredMinute <= observedMinute && player.exitedMinute > observedMinute,
-  );
+  return roster.filter((player) => {
+    if (player.enteredMinute > observedMinute) return false;
+    // A player sent off walks off during the minute they were shown the
+    // card in. Dropping them the instant the clock reached that minute made
+    // a whole team lose a man on a frame where nothing was shown — and the
+    // card itself steps aside whenever a shot lands on the same minute, so
+    // for those minutes the disappearance was the only thing a viewer saw.
+    if (player.dismissed) return player.exitedMinute >= observedMinute;
+    return player.exitedMinute > observedMinute;
+  });
 }

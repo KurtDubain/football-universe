@@ -780,6 +780,15 @@ export function updatePlayerPositions(
     ? tacticalAssignments
     : buildTacticalAssignments(playerPos, defendingHome, ballNX, ballNY, activePlayerIndices, formations);
   for (let i = 0; i < 22; i++) {
+    // A player who has left the pitch does not move. The roster and the
+    // drawing layer already drop them, so without this a sent-off defender
+    // went on tracking the ball from a patch of grass with nobody standing
+    // on it, and the ball layer kept treating that slot as an option.
+    if (activePlayerIndices && !activePlayerIndices.has(i)) {
+      playerPos[i].vx = 0;
+      playerPos[i].vy = 0;
+      continue;
+    }
     const isHomeTeam = i < 11;
     const formIdx = i % 11;
     const isHolder = (isHomeTeam ? ballHolderTeamSide === 'home' : ballHolderTeamSide === 'away') && formIdx === ballHolderIdx;

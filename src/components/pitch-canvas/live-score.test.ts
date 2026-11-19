@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchEvent } from '../../types/match';
-import { scoreAtMinute } from './live-score';
+import { scoreAfterEvents, scoreAtMinute } from './live-score';
 
 function event(
   minute: number,
@@ -46,5 +46,33 @@ describe('scoreAtMinute', () => {
 
   it('handles an empty event list', () => {
     expect(scoreAtMinute([], 'home', 90)).toEqual({ home: 0, away: 0 });
+  });
+});
+
+describe('scoreAfterEvents', () => {
+  it('counts only the events the playback has committed', () => {
+    expect(scoreAfterEvents(EVENTS, 'home', 0)).toEqual({ home: 0, away: 0 });
+    expect(scoreAfterEvents(EVENTS, 'home', 1)).toEqual({ home: 1, away: 0 });
+    expect(scoreAfterEvents(EVENTS, 'home', 2)).toEqual({ home: 1, away: 1 });
+    expect(scoreAfterEvents(EVENTS, 'home', EVENTS.length)).toEqual({ home: 2, away: 2 });
+  });
+
+  it('holds the pre-goal score while a goal is still being presented', () => {
+    // The canvas used to slice by match minute, which read 1-0 on the
+    // stadium screen for the six to ten seconds a goal takes to play out
+    // while the scoreboard in the page chrome still read 0-0 — both on
+    // screen at once, on every goal of every match.
+    const goal = event(55, 'goal', 'home');
+    const events = [event(12, 'goal', 'home'), goal];
+    const pendingIndex = events.indexOf(goal);
+
+    expect(scoreAfterEvents(events, 'home', pendingIndex)).toEqual({ home: 1, away: 0 });
+    expect(scoreAfterEvents(events, 'home', pendingIndex + 1)).toEqual({ home: 2, away: 0 });
+  });
+
+  it('clamps a cursor that runs past either end of the list', () => {
+    expect(scoreAfterEvents(EVENTS, 'home', 999)).toEqual({ home: 2, away: 2 });
+    expect(scoreAfterEvents(EVENTS, 'home', -3)).toEqual({ home: 0, away: 0 });
+    expect(scoreAfterEvents([], 'home', 4)).toEqual({ home: 0, away: 0 });
   });
 });

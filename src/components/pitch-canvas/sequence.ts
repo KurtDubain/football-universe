@@ -718,7 +718,13 @@ const SHOT_REACH = 0.05;
  */
 export interface RetargetContext {
   /** Live positions of the attacking team's eleven players, slot order. */
-  teammates?: ReadonlyArray<{ x: number; y: number }>;
+  /**
+   * The attacking team's slots, or null for a slot whose player is not on
+   * the pitch. A sent-off player keeps their formation slot and their entry
+   * in the position array, so being told here is the only way the ball
+   * layer learns they are gone.
+   */
+  teammates?: ReadonlyArray<{ x: number; y: number } | null>;
   /** Where the ball is as the pass is played. */
   ball?: { x: number; y: number };
 }
@@ -771,7 +777,7 @@ export function retargetPassToReceiver(
       if (bestIdx < 0) bestIdx = farIdx;
       if (bestIdx >= 0 && bestIdx !== receiverIdx) {
         receiverIdx = bestIdx;
-        receiver = teammates[bestIdx];
+        receiver = teammates[bestIdx] ?? receiver;
       }
     }
     // Led forward, not toward wherever the plan last pointed. A receiver who
@@ -816,6 +822,15 @@ export function retargetPassToReceiver(
     return { ...phase, targetOverride: adjusted, receiverIdx, duration };
   }
   if (phase.kind === 'shot' && phase.sourceOverride) {
+    // A set piece is struck from where the referee put the ball. The
+    // penalty spot and the free-kick mark are facts the engine produced,
+    // and the taker is placed on the ball for exactly that reason.
+    // Re-aiming the origin at their live position moved a penalty 40.7 m
+    // when the taker was standing at the halfway line and 65.5 m from their
+    // own half, so the kick was taken from 76.9 m out. Reaching the strike
+    // point is an open-play concern; a dead ball is already where it
+    // belongs, and moving it rewrites a decision the simulation made.
+    if (phase.setPiece) return phase;
     // The ball is struck from where the striker actually is. It used to be
     // pinned inside a shooting band, so a striker who had not made the run
     // had the ball struck seventeen metres in front of them: a shot leaving
@@ -846,6 +861,64 @@ export function retargetPassToReceiver(
     };
   }
   return phase;
+}
+
+/**
+ * Move a generated move off any slot whose player has left the pitch.
+ *
+ * The route is picked from formation slots and from live positions, and
+ * neither of those knows about a red card: a sent-off player keeps their
+ * slot in both. The roster and the drawing layer already drop them, so
+ * without this the ball is played to a patch of grass with nobody standing
+ * on it, and the next pass leaves from there.
+ *
+ * Passes the event names keep their players. Those are facts, and the engine
+ * does not name someone who was not on the pitch.
+ */
+export function rerouteOffFieldPhases(
+  phases: PassPhase[],
+  offFieldSlots: ReadonlySet<number>,
+  formation: FormationSlot[],
+  positions?: ReadonlyArray<{ x: number; y: number }>,
+): PassPhase[] {
+  if (offFieldSlots.size === 0 || phases.length === 0) return phases;
+
+  // One replacement per vacated slot, so a route that used the same slot
+  // twice still chains: the passer's slot and the receiver's slot are the
+  // same number on consecutive phases, and remapping them independently
+  // would hand the ball to a different player than the one who received it.
+  const taken = new Set<number>();
+  const remap = new Map<number, number>();
+  const replacementFor = (slot: number, attackingHome: boolean): number => {
+    const cached = remap.get(slot);
+    if (cached !== undefined) return cached;
+    const entry = formation[slot];
+    const live = livePositionFor(positions, slot, attackingHome);
+    const point = live ?? (entry
+      ? { x: attackingHome ? entry.x : 1 - entry.x, y: entry.y }
+      : { x: 0.5, y: 0.5 });
+    const excluded = [...offFieldSlots, ...taken, slot];
+    const candidate = nearestSlotToPoint(formation, point, attackingHome, excluded);
+    // Nothing left to give the ball to. Leave the move alone rather than
+    // inventing a player: the gap on the pitch is what a short-handed team
+    // actually looks like.
+    const next = candidate >= 0 && !offFieldSlots.has(candidate) ? candidate : slot;
+    if (next !== slot) taken.add(next);
+    remap.set(slot, next);
+    return next;
+  };
+
+  return phases.map((phase) => {
+    if (phase.lockedReceiver) return phase;
+    const passerIdx = offFieldSlots.has(phase.passerIdx)
+      ? replacementFor(phase.passerIdx, phase.attackingHome)
+      : phase.passerIdx;
+    const receiverIdx = offFieldSlots.has(phase.receiverIdx)
+      ? replacementFor(phase.receiverIdx, phase.attackingHome)
+      : phase.receiverIdx;
+    if (passerIdx === phase.passerIdx && receiverIdx === phase.receiverIdx) return phase;
+    return { ...phase, passerIdx, receiverIdx };
+  });
 }
 
 interface DirectedApproach {
