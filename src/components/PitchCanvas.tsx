@@ -933,8 +933,13 @@ function PitchCanvas(props: Props) {
      * aimed at where a player used to be.
      */
     function retargetPhase(phase: PassPhase): PassPhase {
-      const offset = phase.attackingHome ? 0 : 11;
-      const live = playerPosRef.current[offset + phase.receiverIdx];
+      // Re-aiming reads the live position of whoever the phase names, and a
+      // player who has left the pitch still has one: the physics array keeps
+      // every slot. Remap first, or a move is re-aimed at a slot with nobody
+      // standing in it and the next pass leaves from that patch of grass.
+      const aware = offFieldAware([phase], phase.attackingHome)[0] ?? phase;
+      const offset = aware.attackingHome ? 0 : 11;
+      const live = playerPosRef.current[offset + aware.receiverIdx];
       // A player who has been sent off is not on the pitch to receive a
       // pass. The roster and the drawing layer both know that; the ball
       // layer has to as well, or a move is re-aimed at a slot with nobody
@@ -950,7 +955,7 @@ function PitchCanvas(props: Props) {
         y: clamp((ballPos.current.y - P) / fh, 0.05, 0.95),
       };
       return retargetPassToReceiver(
-        phase,
+        aware,
         live ? { x: live.x, y: live.y } : null,
         { teammates, ball },
       );
@@ -979,6 +984,13 @@ function PitchCanvas(props: Props) {
     }
 
     function loadSequence(phases: PassPhase[], seed: number): void {
+      // Every route enters the pitch through here, so this is the one place
+      // that has to know who is still on it. Two of the four callers used to
+      // filter and two did not, and the unfiltered ones — a possession rolling
+      // on and a turnover — put the ball back on a player who had been sent
+      // off forty minutes earlier: 144 frames of a real replay aimed at the
+      // slot a 31st-minute red card had emptied.
+      const aware = offFieldAware(phases, phases[0]?.attackingHome ?? true);
       // A sequence can be replaced while the ball is still in the air: a pass
       // cut out, a scene resolving into a restart. Carry the height it had and
       // let it settle rather than dropping it between one frame and the next.
@@ -986,14 +998,14 @@ function PitchCanvas(props: Props) {
         ballLiftCarryRef.current = ballArcLiftRef.current;
       }
       sequenceSeedRef.current = seed;
-      sequenceRef.current = phases;
+      sequenceRef.current = aware;
       phaseIdxRef.current = 0;
       phaseFrameRef.current = 0;
-      phaseStateRef.current = phases[0]?.kind === 'shot' ? 'shooting' : 'passing';
+      phaseStateRef.current = aware[0]?.kind === 'shot' ? 'shooting' : 'passing';
       interceptedRef.current = false;
       tacticalAssignmentKeyRef.current = '';
       tacticalAssignmentsRef.current = null;
-      const firstPhase = phases[0] ? retargetPhase(phases[0]) : undefined;
+      const firstPhase = aware[0] ? retargetPhase(aware[0]) : undefined;
       if (!firstPhase) return;
       sequenceRef.current[0] = firstPhase;
       const layout = firstPhase.attackingHome
@@ -1132,10 +1144,7 @@ function PitchCanvas(props: Props) {
           homeApproach: initialLive.homeApproach,
           awayApproach: initialLive.awayApproach,
         });
-      loadSequence(
-        offFieldAware(generated.phases, generated.phases[0]?.attackingHome ?? true),
-        initialSeed,
-      );
+      loadSequence(generated.phases, initialSeed);
       activeSceneKeyRef.current = initialScene?.key ?? null;
       sequenceSceneRef.current = initialScene;
     }
@@ -1257,7 +1266,7 @@ function PitchCanvas(props: Props) {
             playerPosRef.current,
           ),
         );
-        loadSequence(offFieldAware(directed.phases, sceneToStart.attackingHome), sceneToStart.seed);
+        loadSequence(directed.phases, sceneToStart.seed);
         activeSceneKeyRef.current = sceneToStart.key;
         playedSceneKeysRef.current.add(sceneToStart.key);
         sequenceSceneRef.current = sceneToStart;

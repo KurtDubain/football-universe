@@ -73,6 +73,50 @@ describe('pitch possession sequences', () => {
     expect(rerouted[2]).toBe(phases[2]);
   });
 
+  it('moves a pass off a vacated slot whoever the phase names there', () => {
+    // The receiver is re-aimed on every phase, so a stale receiver mostly
+    // heals itself. The passer does not: a real replay played 144 frames out
+    // of the slot a 31st-minute red card had emptied, because that route
+    // arrived through a possession nobody had filtered.
+    const formation = getFormationSlots();
+    const phases: PassPhase[] = [
+      {
+        passerIdx: 3, receiverIdx: 2, attackingHome: true, kind: 'pass',
+        duration: 30, hold: 12, arc: 0.1, intercepted: false,
+        targetOverride: { x: 0.6, y: 0.4 },
+      },
+      {
+        passerIdx: 2, receiverIdx: 9, attackingHome: true, kind: 'pass',
+        duration: 30, hold: 12, arc: 0.1, intercepted: false,
+        targetOverride: { x: 0.8, y: 0.5 },
+      },
+    ];
+
+    const rerouted = rerouteOffFieldPhases(phases, new Set([2]), formation);
+
+    expect(rerouted[0].receiverIdx).not.toBe(2);
+    expect(rerouted[1].passerIdx).not.toBe(2);
+    // One replacement per vacated slot, so the chain survives: whoever
+    // received the first ball is the one who plays the second.
+    expect(rerouted[1].passerIdx).toBe(rerouted[0].receiverIdx);
+  });
+
+  it('leaves no phase of a generated move pointing at a vacated slot', () => {
+    const formation = getFormationSlots();
+    for (let seed = 1; seed <= 60; seed++) {
+      const generated = generateSequence(seed, { attackingHome: true });
+      for (let slot = 0; slot < 11; slot++) {
+        const offField = new Set([slot]);
+        for (const phase of rerouteOffFieldPhases(generated.phases, offField, formation)) {
+          // The passes the event names keep their players: those are facts.
+          if (phase.lockedReceiver) continue;
+          expect(offField.has(phase.passerIdx)).toBe(false);
+          expect(offField.has(phase.receiverIdx)).toBe(false);
+        }
+      }
+    }
+  });
+
   it('creates deterministic, bounded receiving points rather than fixed formation coordinates', () => {
     const first = buildPassTarget(9, true, 0.82, false);
     const repeat = buildPassTarget(9, true, 0.82, false);
