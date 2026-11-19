@@ -84,10 +84,7 @@ function RouteFailurePanel({
 }
 
 type RouteModule = { default: ComponentType };
-type RouteLoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; component: ComponentType }
-  | { status: 'error'; error: RouteResourceError };
+type RouteImporter = () => Promise<RouteModule>;
 
 export function RecoverableRoute({
   routeId,
@@ -95,48 +92,66 @@ export function RecoverableRoute({
   fullPage = false,
 }: {
   routeId: string;
-  importer: () => Promise<RouteModule>;
+  importer: RouteImporter;
   fullPage?: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [generation, setGeneration] = useState(0);
-  // A hover- or focus-preloaded route is already in memory. Starting in `ready`
-  // is what keeps the skeleton from flashing for a frame on every navigation
-  // that the preload actually covered.
-  const [loadState, setLoadState] = useState<RouteLoadState>(() => {
-    const preloaded = peekResolvedRouteModule(importer) as RouteModule | null;
-    return preloaded ? { status: 'ready', component: preloaded.default } : { status: 'loading' };
-  });
+  // The shell renders every route into the same slot, so react-router hands
+  // the next route over as a prop change and this component is *not*
+  // remounted. A `useState` initializer therefore only ever ran for the first
+  // route the session landed on: the previous route's component stayed in
+  // state, the load effect returned early on `status === 'ready'`, and the URL
+  // changed while the page did not. Everything held here is keyed by the
+  // importer it belongs to, so a route only ever renders its own module and a
+  // late resolution from the route just left can never overwrite it.
+  const [loaded, setLoaded] = useState<{
+    importer: RouteImporter;
+    component: ComponentType;
+  } | null>(null);
+  const [failure, setFailure] = useState<{
+    importer: RouteImporter;
+    error: RouteResourceError;
+  } | null>(null);
+
+  // A hover- or focus-preloaded route is already in memory, which is what keeps
+  // the skeleton from flashing for a frame on a navigation the preload covered.
+  const preloaded = peekResolvedRouteModule(importer) as RouteModule | null;
+  const component = loaded?.importer === importer
+    ? loaded.component
+    : preloaded?.default ?? null;
+  const error = failure?.importer === importer ? failure.error : null;
 
   useEffect(() => {
-    if (loadState.status === 'ready') return;
+    if (component || error) return;
     let active = true;
     void loadRouteModuleWithRecovery(importer, { routeId }).then(module => {
       rememberResolvedRouteModule(importer, module);
-      if (active) setLoadState({ status: 'ready', component: module.default });
-    }).catch(error => {
       if (!active) return;
-      const routeError = error instanceof RouteResourceError
-        ? error
-        : new RouteResourceError(routeId, 'unknown', 1, error);
+      setLoaded({ importer, component: module.default });
+    }).catch(caught => {
+      if (!active) return;
+      const routeError = caught instanceof RouteResourceError
+        ? caught
+        : new RouteResourceError(routeId, 'unknown', 1, caught);
       recordRouteFailure(routeError);
-      setLoadState({ status: 'error', error: routeError });
+      setFailure({ importer, error: routeError });
     });
     return () => {
       active = false;
     };
-  }, [generation, importer, routeId, loadState.status]);
+  }, [component, error, generation, importer, routeId]);
 
   useEffect(() => {
-    if (loadState.status === 'loading') return;
+    if (!component && !error) return;
     const frame = window.requestAnimationFrame(() => {
       window.dispatchEvent(new CustomEvent(ROUTE_RESOURCE_SETTLED_EVENT, {
-        detail: { routeId, status: loadState.status },
+        detail: { routeId, status: component ? 'ready' : 'error' },
       }));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [loadState.status, routeId]);
+  }, [component, error, routeId]);
 
   const goHome = () => {
     if (location.pathname === '/') {
@@ -146,15 +161,14 @@ export function RecoverableRoute({
     navigate('/');
   };
 
-  if (loadState.status === 'loading') return <RouteLoading fullPage={fullPage} />;
-  if (loadState.status === 'error') {
+  if (!component && error) {
     return (
       <RouteFailurePanel
-        error={loadState.error}
+        error={error}
         routeId={routeId}
         fullPage={fullPage}
         onRetry={() => {
-          setLoadState({ status: 'loading' });
+          setFailure(null);
           setGeneration(value => value + 1);
         }}
         onHome={goHome}
@@ -162,6 +176,8 @@ export function RecoverableRoute({
     );
   }
 
-  const LoadedRoute = loadState.component;
+  if (!component) return <RouteLoading fullPage={fullPage} />;
+
+  const LoadedRoute = component;
   return <LoadedRoute />;
 }
