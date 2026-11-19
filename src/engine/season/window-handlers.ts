@@ -11,7 +11,12 @@ import { determinePromotionRelegation, applyPlayoffResults } from '../standings/
 import { advanceLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { getSuperCupGroupFixtures, updateSuperCupGroupStandings, completeSuperCupGroupStage, advanceSuperCupKnockout } from '../cups/super-cup';
 import { updateWorldCupGroupStandings, completeWorldCupGroupStage, advanceWorldCupKnockout } from '../cups/world-cup';
-import { advanceContinentalCup, getContinentalCupCurrentFixtures } from '../cups/continental-cup';
+import {
+  advanceContinentalCup,
+  collectContinentalCupMatchFixtures,
+  getContinentalCupCurrentFixtures,
+  prefillContinentalCupWindow,
+} from '../cups/continental-cup';
 import { buildSimulationContext, countCompletedSuperCupGroupWindows, createNewsId } from './helpers';
 import { applyVenuePolicy } from '../competitions/venue-policy';
 import { GameWorld, NewsItem } from './season-manager';
@@ -541,7 +546,7 @@ export function handleContinentalCup(
   world: GameWorld,
   window: CalendarWindow,
   teamStates: Record<string, TeamState>,
-  _seasonState: SeasonState,
+  seasonState: SeasonState,
   rng: SeededRNG,
   continentalCups: GameWorld['continentalCups'],
 ): WindowResult {
@@ -564,19 +569,7 @@ export function handleContinentalCup(
   }
 
   // Build one neutral-venue fixture list across the disjoint regional cups.
-  const matchFixtures: MatchFixture[] = [];
-  for (const { cup, fixtures } of allCupFixtures) {
-    for (const cf of fixtures) {
-      matchFixtures.push(applyVenuePolicy({
-        id: cf.id,
-        homeTeamId: cf.homeTeamId,
-        awayTeamId: cf.awayTeamId,
-        competitionType: 'continental_cup' as const,
-        competitionName: cup.name,
-        roundLabel: cf.roundName,
-      }));
-    }
-  }
+  const matchFixtures = collectContinentalCupMatchFixtures(continentalCups);
 
   const isKnockout = allCupFixtures.every(({ cup }) => cup.groupStageCompleted);
   const sim = simulateFixtures(matchFixtures, world, teamStates, rng, isKnockout);
@@ -593,6 +586,11 @@ export function handleContinentalCup(
   }
 
   window.fixtures = matchFixtures;
+
+  // Pre-fill the next continental window so the upcoming matchday is visible
+  // before it is advanced; an empty window reads as "本阶段无比赛安排" and
+  // offers no focus match to watch.
+  prefillContinentalCupWindow(seasonState.calendar, updatedCups, window.id);
 
   return {
     results: sim.results,

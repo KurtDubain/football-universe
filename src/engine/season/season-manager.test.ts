@@ -7,6 +7,8 @@ import {
   type NewsItem,
 } from './season-manager';
 import { firstMatchdayWorld } from './test-world';
+import { getContinentalCupCurrentFixtures } from '../cups/continental-cup';
+import type { ContinentalCupState } from '../../types/cup';
 import { defaultTeams } from '../../config/teams';
 import { CUP_PRIZE } from '../economy/finance';
 import { PLAYER_SCORE_VERSION } from '../players/player-performance';
@@ -651,4 +653,59 @@ describe('executeCurrentWindow', () => {
     expect(world.seasonState.seasonNumber).toBeGreaterThanOrEqual(3);
     expect(turns).toBeLessThan(220);
   });
+});
+
+describe('continental cup windows', () => {
+  /** Jump straight to a continental cup season without playing four seasons. */
+  function continentalCupSeasonWorld(): ReturnType<typeof initializeNewSeason> {
+    const base = initializeGameWorld(20260722);
+    return initializeNewSeason({
+      ...base,
+      seasonState: { ...base.seasonState, seasonNumber: 4 },
+    });
+  }
+
+  it('fills the opening continental matchday when the calendar is built', () => {
+    const world = continentalCupSeasonWorld();
+    expect(world.seasonState.seasonNumber).toBe(5);
+
+    const cups = ([
+      world.continentalCups.mainland_cup,
+      world.continentalCups.southern_cup,
+      world.continentalCups.eastern_cup,
+    ]).filter((cup): cup is ContinentalCupState => cup !== null);
+    expect(cups.length).toBeGreaterThan(0);
+
+    const windows = world.seasonState.calendar.filter(w => w.type === 'continental_cup');
+    expect(windows.length).toBeGreaterThan(0);
+
+    // The first window carries exactly what the cups will play, so the stage
+    // never reads as "本阶段无比赛安排" before it is advanced.
+    const expected = cups.flatMap(cup => getContinentalCupCurrentFixtures(cup));
+    expect(expected.length).toBeGreaterThan(0);
+    expect(windows[0].fixtures.map(fixture => fixture.id))
+      .toEqual(expected.map(fixture => fixture.id));
+    expect(windows[0].fixtures.every(fixture => fixture.competitionType === 'continental_cup')).toBe(true);
+
+    // Later rounds are not drawn yet, so their windows stay empty.
+    expect(windows.slice(1).every(w => w.fixtures.length === 0)).toBe(true);
+  });
+
+  it('pre-fills the following window as the cup advances', () => {
+    let world = continentalCupSeasonWorld();
+    const firstIndex = world.seasonState.calendar.findIndex(w => w.type === 'continental_cup');
+    expect(firstIndex).toBeGreaterThanOrEqual(0);
+
+    while (world.seasonState.currentWindowIndex < firstIndex) {
+      world = executeCurrentWindow(world).world;
+    }
+    expect(world.seasonState.calendar[firstIndex].fixtures.length).toBeGreaterThan(0);
+
+    world = executeCurrentWindow(world).world;
+
+    const windows = world.seasonState.calendar.filter(w => w.type === 'continental_cup');
+    expect(windows[0].completed).toBe(true);
+    expect(windows[1].fixtures.length).toBeGreaterThan(0);
+    expect(windows[1].fixtures.every(fixture => fixture.roundLabel.endsWith('- R2'))).toBe(true);
+  }, 20_000);
 });

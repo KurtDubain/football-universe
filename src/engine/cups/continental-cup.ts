@@ -9,6 +9,16 @@ import type { StandingEntry } from '../../types/league';
 import type { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 import { drawGroups } from './draw';
+import { getContinentalCupCurrentFixtures } from './continental-cup-fixtures';
+
+// Re-exported so existing callers keep one import site; the implementations live
+// in a leaf module so a first-paint reader does not pull the cup engine in.
+export {
+  collectContinentalCupMatchFixtures,
+  getContinentalCupCurrentFixtures,
+  prefillContinentalCupWindow,
+  type ContinentalCupRegistry,
+} from './continental-cup-fixtures';
 
 type RegionToType = {
   '大陆': 'mainland_cup';
@@ -279,20 +289,6 @@ export function initContinentalCup(
     currentRound: 0,
     completed: false,
   };
-}
-
-export function getContinentalCupCurrentFixtures(cup: ContinentalCupState): CupFixture[] {
-  if (!cup.groupStageCompleted) {
-    for (let round = 1; round <= 3; round++) {
-      const fixtures = cup.groups.flatMap(group =>
-        group.fixtures.filter(fixture => fixture.round === round),
-      );
-      if (fixtures.some(fixture => !fixture.result)) return fixtures;
-    }
-    return [];
-  }
-  const round = cup.rounds.find(item => item.roundNumber === cup.currentRound);
-  return round?.fixtures ?? [];
 }
 
 export function advanceContinentalCup(

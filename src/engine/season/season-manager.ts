@@ -15,7 +15,11 @@ import { createInitialStandings } from '../standings/standings';
 import { determinePromotionRelegation } from '../standings/promotion-relegation';
 import { initLeagueCup, getLeagueCupCurrentFixtures } from '../cups/league-cup';
 import { initSuperCup, getSuperCupGroupFixtures } from '../cups/super-cup';
-import { continentalCupWindowCount, initContinentalCup } from '../cups/continental-cup';
+import {
+  continentalCupWindowCount,
+  initContinentalCup,
+  prefillContinentalCupWindow,
+} from '../cups/continental-cup';
 import { ensureWorldCupEdition } from '../cups/world-cup-host';
 import {
   selectWorldCupParticipants,
@@ -787,6 +791,11 @@ export function initializeNewSeason(world: GameWorld): GameWorld {
     ),
   };
   const baseCalendar = buildSeasonCalendar(calendarInput);
+
+  // The calendar only reserves continental slots, so fill the opening
+  // matchday now — otherwise the first continental window reads as an empty
+  // stage until it has already been advanced.
+  prefillContinentalCupWindow(baseCalendar, continentalCups, -1);
 
   // Create initial standings
   const league1Standings = createInitialStandings(l1Teams);

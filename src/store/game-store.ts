@@ -11,6 +11,7 @@ import {
 import { exportCurrentSave, importCurrentSave } from './save-backup';
 import type { GameWorld, NewsItem } from '../engine/season/season-manager';
 import { getCurrentWindow, isSeasonFullyComplete } from '../engine/season/world-selectors';
+import { prefillContinentalCupWindow } from '../engine/cups/continental-cup-fixtures';
 import { applyOfferTransfer, applyOutgoingBid, signFreeAgent, autoResolveRemaining } from '../engine/transfers/transfer-window-actions';
 import { syncPlayerStatsTeamIds } from '../engine/players/stats';
 import { processCoachFiring } from '../engine/coaches/coach-hiring';
@@ -181,6 +182,18 @@ function mergePersistedGameState(
 ): GameStore {
   const persisted = persistedState as PersistedGameState;
   const merged = { ...current, ...persisted };
+
+  // Saves written before continental windows were pre-filled can sit on an
+  // empty continental matchday. Refill it from cup state — display only,
+  // since simulation reads its fixtures from the cups, not the window.
+  if (merged.world?.seasonState?.calendar) {
+    prefillContinentalCupWindow(
+      merged.world.seasonState.calendar,
+      merged.world.continentalCups,
+      -1,
+    );
+  }
+
   const favoriteTeamIds = [...new Set(merged.favoriteTeamIds)].slice(0, 3);
   const favoritePlayerIds = [...new Set(merged.favoritePlayerIds ?? [])]
     .filter(Boolean)

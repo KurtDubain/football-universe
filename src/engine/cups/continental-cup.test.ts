@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { ContinentalCupState, CupFixture } from '../../types/cup';
-import type { MatchResult, MatchStats } from '../../types/match';
+import type { MatchFixture, MatchResult, MatchStats } from '../../types/match';
+import type { CalendarWindow } from '../../types/season';
 import { SeededRNG } from '../match/rng';
 import {
   advanceContinentalCup,
+  collectContinentalCupMatchFixtures,
   continentalCupWindowCount,
   getContinentalCupCurrentFixtures,
   initContinentalCup,
+  prefillContinentalCupWindow,
+  type ContinentalCupRegistry,
 } from './continental-cup';
 
 const EMPTY_STATS: MatchStats = {
@@ -216,5 +220,134 @@ describe('advanceContinentalCup', () => {
     const fixtures = getContinentalCupCurrentFixtures(cup);
     expect(() => advanceContinentalCup(cup, fixtures.slice(0, 2).map(homeWins))).toThrow(/Missing result/);
     expect(cup).toEqual(before);
+  });
+});
+
+function continentalWindow(
+  id: number,
+  overrides: Partial<CalendarWindow> = {},
+): CalendarWindow {
+  return {
+    id,
+    type: 'continental_cup',
+    label: `洲际杯 w${id}`,
+    description: `第5赛季 洲际杯 w${id}`,
+    fixtures: [],
+    completed: false,
+    results: [],
+    ...overrides,
+  };
+}
+
+function registry(cups: Partial<ContinentalCupRegistry>): ContinentalCupRegistry {
+  return { mainland_cup: null, southern_cup: null, eastern_cup: null, ...cups };
+}
+
+function playToCompletion(cup: ContinentalCupState): ContinentalCupState {
+  let current = cup;
+  while (!current.completed) current = playCurrent(current);
+  return current;
+}
+
+describe('prefillContinentalCupWindow', () => {
+  it("fills the first unplayed window with every active cup's current round", () => {
+    const mainland = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(1));
+    const southern = initContinentalCup('南洲', TEAMS_8, 5, new SeededRNG(2));
+    const calendar = [continentalWindow(0), continentalWindow(1)];
+
+    prefillContinentalCupWindow(
+      calendar,
+      registry({ mainland_cup: mainland, southern_cup: southern }),
+      -1,
+    );
+
+    const expected = [
+      ...getContinentalCupCurrentFixtures(mainland),
+      ...getContinentalCupCurrentFixtures(southern),
+    ];
+    expect(calendar[0].fixtures.map(fixture => fixture.id))
+      .toEqual(expected.map(fixture => fixture.id));
+    expect(calendar[0].fixtures.every(fixture => fixture.competitionType === 'continental_cup')).toBe(true);
+    expect(calendar[0].fixtures.every(fixture => fixture.isNeutralVenue)).toBe(true);
+    expect([...new Set(calendar[0].fixtures.map(fixture => fixture.competitionName))].sort())
+      .toEqual(['南洲杯', '大陆杯']);
+    expect(calendar[1].fixtures).toHaveLength(0);
+  });
+
+  it('skips completed cups and windows that already carry fixtures', () => {
+    const mainland = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(1));
+    const southern = playToCompletion(initContinentalCup('南洲', TEAMS_4, 5, new SeededRNG(2)));
+    expect(southern.completed).toBe(true);
+
+    const existing: MatchFixture = {
+      id: 'existing',
+      homeTeamId: 'a',
+      awayTeamId: 'b',
+      competitionType: 'continental_cup',
+      competitionName: '大陆杯',
+      roundLabel: 'Group A - R1',
+      isNeutralVenue: true,
+    };
+    const played = continentalWindow(0, { completed: true });
+    const alreadyFilled = continentalWindow(1, { fixtures: [existing] });
+    const target = continentalWindow(2);
+    const calendar = [played, alreadyFilled, target];
+
+    prefillContinentalCupWindow(
+      calendar,
+      registry({ mainland_cup: mainland, southern_cup: southern }),
+      -1,
+    );
+
+    expect(alreadyFilled.fixtures.map(fixture => fixture.id)).toEqual(['existing']);
+    expect(target.fixtures.map(fixture => fixture.id))
+      .toEqual(getContinentalCupCurrentFixtures(mainland).map(fixture => fixture.id));
+  });
+
+  it('fills the window after the one just played', () => {
+    const mainland = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(1));
+    const calendar = [continentalWindow(0), continentalWindow(1)];
+
+    prefillContinentalCupWindow(calendar, registry({ mainland_cup: mainland }), 0);
+
+    expect(calendar[0].fixtures).toHaveLength(0);
+    expect(calendar[1].fixtures.length).toBeGreaterThan(0);
+  });
+
+  it('carries the next round once the current one has been played', () => {
+    let mainland = initContinentalCup('大陆', TEAMS_16, 5, new SeededRNG(1));
+    const calendar = [continentalWindow(0), continentalWindow(1)];
+
+    prefillContinentalCupWindow(calendar, registry({ mainland_cup: mainland }), -1);
+    expect(calendar[0].fixtures.every(fixture => fixture.roundLabel.endsWith('- R1'))).toBe(true);
+
+    mainland = playCurrent(mainland);
+    prefillContinentalCupWindow(calendar, registry({ mainland_cup: mainland }), 0);
+
+    expect(calendar[0].fixtures.every(fixture => fixture.roundLabel.endsWith('- R1'))).toBe(true);
+    expect(calendar[1].fixtures.length).toBeGreaterThan(0);
+    expect(calendar[1].fixtures.every(fixture => fixture.roundLabel.endsWith('- R2'))).toBe(true);
+  });
+
+  it('leaves the window empty when no cup is active', () => {
+    const calendar = [continentalWindow(0)];
+
+    prefillContinentalCupWindow(calendar, registry({}), -1);
+    expect(calendar[0].fixtures).toHaveLength(0);
+
+    prefillContinentalCupWindow(calendar, undefined, -1);
+    expect(calendar[0].fixtures).toHaveLength(0);
+  });
+});
+
+describe('collectContinentalCupMatchFixtures', () => {
+  it('returns nothing for a missing registry', () => {
+    expect(collectContinentalCupMatchFixtures(undefined)).toEqual([]);
+  });
+
+  it('never offers a completed cup\'s final round again', () => {
+    const finished = playToCompletion(initContinentalCup('东洲', TEAMS_4, 5, new SeededRNG(7)));
+    expect(finished.rounds.at(-1)!.fixtures.length).toBeGreaterThan(0);
+    expect(collectContinentalCupMatchFixtures(registry({ eastern_cup: finished }))).toEqual([]);
   });
 });
