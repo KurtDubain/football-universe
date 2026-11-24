@@ -35,8 +35,18 @@ export const PLAYER_RANKING_MINUTES = 0;
  * The v3 calibration puts every position's median on 50 and its P99 on 93,
  * which is what makes the four scales comparable at all. Goalkeeper P99 moves
  * 81.0 -> 93.0; under v2 no keeper could reach 90 in 54 seasons.
+ *
+ * v4: v3 sampled its anchors from the top flight only but applied them to all
+ * three tiers, and the lower divisions generate far fewer shots. The median
+ * second- and third-tier goalkeeper fell to 16.2 and 14.9 out of 120, because
+ * the two terms carrying 55% of the goalkeeper weight were both far below their
+ * p10; `scripts/audit-player-performance.ts` went from passing to failing on
+ * cross-position median spread (0.9 -> 9.4). v4 makes anchors and calibration
+ * per tier — 54 anchor groups instead of 18 — and resamples all of them from 288
+ * completed seasons at 900+ minutes. Every one of the twelve position/tier
+ * groups now has its median on 50 and its P99 on 93.
  */
-export const PLAYER_SCORE_VERSION = 3;
+export const PLAYER_SCORE_VERSION = 4;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -88,60 +98,139 @@ interface MetricAnchors {
   p90: number;
 }
 
-// Anchors sampled from a completed 54-season world (seed 698104882): every
-// top-flight season row with 20+ appearances, 11,255 rows in total. They are
-// never rebuilt from the live universe, so the same performance keeps the same
-// score across saves.
+// Anchors sampled from 288 completed seasons across 24 independent seeds
+// (20260808 + n*104729), taking every season row with 900+ minutes — the point
+// where the confidence factor below reaches 0.5. They are never rebuilt from
+// the live universe, so the same performance keeps the same score across saves.
+//
+// Anchors are per league tier. The simulator generates far fewer shots in the
+// lower divisions and a keeper's rate metrics collapse with them: a top-flight
+// keeper makes 3.76 routine saves per 90 and stops 76.8% of what he faces, a
+// third-tier keeper makes 1.50 and stops 54.7%. Scoring every tier against
+// top-flight anchors pinned the median lower-division keeper to 15 out of 120,
+// because the two terms carrying 55% of the goalkeeper weight were both far
+// below their p10. Per-tier anchors make positionQuality mean "how good,
+// against the players you actually face"; which tier that was is carried by
+// `leagueStrength` in the season score.
 //
 // Sparse terms (zero in more than 5% of rows, scored through `sparseMetric`)
 // take their P10/P50 from the NON-ZERO rows only. Sampling those from the full
 // population would put the anchor at zero and make `sparseMetric` jump from its
 // flat 40 baseline straight to the 50-90 band on the first non-zero event; the
 // non-zero basis holds that step to about 3 points.
-const ANCHORS = {
-  FW: {
-    goals: { p10: 0.1741, p50: 0.4054, p90: 0.8531 },
-    assists: { p10: 0, p50: 0.0401, p90: 0.1212 },
-    extraChances: { p10: 0.0270, p50: 0.0681, p90: 0.1339 },
-  },
-  MF: {
-    assists: { p10: 0.0321, p50: 0.1176, p90: 0.2292 },
-    extraPasses: { p10: 0.0231, p50: 0.0298, p90: 0.0476 },
-    goals: { p10: 0, p50: 0.0763, p90: 0.1848 },
-    extraChances: { p10: 0.0225, p50: 0.0283, p90: 0.0323 },
+type LeagueTier = 1 | 2 | 3;
+
+interface PositionAnchorSet {
+  [group: string]: MetricAnchors;
+}
+
+const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
+  GK: {
+    1: {
+      savePercentage: { p10: 0.6571, p50: 0.7682, p90: 0.8495 },
+      keySaves: { p10: 0.0288, p50: 0.0882, p90: 0.1786 },
+      goalsConceded: { p10: 0.7241, p50: 1.1628, p90: 1.8387 },
+      routineSaves: { p10: 3.3113, p50: 3.7568, p90: 4.1667 },
+      cleanSheets: { p10: 0.1667, p50: 0.3514, p90: 0.5338 },
+    },
+    2: {
+      savePercentage: { p10: 0.5517, p50: 0.6556, p90: 0.7544 },
+      keySaves: { p10: 0.0435, p50: 0.0667, p90: 0.15 },
+      goalsConceded: { p10: 0.913, p50: 1.3973, p90: 1.92 },
+      routineSaves: { p10: 2.1333, p50: 2.5714, p90: 3 },
+      cleanSheets: { p10: 0.1304, p50: 0.2727, p90: 0.4655 },
+    },
+    3: {
+      savePercentage: { p10: 0.4167, p50: 0.5469, p90: 0.6757 },
+      keySaves: { p10: 0.0526, p50: 0.0667, p90: 0.1429 },
+      goalsConceded: { p10: 0.8333, p50: 1.2778, p90: 1.8 },
+      routineSaves: { p10: 1.1333, p50: 1.5, p90: 1.8824 },
+      cleanSheets: { p10: 0.1429, p50: 0.3125, p90: 0.4828 },
+    },
   },
   DF: {
-    interceptions: { p10: 1.6410, p50: 2.0642, p90: 2.4571 },
-    clearances: { p10: 2.3636, p50: 2.9416, p90: 3.4528 },
-    blocks: { p10: 0.0235, p50: 0.0288, p90: 0.0437 },
-    goalsConceded: { p10: 0.7373, p50: 1.0840, p90: 1.6118 },
-    cleanSheets: { p10: 0.2059, p50: 0.3527, p90: 0.5055 },
-    attack: { p10: 0.0256, p50: 0.0526, p90: 0.1000 },
+    1: {
+      interceptions: { p10: 1.705, p50: 2.0998, p90: 2.4862 },
+      clearances: { p10: 2.525, p50: 3.0653, p90: 3.5612 },
+      blocks: { p10: 0.0234, p50: 0.0295, p90: 0.0667 },
+      goalsConceded: { p10: 0.7105, p50: 1.1478, p90: 1.8414 },
+      cleanSheets: { p10: 0.1668, p50: 0.3543, p90: 0.5366 },
+      attack: { p10: 0.0263, p50: 0.0566, p90: 0.119 },
+    },
+    2: {
+      interceptions: { p10: 1.5652, p50: 2.0225, p90: 2.5 },
+      clearances: { p10: 2.1639, p50: 2.7541, p90: 3.36 },
+      blocks: { p10: 0.0411, p50: 0.05, p90: 0.0789 },
+      goalsConceded: { p10: 0.9, p50: 1.3889, p90: 1.9315 },
+      cleanSheets: { p10: 0.1304, p50: 0.2712, p90: 0.4627 },
+      attack: { p10: 0.0435, p50: 0.0637, p90: 0.1343 },
+    },
+    3: {
+      interceptions: { p10: 1.3333, p50: 1.8, p90: 2.3093 },
+      clearances: { p10: 1.6957, p50: 2.2632, p90: 2.8889 },
+      blocks: { p10: 0.0526, p50: 0.0625, p90: 0.0771 },
+      goalsConceded: { p10: 0.8276, p50: 1.2778, p90: 1.8 },
+      cleanSheets: { p10: 0.1333, p50: 0.3077, p90: 0.4828 },
+      attack: { p10: 0.0545, p50: 0.0667, p90: 0.1333 },
+    },
   },
-  GK: {
-    savePercentage: { p10: 0.6802, p50: 0.7721, p90: 0.8415 },
-    keySaves: { p10: 0.0261, p50: 0.0769, p90: 0.1654 },
-    goalsConceded: { p10: 0.7358, p50: 1.0827, p90: 1.6200 },
-    routineSaves: { p10: 3.2409, p50: 3.5882, p90: 3.9767 },
-    cleanSheets: { p10: 0.2069, p50: 0.3514, p90: 0.5037 },
+  MF: {
+    1: {
+      assists: { p10: 0.0321, p50: 0.1262, p90: 0.2419 },
+      extraPasses: { p10: 0.0227, p50: 0.0294, p90: 0.0667 },
+      goals: { p10: 0, p50: 0.0863, p90: 0.2177 },
+      extraChances: { p10: 0.0226, p50: 0.0286, p90: 0.0654 },
+    },
+    2: {
+      assists: { p10: 0, p50: 0.1053, p90: 0.2471 },
+      extraPasses: { p10: 0.0417, p50: 0.0526, p90: 0.0769 },
+      goals: { p10: 0, p50: 0.0645, p90: 0.1935 },
+      extraChances: { p10: 0.0411, p50: 0.0526, p90: 0.0741 },
+    },
+    3: {
+      assists: { p10: 0, p50: 0.1053, p90: 0.2449 },
+      extraPasses: { p10: 0.0526, p50: 0.0625, p90: 0.0825 },
+      goals: { p10: 0, p50: 0.0667, p90: 0.2 },
+      extraChances: { p10: 0.0526, p50: 0.0625, p90: 0.0769 },
+    },
   },
-} as const;
+  FW: {
+    1: {
+      goals: { p10: 0.1755, p50: 0.4654, p90: 1.0227 },
+      assists: { p10: 0, p50: 0.043, p90: 0.1237 },
+      extraChances: { p10: 0.03, p50: 0.0723, p90: 0.1703 },
+    },
+    2: {
+      goals: { p10: 0.1333, p50: 0.3661, p90: 0.7368 },
+      assists: { p10: 0, p50: 0.0476, p90: 0.1364 },
+      extraChances: { p10: 0.0448, p50: 0.0667, p90: 0.1304 },
+    },
+    3: {
+      goals: { p10: 0.1333, p50: 0.3673, p90: 0.7347 },
+      assists: { p10: 0, p50: 0, p90: 0.1333 },
+      extraChances: { p10: 0.0545, p50: 0.0668, p90: 0.1333 },
+    },
+  },
+};
 
-// `median` is the position's own raw-quality median, so every position lands
-// on 50 at its median. `scale` amplifies the distance from that median and is
-// chosen so each position's P99 lands on 93 — which is what makes four
+// `median` is the raw-quality median of that position IN THAT TIER, so every
+// group lands on 50 at its own median. `scale` amplifies the distance from that
+// median and is chosen so the group's P99 lands on 93 — which is what makes twelve
 // separately-shaped distributions comparable at all.
 //
-// The scale is additionally capped so the position's WORST observed season
-// stays above zero. A scale that only targets the top would push the long left
-// tail of the forward and goalkeeper distributions negative and flatten it onto
-// the clamp. Defender scale is 1.64 rather than the 1.73 its P99 asks for, and
-// its P99 lands on 89.5 instead of 93, for exactly that reason.
-const POSITION_QUALITY_CALIBRATION: Record<PlayerPosition, { median: number; scale: number }> = {
-  GK: { median: 55.5, scale: 1.42 },
-  DF: { median: 53.0, scale: 1.64 },
-  MF: { median: 51.4, scale: 1.37 },
-  FW: { median: 52.0, scale: 1.18 },
+// The scale is additionally capped so the group's worst observed season stays
+// above zero. With per-tier anchors that cap never binds: the lowest resulting
+// P1 across the twelve groups is 6.2, so every scale here is the one its P99
+// asks for. Every position still lands on 50 at its own tier median, and the
+// spread between tiers is carried by leagueStrength instead of by the anchors.
+const POSITION_QUALITY_CALIBRATION: Record<
+  PlayerPosition,
+  Record<LeagueTier, { median: number; scale: number }>
+> = {
+  GK: { 1: { median: 55.51, scale: 1.46 }, 2: { median: 52.9, scale: 1.39 }, 3: { median: 52.76, scale: 1.35 } },
+  DF: { 1: { median: 53.28, scale: 2.1 }, 2: { median: 51.8, scale: 2.06 }, 3: { median: 51.37, scale: 1.88 } },
+  MF: { 1: { median: 50.82, scale: 1.41 }, 2: { median: 47.51, scale: 1.54 }, 3: { median: 46.97, scale: 1.63 } },
+  FW: { 1: { median: 52.19, scale: 1.19 }, 2: { median: 49.02, scale: 1.25 }, 3: { median: 48.96, scale: 1.28 } },
 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -254,17 +343,22 @@ export function getPlayerPerformanceMetrics(stats?: PlayerSeasonStats): PlayerPe
   };
 }
 
-function computePositionQuality(position: PlayerPosition, metrics: PlayerPerformanceMetrics): number {
+function computePositionQuality(
+  position: PlayerPosition,
+  metrics: PlayerPerformanceMetrics,
+  tier: LeagueTier,
+): number {
+  const anchors = ANCHORS[position][tier];
   let quality: number;
   if (position === 'FW') {
-    quality = anchoredMetric(metrics.goalsPer90, ANCHORS.FW.goals) * 0.45
-      + anchoredMetric(metrics.assistsPer90, ANCHORS.FW.assists) * 0.25
-      + sparseMetric(metrics.extraBigChancesPer90, ANCHORS.FW.extraChances) * 0.30;
+    quality = anchoredMetric(metrics.goalsPer90, anchors.goals) * 0.45
+      + anchoredMetric(metrics.assistsPer90, anchors.assists) * 0.25
+      + sparseMetric(metrics.extraBigChancesPer90, anchors.extraChances) * 0.30;
   } else if (position === 'MF') {
-    quality = anchoredMetric(metrics.assistsPer90, ANCHORS.MF.assists) * 0.35
-      + sparseMetric(metrics.extraKeyPassesPer90, ANCHORS.MF.extraPasses) * 0.30
-      + anchoredMetric(metrics.goalsPer90, ANCHORS.MF.goals) * 0.25
-      + sparseMetric(metrics.extraBigChancesPer90, ANCHORS.MF.extraChances) * 0.10;
+    quality = anchoredMetric(metrics.assistsPer90, anchors.assists) * 0.35
+      + sparseMetric(metrics.extraKeyPassesPer90, anchors.extraPasses) * 0.30
+      + anchoredMetric(metrics.goalsPer90, anchors.goals) * 0.25
+      + sparseMetric(metrics.extraBigChancesPer90, anchors.extraChances) * 0.10;
   } else if (position === 'DF') {
     // Interceptions and clearances are generated from the OPPONENT's shot and
     // possession totals, so they measure how much a defence was attacked rather
@@ -278,23 +372,23 @@ function computePositionQuality(position: PlayerPosition, metrics: PlayerPerform
     // record an outcome — goals conceded while on the pitch and clean-sheet
     // share — which takes r(team goals conceded, defender quality) from -0.12
     // to -0.53 and drops the bottom-four wins to zero.
-    quality = anchoredMetric(metrics.interceptionsPer90, ANCHORS.DF.interceptions) * 0.22
-      + anchoredMetric(metrics.clearancesPer90, ANCHORS.DF.clearances) * 0.18
-      + sparseMetric(metrics.goalLineBlocksPer90, ANCHORS.DF.blocks) * 0.12
-      + inverseMetric(metrics.goalsConcededPer90, ANCHORS.DF.goalsConceded) * 0.22
-      + anchoredMetric(metrics.cleanSheetContribution, ANCHORS.DF.cleanSheets) * 0.16
-      + sparseMetric(metrics.attackContributionPer90, ANCHORS.DF.attack) * 0.10;
+    quality = anchoredMetric(metrics.interceptionsPer90, anchors.interceptions) * 0.22
+      + anchoredMetric(metrics.clearancesPer90, anchors.clearances) * 0.18
+      + sparseMetric(metrics.goalLineBlocksPer90, anchors.blocks) * 0.12
+      + inverseMetric(metrics.goalsConcededPer90, anchors.goalsConceded) * 0.22
+      + anchoredMetric(metrics.cleanSheetContribution, anchors.cleanSheets) * 0.16
+      + sparseMetric(metrics.attackContributionPer90, anchors.attack) * 0.10;
   } else {
     const saveRateScore = metrics.routineSavesPer90 + metrics.keySavesPer90 > 0
-      ? anchoredMetric(metrics.savePercentage, ANCHORS.GK.savePercentage)
+      ? anchoredMetric(metrics.savePercentage, anchors.savePercentage)
       : 50;
     quality = saveRateScore * 0.35
-      + sparseMetric(metrics.keySavesPer90, ANCHORS.GK.keySaves) * 0.25
-      + anchoredMetric(metrics.routineSavesPer90, ANCHORS.GK.routineSaves) * 0.20
-      + inverseMetric(metrics.goalsConcededPer90, ANCHORS.GK.goalsConceded) * 0.15
-      + anchoredMetric(metrics.cleanSheetContribution, ANCHORS.GK.cleanSheets) * 0.05;
+      + sparseMetric(metrics.keySavesPer90, anchors.keySaves) * 0.25
+      + anchoredMetric(metrics.routineSavesPer90, anchors.routineSaves) * 0.20
+      + inverseMetric(metrics.goalsConcededPer90, anchors.goalsConceded) * 0.15
+      + anchoredMetric(metrics.cleanSheetContribution, anchors.cleanSheets) * 0.05;
   }
-  const calibration = POSITION_QUALITY_CALIBRATION[position];
+  const calibration = POSITION_QUALITY_CALIBRATION[position][tier];
   return round1(clamp(50 + (quality - calibration.median) * calibration.scale, 0, PLAYER_SCORE_CEILING));
 }
 
@@ -338,7 +432,11 @@ export function computePlayerPerformance(
   leagueLevel?: 1 | 2 | 3,
 ): PlayerPerformanceResult {
   const metrics = getPlayerPerformanceMetrics(stats);
-  return resultFromQuality(computePositionQuality(position, metrics), metrics, leagueStrengthScore(leagueLevel));
+  return resultFromQuality(
+    computePositionQuality(position, metrics, leagueLevel ?? 1),
+    metrics,
+    leagueStrengthScore(leagueLevel),
+  );
 }
 
 function aggregateSegments(segments: PlayerTeamSeasonStats[]): PlayerSeasonStats | undefined {
@@ -377,7 +475,11 @@ export function computeSegmentedPlayerPerformance(
     ) / totalMinutes;
   };
   const positionQuality = weighted(segment =>
-    computePositionQuality(position, getPlayerPerformanceMetrics(segment)),
+    computePositionQuality(
+      position,
+      getPlayerPerformanceMetrics(segment),
+      leagueLevels[segment.teamId] ?? 1,
+    ),
   );
   const leagueStrength = weighted(segment => leagueStrengthScore(leagueLevels[segment.teamId]));
   return resultFromQuality(positionQuality, metrics, leagueStrength);

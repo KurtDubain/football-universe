@@ -69,35 +69,44 @@ describe('position performance', () => {
     const minutes = 2700;
     /** Season total that corresponds to a per-90 rate over `minutes`. */
     const at = (per90: number) => per90 * minutes / 90;
-    // Every fixture sits exactly on its position's v3 anchor medians, so this
-    // asserts the calibration rather than four hand-picked seasons: the median
-    // forward, midfielder, defender and keeper must still land in one readable
-    // band even though their metric shapes have nothing in common.
+    // Every fixture sits exactly on its position's top-flight anchor medians, so
+    // this asserts the calibration rather than four hand-picked seasons: the
+    // median forward, midfielder, defender and keeper must still land in one
+    // readable band even though their metric shapes have nothing in common.
     const samples = [
       computePlayerPerformance('FW', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: at(0.4054), assists: at(0.0401), bigChances: at(0.4054) + at(0.0681),
+        goals: at(0.4654), assists: at(0.043), bigChances: at(0.4654) + at(0.0723),
       })),
       computePlayerPerformance('MF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: at(0.0763), assists: at(0.1176),
-        keyPasses: at(0.1176) + at(0.0298), bigChances: at(0.0763) + at(0.0283),
+        goals: at(0.0863), assists: at(0.1262),
+        keyPasses: at(0.1262) + at(0.0294), bigChances: at(0.0863) + at(0.0286),
       })),
       computePlayerPerformance('DF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 0.5, assists: at(0.0526) - 0.5, interceptions: at(2.0642), clearances: at(2.9416),
-        keyBlocks: at(0.0288), goalsConcededWhileOnPitch: at(1.0840),
-        cleanSheetMinutes: 0.3527 * minutes,
+        goals: 0.5, assists: at(0.0566) - 0.5, interceptions: at(2.0998), clearances: at(3.0653),
+        keyBlocks: at(0.0295), goalsConcededWhileOnPitch: at(1.1478),
+        cleanSheetMinutes: 0.3543 * minutes,
       })),
       computePlayerPerformance('GK', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        routineSaves: at(3.5882), saves: at(0.0769),
-        shotsOnTargetFaced: (at(3.5882) + at(0.0769)) / 0.7721,
-        goalsConcededWhileOnPitch: at(1.0827), cleanSheetMinutes: 0.3514 * minutes,
+        routineSaves: at(3.7568), saves: at(0.0882),
+        shotsOnTargetFaced: (at(3.7568) + at(0.0882)) / 0.7682,
+        goalsConcededWhileOnPitch: at(1.1628), cleanSheetMinutes: 0.3514 * minutes,
       })),
     ];
     const qualities = samples.map(result => result.positionQuality);
-    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(10);
+    // The band is 45-60 rather than a tight 5 because two of the midfielder's
+    // four terms are sparse: at their non-zero median `sparseMetric` returns 65,
+    // not the 50 `anchoredMetric` returns, so an all-at-median midfielder sits
+    // above the real median midfielder. Measured over live top-flight seasons
+    // the four medians are 52.4 / 51.3 / 52.0 / 50.4.
+    for (const quality of qualities) {
+      expect(quality).toBeGreaterThanOrEqual(45);
+      expect(quality).toBeLessThanOrEqual(60);
+    }
+    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(12);
     for (const result of samples) {
       expect(result.seasonScore).toBeGreaterThanOrEqual(0);
       expect(result.seasonScore).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
@@ -120,15 +129,44 @@ describe('position performance', () => {
     expect(injured.seasonScore).toBeLessThan(healthy.seasonScore);
   });
 
-  it('keeps league strength light and reverse defensive metrics directional', () => {
-    const shared = stat({
-      appearances: 20, minutesPlayed: 1800, teamMatchesAllCompetitions: 20,
-      interceptions: 42, clearances: 58, goalsConcededWhileOnPitch: 20,
-    });
-    const top = computePlayerPerformance('DF', shared, 1);
-    const lower = computePlayerPerformance('DF', shared, 3);
-    const leakier = computePlayerPerformance('DF', { ...shared, goalsConcededWhileOnPitch: 40 }, 1);
-    expect(top.seasonScore - lower.seasonScore).toBeCloseTo(1, 1);
+  it('scores a tier-median defender the same in every division', () => {
+    const minutes = 1800;
+    const at = (per90: number) => per90 * minutes / 90;
+    // Each fixture sits on its OWN tier's defender anchor medians. From score
+    // version 4 the anchors are per tier, because the lower divisions generate
+    // far fewer shots and a keeper's rate metrics collapse with them; scoring
+    // everyone against top-flight anchors pinned the median third-tier keeper
+    // to 15 out of 120. So the reference population, not the division, is what
+    // output is measured against, and `leagueStrength` (10% weight, 100/95/90)
+    // is the only term that still knows where the season was played.
+    const tierMedian = (tier: 1 | 2 | 3) => {
+      const anchor = {
+        1: { int: 2.0998, clr: 3.0653, blk: 0.0295, gc: 1.1478, cs: 0.3543, atk: 0.0566 },
+        2: { int: 2.0225, clr: 2.7541, blk: 0.05, gc: 1.3889, cs: 0.2712, atk: 0.0637 },
+        3: { int: 1.8, clr: 2.2632, blk: 0.0625, gc: 1.2778, cs: 0.3077, atk: 0.0667 },
+      }[tier];
+      return stat({
+        appearances: 20, minutesPlayed: minutes, teamMatchesAllCompetitions: 20,
+        interceptions: at(anchor.int), clearances: at(anchor.clr), keyBlocks: at(anchor.blk),
+        goalsConcededWhileOnPitch: at(anchor.gc), cleanSheetMinutes: anchor.cs * minutes,
+        goals: 0.5, assists: at(anchor.atk) - 0.5,
+      });
+    };
+
+    const top = computePlayerPerformance('DF', tierMedian(1), 1);
+    const mid = computePlayerPerformance('DF', tierMedian(2), 2);
+    const lower = computePlayerPerformance('DF', tierMedian(3), 3);
+    for (const result of [top, mid, lower]) {
+      expect(result.positionQuality).toBeGreaterThanOrEqual(45);
+      expect(result.positionQuality).toBeLessThanOrEqual(55);
+    }
+    // Two whole divisions apart, and league strength is still worth ~1 point.
+    expect(Math.abs(top.seasonScore - lower.seasonScore)).toBeLessThanOrEqual(2);
+
+    // Reverse metrics stay directional inside a tier: conceding more is worse.
+    const leakier = computePlayerPerformance('DF', {
+      ...tierMedian(1), goalsConcededWhileOnPitch: at(2.5),
+    }, 1);
     expect(leakier.positionQuality).toBeLessThan(top.positionQuality);
   });
 
@@ -146,6 +184,6 @@ describe('position performance', () => {
     expect(result.metrics.teamMatchesAllCompetitions).toBe(15);
     expect(result.leagueStrength).toBeCloseTo(96.7, 1);
     expect(result.score).toBeGreaterThanOrEqual(0);
-    expect(result.score).toBeLessThanOrEqual(100);
+    expect(result.score).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
   });
 });
