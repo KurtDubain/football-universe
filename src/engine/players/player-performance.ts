@@ -1,8 +1,17 @@
 import type { PlayerPosition, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import { PLAYER_STAT_COUNTER_FIELDS } from './player-stat-fields';
 
-/** Minutes at which the soft confidence factor reaches 0.5. */
-export const PLAYER_CONFIDENCE_MINUTES = 900;
+/**
+ * Minutes at which the soft confidence factor reaches 0.5.
+ *
+ * Lowered from 900 in score version 5. The old value meant a forward who
+ * played 4,030 minutes — a full season — was still scored at 0.82 confidence
+ * while a midfielder on 6,480 minutes reached 0.88, and that 0.06 gap is
+ * applied to the whole distance from 50. Measured over 120 seasons it cost
+ * forwards 8 points of the top-ten share on its own, before availability was
+ * counted at all. Small samples still shrink: 180 minutes reads 0.23.
+ */
+export const PLAYER_CONFIDENCE_MINUTES = 600;
 /**
  * Upper bound for position quality and season score.
  *
@@ -45,8 +54,18 @@ export const PLAYER_RANKING_MINUTES = 0;
  * per tier — 54 anchor groups instead of 18 — and resamples all of them from 288
  * completed seasons at 900+ minutes. Every one of the twelve position/tier
  * groups now has its median on 50 and its P99 on 93.
+ *
+ * v5: the two minute-driven terms are both cut back. Availability moves from
+ * 0.20 to 0.15 and from a 0.60/0.40 minute/appearance split to 0.25/0.75, and
+ * the confidence constant drops 900 -> 600. The simulator substitutes 54.7%
+ * of starting forwards against 8-10% of defenders and midfielders, so a
+ * season score that leaned on minutes was quietly a position tax: across 120
+ * seasons not one forward finished top of the league, and the forward share
+ * of the Ballon d'Or had fallen to 3%. Under v5 the forward share of the
+ * season-score top ten goes 5% -> 11%, and the cross-position median spread
+ * tightens from 2.2 to 0.5.
  */
-export const PLAYER_SCORE_VERSION = 4;
+export const PLAYER_SCORE_VERSION = 5;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -401,13 +420,24 @@ function resultFromQuality(
     ? metrics.minutes / (metrics.minutes + PLAYER_CONFIDENCE_MINUTES)
     : 0;
   const adjustedPositionQuality = 50 + (positionQuality - 50) * confidence;
+  // Availability answers "was this player there", not "did he play the full
+  // ninety". A forward who starts and is replaced on the hour every week is
+  // fully available; the old 0.60 weight on minute share read him as 60%
+  // available and docked him for a coach's substitution, not for being
+  // absent. The simulator hooks 54.7% of starting forwards — against 9.7% of
+  // defenders and 8.4% of midfielders — because a 4-4-2 leaves 1.57 forwards
+  // on a bench that supplies 67% of all substitutions. Weight moves to
+  // appearance share, which sits between 0.92 and 0.97 at every position.
   const availabilityScore = 100 * (
-    metrics.minuteAttendanceRate * 0.60
-    + metrics.appearanceRate * 0.40
+    metrics.minuteAttendanceRate * 0.25
+    + metrics.appearanceRate * 0.75
   );
   const eligible = metrics.minutes > 0;
+  // Availability drops from 0.20 to 0.15: the confidence factor above already
+  // prices in a thin sample, and the term here was a second penalty on the same
+  // minutes. Position output carries 0.75 of the score.
   const score = eligible
-    ? clamp(adjustedPositionQuality * 0.70 + availabilityScore * 0.20 + leagueStrength * 0.10, 0, PLAYER_SCORE_CEILING)
+    ? clamp(adjustedPositionQuality * 0.75 + availabilityScore * 0.15 + leagueStrength * 0.10, 0, PLAYER_SCORE_CEILING)
     : 0;
   const roundedScore = round1(score);
   return {
