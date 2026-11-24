@@ -218,10 +218,14 @@ describe('computeSeasonAwards — tie-breaking and mid-season transfers', () => 
     const squads = {
       teamA: [makePlayer('teamA', 9, 'FW'), makePlayer('teamA', 10, 'FW')],
     };
-    // Identical output, different minutes. Both clear the appearance gate.
+    // Same per-90 output, different minutes: 12 goals in 1800 is the same rate
+    // as 18 in 2700. Equal raw totals would NOT tie, because every metric is
+    // normalised per 90 — the player who reached the same numbers in fewer
+    // minutes scores higher, which is the opposite of what this test is about.
+    // Both clear the appearance gate.
     const stats = {
-      'teamA-9': { ...makeStat('teamA-9', 'teamA', 20, 5), minutesPlayed: 1800 },
-      'teamA-10': { ...makeStat('teamA-10', 'teamA', 20, 5), minutesPlayed: 2700 },
+      'teamA-9': { ...makeStat('teamA-9', 'teamA', 12, 4), minutesPlayed: 1800 },
+      'teamA-10': { ...makeStat('teamA-10', 'teamA', 18, 6), minutesPlayed: 2700 },
     };
     const standings = [makeStanding('teamA', 30, 20)];
 

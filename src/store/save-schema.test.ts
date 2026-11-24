@@ -95,7 +95,8 @@ it('round-trips optional compact retirement facts without changing the schema or
   expect(restored.state.world.retirementHistory).toEqual(world.retirementHistory);
   expect(restored.state.world.rngState).toBe(world.rngState);
   expect(restored.state.world.seasonState).toEqual(world.seasonState);
-  world.retirementHistory[0].careerScore!.weightedTotal = 180001;
+  // Ceiling is minutes x PLAYER_SCORE_CEILING (1800 x 120), not minutes x 100.
+  world.retirementHistory[0].careerScore!.weightedTotal = 216001;
   expect(() => parseCurrentSave(JSON.stringify(save))).toThrow('生涯评分汇总无效');
   world.retirementHistory[0].careerScore!.weightedTotal = 126000;
   world.retirementHistory[0].careerSummary!.totals.minutesPlayed = -1;
@@ -424,7 +425,7 @@ describe('current schema hydration boundary', () => {
     ['out-of-range player season score', (() => {
       const save = makeSave();
       const stat = Object.values(save.state.world.playerStats)[0] as typeof save.state.world.playerStats[string] & { seasonScore?: number };
-      stat.seasonScore = 101;
+      stat.seasonScore = 121;
       return JSON.stringify(save);
     })()],
     ['invalid observer archive counters', (() => {

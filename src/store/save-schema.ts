@@ -225,8 +225,27 @@ function validateOptionalNonNegativeNumbers(value: JsonRecord, context: string):
   }
 }
 
+/**
+ * Upper bound for the two scores that can legitimately exceed 100.
+ *
+ * Mirrors `PLAYER_SCORE_CEILING` in engine/players/player-performance.ts. From
+ * score version 3 the scale is no longer capped at 100, because a capped scale
+ * made the strongest seasons tie and handed the tiebreak to a uuid. Kept as a
+ * local literal rather than an import so the save schema stays free of engine
+ * dependencies.
+ */
+const PLAYER_SCORE_CEILING = 120;
+
 function validatePlayerScoreFields(value: JsonRecord, context: string): void {
-  for (const key of ['seasonScore', 'positionQuality', 'availabilityScore', 'leagueStrength'] as const) {
+  // seasonScore and positionQuality can exceed 100 by design; the two ratio
+  // fields cannot, so they keep the tight bound and still catch real corruption.
+  for (const key of ['seasonScore', 'positionQuality'] as const) {
+    const field = value[key];
+    if (field !== undefined && (typeof field !== 'number' || field < 0 || field > PLAYER_SCORE_CEILING)) {
+      throw new Error(`${context}字段 ${key} 必须在 0 到 ${PLAYER_SCORE_CEILING} 之间`);
+    }
+  }
+  for (const key of ['availabilityScore', 'leagueStrength'] as const) {
     const field = value[key];
     if (field !== undefined && (typeof field !== 'number' || field < 0 || field > 100)) {
       throw new Error(`${context}字段 ${key} 必须在 0 到 100 之间`);
@@ -324,7 +343,7 @@ function validateFeaturedPlayers(
     }
     if (entry.seasonScoreAtKickoff !== undefined) {
       const score = requireFiniteNumber(entry, 'seasonScoreAtKickoff', `${context}焦点球员 ${playerId} `);
-      if (score < 0 || score > 100) throw new Error(`${context}焦点球员 ${playerId} 赛季评分超出范围`);
+      if (score < 0 || score > PLAYER_SCORE_CEILING) throw new Error(`${context}焦点球员 ${playerId} 赛季评分超出范围`);
     }
   }
 }
@@ -726,7 +745,9 @@ function validateCurrentWorld(world: JsonRecord): GameWorld {
       const minutes = requireFiniteNumber(score, 'minutes', '生涯评分');
       const total = requireFiniteNumber(score, 'weightedTotal', '生涯评分');
       requireBoolean(score, 'complete', '生涯评分');
-      if (minutes <= 0 || total < 0 || total > minutes * 100) throw new Error('生涯评分汇总无效');
+      // Weighted by minutes against a per-minute score that can reach 120 from
+      // score version 3; the bound is the ceiling, not the old 100 cap.
+      if (minutes <= 0 || total < 0 || total > minutes * PLAYER_SCORE_CEILING) throw new Error('生涯评分汇总无效');
     }
     if (!isRecord(retired) || retired.careerSummary === undefined) continue;
     const summary = requireRecord(retired, 'careerSummary');

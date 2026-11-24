@@ -3,6 +3,15 @@ import { PLAYER_STAT_COUNTER_FIELDS } from './player-stat-fields';
 
 /** Minutes at which the soft confidence factor reaches 0.5. */
 export const PLAYER_CONFIDENCE_MINUTES = 900;
+/**
+ * Upper bound for position quality and season score.
+ *
+ * Deliberately above 100. Capping at 100 made the strongest seasons tie: 74
+ * player-seasons reached exactly 100 under the v2 scale, 39 of them on fewer
+ * than 20 appearances, and once several candidates tie the award falls through
+ * to a uuid comparison — which is a coin flip dressed up as a ranking.
+ */
+export const PLAYER_SCORE_CEILING = 120;
 /** Kept as a compatibility export; ranking no longer has a hard minute gate. */
 export const PLAYER_RANKING_MINUTES = 0;
 /**
@@ -13,8 +22,21 @@ export const PLAYER_RANKING_MINUTES = 0;
  * highest-variance position (P10 lowest, P90 level with everyone else) and
  * handed 40% of Ballon d'Or wins to centre-backs. See
  * docs/score-params-simulation-report.md for the 50-season comparison.
+ *
+ * v3: every anchor and every calibration constant resampled from a completed
+ * 54-season world (seed 698104882, 11,255 top-flight season rows at 20+
+ * appearances). The v2 anchors were sampled from an older simulator whose
+ * scoring rates no longer hold: measured against live data the forward goal
+ * anchor was 28% low, the goalkeeper routine-save anchor 22% low, and three
+ * sparse anchors (defender blocks, midfielder extra passes, midfielder extra
+ * chances) had a real median of ZERO while the anchor claimed 0.033-0.039 —
+ * so more than half of all players scored a flat 40 on those terms.
+ *
+ * The v3 calibration puts every position's median on 50 and its P99 on 93,
+ * which is what makes the four scales comparable at all. Goalkeeper P99 moves
+ * 81.0 -> 93.0; under v2 no keeper could reach 90 in 54 seasons.
  */
-export const PLAYER_SCORE_VERSION = 2;
+export const PLAYER_SCORE_VERSION = 3;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -66,47 +88,60 @@ interface MetricAnchors {
   p90: number;
 }
 
-// Fixed anchors sampled from 50 completed simulator seasons. They are never
-// rebuilt from the live universe, so the same performance keeps the same score.
+// Anchors sampled from a completed 54-season world (seed 698104882): every
+// top-flight season row with 20+ appearances, 11,255 rows in total. They are
+// never rebuilt from the live universe, so the same performance keeps the same
+// score across saves.
+//
+// Sparse terms (zero in more than 5% of rows, scored through `sparseMetric`)
+// take their P10/P50 from the NON-ZERO rows only. Sampling those from the full
+// population would put the anchor at zero and make `sparseMetric` jump from its
+// flat 40 baseline straight to the 50-90 band on the first non-zero event; the
+// non-zero basis holds that step to about 3 points.
 const ANCHORS = {
   FW: {
-    goals: { p10: 0.133, p50: 0.316, p90: 0.541 },
-    assists: { p10: 0, p50: 0.056, p90: 0.135 },
-    extraChances: { p10: 0.026, p50: 0.053, p90: 0.099 },
+    goals: { p10: 0.1741, p50: 0.4054, p90: 0.8531 },
+    assists: { p10: 0, p50: 0.0401, p90: 0.1212 },
+    extraChances: { p10: 0.0270, p50: 0.0681, p90: 0.1339 },
   },
   MF: {
-    assists: { p10: 0, p50: 0.128, p90: 0.260 },
-    extraPasses: { p10: 0.025, p50: 0.039, p90: 0.075 },
-    goals: { p10: 0, p50: 0.058, p90: 0.151 },
-    extraChances: { p10: 0.025, p50: 0.033, p90: 0.068 },
+    assists: { p10: 0.0321, p50: 0.1176, p90: 0.2292 },
+    extraPasses: { p10: 0.0231, p50: 0.0298, p90: 0.0476 },
+    goals: { p10: 0, p50: 0.0763, p90: 0.1848 },
+    extraChances: { p10: 0.0225, p50: 0.0283, p90: 0.0323 },
   },
   DF: {
-    interceptions: { p10: 1.667, p50: 2.063, p90: 2.433 },
-    clearances: { p10: 2.250, p50: 2.818, p90: 3.307 },
-    blocks: { p10: 0.025, p50: 0.034, p90: 0.070 },
-    goalsConceded: { p10: 0.788, p50: 1.176, p90: 1.792 },
-    cleanSheets: { p10: 0.167, p50: 0.327, p90: 0.482 },
-    attack: { p10: 0.030, p50: 0.065, p90: 0.150 },
+    interceptions: { p10: 1.6410, p50: 2.0642, p90: 2.4571 },
+    clearances: { p10: 2.3636, p50: 2.9416, p90: 3.4528 },
+    blocks: { p10: 0.0235, p50: 0.0288, p90: 0.0437 },
+    goalsConceded: { p10: 0.7373, p50: 1.0840, p90: 1.6118 },
+    cleanSheets: { p10: 0.2059, p50: 0.3527, p90: 0.5055 },
+    attack: { p10: 0.0256, p50: 0.0526, p90: 0.1000 },
   },
   GK: {
-    savePercentage: { p10: 0.513, p50: 0.698, p90: 0.810 },
-    keySaves: { p10: 0.036, p50: 0.075, p90: 0.154 },
-    goalsConceded: { p10: 0.800, p50: 1.188, p90: 1.800 },
-    routineSaves: { p10: 1.469, p50: 2.933, p90: 3.618 },
-    cleanSheets: { p10: 0.167, p50: 0.325, p90: 0.478 },
+    savePercentage: { p10: 0.6802, p50: 0.7721, p90: 0.8415 },
+    keySaves: { p10: 0.0261, p50: 0.0769, p90: 0.1654 },
+    goalsConceded: { p10: 0.7358, p50: 1.0827, p90: 1.6200 },
+    routineSaves: { p10: 3.2409, p50: 3.5882, p90: 3.9767 },
+    cleanSheets: { p10: 0.2069, p50: 0.3514, p90: 0.5037 },
   },
 } as const;
 
-// scale amplifies how far a position's raw quality sits from its own median.
-// Defender scale was narrowed from 1.85 after a 50-season audit: the wider
-// value did not raise defender medians (already the lowest of the four) but
-// stretched their tails, which is what let relegation-battling centre-backs
-// outscore title-winning forwards.
+// `median` is the position's own raw-quality median, so every position lands
+// on 50 at its median. `scale` amplifies the distance from that median and is
+// chosen so each position's P99 lands on 93 — which is what makes four
+// separately-shaped distributions comparable at all.
+//
+// The scale is additionally capped so the position's WORST observed season
+// stays above zero. A scale that only targets the top would push the long left
+// tail of the forward and goalkeeper distributions negative and flatten it onto
+// the clamp. Defender scale is 1.64 rather than the 1.73 its P99 asks for, and
+// its P99 lands on 89.5 instead of 93, for exactly that reason.
 const POSITION_QUALITY_CALIBRATION: Record<PlayerPosition, { median: number; scale: number }> = {
-  GK: { median: 52.7, scale: 0.83 },
-  DF: { median: 52.1, scale: 1.60 },
-  MF: { median: 48.5, scale: 1.42 },
-  FW: { median: 50.9, scale: 1.14 },
+  GK: { median: 55.5, scale: 1.42 },
+  DF: { median: 53.0, scale: 1.64 },
+  MF: { median: 51.4, scale: 1.37 },
+  FW: { median: 52.0, scale: 1.18 },
 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -231,11 +266,23 @@ function computePositionQuality(position: PlayerPosition, metrics: PlayerPerform
       + anchoredMetric(metrics.goalsPer90, ANCHORS.MF.goals) * 0.25
       + sparseMetric(metrics.extraBigChancesPer90, ANCHORS.MF.extraChances) * 0.10;
   } else if (position === 'DF') {
-    quality = anchoredMetric(metrics.interceptionsPer90, ANCHORS.DF.interceptions) * 0.30
-      + anchoredMetric(metrics.clearancesPer90, ANCHORS.DF.clearances) * 0.25
-      + sparseMetric(metrics.goalLineBlocksPer90, ANCHORS.DF.blocks) * 0.15
-      + inverseMetric(metrics.goalsConcededPer90, ANCHORS.DF.goalsConceded) * 0.12
-      + anchoredMetric(metrics.cleanSheetContribution, ANCHORS.DF.cleanSheets) * 0.08
+    // Interceptions and clearances are generated from the OPPONENT's shot and
+    // possession totals, so they measure how much a defence was attacked rather
+    // than how well it defended: measured across 4,012 top-flight defender
+    // seasons, r(team goals conceded, interceptions/90) = +0.21 and
+    // r(.., clearances/90) = +0.26. Under the old 0.30/0.25 weighting a
+    // relegation-battling centre-back outscored a title winner, and the best
+    // defender award went to a bottom-four club in 4 of 54 seasons.
+    //
+    // Weight moves from those two counts onto the two terms that actually
+    // record an outcome — goals conceded while on the pitch and clean-sheet
+    // share — which takes r(team goals conceded, defender quality) from -0.12
+    // to -0.53 and drops the bottom-four wins to zero.
+    quality = anchoredMetric(metrics.interceptionsPer90, ANCHORS.DF.interceptions) * 0.22
+      + anchoredMetric(metrics.clearancesPer90, ANCHORS.DF.clearances) * 0.18
+      + sparseMetric(metrics.goalLineBlocksPer90, ANCHORS.DF.blocks) * 0.12
+      + inverseMetric(metrics.goalsConcededPer90, ANCHORS.DF.goalsConceded) * 0.22
+      + anchoredMetric(metrics.cleanSheetContribution, ANCHORS.DF.cleanSheets) * 0.16
       + sparseMetric(metrics.attackContributionPer90, ANCHORS.DF.attack) * 0.10;
   } else {
     const saveRateScore = metrics.routineSavesPer90 + metrics.keySavesPer90 > 0
@@ -248,7 +295,7 @@ function computePositionQuality(position: PlayerPosition, metrics: PlayerPerform
       + anchoredMetric(metrics.cleanSheetContribution, ANCHORS.GK.cleanSheets) * 0.05;
   }
   const calibration = POSITION_QUALITY_CALIBRATION[position];
-  return round1(clamp(50 + (quality - calibration.median) * calibration.scale, 0, 100));
+  return round1(clamp(50 + (quality - calibration.median) * calibration.scale, 0, PLAYER_SCORE_CEILING));
 }
 
 function resultFromQuality(
@@ -266,7 +313,7 @@ function resultFromQuality(
   );
   const eligible = metrics.minutes > 0;
   const score = eligible
-    ? clamp(adjustedPositionQuality * 0.70 + availabilityScore * 0.20 + leagueStrength * 0.10, 0, 100)
+    ? clamp(adjustedPositionQuality * 0.70 + availabilityScore * 0.20 + leagueStrength * 0.10, 0, PLAYER_SCORE_CEILING)
     : 0;
   const roundedScore = round1(score);
   return {

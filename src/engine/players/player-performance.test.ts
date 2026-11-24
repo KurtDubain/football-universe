@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PlayerSeasonStats } from '../../types/player';
 import {
+  PLAYER_SCORE_CEILING,
   computePlayerPerformance,
   computeSegmentedPlayerPerformance,
   getPlayerPerformanceMetrics,
@@ -66,31 +67,40 @@ describe('position performance', () => {
 
   it('keeps representative position medians on a comparable quality scale', () => {
     const minutes = 2700;
+    /** Season total that corresponds to a per-90 rate over `minutes`. */
+    const at = (per90: number) => per90 * minutes / 90;
+    // Every fixture sits exactly on its position's v3 anchor medians, so this
+    // asserts the calibration rather than four hand-picked seasons: the median
+    // forward, midfielder, defender and keeper must still land in one readable
+    // band even though their metric shapes have nothing in common.
     const samples = [
       computePlayerPerformance('FW', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 9.48, assists: 1.68, bigChances: 11.07,
+        goals: at(0.4054), assists: at(0.0401), bigChances: at(0.4054) + at(0.0681),
       })),
       computePlayerPerformance('MF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 1.74, assists: 3.84, keyPasses: 5.01, bigChances: 2.73,
+        goals: at(0.0763), assists: at(0.1176),
+        keyPasses: at(0.1176) + at(0.0298), bigChances: at(0.0763) + at(0.0283),
       })),
       computePlayerPerformance('DF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 0.5, assists: 1.45, interceptions: 61.89, clearances: 84.54,
-        keyBlocks: 1.02, goalsConcededWhileOnPitch: 35.28, cleanSheetMinutes: 883,
+        goals: 0.5, assists: at(0.0526) - 0.5, interceptions: at(2.0642), clearances: at(2.9416),
+        keyBlocks: at(0.0288), goalsConcededWhileOnPitch: at(1.0840),
+        cleanSheetMinutes: 0.3527 * minutes,
       })),
       computePlayerPerformance('GK', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        routineSaves: 87.99, saves: 2.25, shotsOnTargetFaced: 129.3,
-        goalsConcededWhileOnPitch: 35.64, cleanSheetMinutes: 878,
+        routineSaves: at(3.5882), saves: at(0.0769),
+        shotsOnTargetFaced: (at(3.5882) + at(0.0769)) / 0.7721,
+        goalsConcededWhileOnPitch: at(1.0827), cleanSheetMinutes: 0.3514 * minutes,
       })),
     ];
     const qualities = samples.map(result => result.positionQuality);
     expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(10);
     for (const result of samples) {
       expect(result.seasonScore).toBeGreaterThanOrEqual(0);
-      expect(result.seasonScore).toBeLessThanOrEqual(100);
+      expect(result.seasonScore).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
     }
   });
 
