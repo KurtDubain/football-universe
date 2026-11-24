@@ -3,7 +3,10 @@ import {
   getCurrentWindow,
   initializeGameWorld,
 } from '../src/engine/season/season-manager';
-import { computeSegmentedPlayerPerformance } from '../src/engine/players/player-performance';
+import {
+  PLAYER_SCORE_CEILING,
+  computeSegmentedPlayerPerformance,
+} from '../src/engine/players/player-performance';
 import type { PlayerPosition, PlayerTeamSeasonStats } from '../src/types/player';
 
 const fast = process.env.PLAYER_PERFORMANCE_AUDIT_FAST === '1';
@@ -81,9 +84,9 @@ for (let seedIndex = 0; seedIndex < seedCount; seedIndex++) {
           !Number.isFinite(sample.score)
           || !Number.isFinite(sample.quality)
           || sample.score < 0
-          || sample.score > 100
+          || sample.score > PLAYER_SCORE_CEILING
           || sample.quality < 0
-          || sample.quality > 100
+          || sample.quality > PLAYER_SCORE_CEILING
         ) invalidScores++;
         if (
           result.metrics.missedMatches > result.metrics.teamMatchesAllCompetitions
@@ -122,6 +125,8 @@ const distributions = Object.fromEntries(positions.map(position => {
     scoreP90: round(percentile(scores, 0.9)),
     qualityMedian: round(percentile(qualities, 0.5)),
     qualityP90: round(percentile(qualities, 0.9)),
+    // Score version 3 targets a median of 50 and a P99 of 93 at every position.
+    qualityP99: round(percentile(qualities, 0.99)),
   }];
 })) as Record<PlayerPosition, {
   count: number;
@@ -130,6 +135,7 @@ const distributions = Object.fromEntries(positions.map(position => {
   scoreP90: number;
   qualityMedian: number;
   qualityP90: number;
+  qualityP99: number;
 }>;
 
 const medians = positions.map(position => distributions[position].scoreMedian);
