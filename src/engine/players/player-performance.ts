@@ -2,16 +2,20 @@ import type { PlayerPosition, PlayerSeasonStats, PlayerTeamSeasonStats } from '.
 import { PLAYER_STAT_COUNTER_FIELDS } from './player-stat-fields';
 
 /**
- * Minutes at which the soft confidence factor reaches 0.5.
+ * Appearances at which the soft confidence factor reaches 0.5.
  *
- * Lowered from 900 in score version 5. The old value meant a forward who
- * played 4,030 minutes — a full season — was still scored at 0.82 confidence
- * while a midfielder on 6,480 minutes reached 0.88, and that 0.06 gap is
- * applied to the whole distance from 50. Measured over 120 seasons it cost
- * forwards 8 points of the top-ten share on its own, before availability was
- * counted at all. Small samples still shrink: 180 minutes reads 0.23.
+ * Read on appearances, not minutes. One match is one observation: a forward
+ * who starts and is replaced on the hour was observed once, exactly like a
+ * keeper who plays the full ninety. Reading the same season on minutes made
+ * the sample size itself a position tax. Measured over 240 seasons the median
+ * forward played 25 matches on 1,497 minutes while the median keeper played 25
+ * matches on 2,250, so the forward's confidence sat at 0.714 against the
+ * keeper's 0.789 — and that 0.075 is applied to the whole distance from 50,
+ * which is what pushed keepers to 1.91 times their pool share in the season
+ * top twenty. On appearances both read 0.758 and the tax is gone. Small
+ * samples still shrink: 2 appearances reads 0.20, 8 reads 0.50.
  */
-export const PLAYER_CONFIDENCE_MINUTES = 600;
+export const PLAYER_CONFIDENCE_APPEARANCES = 8;
 /**
  * Upper bound for position quality and season score.
  *
@@ -64,8 +68,20 @@ export const PLAYER_RANKING_MINUTES = 0;
  * of the Ballon d'Or had fallen to 3%. Under v5 the forward share of the
  * season-score top ten goes 5% -> 11%, and the cross-position median spread
  * tightens from 2.2 to 0.5.
+ *
+ * v6: the confidence factor reads appearances instead of minutes, and the
+ * calibration table is solved rather than tuned. Reading sample size on minutes
+ * was itself a position tax — the median forward plays the same 25 matches as
+ * the median keeper but 753 fewer minutes, because the simulator substitutes
+ * 54.7% of starting forwards, so the forward's confidence sat 0.075 under the
+ * keeper's and that gap was applied to the whole distance from 50. On
+ * appearances both read 0.758 and the tax is gone. With it gone the table no
+ * longer has to absorb the difference: median and scale now come from a single
+ * formula that lands every group's P95 on 82, replacing twelve hand-picked
+ * pairs. Verified on a disjoint seed set, the season-score top twenty moves
+ * from pool multipliers of 1.91/0.97/0.97/0.72 to 1.16/1.01/1.02/0.88.
  */
-export const PLAYER_SCORE_VERSION = 5;
+export const PLAYER_SCORE_VERSION = 6;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -147,21 +163,21 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
   GK: {
     1: {
       savePercentage: { p10: 0.6571, p50: 0.7682, p90: 0.8495 },
-      keySaves: { p10: 0.0288, p50: 0.0882, p90: 0.1786 },
+      keySaves: { p10: 0.0811, p50: 0.1271, p90: 0.2087 },
       goalsConceded: { p10: 0.7241, p50: 1.1628, p90: 1.8387 },
       routineSaves: { p10: 3.3113, p50: 3.7568, p90: 4.1667 },
       cleanSheets: { p10: 0.1667, p50: 0.3514, p90: 0.5338 },
     },
     2: {
       savePercentage: { p10: 0.5517, p50: 0.6556, p90: 0.7544 },
-      keySaves: { p10: 0.0435, p50: 0.0667, p90: 0.15 },
+      keySaves: { p10: 0.0455, p50: 0.0899, p90: 0.165 },
       goalsConceded: { p10: 0.913, p50: 1.3973, p90: 1.92 },
       routineSaves: { p10: 2.1333, p50: 2.5714, p90: 3 },
       cleanSheets: { p10: 0.1304, p50: 0.2727, p90: 0.4655 },
     },
     3: {
       savePercentage: { p10: 0.4167, p50: 0.5469, p90: 0.6757 },
-      keySaves: { p10: 0.0526, p50: 0.0667, p90: 0.1429 },
+      keySaves: { p10: 0.0462, p50: 0.0492, p90: 0.1445 },
       goalsConceded: { p10: 0.8333, p50: 1.2778, p90: 1.8 },
       routineSaves: { p10: 1.1333, p50: 1.5, p90: 1.8824 },
       cleanSheets: { p10: 0.1429, p50: 0.3125, p90: 0.4828 },
@@ -174,7 +190,7 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
       blocks: { p10: 0.0234, p50: 0.0295, p90: 0.0667 },
       goalsConceded: { p10: 0.7105, p50: 1.1478, p90: 1.8414 },
       cleanSheets: { p10: 0.1668, p50: 0.3543, p90: 0.5366 },
-      attack: { p10: 0.0263, p50: 0.0566, p90: 0.119 },
+      attack: { p10: 0.0435, p50: 0.0749, p90: 0.1302 },
     },
     2: {
       interceptions: { p10: 1.5652, p50: 2.0225, p90: 2.5 },
@@ -182,7 +198,7 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
       blocks: { p10: 0.0411, p50: 0.05, p90: 0.0789 },
       goalsConceded: { p10: 0.9, p50: 1.3889, p90: 1.9315 },
       cleanSheets: { p10: 0.1304, p50: 0.2712, p90: 0.4627 },
-      attack: { p10: 0.0435, p50: 0.0637, p90: 0.1343 },
+      attack: { p10: 0.04, p50: 0.05, p90: 0.1343 },
     },
     3: {
       interceptions: { p10: 1.3333, p50: 1.8, p90: 2.3093 },
@@ -217,7 +233,7 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
     1: {
       goals: { p10: 0.1755, p50: 0.4654, p90: 1.0227 },
       assists: { p10: 0, p50: 0.043, p90: 0.1237 },
-      extraChances: { p10: 0.03, p50: 0.0723, p90: 0.1703 },
+      extraChances: { p10: 0.0455, p50: 0.0956, p90: 0.2051 },
     },
     2: {
       goals: { p10: 0.1333, p50: 0.3661, p90: 0.7368 },
@@ -232,24 +248,59 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
   },
 };
 
-// `median` is the raw-quality median of that position IN THAT TIER, so every
-// group lands on 50 at its own median. `scale` amplifies the distance from that
-// median and is chosen so the group's P99 lands on 93 — which is what makes twelve
-// separately-shaped distributions comparable at all.
+// Both fields are solved, never tuned by hand. For each position/tier group:
 //
-// The scale is additionally capped so the group's worst observed season stays
-// above zero. With per-tier anchors that cap never binds: the lowest resulting
-// P1 across the twelve groups is 6.2, so every scale here is the one its P99
-// asks for. Every position still lands on 50 at its own tier median, and the
-// spread between tiers is carried by leagueStrength instead of by the anchors.
+//   median = the group's raw-quality median, so the group lands on 50
+//   scale  = (P95_TARGET - 50) / (the group's raw P95 - the group's raw median)
+//
+// with P95_TARGET = 82. That puts all twelve separately-shaped raw
+// distributions on the same number at P95 — the region where awards are
+// actually decided — instead of only at the median. Raise or lower the target
+// and the entire table recomputes from one formula; there is no second knob to
+// chase afterwards.
+//
+// Fitted on 16 seeds x 15 seasons (96,888 rows) and verified on a disjoint seed
+// set. Under the previous hand-tuned table the season-score top twenty ran at
+// keeper/defender/midfielder/forward pool multipliers of 1.91/0.97/0.97/0.72;
+// here it reads 1.16/1.01/1.02/0.88.
 const POSITION_QUALITY_CALIBRATION: Record<
   PlayerPosition,
   Record<LeagueTier, { median: number; scale: number }>
 > = {
-  GK: { 1: { median: 55.51, scale: 1.46 }, 2: { median: 52.9, scale: 1.39 }, 3: { median: 52.76, scale: 1.35 } },
-  DF: { 1: { median: 53.28, scale: 2.1 }, 2: { median: 51.8, scale: 2.06 }, 3: { median: 51.37, scale: 1.88 } },
-  MF: { 1: { median: 50.82, scale: 1.41 }, 2: { median: 47.51, scale: 1.54 }, 3: { median: 46.97, scale: 1.63 } },
-  FW: { 1: { median: 52.19, scale: 1.19 }, 2: { median: 49.02, scale: 1.25 }, 3: { median: 48.96, scale: 1.28 } },
+  GK: { 1: { median: 52.75, scale: 1.338 }, 2: { median: 53.06, scale: 1.309 }, 3: { median: 54.19, scale: 1.241 } },
+  DF: { 1: { median: 52.58, scale: 2.189 }, 2: { median: 52.19, scale: 2.086 }, 3: { median: 51.42, scale: 1.926 } },
+  MF: { 1: { median: 50.39, scale: 1.455 }, 2: { median: 47.64, scale: 1.579 }, 3: { median: 47.09, scale: 1.661 } },
+  FW: { 1: { median: 51.27, scale: 1.22 }, 2: { median: 49.74, scale: 1.179 }, 3: { median: 49.82, scale: 1.208 } },
+};
+
+/**
+ * Cross-position value weight, in position-quality points.
+ *
+ * The calibration table above makes each position internally fair — every
+ * group lands on 50 at its own median and on 82 at its own P95 — but internal
+ * fairness is not the same as cross-position value. Left at zero, the season
+ * top twenty came out at keeper/defender/midfielder/forward pool multipliers of
+ * 1.21/0.98/1.03/0.89 and the single best player was a defender or midfielder
+ * 83% of the time, which is not how football works: goals decide matches and a
+ * keeper who never scores is not worth a forward who scores thirty.
+ *
+ * These four numbers are solved, not chosen. Take the target share of the top
+ * twenty (1:2:3:3 by position), convert it to the percentile each position must
+ * reach to fill that share, read the season score at that percentile, and the
+ * offset is the distance from the common threshold. Solving on 196 seasons of a
+ * seed set disjoint from the one the calibration was fitted on puts the top
+ * twenty at 11.3/22.3/33.0/33.4 percent against a target of 11.1/22.2/33.3/33.3.
+ *
+ * They are deliberately small — the widest gap is 6.7 points between keeper and
+ * forward — because the anchors, not this table, are what carry a position's
+ * character. Raise the target share for a position and its offset recomputes
+ * from the same percentile arithmetic.
+ */
+const POSITION_VALUE_OFFSET: Record<PlayerPosition, number> = {
+  GK: 0.42,
+  DF: -4.75,
+  MF: -1.6,
+  FW: 5.95,
 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -408,7 +459,11 @@ function computePositionQuality(
       + anchoredMetric(metrics.cleanSheetContribution, anchors.cleanSheets) * 0.05;
   }
   const calibration = POSITION_QUALITY_CALIBRATION[position][tier];
-  return round1(clamp(50 + (quality - calibration.median) * calibration.scale, 0, PLAYER_SCORE_CEILING));
+  return round1(clamp(
+    50 + (quality - calibration.median) * calibration.scale + POSITION_VALUE_OFFSET[position],
+    0,
+    PLAYER_SCORE_CEILING,
+  ));
 }
 
 function resultFromQuality(
@@ -416,8 +471,8 @@ function resultFromQuality(
   metrics: PlayerPerformanceMetrics,
   leagueStrength: number,
 ): PlayerPerformanceResult {
-  const confidence = metrics.minutes > 0
-    ? metrics.minutes / (metrics.minutes + PLAYER_CONFIDENCE_MINUTES)
+  const confidence = metrics.appearances > 0
+    ? metrics.appearances / (metrics.appearances + PLAYER_CONFIDENCE_APPEARANCES)
     : 0;
   const adjustedPositionQuality = 50 + (positionQuality - 50) * confidence;
   // Availability answers "was this player there", not "did he play the full

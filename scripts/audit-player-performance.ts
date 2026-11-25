@@ -146,10 +146,20 @@ const top20Total = Object.values(top20ByPosition).reduce((sum, count) => sum + c
 const injured = trusted.filter(sample => sample.injuryAbsences > 0);
 const healthy = trusted.filter(sample => sample.injuryAbsences === 0);
 
+// medianSpread was capped at 5 back when the four positions were deliberately
+// levelled, and a spread that wide meant an anchor or a scale had drifted. Score
+// version 6 introduces POSITION_VALUE_OFFSET, so the positions are now SUPPOSED
+// to sit apart: the widest gap between those offsets is 10.7 quality points,
+// which lands near 6 season-score points once the confidence factor and the 0.75
+// weight are applied. The cap moves to 8 to match p90Spread. A genuine
+// calibration error still shifts a whole position by far more than that — the
+// third-tier keeper pinned to 15 out of 120 under the old top-flight anchors is
+// the kind of failure this is here to catch — while the intended value ordering
+// gets room to breathe instead of tripping the gate on noise.
 const report = {
   passed: invalidScores === 0
     && invalidAttendance === 0
-    && medianSpread <= 5
+    && medianSpread <= 8
     && p90Spread <= 8
     && lowConfidenceTop20 / Math.max(1, top20Total) <= 0.05,
   matrix: { seedCount, seasonsPerSeed, completedSeasons },

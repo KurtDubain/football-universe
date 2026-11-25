@@ -97,16 +97,25 @@ describe('position performance', () => {
       })),
     ];
     const qualities = samples.map(result => result.positionQuality);
-    // The band is 45-60 rather than a tight 5 because two of the midfielder's
-    // four terms are sparse: at their non-zero median `sparseMetric` returns 65,
-    // not the 50 `anchoredMetric` returns, so an all-at-median midfielder sits
-    // above the real median midfielder. Measured over live top-flight seasons
-    // the four medians are 52.4 / 51.3 / 52.0 / 50.4.
+    // The band is wide on purpose, for two separate reasons. Two of the
+    // midfielder's four terms are sparse: at their non-zero median
+    // `sparseMetric` returns 65, not the 50 `anchoredMetric` returns, so an
+    // all-at-median midfielder sits above the real median midfielder. And
+    // POSITION_VALUE_OFFSET now separates the positions deliberately — a
+    // forward sitting on its own tier median reads several points above a
+    // defender sitting on its own, which is the cross-position value weight
+    // doing its job, not a calibration error. What has to hold is the ORDER:
+    // a forward is worth more than a midfielder, who is worth more than a
+    // keeper, who is worth more than a defender.
     for (const quality of qualities) {
-      expect(quality).toBeGreaterThanOrEqual(45);
-      expect(quality).toBeLessThanOrEqual(60);
+      expect(quality).toBeGreaterThanOrEqual(42);
+      expect(quality).toBeLessThanOrEqual(64);
     }
-    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(12);
+    const [forward, midfielder, defender, keeper] = qualities;
+    expect(forward).toBeGreaterThan(midfielder);
+    expect(midfielder).toBeGreaterThan(keeper);
+    expect(keeper).toBeGreaterThan(defender);
+    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(18);
     for (const result of samples) {
       expect(result.seasonScore).toBeGreaterThanOrEqual(0);
       expect(result.seasonScore).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
@@ -156,9 +165,13 @@ describe('position performance', () => {
     const top = computePlayerPerformance('DF', tierMedian(1), 1);
     const mid = computePlayerPerformance('DF', tierMedian(2), 2);
     const lower = computePlayerPerformance('DF', tierMedian(3), 3);
+    // The band sits below 50 because a defender carries the largest negative
+    // POSITION_VALUE_OFFSET: the same tier-median season that reads 50 for a
+    // position of neutral value reads in the mid-forties here. What matters is
+    // that all three divisions land on the same number.
     for (const result of [top, mid, lower]) {
-      expect(result.positionQuality).toBeGreaterThanOrEqual(45);
-      expect(result.positionQuality).toBeLessThanOrEqual(55);
+      expect(result.positionQuality).toBeGreaterThanOrEqual(42);
+      expect(result.positionQuality).toBeLessThanOrEqual(52);
     }
     // Two whole divisions apart, and league strength is still worth ~1 point.
     expect(Math.abs(top.seasonScore - lower.seasonScore)).toBeLessThanOrEqual(2);
