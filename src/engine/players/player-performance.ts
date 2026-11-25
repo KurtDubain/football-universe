@@ -80,8 +80,23 @@ export const PLAYER_RANKING_MINUTES = 0;
  * formula that lands every group's P95 on 82, replacing twelve hand-picked
  * pairs. Verified on a disjoint seed set, the season-score top twenty moves
  * from pool multipliers of 1.91/0.97/0.97/0.72 to 1.16/1.01/1.02/0.88.
+ *
+ * v7: every per-90 rate is shrunk toward its own p50 anchor over a 1,440-minute
+ * prior before it is scored. Until v6 a rate was read at face value no matter
+ * how little it had been observed over, so a substitute whose goals, assists
+ * and big chances all happened to land above their p90 anchors collected three
+ * capped sub-scores at once and outscored a 36-goal striker. Measured over 144
+ * seasons, the top of the season table was a player with more substitute
+ * appearances than starts 17.4% of the time and a player with no starts at all
+ * 7.0% of the time. The median small-sample season was already LOW (33.6
+ * position quality under 600 minutes against 51.5 over 3,000), so this is a fat
+ * right tail rather than a shifted distribution, which is what a prior fixes
+ * and a threshold cannot. Verified on a seed set disjoint from the one the
+ * offsets were re-solved on, the top of the table goes from 26.8% substitute-led
+ * to 8.9%, from 5.4% never-started to 1.2%, and the lowest minute total any
+ * season leader carried rises from 442 to 1,021.
  */
-export const PLAYER_SCORE_VERSION = 6;
+export const PLAYER_SCORE_VERSION = 7;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -102,6 +117,8 @@ export interface PlayerPerformanceMetrics {
   routineSavesPer90: number;
   keySavesPer90: number;
   savePercentage: number;
+  /** Shots on target this player faced. The sample a save percentage is read over. */
+  shotsFaced: number;
   cleanSheetContribution: number;
   goalsConcededPer90: number;
   interceptionsPer90: number;
@@ -291,16 +308,23 @@ const POSITION_QUALITY_CALIBRATION: Record<
  * seed set disjoint from the one the calibration was fitted on puts the top
  * twenty at 11.3/22.3/33.0/33.4 percent against a target of 11.1/22.2/33.3/33.3.
  *
- * They are deliberately small — the widest gap is 6.7 points between keeper and
- * forward — because the anchors, not this table, are what carry a position's
+ * Re-solved for score version 7, because the rate shrinkage above changes the
+ * shape these offsets are read against. Shrinking removes the small-sample tail
+ * that had been inflating forwards, so the forward offset carries more of the
+ * real gap (+5.95 -> +6.82) while midfielder and defender fall back toward the
+ * keeper. Solved on 196 seasons (14 seeds x 14 seasons) against the real scorer
+ * rather than a re-implementation, this lands the top twenty at 11.1/22.2/33.4/33.2.
+ *
+ * They are deliberately small — the widest gap is 10.2 points between defender
+ * and forward — because the anchors, not this table, are what carry a position's
  * character. Raise the target share for a position and its offset recomputes
  * from the same percentile arithmetic.
  */
-const POSITION_VALUE_OFFSET: Record<PlayerPosition, number> = {
-  GK: 0.42,
-  DF: -4.75,
-  MF: -1.6,
-  FW: 5.95,
+export const POSITION_VALUE_OFFSET: Record<PlayerPosition, number> = {
+  GK: -0.32,
+  DF: -3.4,
+  MF: -3.09,
+  FW: 6.82,
 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -313,6 +337,50 @@ function round1(value: number): number {
 
 function per90(value: number, minutes: number): number {
   return minutes > 0 ? value * 90 / minutes : 0;
+}
+
+/**
+ * Prior strength, in minutes, for shrinking a rate toward its own anchor.
+ *
+ * 1,440 minutes is sixteen full matches, half a top-flight season: the point at
+ * which a player's own rate and the positional average are weighted equally.
+ * It is the knee of the measured curve rather than a round number — a prior of
+ * 2,160 cleans the tail further but collapses the defender share of the top
+ * twenty from 17.9% to 15.5% and pushes midfielders to 39.7%.
+ *
+ * Without it a rate is read at face value no matter how little it was
+ * observed over. A forward who came on for 454 minutes and scored 5 goals
+ * reads 0.99 goals per 90; if his assist and big-chance rates happen to land
+ * above their p90 anchors as well, all three forward terms cap at 100 and he
+ * outscores a 42-goal striker. Measured over 144 seasons that put a player
+ * with more substitute appearances than starts at the top of the season table
+ * in 17.4% of seasons, and a player with no starts at all in 7.0% — the worst
+ * case being a midfielder with 1 goal and 3 assists in 625 minutes.
+ *
+ * The prior is the metric's own p50 anchor, so shrinkage pulls toward "an
+ * ordinary season at this position and tier" rather than toward a number
+ * chosen here. Note that the median small-sample season was already low (33.6
+ * position quality under 600 minutes against 51.5 over 3,000): this is a fat
+ * right tail, not a shifted distribution, which is exactly what a prior fixes.
+ */
+const RATE_PRIOR_MINUTES = 1440;
+
+/**
+ * Shrink an intensive value observed over `minutes` toward `prior`.
+ *
+ * At 1,440 minutes the observation and the prior are weighted equally; at
+ * 3,000 the observation keeps 68% of the weight, so a full season is mostly
+ * untouched, while a 454-minute substitute keeps 24% and is mostly replaced.
+ */
+function shrunkByMinutes(value: number, minutes: number, prior: number): number {
+  if (minutes <= 0) return prior;
+  return (value * minutes + RATE_PRIOR_MINUTES * prior) / (minutes + RATE_PRIOR_MINUTES);
+}
+
+/** Same shrinkage for a share observed over a count that is not minutes. */
+function shrunkByCount(value: number, count: number, prior: number, priorCount: number): number {
+  if (count <= 0) return prior;
+  return (value * count + priorCount * prior) / (count + priorCount);
 }
 
 function interpolate(value: number, from: number, to: number, low: number, high: number): number {
@@ -405,6 +473,7 @@ export function getPlayerPerformanceMetrics(stats?: PlayerSeasonStats): PlayerPe
     routineSavesPer90: per90(routineSaves, minutes),
     keySavesPer90: per90(keySaves, minutes),
     savePercentage: shotsFaced > 0 ? clamp((routineSaves + keySaves) / shotsFaced, 0, 1) : 0,
+    shotsFaced,
     cleanSheetContribution: minutes > 0 ? clamp(cleanSheetMinutes / minutes, 0, 1) : 0,
     goalsConcededPer90: per90(goalsConceded, minutes),
     interceptionsPer90: per90(stats?.interceptions ?? 0, minutes),
@@ -419,16 +488,19 @@ function computePositionQuality(
   tier: LeagueTier,
 ): number {
   const anchors = ANCHORS[position][tier];
+  // Every rate below is shrunk toward its own p50 anchor before it is scored,
+  // so a handful of minutes cannot read as a season's worth of output.
+  const S = (value: number, prior: number) => shrunkByMinutes(value, metrics.minutes, prior);
   let quality: number;
   if (position === 'FW') {
-    quality = anchoredMetric(metrics.goalsPer90, anchors.goals) * 0.45
-      + anchoredMetric(metrics.assistsPer90, anchors.assists) * 0.25
-      + sparseMetric(metrics.extraBigChancesPer90, anchors.extraChances) * 0.30;
+    quality = anchoredMetric(S(metrics.goalsPer90, anchors.goals.p50), anchors.goals) * 0.45
+      + anchoredMetric(S(metrics.assistsPer90, anchors.assists.p50), anchors.assists) * 0.25
+      + sparseMetric(S(metrics.extraBigChancesPer90, anchors.extraChances.p50), anchors.extraChances) * 0.30;
   } else if (position === 'MF') {
-    quality = anchoredMetric(metrics.assistsPer90, anchors.assists) * 0.35
-      + sparseMetric(metrics.extraKeyPassesPer90, anchors.extraPasses) * 0.30
-      + anchoredMetric(metrics.goalsPer90, anchors.goals) * 0.25
-      + sparseMetric(metrics.extraBigChancesPer90, anchors.extraChances) * 0.10;
+    quality = anchoredMetric(S(metrics.assistsPer90, anchors.assists.p50), anchors.assists) * 0.35
+      + sparseMetric(S(metrics.extraKeyPassesPer90, anchors.extraPasses.p50), anchors.extraPasses) * 0.30
+      + anchoredMetric(S(metrics.goalsPer90, anchors.goals.p50), anchors.goals) * 0.25
+      + sparseMetric(S(metrics.extraBigChancesPer90, anchors.extraChances.p50), anchors.extraChances) * 0.10;
   } else if (position === 'DF') {
     // Interceptions and clearances are generated from the OPPONENT's shot and
     // possession totals, so they measure how much a defence was attacked rather
@@ -442,21 +514,29 @@ function computePositionQuality(
     // record an outcome — goals conceded while on the pitch and clean-sheet
     // share — which takes r(team goals conceded, defender quality) from -0.12
     // to -0.53 and drops the bottom-four wins to zero.
-    quality = anchoredMetric(metrics.interceptionsPer90, anchors.interceptions) * 0.22
-      + anchoredMetric(metrics.clearancesPer90, anchors.clearances) * 0.18
-      + sparseMetric(metrics.goalLineBlocksPer90, anchors.blocks) * 0.12
-      + inverseMetric(metrics.goalsConcededPer90, anchors.goalsConceded) * 0.22
-      + anchoredMetric(metrics.cleanSheetContribution, anchors.cleanSheets) * 0.16
-      + sparseMetric(metrics.attackContributionPer90, anchors.attack) * 0.10;
+    quality = anchoredMetric(S(metrics.interceptionsPer90, anchors.interceptions.p50), anchors.interceptions) * 0.22
+      + anchoredMetric(S(metrics.clearancesPer90, anchors.clearances.p50), anchors.clearances) * 0.18
+      + sparseMetric(S(metrics.goalLineBlocksPer90, anchors.blocks.p50), anchors.blocks) * 0.12
+      + inverseMetric(S(metrics.goalsConcededPer90, anchors.goalsConceded.p50), anchors.goalsConceded) * 0.22
+      + anchoredMetric(S(metrics.cleanSheetContribution, anchors.cleanSheets.p50), anchors.cleanSheets) * 0.16
+      + sparseMetric(S(metrics.attackContributionPer90, anchors.attack.p50), anchors.attack) * 0.10;
   } else {
+    // A save percentage is a share over shots faced, not over minutes, so it is
+    // shrunk over its own sample. The prior count is what the anchor medians
+    // imply over RATE_PRIOR_MINUTES, which keeps one constant behind both.
+    const shotsPrior = RATE_PRIOR_MINUTES / 90
+      * (anchors.routineSaves.p50 + anchors.keySaves.p50 + anchors.goalsConceded.p50);
     const saveRateScore = metrics.routineSavesPer90 + metrics.keySavesPer90 > 0
-      ? anchoredMetric(metrics.savePercentage, anchors.savePercentage)
+      ? anchoredMetric(
+        shrunkByCount(metrics.savePercentage, metrics.shotsFaced, anchors.savePercentage.p50, shotsPrior),
+        anchors.savePercentage,
+      )
       : 50;
     quality = saveRateScore * 0.35
-      + sparseMetric(metrics.keySavesPer90, anchors.keySaves) * 0.25
-      + anchoredMetric(metrics.routineSavesPer90, anchors.routineSaves) * 0.20
-      + inverseMetric(metrics.goalsConcededPer90, anchors.goalsConceded) * 0.15
-      + anchoredMetric(metrics.cleanSheetContribution, anchors.cleanSheets) * 0.05;
+      + sparseMetric(S(metrics.keySavesPer90, anchors.keySaves.p50), anchors.keySaves) * 0.25
+      + anchoredMetric(S(metrics.routineSavesPer90, anchors.routineSaves.p50), anchors.routineSaves) * 0.20
+      + inverseMetric(S(metrics.goalsConcededPer90, anchors.goalsConceded.p50), anchors.goalsConceded) * 0.15
+      + anchoredMetric(S(metrics.cleanSheetContribution, anchors.cleanSheets.p50), anchors.cleanSheets) * 0.05;
   }
   const calibration = POSITION_QUALITY_CALIBRATION[position][tier];
   return round1(clamp(

@@ -76,7 +76,7 @@ describe('position performance', () => {
     const samples = [
       computePlayerPerformance('FW', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: at(0.4654), assists: at(0.043), bigChances: at(0.4654) + at(0.0723),
+        goals: at(0.4654), assists: at(0.043), bigChances: at(0.4654) + at(0.0956),
       })),
       computePlayerPerformance('MF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
@@ -85,14 +85,14 @@ describe('position performance', () => {
       })),
       computePlayerPerformance('DF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 0.5, assists: at(0.0566) - 0.5, interceptions: at(2.0998), clearances: at(3.0653),
+        goals: 0.5, assists: at(0.0749) - 0.5, interceptions: at(2.0998), clearances: at(3.0653),
         keyBlocks: at(0.0295), goalsConcededWhileOnPitch: at(1.1478),
         cleanSheetMinutes: 0.3543 * minutes,
       })),
       computePlayerPerformance('GK', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        routineSaves: at(3.7568), saves: at(0.0882),
-        shotsOnTargetFaced: (at(3.7568) + at(0.0882)) / 0.7682,
+        routineSaves: at(3.7568), saves: at(0.1271),
+        shotsOnTargetFaced: (at(3.7568) + at(0.1271)) / 0.7682,
         goalsConcededWhileOnPitch: at(1.1628), cleanSheetMinutes: 0.3514 * minutes,
       })),
     ];
