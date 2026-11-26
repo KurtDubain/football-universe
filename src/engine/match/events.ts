@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { Player } from '../../types/player';
 import { effectiveGoalScoring } from '../players/development';
+import { clutchGoalWeight, hasTag, HOTHEAD_EXTRA_BOOKING_CHANCE, keeperCreditChance, personalityWeight, styleWeight } from '../players/tags';
 import type { MatchApproach } from '../../types/coach';
 import { SeededRNG } from './rng';
 
@@ -155,6 +156,12 @@ const PENALTY_SHOOTOUT_WOODWORK = [
 // ── Player picking helpers ────────────────────────────────────────
 
 /**
+ * What a pick is for. Each intent reads a different style/personality axis, so
+ * a poacher's assist penalty can never leak into who gets booked.
+ */
+type PickIntent = 'goal' | 'assist' | 'card' | 'miss';
+
+/**
  * Pick a player from the squad weighted by position relevance and goalScoring stat.
  * positionWeights maps position to a base weight multiplier.
  * The goalScoring stat is then used as additional weighting for scoring events.
@@ -167,7 +174,7 @@ function pickPlayer(
   squad: Player[],
   positionWeights: Record<string, number>,
   rng: SeededRNG,
-  useGoalScoring: boolean = false,
+  intent: PickIntent,
   isBigMatch: boolean = false,
   abilityWeight: number = 0,
 ): Player {
@@ -175,10 +182,19 @@ function pickPlayer(
     const posWeight = positionWeights[p.position] ?? 1;
     // goalScoring is the stored PEAK instinct; the age curve is applied here
     // so a 38-year-old no longer takes the same share of goals as he did at 27.
+    const useGoalScoring = intent === 'goal' || intent === 'miss';
     const scoringWeight = useGoalScoring ? Math.max(1, effectiveGoalScoring(p)) : 10;
-    const clutchMul = isBigMatch && p.tag === 'clutch' ? 1.3 : 1;
     const abilityMultiplier = Math.max(0.55, 1 + ((p.rating - 60) / 40) * abilityWeight);
-    return posWeight * scoringWeight * clutchMul * abilityMultiplier;
+    // Style and personality multipliers, read on this pick's axis only. Both
+    // are multipliers on a weight that already exists — the number of goals,
+    // assists and cards in a match is fixed before any of this runs, so a tag
+    // can move WHO receives them and never how many there are.
+    const axis: 'goal' | 'assist' | 'card' =
+      intent === 'card' ? 'card' : intent === 'assist' ? 'assist' : 'goal';
+    const styleMul = axis === 'card' ? 1 : styleWeight(p.styleTag, axis);
+    const personalityMul = personalityWeight(p, axis);
+    const clutchMul = clutchGoalWeight(p, isBigMatch);
+    return posWeight * scoringWeight * clutchMul * abilityMultiplier * styleMul * personalityMul;
   });
 
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -200,7 +216,7 @@ function pickGoalScorer(squad: Player[], rng: SeededRNG, isBigMatch: boolean = f
     squad,
     { FW: 10, MF: 4, DF: 1, GK: 0.05 },
     rng,
-    true,
+    'goal',
     isBigMatch,
     0.35,
   );
@@ -213,7 +229,7 @@ function pickAssistProvider(squad: Player[], scorerUuid: string, rng: SeededRNG)
     candidates,
     { MF: 10, FW: 6, DF: 3, GK: 0.1 },
     rng,
-    false,
+    'assist',
     false,
     0.7,
   );
@@ -227,7 +243,7 @@ function pickCardPlayer(squad: Player[], rng: SeededRNG): Player {
     squad,
     { DF: 10, MF: 6, FW: 3, GK: 1 },
     rng,
-    false,
+    'card',
   );
 }
 
@@ -252,18 +268,20 @@ function pickMissPlayer(squad: Player[], rng: SeededRNG): Player {
     squad,
     { FW: 8, MF: 5, DF: 1, GK: 0.1 },
     rng,
-    true,
+    'miss',
     false,
     0.25,
   );
 }
 
 function pickSetPieceTaker(squad: Player[], rng: SeededRNG): Player {
+  // Set-piece delivery is creation, so it reads the assist axis: a creator
+  // takes the corners and free kicks, a poacher waits in the box for them.
   return pickPlayer(
     squad,
     { MF: 10, FW: 6, DF: 3, GK: 0.05 },
     rng,
-    false,
+    'assist',
     false,
     0.9,
   );
@@ -299,7 +317,7 @@ function buildPenaltyTakerOrder(squad: Player[] | undefined, rng: SeededRNG): Pl
   const remaining = (squad ?? []).filter(player => player.position !== 'GK');
   const order: Player[] = [];
   while (remaining.length > 0) {
-    const selected = pickPlayer(remaining, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, true);
+    const selected = pickPlayer(remaining, { FW: 8, MF: 5, DF: 2, GK: 0 }, rng, 'goal');
     order.push(selected);
     remaining.splice(remaining.findIndex(player => player.uuid === selected.uuid), 1);
   }
@@ -555,6 +573,41 @@ export function generateMatchEvents(
       playerName,
       description: formatDescription(description, playerNumber, playerName),
     });
+  }
+
+  // ── Hothead extra bookings ───────────────────────────────────────
+  //
+  // A hothead does not merely take a bigger SHARE of a fixed card count — he
+  // raises it. The share route was measured and abandoned: a defender already
+  // carries a base card weight of 10 against a keeper's 1, so a ×2.5 and then a
+  // ×3.5 weight multiplier moved a defender's cards/90 by ×1.01 and ×1.14 while
+  // the same multiplier delivered ×2.16 on a keeper. Upward share shifts
+  // saturate; an independent extra booking does not, and it reads directly in
+  // cards/90 at every position.
+  for (const teamId of [homeTeamId, awayTeamId]) {
+    if (isShootoutOnly) break;
+    const squad = getSquad(teamId, maxMinute);
+    if (!squad?.length) continue;
+    for (const player of squad) {
+      if (!hasTag(player, 'hothead')) continue;
+      if (rng.next() >= HOTHEAD_EXTRA_BOOKING_CHANCE) continue;
+      // Minute first, then confirm he was actually on the pitch for it. Reading
+      // the squad at maxMinute and back-dating the booking put cards on
+      // substitutes before they came on, which the world validator rejects as
+      // `event_player_not_on_field`.
+      const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
+      const onPitch = getSquad(teamId, minute);
+      if (!onPitch?.some(candidate => candidate.uuid === player.uuid)) continue;
+      events.push({
+        minute,
+        type: 'yellow_card',
+        teamId,
+        playerId: player.uuid,
+        playerNumber: player.number,
+        playerName: player.name,
+        description: formatDescription(rng.pick(YELLOW_CARD_DESCRIPTIONS), player.number, player.name),
+      });
+    }
   }
 
   // ── Near misses (1-3) ────────────────────────────────────────────
@@ -894,8 +947,13 @@ export function applyDenyPipeline(
     }
     // Pick GK or DF for credit. If the preferred position is unavailable,
     // use the other real position rather than relabelling an outfield player.
-    const useGk = rng.next() < 0.6;
+    // Keeper credit is style-driven: a shot-stopper claims more of the denied
+    // goals than a conventional keeper, a flaky one swings match to match. The
+    // extra draw is taken ONLY for a flaky keeper so every other match keeps
+    // the exact RNG stream it had before styles existed.
     const goalkeeper = pickGoalkeeper(defendingSquad);
+    const flakyRoll = goalkeeper?.styleTag === 'flaky' ? rng.next() : 0;
+    const useGk = rng.next() < keeperCreditChance(goalkeeper, flakyRoll);
     const defender = pickDefender(defendingSquad, rng);
     const creditedPlayer = useGk ? goalkeeper ?? defender : defender ?? goalkeeper;
     if (!creditedPlayer) {

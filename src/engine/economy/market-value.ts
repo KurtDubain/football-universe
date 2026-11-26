@@ -1,6 +1,7 @@
 import { Player } from '../../types/player';
 import { PlayerSeasonStats } from '../../types/player';
 import { computeCurrentRating } from '../players/development';
+import { tagMarketMultiplier } from '../players/tags';
 
 // ── Two questions, two functions ─────────────────────────────────
 //
@@ -119,7 +120,7 @@ export function computePresentMarketValue(player: Player): number {
   const resaleMul = resaleMultiplier(player.age ?? 25);
   // v17 — tag effect: glass-prone players take a 30% market value haircut
   // (high injury risk depresses what buyers will pay).
-  const tagMul = player.tag === 'glass' ? 0.7 : 1.0;
+  const tagMul = tagMarketMultiplier(player);
   return Math.max(0.3, Math.round(base * posMul * resaleMul * tagMul * 10) / 10);
 }
 
@@ -148,7 +149,7 @@ export function computeInitialMarketValue(player: Player): number {
   const base = tierBase(r);
   const posMul = positionMultiplier(player.position);
   const ageMul = ageMultiplier(player.age ?? 25);
-  const tagMul = player.tag === 'glass' ? 0.7 : 1.0;
+  const tagMul = tagMarketMultiplier(player);
   return Math.max(0.3, Math.round(base * posMul * ageMul * tagMul * 10) / 10);
 }
 

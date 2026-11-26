@@ -22,6 +22,7 @@ import {
   FREE_MARKET_TEAM_ID,
 } from './transfer-application';
 import { spendableBudget } from './transfer-window';
+import { hasTag } from '../players/tags';
 
 /**
  * Squad-size target and the top-up pass that enforces it.
@@ -307,7 +308,7 @@ export function topUpSquads(params: TopUpParams): TopUpResult {
     while (excess > 0) {
       const squad = squads[teamId] ?? [];
       const candidate = squad
-        .filter(player => !isKeySquadPlayer(squad, player) && player.tag !== 'loyal')
+        .filter(player => !isKeySquadPlayer(squad, player) && !hasTag(player, 'loyal'))
         .sort((a, b) => a.rating - b.rating)[0];
       if (!candidate) break;
       const applied = applyTransferMove({
@@ -360,7 +361,7 @@ export function topUpSquads(params: TopUpParams): TopUpResult {
       for (const sellerId of sellers) {
         const sellerSquad = squads[sellerId] ?? [];
         const target = sellerSquad
-          .filter(player => !isKeySquadPlayer(sellerSquad, player) && player.tag !== 'loyal')
+          .filter(player => !isKeySquadPlayer(sellerSquad, player) && !hasTag(player, 'loyal'))
           .sort((a, b) => a.rating - b.rating)[0];
         if (!target) continue;
         const askingValue = estimateTransferValue({

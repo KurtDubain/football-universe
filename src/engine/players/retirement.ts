@@ -3,7 +3,7 @@ import { CoachCandidate, CoachStyle } from '../../types/coach';
 import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { GameWorld } from '../season/season-manager';
-import { rollTagForUuid } from './tags';
+import { peakAgeBandForTags, rollStyleTagForUuid, rollTagsForUuid } from './tags';
 import { pickPlayerName } from '../../config/player-names';
 import { computeCurrentRating } from './development';
 import { computeInitialMarketValue } from '../economy/market-value';
@@ -258,11 +258,13 @@ export function generateYouthReplacement(
   const age = Math.min(ageA, ageB);
   // Pre-roll uuid + tag so peakAge can react to late_bloomer.
   const uuid = formatPlayerUuid(nextUuid.value++);
-  const tag = rollTagForUuid(uuid);
+  const tags = rollTagsForUuid(uuid);
+  const styleTag = rollStyleTagForUuid(uuid, position);
   const talentRng = rng.fork();
   const talentTier = rollYouthTalentTier(team.reputation ?? 50, academyLevel, talentRng, talentEra);
-  const peakAge = tag === 'late_bloomer'
-    ? talentRng.nextInt(28, 32)
+  const peakBand = peakAgeBandForTags(tags);
+  const peakAge = peakBand
+    ? talentRng.nextInt(peakBand[0], peakBand[1])
     : talentTier === 'elite'
       ? talentRng.nextInt(23, 27)
       : talentRng.nextInt(24, 29);
@@ -339,8 +341,9 @@ export function generateYouthReplacement(
     age,
     marketValue: 0,
   };
-  // Tag — pre-rolled above (deterministic from uuid)
-  if (tag) player.tag = tag;
+  // Tags — pre-rolled above (deterministic from uuid)
+  if (tags.length > 0) player.tags = tags;
+  if (styleTag) player.styleTag = styleTag;
   player.marketValue = computeInitialMarketValue(player);
   return player;
 }

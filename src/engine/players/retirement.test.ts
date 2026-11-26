@@ -300,7 +300,7 @@ describe('generateYouthReplacement — basic shape', () => {
     expect(counts.elite / 20_000).toBeLessThan(0.03);
   });
 
-  it('age in [18, 22], peakAge in [24, 29]', () => {
+  it('age in [18, 22], peakAge within the tag-widened band', () => {
     const team = makeTeam('t1');
     const rng = new SeededRNG(1234);
     const nextUuid = { value: 100 };
@@ -310,8 +310,9 @@ describe('generateYouthReplacement — basic shape', () => {
       );
       expect(youth.age).toBeGreaterThanOrEqual(18);
       expect(youth.age).toBeLessThanOrEqual(22);
-      expect(youth.peakAge).toBeGreaterThanOrEqual(24);
-      // v18 — late_bloomer tag shifts peakAge to 28-32 (vs default 24-29)
+      // v18 late_bloomer 28-32, v23 early_peak 21-24, elite tier 23-27 and
+      // the default 24-29 — the union of every band is 21-32.
+      expect(youth.peakAge).toBeGreaterThanOrEqual(21);
       expect(youth.peakAge).toBeLessThanOrEqual(32);
     }
   });

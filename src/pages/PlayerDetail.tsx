@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useGameStore } from '../store/game-store';
 import { formatMarketValue } from '../engine/economy/market-value';
-import { TAG_META } from '../engine/players/tags';
+import { getPlayerTags, STYLE_TAG_META, TAG_META } from '../engine/players/tags';
 import { effectiveGoalScoring } from '../engine/players/development';
 import { Icon, IconName } from '../components/Icon';
 import { computePlayerRivals } from '../engine/players/player-rivalries';
@@ -17,7 +17,7 @@ import {
   getPlayerRowPerformance,
   type PlayerStatRow,
 } from '../engine/players/player-stat-selectors';
-import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag } from '../types/player';
+import type { Player, PlayerRetirement, PlayerSeasonStats, PlayerTag, StyleTag } from '../types/player';
 import type { GameWorld } from '../engine/season/season-manager';
 import { EmptyState, Panel } from '../components/ui';
 import { POSITION_CHIP, POSITION_CHIP_BASE } from '../components/position-chip';
@@ -34,12 +34,30 @@ import { playerCareerAwards } from '../engine/players/player-honors';
 
 const TAG_HINT: Record<PlayerTag, string> = {
   loyal:        '忠诚 — 永不被豪门挖角',
-  ambitious:    '野心家 — 被挖角概率 ×1.5',
+  ambitious:    '野心家 — 被挖角概率 +12 个百分点',
   iron:         '铁人 — 受伤几率 ÷3',
   glass:        '玻璃人 — 受伤几率 ×2，市值打 7 折',
   clutch:       '大心脏 — 在杯赛决赛 / 德比战中进球倾向 ×1.3',
-  late_bloomer: '大器晚成 — 成长曲线通常比同龄球员更晚成熟',
-  wanderer:     '浪子 — 每赛季 8% 概率自请离队进自由市场',
+  late_bloomer: '大器晚成 — 巅峰年龄 28-32 岁',
+  wanderer:     '浪子 — 每赛季 8% 概率想走，有球队接手才真的转会',
+  hothead:      '火药桶 — 吃牌倾向大幅偏高，停赛更多',
+  gentleman:    '干净利落 — 几乎不吃牌',
+  solo:         '独狼 — 进球倾向 ×1.25，助攻倾向 ×0.45',
+  leader:       '领袖 — 被挖角概率 ×0.6，市值 ×1.1',
+  early_peak:   '少年老成 — 巅峰年龄 21-24 岁',
+};
+
+const STYLE_HINT: Record<StyleTag, string> = {
+  poacher:     '禁区猎手 — 进球倾向 ×1.55，助攻倾向 ×0.4',
+  creator:     '机会制造者 — 助攻倾向 ×1.95，进球倾向 ×0.6',
+  playmaker:   '组织核心 — 助攻倾向 ×1.9，防守投入 ×0.5',
+  engine:      '工兵 — 防守投入 ×1.6，助攻倾向 ×0.55',
+  shadow:      '影子前锋 — 进球倾向 ×2.2，防守投入 ×0.6',
+  marker:      '盯人中卫 — 拦截 ×1.55，解围 ×0.7',
+  sweeper:     '清道夫 — 解围 ×1.55，拦截 ×0.7',
+  raider_df:   '带刀后卫 — 进攻贡献 ×4.0，防守投入 ×0.95',
+  shotstopper: '门线型 — 被拒进球归自己的比例 60% → 78%',
+  flaky:       '神经刀 — 每场在 48% 与 72% 之间摇摆',
 };
 
 const posLabel: Record<string, string> = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
@@ -277,14 +295,23 @@ function PlayerDetailContent({ world, uuid }: { world: GameWorld; uuid: string }
               <span className={`${POSITION_CHIP_BASE} ${POSITION_CHIP[player.position]}`}>
                 {posLabel[player.position] ?? player.position}
               </span>
-              {player.tag && TAG_META[player.tag] && (
+              {player.styleTag && STYLE_TAG_META[player.styleTag] && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded border ${TAG_META[player.tag].color}`}
-                  title={TAG_HINT[player.tag]}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${STYLE_TAG_META[player.styleTag].color}`}
+                  title={STYLE_HINT[player.styleTag]}
                 >
-                  {TAG_META[player.tag].icon} {TAG_META[player.tag].label}
+                  {STYLE_TAG_META[player.styleTag].icon} {STYLE_TAG_META[player.styleTag].label}
                 </span>
               )}
+              {getPlayerTags(player).map(tag => TAG_META[tag] && (
+                <span
+                  key={tag}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${TAG_META[tag].color}`}
+                  title={TAG_HINT[tag]}
+                >
+                  {TAG_META[tag].icon} {TAG_META[tag].label}
+                </span>
+              ))}
               <span className="text-xs text-slate-500">基础能力 {player.rating}</span>
               {player.age !== undefined && (
                 <span className="text-xs text-slate-500">{player.age}岁</span>

@@ -3,6 +3,7 @@ import { MatchResult } from '../../types/match';
 import { SeededRNG } from '../match/rng';
 import type { CoachFormation } from '../../types/coach';
 import { getFormationShape } from '../coaches/tactics';
+import { tagInjuryMultiplier } from './tags';
 
 /**
  * Phase G — injury / suspension engine.
@@ -586,9 +587,7 @@ export function processInjuriesAndSuspensions(args: {
         // v17 — personality tag scales injury probability:
         //   iron  → ÷3 (rarely injured)
         //   glass → ×2 (injury-prone)
-        let chance = INJURY_ROLL_CHANCE;
-        if (p.tag === 'iron')  chance /= 3;
-        if (p.tag === 'glass') chance *= 2;
+        const chance = INJURY_ROLL_CHANCE * tagInjuryMultiplier(p);
         if (rng.next() >= chance) continue;
 
         const injury = rollInjury(seasonNumber, globalWindowIdx, rng);

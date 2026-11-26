@@ -91,30 +91,76 @@ export interface Player {
   injuryHistory?: Injury[];
   // ── v17: Personality tag ──────────────────────────────────────────
   /**
-   * Optional personality tag affecting transfers / injuries / market value.
-   * Mutually exclusive — 0 or 1 tag per player. Assigned at generation
-   * based on a deterministic uuid-hash roll (~30% chance of any tag,
-   * roughly: 10% loyal / 10% ambitious / 5% iron / 5% glass).
+   * Personality tags affecting transfers / injuries / market value, plus the
+   * v23 additions that reach the match engine through card and shot weights.
    *
-   * Effects:
-   *   loyal     — never poached by elites (poach probability = 0)
-   *   ambitious — poach probability × 1.5
-   *   iron      — injury chance ÷ 3
-   *   glass     — injury chance × 2, market value × 0.7
+   * 0-2 tags per player, rolled from independent uuid-hash slots (see
+   * `rollTagsForUuid`). ~29% of players carry none, ~50% carry one, ~21% carry
+   * two. Never read this field directly — go through `getPlayerTags` /
+   * `hasTag` in `engine/players/tags`, which resolve the legacy single-tag
+   * shape below.
+   */
+  tags?: PlayerTag[];
+  /**
+   * Playing-style tag. Exactly one of the position's styles, or absent for a
+   * conventional player. Rolled from the uuid hash like the personality tags,
+   * but scoped to the player's position — a style describes HOW a player
+   * produces, so it is what the match engine reads when it divides goals,
+   * assists, cards and defensive actions.
+   *
+   * A style never touches `peakRating`. It moves the SHAPE of a player's
+   * output, not their ceiling.
+   */
+  styleTag?: StyleTag;
+  /**
+   * @deprecated v17-v22 single-tag shape. Present on saves written before the
+   * multi-tag roll; `getPlayerTags` folds it into the array when `tags` is
+   * absent. New writes go to `tags`.
    */
   tag?: PlayerTag;
 }
 
-/** v17+ — player personality tag (at most one per player). */
+/** v17+ — player personality tag (at most two per player). */
 export type PlayerTag =
   | 'loyal'        // never poached
-  | 'ambitious'    // 1.5× poach probability
+  | 'ambitious'    // poach probability +0.12
   | 'iron'         // injury chance ÷ 3
   | 'glass'        // injury chance × 2, market value × 0.7
   // v18 additions
   | 'clutch'       // +30% goal weight in finals + derbies
   | 'late_bloomer' // peakAge 28-32 instead of 24-29
-  | 'wanderer';    // 8% per season chance to self-release to free agent pool
+  | 'wanderer'     // wants out 8%/season; leaves only when a club actually buys him
+  // v23 additions — all five land on an existing engine hook
+  | 'hothead'      // card weight × 2.5
+  | 'gentleman'    // card weight × 0.3
+  | 'solo'         // goal weight × 1.25, assist weight × 0.45
+  | 'leader'       // poach probability × 0.6, market value × 1.10
+  | 'early_peak';  // peakAge 21-24 instead of 24-29
+
+/**
+ * v23 — playing-style tag. One per player at most, drawn from the styles
+ * available at that position.
+ *
+ * Each style is a multiplier on a weight the match engine already computes, so
+ * a style can only redistribute a fixed pool of events — it cannot create
+ * goals, assists or defensive actions that the fixture did not generate.
+ */
+export type StyleTag =
+  // FW — the two dials a forward has are finishing and creation
+  | 'poacher'      // goal × 1.35, assist × 0.60
+  | 'creator'      // goal × 0.75, assist × 1.55
+  // MF — assists, shooting and defensive work
+  | 'playmaker'    // assist × 1.60, defensive work × 0.50
+  | 'engine'       // assist × 0.55, goal × 0.85, defensive work × 2.00
+  | 'shadow'       // goal × 2.20, defensive work × 0.60
+  // DF — interception/clearance split, plus attacking contribution
+  | 'marker'       // interceptions × 1.55, clearances × 0.70
+  | 'sweeper'      // interceptions × 0.70, clearances × 1.55
+  | 'raider_df'    // goal × 3.00, defensive work × 0.90
+  // GK — one dial only: how often a denied goal is credited to the keeper
+  // rather than to a defender on the line
+  | 'shotstopper'  // keeper credit 0.60 → 0.72
+  | 'flaky';       // keeper credit 0.45 or 0.78, redrawn per match
 
 /**
  * One entry in `Player.injuryHistory`. Severity drives both `durationMatches`

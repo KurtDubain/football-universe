@@ -20,8 +20,10 @@ describe('generator — peakRating / peakAge assignment', () => {
     for (const p of all) {
       expect(typeof p.peakRating).toBe('number');
       expect(typeof p.peakAge).toBe('number');
-      expect(p.peakAge).toBeGreaterThanOrEqual(24);
-      expect(p.peakAge).toBeLessThanOrEqual(29);
+      // v23 — the two age tags widen the band: early_peak rolls 21-24 and
+      // late_bloomer 28-32. The default roll is still 24-29.
+      expect(p.peakAge).toBeGreaterThanOrEqual(21);
+      expect(p.peakAge).toBeLessThanOrEqual(32);
     }
   });
 

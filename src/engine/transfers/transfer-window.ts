@@ -18,6 +18,7 @@ import {
 import { computeCurrentRating } from '../players/development';
 import { computeSalary } from '../economy/finance';
 import { computePlayerCareerTotals } from '../players/career-totals';
+import { hasTag, tagPoachMultiplier } from '../players/tags';
 import {
   STARTER_TARGETS,
   assessSquadNeeds,
@@ -104,6 +105,23 @@ const ELITE_SWAP_MAX = 2;
 const ELITE_SWAP_ATTEMPT_CHANCE = 0.55;
 const ELITE_SWAP_MIN_NEED = 0.24;
 const ELITE_SWAP_VALUE_TOLERANCE = 0.35;
+// ── Wanderer lane ───────────────────────────────────────────
+// A wanderer who asks out is SHOPPED, not dumped — see Step 2.7. He only
+// actually leaves when a club signs him, so these three numbers decide how
+// often the tag fires at all rather than how often it strands a player.
+const WANDERER_DEPARTURE_CHANCE = 0.08;
+/**
+ * Share of the asking price a wanderer fetches. Below 1 because he has asked
+ * out: the buyer knows the seller cannot hold him, and a player who wants to
+ * go is not a player two clubs bid against.
+ */
+const WANDERER_BID_SHARE = 0.85;
+/**
+ * Minimum squad-need score before a club takes a wanderer. Deliberately below
+ * ELITE_SWAP_MIN_NEED (0.24) — a wanderer is a market opportunity rather than
+ * a targeted signing, so a club with a mild hole takes him.
+ */
+const WANDERER_MIN_NEED = 0.15;
 // ── Premium bidding ──────────────────────────────────────────
 // A long save accumulates cash with almost no outlet: measured at S150 the
 // league held €54.3bn, not one club was in the red across 150 seasons, and
@@ -259,7 +277,7 @@ function buildCandidates(
     // has banked a headline season yet. Without this the market only ever sees
     // players who already produced, which strands wonderkids on weak clubs for
     // their entire career.
-    if ((player.peakRating ?? 0) >= peakGate && player.age <= ageGate && player.tag !== 'loyal') {
+    if ((player.peakRating ?? 0) >= peakGate && player.age <= ageGate && !hasTag(player, 'loyal')) {
       allCands.push({
         playerUuid: stat.playerId,
         teamId: stat.teamId,
@@ -433,7 +451,7 @@ function attemptEliteSwaps(params: {
         // paper but almost never fired: most squads sit at 18-22 players, so a
         // club rarely carries a position group larger than its target.
         for (const candidate of peers.slice(STARTER_TARGETS[position])) {
-          if (candidate.tag === 'loyal' || spent.has(candidate.uuid)) continue;
+          if (hasTag(candidate, 'loyal') || spent.has(candidate.uuid)) continue;
           surplus.push(candidate);
           valueByUuid.set(candidate.uuid, estimateTransferValue({
             player: candidate,
@@ -638,7 +656,7 @@ export function processTransferWindow(
     if ((sellerPoachCount[cand.teamId] ?? 0) >= MAX_POACHES_PER_SELLER) continue;
     const fromSquad = squads[cand.teamId];
     const candPlayer = fromSquad?.find(p => p.uuid === cand.playerUuid);
-    if (candPlayer?.tag === 'loyal') continue;
+    if (hasTag(candPlayer, 'loyal')) continue;
     const incomingPlayer = candPlayer;
     if (!incomingPlayer || !fromSquad || (fromSquad.length >= 11 && fromSquad.length <= 18)) continue;
     const fromTeam = world.teamBases[cand.teamId];
@@ -691,8 +709,11 @@ export function processTransferWindow(
     if (buyerOptions.length === 0) continue;
 
     const strongestDemand = Math.max(...buyerOptions.map((option) => option.fit.needScore));
-    const personalityBoost = incomingPlayer.tag === 'ambitious' ? 0.12 : 0;
-    const activityChance = Math.min(0.72, (POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost) * marketHeat);
+    const personalityBoost = hasTag(incomingPlayer, 'ambitious') ? 0.12 : 0;
+    // A leader is the last man out of a dressing room, so the whole lane is
+    // damped for him rather than merely losing the ambitious bump.
+    const activityChance = Math.min(0.72, (POACH_PROBABILITY * 0.55 + strongestDemand * 0.22 + personalityBoost) * marketHeat)
+      * tagPoachMultiplier(incomingPlayer);
     if (rng.next() >= activityChance) continue;
 
     // Competitive bidding: every interested club prices the player against its
@@ -1021,7 +1042,7 @@ export function processTransferWindow(
     // Release the lowest-rated player (fringe). Skip if they have a tag
     // that suggests loyalty — those would never voluntarily depart.
     const sortedByRating = [...sq].sort((a, b) => a.rating - b.rating);
-    const candidate = sortedByRating.find(p => p.tag !== 'loyal');
+    const candidate = sortedByRating.find(p => !hasTag(p, 'loyal'));
     if (!candidate) continue;
     const applied = applyTransferMove({
       squads,
@@ -1049,39 +1070,76 @@ export function processTransferWindow(
   }
 
   // ── Step 2.7: Wanderer tag — voluntary departure ────────────────
-  // v18 — players with 🎒 wanderer tag have an 8% per-season chance to
-  // self-request transfer (released to pool, no buyer needed). Applies
-  // to ALL teams including elites — a wanderer might leave 广州恒大 too.
-  const WANDERER_RELEASE_CHANCE = 0.08;
+  //
+  // v23 — a wanderer who asks out is SHOPPED, not dumped.
+  //
+  // The old version released him straight into the free-agent pool with no
+  // buyer sought. Measured over 120 seasons / 304 departures: 42.4% were
+  // re-signed in the same window, 19.4% the next season, 17.4% later, and
+  // 20.7% were never signed at all. So 57.6% of departures cost the player at
+  // least one season and a fifth cost him his career — while the selling club
+  // received nothing for an asset it had developed.
+  //
+  // Now he asks out, the league is polled for a buyer, and he leaves ONLY if a
+  // club actually signs him. No buyer means he stays and re-rolls next season.
+  // A player nobody wants does not get to leave, which is both how contracts
+  // work and what removes the wasted season entirely. Every departure is now a
+  // real transfer with a fee, so the seller is paid as well.
   for (const tid of Object.keys(squads)) {
     const sq = squads[tid];
     if (!sq || sq.length < MIN_SQUAD_AFTER_RELEASE + 1) continue;
-    const wanderers = sq.filter(p => p.tag === 'wanderer');
+    const wanderers = sq.filter(player => hasTag(player, 'wanderer'));
     for (const w of wanderers) {
-      if (rng.next() >= WANDERER_RELEASE_CHANCE) continue;
+      if (rng.next() >= WANDERER_DEPARTURE_CHANCE) continue;
       if (squads[tid].length <= MIN_SQUAD_AFTER_RELEASE) break;
+
+      const askingValue = estimateTransferValue({
+        player: w,
+        sellerSquad: squads[tid],
+        sellerCash: world.teamFinances[tid]?.cash ?? 0,
+        stats: playerStats[w.uuid],
+      });
+      const bid = Math.round(askingValue * WANDERER_BID_SHARE * 10) / 10;
+      if (bid <= 0) continue;
+
+      // Poll every other club. Squad need is the primary signal — a club that
+      // has his position covered is not interested at any price — and the
+      // budget check is the same solvency-floor cash the premium lane uses.
+      const buyers = Object.keys(squads)
+        .filter(otherId => otherId !== tid)
+        .map(otherId => ({
+          otherId,
+          need: needsByTeam[otherId]?.[w.position]?.needScore ?? 0,
+          cash: availableCash(otherId),
+        }))
+        .filter(option => option.need >= WANDERER_MIN_NEED && option.cash >= bid)
+        .sort((a, b) => (b.need - a.need) || a.otherId.localeCompare(b.otherId));
+      // No buyer: he stays. This is the branch that used to strand him.
+      if (buyers.length === 0) continue;
+
+      const buyerId = buyers[0].otherId;
       const applied = applyTransferMove({
         squads,
         playerStats,
         player: w,
         fromTeamId: tid,
-        toTeamId: FREE_MARKET_TEAM_ID,
+        toTeamId: buyerId,
       });
       if (!applied) continue;
       squads = applied.squads;
       playerStats = applied.playerStats;
-      freeAgentPool.push({ player: applied.movedPlayer, releasedFromTeamId: tid });
-      const teamName = world.teamBases[tid]?.name ?? tid;
+      plannedSpending[buyerId] = (plannedSpending[buyerId] ?? 0) + bid;
       transfers.push(createTransferRecord({
         season: seasonNumber,
         windowIndex,
         player: applied.movedPlayer,
         fromTeamId: tid,
-        fromTeamName: teamName,
-        toTeamId: FREE_MARKET_TEAM_ID,
-        toTeamName: '自由市场',
-        type: 'free',
-        reason: '🎒 浪子情怀，自请离队',
+        fromTeamName: world.teamBases[tid]?.name ?? tid,
+        toTeamId: buyerId,
+        toTeamName: world.teamBases[buyerId]?.name ?? buyerId,
+        type: 'transfer',
+        fee: bid,
+        reason: '🎒 浪子自请离队，转会加盟',
       }));
     }
   }

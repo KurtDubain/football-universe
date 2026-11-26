@@ -16,6 +16,7 @@ import { BALANCE } from '../../config/balance';
 import { poissonSample } from './poisson';
 import { addNotableSetPieceEvents, generateMatchEvents, applyDenyPipeline } from './events';
 import { selectMatchday } from '../players/injuries';
+import { styleWeight } from '../players/tags';
 import {
   buildMatchParticipation,
   extendMatchParticipation,
@@ -133,8 +134,15 @@ function distributeDefensiveTotal(
     .filter((entry): entry is { player: Player; minutes: number; share: number } => Boolean(entry.player));
   if (candidates.length === 0) return;
 
+  // Style splits the SAME team total along a different axis: an engine takes
+  // twice a playmaker's share, a marker trades clearances for interceptions.
+  // The total is fixed before this runs, so a style cannot manufacture
+  // defensive actions the fixture did not generate.
+  const splitAxis = field === 'interceptions' ? 'interception' : 'clearance';
   const weights = candidates.map(({ player, minutes, share }) =>
-    minutes * share * (0.55 + player.rating / 100));
+    minutes * share * (0.55 + player.rating / 100)
+    * styleWeight(player.styleTag, 'defense')
+    * styleWeight(player.styleTag, splitAxis));
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   for (let action = 0; action < total; action++) {
     let roll = rng.next() * weightTotal;

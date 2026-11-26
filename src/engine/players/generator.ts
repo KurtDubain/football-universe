@@ -3,7 +3,7 @@ import { TeamBase } from '../../types/team';
 import { SeededRNG } from '../match/rng';
 import { pickPlayerName } from '../../config/player-names';
 import { computeInitialMarketValue } from '../economy/market-value';
-import { rollTagForUuid } from './tags';
+import { peakAgeBandForTags, rollStyleTagForUuid, rollTagsForUuid } from './tags';
 import { computeCurrentRating } from './development';
 
 /**
@@ -144,12 +144,14 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
     // Pre-roll uuid + tag so peakAge can react to late_bloomer (peakAge shifted
     // to 28-32 vs default 24-29). Tag itself is destiny — same uuid → same tag.
     const uuid = formatPlayerUuid(nextUuid.value++);
-    const tag = rollTagForUuid(uuid);
+    const tags = rollTagsForUuid(uuid);
+    const styleTag = rollStyleTagForUuid(uuid, pos);
     // Individual peak-age variance — 24-29, uniform. peakRating is fixed;
     // the curve in development.ts scales the *current* rating from it so a
     // 19-year-old wonderkid doesn't ship at full peak.
     // Late bloomers peak later — gives the storyline of "老兵突然封神".
-    const peakAge = tag === 'late_bloomer' ? rng.nextInt(28, 32) : rng.nextInt(24, 29);
+    const peakBand = peakAgeBandForTags(tags);
+    const peakAge = peakBand ? rng.nextInt(peakBand[0], peakBand[1]) : rng.nextInt(24, 29);
     const rating = computeCurrentRating(peakRating, age, peakAge);
     const newPlayer: Player = {
       uuid,
@@ -164,8 +166,9 @@ export function generateSquad(team: TeamBase, rng: SeededRNG, nextUuid: { value:
       age,
       marketValue: 0, // computed below after object exists
     };
-    // Assign personality tag (set via let above — uuid-hash determined)
-    if (tag) newPlayer.tag = tag;
+    // Assign personality + style tags (uuid-hash determined, set above)
+    if (tags.length > 0) newPlayer.tags = tags;
+    if (styleTag) newPlayer.styleTag = styleTag;
     newPlayer.marketValue = computeInitialMarketValue(newPlayer);
     players.push(newPlayer);
   }

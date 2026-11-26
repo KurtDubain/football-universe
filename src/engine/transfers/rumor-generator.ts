@@ -2,6 +2,7 @@ import { GameWorld, NewsItem } from '../season/season-manager';
 import { Player, PlayerPosition } from '../../types/player';
 import { SeededRNG } from '../match/rng';
 import { createNewsId } from '../season/helpers';
+import { hasTag } from '../players/tags';
 
 /**
  * Phase 转会传闻 — generated in the back-end of each season as "rumors"
@@ -70,7 +71,7 @@ export function generateRumors(world: GameWorld, rng: SeededRNG): { rumors: Tran
     if (!team || team.overall >= NON_ELITE_OVERALL_THRESHOLD) continue;
     const player = (world.squads[stat.teamId] ?? []).find(p => p.uuid === stat.playerId);
     if (!player) continue;
-    if (player.tag === 'loyal') continue; // loyal won't be poached, no rumors
+    if (hasTag(player, 'loyal')) continue; // loyal won't be poached, no rumors
     let sortKey = 0;
     switch (player.position) {
       case 'FW': sortKey = stat.goals * 3; break;
