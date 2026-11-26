@@ -17,13 +17,16 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // player-marginal-impact (1,636 gzipped) are hoisted with it because they
     // were previously reachable only from lazy route chunks and are now
     // shared with the tag chunk. Measured against the v4.80.0 baseline built
-    // from 2caa997: initial JS goes 159,604 → 173,476 gzipped and 469,408 →
-    // 509,233 raw. This is one round of structural growth rather than drift —
-    // v4.80.0 had 396 bytes of headroom left — and entry JS did not move at
-    // 61,408 gzipped against 66,000, so the first script the browser parses is
-    // unchanged. Splitting the tag tables out would mean the simulator
-    // awaiting an import mid-match, which buys back 11 KB at the cost of an
-    // engine change and a fetch before the first advance.
+    // from 2caa997: initial JS goes 469,408 → just over 509,000 raw and
+    // 159,604 → just over 173,000 gzipped, and entry JS stays around 61,400
+    // against 66,000, so the first script the browser parses does not move.
+    // This is one round of structural growth rather than drift — v4.80.0 had
+    // 396 bytes of headroom left. The exact byte counts live in README.md and
+    // docs/current-status.md rather than here: this comment ships inside the
+    // bundle it describes, so pinning a gzip figure in it oscillates.
+    // Splitting the tag tables out would mean the simulator awaiting an
+    // import mid-match, which buys back 11 KB at the cost of an engine change
+    // and a fetch before the first advance.
     bytes: 515_000,
     gzipBytes: 176_000,
   },
@@ -119,7 +122,7 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // above. award-scoring and player-marginal-impact were previously
     // reachable only from lazy route chunks; the tag chunk now imports both,
     // and the tag chunk is initial, so both are hoisted into the initial
-    // precache set. Measured precache bytes are 2,088,499 against the
+    // precache set. Measured precache bytes are just over 2,088,000 against the
     // 2,150,000 cap, so only the entry count moved.
     entries: 94,
     bytes: 2_150_000,
