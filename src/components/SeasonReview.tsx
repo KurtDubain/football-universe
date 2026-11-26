@@ -20,6 +20,7 @@ import {
 } from '../engine/players/player-stat-selectors';
 import { leagueGoalsOf } from '../engine/players/player-stat-fields';
 import { AWARD_META } from '../engine/awards/season-awards';
+import { deriveCoachHonours } from '../engine/awards/coach-honours';
 import type { StorylineOutcome, StorylineType } from '../engine/season/storylines';
 import type {
   ObserverSeasonCheckpoint,
@@ -89,17 +90,11 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
 
   const l1Records = seasonRecords.filter(r => r.leagueLevel === 1).sort((a, b) => a.leaguePosition - b.leaguePosition);
   /**
-   * Overperformance baseline for the coach cards.
-   *
-   * `expectation` runs 1-5, so an expectation-5 side maps to expected position 0
-   * and rates -1 even when it wins the league. That is correct for an
-   * overperformance award and useless as the only coach card, which is why the
-   * champion now gets a card of its own.
+   * The two coaching cards, from the same derivation the closing ceremony
+   * prints. One definition, so a ceremony can never contradict this panel
+   * about the same season.
    */
-  const expectedPositionFor = (teamId: string) => {
-    const expectation = tb[teamId]?.expectation ?? 3;
-    return Math.round(l1Records.length * (1 - (expectation - 1) / 4));
-  };
+  const coachHonours = deriveCoachHonours(world, seasonNumber);
   const competitionStats = selectSeasonCompetitionStats(world, seasonNumber);
 
   const bestDefense = l1Records.length > 0 ? l1Records.reduce((b, r) => r.leagueGA < b.leagueGA ? r : b) : null;
@@ -486,42 +481,19 @@ export default function SeasonReview({ world, seasonNumber }: Props) {
           <h3 className="text-sm font-bold text-[var(--competition-gold)]">球队与教练观察</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-700/30">
-          {/* Champion's coach. Before this card existed, strong sides had no
-              route onto the panel at all — see expectedPositionFor. */}
-          {l1Records.length > 0 && (() => {
-            const champion = l1Records[0];
-            const coachName = world.coachBases[champion.coachId]?.name ?? '未知';
-            return (
-              <AwardCard
-                emoji="🏆"
-                title="冠军教头"
-                value={coachName}
-                sub={`${getTeamName(champion.teamId, tb)} 第${champion.leaguePosition}名`}
-              />
-            );
-          })()}
-          {/* Best Coach — biggest overperformance against expectation. The
-              champion is excluded so one coach never fills two cards. */}
-          {l1Records.length > 1 && (() => {
-            const championTeamId = l1Records[0].teamId;
-            const bestCoach = l1Records
-              .filter(record => record.teamId !== championTeamId)
-              .reduce((best, record) => (
-                expectedPositionFor(record.teamId) - record.leaguePosition
-                  > expectedPositionFor(best.teamId) - best.leaguePosition
-                  ? record
-                  : best
-              ));
-            const coachName = world.coachBases[bestCoach.coachId]?.name ?? '未知';
-            return (
-              <AwardCard
-                emoji="👔"
-                title="最佳教练"
-                value={coachName}
-                sub={`${getTeamName(bestCoach.teamId, tb)} 第${bestCoach.leaguePosition}名 · 超额完成预期`}
-              />
-            );
-          })()}
+          {/* 冠军教头 and 最佳教练. The champion is excluded from the second
+              card by construction, so one coach never fills both. */}
+          {coachHonours.map(honour => (
+            <AwardCard
+              key={honour.kind}
+              emoji={honour.kind === 'champion_coach' ? '🏆' : '👔'}
+              title={honour.kind === 'champion_coach' ? '冠军教头' : '最佳教练'}
+              value={honour.coachName}
+              sub={honour.kind === 'champion_coach'
+                ? `${getTeamName(honour.teamId, tb)} 第${honour.leaguePosition}名`
+                : `${getTeamName(honour.teamId, tb)} 第${honour.leaguePosition}名 · 超额完成预期`}
+            />
+          ))}
           {/* Most Improved — team that climbed the most positions vs last season */}
           {l1Records.length > 0 && (() => {
             const prev = world.honorHistory.find(h => h.seasonNumber === seasonNumber - 1);

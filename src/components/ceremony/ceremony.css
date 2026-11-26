@@ -282,6 +282,53 @@
   color: rgba(62, 52, 32, 0.7);
 }
 
+/* A full honours list: what was won, who won it, and the fact that decided it.
+   The detail is set flush right the way a printed table rules its figures, and
+   wraps under the name rather than squeezing it when the page is narrow. */
+.ceremony-honours--full li {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 3px 10px;
+  padding-bottom: 5px;
+}
+
+.ceremony-honours--full .ceremony-honour-label {
+  flex: none;
+}
+
+.ceremony-honour-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-weight: 700;
+  color: rgba(32, 28, 18, 0.92);
+}
+
+.ceremony-honour-detail {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
+  color: rgba(62, 52, 32, 0.72);
+}
+
+.ceremony-podium-points {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
+  color: rgba(62, 52, 32, 0.66);
+}
+
+/* Folio: which leaf of the annual this is. */
+.ceremony-folio {
+  display: inline-block;
+  margin-right: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.18em;
+  color: rgba(62, 52, 32, 0.55);
+}
+
 .ceremony-entrants {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));

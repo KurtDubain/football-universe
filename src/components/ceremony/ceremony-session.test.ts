@@ -19,6 +19,8 @@ function stamp(champion: string): CeremonyRequest {
     champion: { teamId: champion, name: champion, shortName: champion, color: '#ffffff' },
     runnerUp: null,
     score: '2-1',
+    finalMvp: null,
+    topScorer: null,
   };
 }
 

@@ -10,6 +10,8 @@ import CeremonyOverlay from './CeremonyOverlay';
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const TEAM = { teamId: 'alpha', name: '大同队', shortName: '大同', color: '#3fb978' };
+const SECOND = { ...TEAM, teamId: 'beta', name: '海门队', shortName: '海门' };
+const THIRD = { ...TEAM, teamId: 'gamma', name: '南岭队', shortName: '南岭' };
 
 function stamp(): CeremonyRequest {
   return {
@@ -17,8 +19,10 @@ function stamp(): CeremonyRequest {
     competitionName: '联赛杯',
     roundLabel: '决赛',
     champion: TEAM,
-    runnerUp: { ...TEAM, teamId: 'beta', name: '海门队', shortName: '海门' },
+    runnerUp: SECOND,
     score: '2-1',
+    finalMvp: { label: '决赛最佳球员', name: '林川', detail: '1 球 · 1 助', team: TEAM },
+    topScorer: { label: '赛事金靴', name: '周野', detail: '6 球', team: SECOND },
   };
 }
 
@@ -27,8 +31,21 @@ function closing(): CeremonyRequest {
     kind: 'season_closing',
     seasonNumber: 7,
     champion: TEAM,
-    podium: [TEAM, { ...TEAM, teamId: 'beta', name: '海门队' }, { ...TEAM, teamId: 'gamma', name: '南岭队' }],
+    podium: [
+      { team: TEAM, points: 68 },
+      { team: SECOND, points: 61 },
+      { team: THIRD, points: 55 },
+    ],
     summary: '大同队以 68 分夺得顶级联赛冠军。',
+    playerHonours: [
+      { label: '金球奖', name: '林川', detail: '大同队 · 评分 112.4', team: TEAM },
+      { label: '金靴奖', name: '周野', detail: '海门队 · 32球', team: SECOND },
+      { label: '最佳门将', name: '赵岭', detail: '南岭队 · 仅失18球', team: THIRD },
+    ],
+    coachHonours: [
+      { label: '冠军教头', name: '陈教', detail: '大同队 · 顶级联赛冠军', team: TEAM },
+      { label: '最佳教练', name: '孙教', detail: '南岭队 第 3 名 · 超预期 6 位', team: THIRD },
+    ],
   };
 }
 
@@ -49,34 +66,96 @@ afterEach(() => {
   host.remove();
 });
 
-describe('CeremonyOverlay', () => {
-  it('prints the page the request describes', () => {
-    act(() => root.render(
-      <CeremonyOverlay
-        request={closing()}
-        timing={ceremonyTiming('season_closing', false)}
-        dismissAfter={null}
-        onDismiss={vi.fn()}
-      />,
-    ));
+const overlay = () => document.querySelector('[data-testid="ceremony-overlay"]');
+const skip = () => document.querySelector('[data-testid="ceremony-skip"]') as HTMLButtonElement;
+const folio = () => document.querySelector('[data-testid="ceremony-folio"]')?.textContent;
 
-    const overlay = document.querySelector('[data-testid="ceremony-overlay"]');
-    expect(overlay).not.toBeNull();
-    expect(overlay?.getAttribute('data-ceremony-kind')).toBe('season_closing');
-    expect(overlay?.textContent).toContain('第 7 赛季 · 封盘');
-    expect(overlay?.textContent).toContain('大同队');
-    expect(overlay?.textContent).toContain('南岭队');
+function render(request: CeremonyRequest, onDismiss = vi.fn(), dismissAfter: number | null = null) {
+  act(() => root.render(
+    <CeremonyOverlay
+      request={request}
+      timing={ceremonyTiming(request.kind, false)}
+      dismissAfter={dismissAfter}
+      onDismiss={onDismiss}
+    />,
+  ));
+  return onDismiss;
+}
+
+describe('CeremonyOverlay', () => {
+  it('prints the league page the request describes', () => {
+    render(closing());
+
+    expect(overlay()?.getAttribute('data-ceremony-kind')).toBe('season_closing');
+    expect(overlay()?.getAttribute('data-ceremony-pages')).toBe('3');
+    expect(overlay()?.getAttribute('data-ceremony-page')).toBe('1');
+    expect(overlay()?.textContent).toContain('第 7 赛季 · 封盘');
+    expect(overlay()?.textContent).toContain('大同队');
+    expect(overlay()?.textContent).toContain('南岭队');
+    expect(overlay()?.textContent).toContain('68 分');
+    expect(folio()).toBe('1 / 3');
   });
 
-  it('stamps a cup and passes on by itself', () => {
-    const onDismiss = vi.fn();
+  it('turns through the awards pages and only closes on the last one', () => {
+    const onDismiss = render(closing());
+
+    expect(skip().textContent).toBe('翻页');
+    expect(overlay()?.textContent).not.toContain('金球奖');
+
+    act(() => skip().click());
+    expect(overlay()?.getAttribute('data-ceremony-page')).toBe('2');
+    expect(folio()).toBe('2 / 3');
+    expect(overlay()?.textContent).toContain('个人荣誉');
+    expect(overlay()?.textContent).toContain('金球奖');
+    expect(overlay()?.textContent).toContain('林川');
+    expect(overlay()?.textContent).toContain('大同队 · 评分 112.4');
+    expect(overlay()?.textContent).not.toContain('冠军教头');
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => skip().click());
+    expect(overlay()?.getAttribute('data-ceremony-page')).toBe('3');
+    expect(folio()).toBe('3 / 3');
+    expect(overlay()?.textContent).toContain('教练席');
+    expect(overlay()?.textContent).toContain('冠军教头');
+    expect(overlay()?.textContent).toContain('孙教');
+    expect(skip().textContent).toBe('合上');
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    act(() => skip().click());
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('turns the page on Escape and closes on the last one', () => {
+    const onDismiss = render(closing());
+    const escape = () => act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+
+    escape();
+    expect(overlay()?.getAttribute('data-ceremony-page')).toBe('2');
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    escape();
+    expect(overlay()?.getAttribute('data-ceremony-page')).toBe('3');
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    escape();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('stamps a cup with the final honours and passes on by itself', () => {
     const timing = ceremonyTiming('cup_stamp', false);
-    const total = ceremonySettle(timing, 2) + (timing.autoDismiss ?? 0);
-    act(() => root.render(
-      <CeremonyOverlay request={stamp()} timing={timing} dismissAfter={total} onDismiss={onDismiss} />,
-    ));
+    const total = ceremonySettle(timing, 4) + (timing.autoDismiss ?? 0);
+    const onDismiss = render(stamp(), vi.fn(), total);
+
+    expect(overlay()?.getAttribute('data-ceremony-pages')).toBe('1');
     expect(document.body.textContent).toContain('冠军');
     expect(document.body.textContent).toContain('2-1');
+    expect(document.body.textContent).toContain('决赛最佳球员');
+    expect(document.body.textContent).toContain('林川');
+    expect(document.body.textContent).toContain('1 球 · 1 助');
+    expect(document.body.textContent).toContain('赛事金靴');
+    expect(document.body.textContent).toContain('6 球');
 
     act(() => vi.advanceTimersByTime(total - 1));
     expect(onDismiss).not.toHaveBeenCalled();
@@ -85,49 +164,14 @@ describe('CeremonyOverlay', () => {
   });
 
   it('holds a page until it is turned', () => {
-    const onDismiss = vi.fn();
-    act(() => root.render(
-      <CeremonyOverlay
-        request={closing()}
-        timing={ceremonyTiming('season_closing', false)}
-        dismissAfter={null}
-        onDismiss={onDismiss}
-      />,
-    ));
+    const onDismiss = render(closing());
     act(() => vi.advanceTimersByTime(60_000));
     expect(onDismiss).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-testid="ceremony-skip"]')?.textContent).toBe('翻页');
-  });
-
-  it('turns the page on Escape and on the corner button', () => {
-    const onDismiss = vi.fn();
-    act(() => root.render(
-      <CeremonyOverlay
-        request={closing()}
-        timing={ceremonyTiming('season_closing', false)}
-        dismissAfter={null}
-        onDismiss={onDismiss}
-      />,
-    ));
-
-    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-
-    const skip = document.querySelector('[data-testid="ceremony-skip"]') as HTMLButtonElement;
-    act(() => skip.click());
-    expect(onDismiss).toHaveBeenCalledTimes(2);
+    expect(skip().textContent).toBe('翻页');
   });
 
   it('takes the focus so a keyboard viewer lands on the page turn', () => {
-    act(() => root.render(
-      <CeremonyOverlay
-        request={closing()}
-        timing={ceremonyTiming('season_closing', false)}
-        dismissAfter={null}
-        onDismiss={vi.fn()}
-      />,
-    ));
-    const skip = document.querySelector('[data-testid="ceremony-skip"]');
-    expect(document.activeElement).toBe(skip);
+    render(closing());
+    expect(document.activeElement).toBe(skip());
   });
 });

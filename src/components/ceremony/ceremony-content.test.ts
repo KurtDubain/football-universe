@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { CupFixture, WorldCupState } from '../../types/cup';
+import type { MatchEvent, MatchResult } from '../../types/match';
 import { initializeGameWorld, type GameWorld } from '../../engine/season/season-manager';
 import { pastSeasonOpening } from '../../engine/season/test-world';
-import { CEREMONY_PRIORITY, ceremonyScope, deriveCeremonies, formatCupScore } from './ceremony-content';
+import { CEREMONY_PRIORITY, ceremonyScope, countCeremonyLines, deriveCeremonies, formatCupScore } from './ceremony-content';
+import type { CeremonyHonour, CeremonyTeam } from './ceremony-types';
 
 const SEED = 20260722;
 
@@ -191,5 +193,157 @@ describe('ceremonyScope', () => {
       honorHistory: [{ seasonNumber: 1 } as GameWorld['honorHistory'][number]],
     };
     expect(ceremonyScope(withHonour)).not.toBe(ceremonyScope(world));
+  });
+});
+
+const ZERO_STATS = {
+  possession: [50, 50] as [number, number],
+  shots: [0, 0] as [number, number],
+  shotsOnTarget: [0, 0] as [number, number],
+  corners: [0, 0] as [number, number],
+  fouls: [0, 0] as [number, number],
+  yellowCards: [0, 0] as [number, number],
+  redCards: [0, 0] as [number, number],
+};
+
+function team(teamId: string): CeremonyTeam {
+  return { teamId, name: teamId, shortName: teamId, color: '#000000' };
+}
+
+function podiumEntry(teamId: string, points: number) {
+  return { team: team(teamId), points };
+}
+
+function honour(label: string, name: string): CeremonyHonour {
+  return { label, name, detail: '', team: null };
+}
+
+function matchEvent(
+  type: MatchEvent['type'],
+  teamId: string,
+  playerId: string,
+  playerName: string,
+): MatchEvent {
+  return { minute: 10, type, teamId, playerId, playerName, description: playerName };
+}
+
+/** The decided cup final, with the match the calendar actually recorded for it. */
+function withFinalEvents(world: GameWorld, events: MatchEvent[]): GameWorld {
+  const decided = withLeagueCupDecided(world);
+  const [home, away] = teamIds(world);
+  const result: MatchResult = {
+    fixtureId: 'final',
+    homeTeamId: home,
+    awayTeamId: away,
+    homeGoals: 2,
+    awayGoals: 1,
+    extraTime: false,
+    penalties: false,
+    events,
+    stats: ZERO_STATS,
+    competitionType: 'league_cup',
+    competitionName: '联赛杯',
+    roundLabel: '决赛',
+  };
+  return {
+    ...decided,
+    seasonState: {
+      ...decided.seasonState,
+      calendar: decided.seasonState.calendar.map((window, index) => (
+        index === 0 ? { ...window, results: [result] } : window
+      )),
+    },
+  };
+}
+
+function cupStampOf(world: GameWorld) {
+  const stamp = deriveCeremonies(world).find(request => request.kind === 'cup_stamp');
+  if (stamp?.kind !== 'cup_stamp') throw new Error('expected a cup stamp');
+  return stamp;
+}
+
+describe('countCeremonyLines', () => {
+  it('lets the longest of the three closing pages set the rhythm', () => {
+    const base = {
+      kind: 'season_closing' as const,
+      seasonNumber: 1,
+      champion: null,
+      summary: '',
+    };
+    expect(countCeremonyLines({ ...base, podium: [], playerHonours: [], coachHonours: [] })).toBe(2);
+
+    // Seven individual awards outrun a three-club podium and two coaches.
+    const full = {
+      ...base,
+      podium: [podiumEntry('a', 70), podiumEntry('b', 68), podiumEntry('c', 66)],
+      playerHonours: Array.from({ length: 7 }, (_, index) => honour('奖项', '球员' + index)),
+      coachHonours: [honour('冠军教头', '教练甲'), honour('最佳教练', '教练乙')],
+    };
+    expect(countCeremonyLines(full)).toBe(7);
+
+    // A short award list falls back to the podium it shares the key with.
+    expect(countCeremonyLines({ ...full, playerHonours: [honour('金球奖', '球员')] })).toBe(5);
+  });
+
+  it('adds a line per honour the cup final produced', () => {
+    const stamp = {
+      kind: 'cup_stamp' as const,
+      competitionName: '联赛杯',
+      roundLabel: '决赛',
+      champion: team('a'),
+      runnerUp: null,
+      score: '2-1',
+    };
+    expect(countCeremonyLines({ ...stamp, finalMvp: null, topScorer: null })).toBe(2);
+    expect(countCeremonyLines({ ...stamp, finalMvp: honour('决赛最佳球员', '甲'), topScorer: null })).toBe(3);
+    expect(countCeremonyLines({
+      ...stamp,
+      finalMvp: honour('决赛最佳球员', '甲'),
+      topScorer: honour('赛事金靴', '乙'),
+    })).toBe(4);
+  });
+});
+
+describe('cup stamp honours', () => {
+  it('names the player who decided the final and the competition leading scorer', () => {
+    const world = baseWorld();
+    const [home, away] = teamIds(world);
+    const stamp = cupStampOf(withFinalEvents(world, [
+      matchEvent('goal', home, 'p1', '主队前锋'),
+      matchEvent('assist', home, 'p2', '主队中场'),
+      matchEvent('goal', home, 'p1', '主队前锋'),
+      matchEvent('goal', away, 'p3', '客队前锋'),
+      // Neither of these is a goal the player scored for their own club.
+      matchEvent('own_goal', away, 'p4', '客队后卫'),
+      matchEvent('penalty_goal', home, 'p5', '主队点球手'),
+    ]));
+
+    // Two goals outweigh one assist, and shoot-out kicks weigh nothing.
+    expect(stamp.finalMvp?.name).toBe('主队前锋');
+    expect(stamp.finalMvp?.detail).toBe('2 球');
+    expect(stamp.topScorer?.name).toBe('主队前锋');
+    expect(stamp.topScorer?.detail).toBe('2 球');
+  });
+
+  it('gives the final honour to the side that lifted it, not the top scorer', () => {
+    const world = baseWorld();
+    const [home, away] = teamIds(world);
+    const stamp = cupStampOf(withFinalEvents(world, [
+      matchEvent('goal', home, 'p1', '主队前锋'),
+      matchEvent('goal', away, 'p3', '客队前锋'),
+      matchEvent('goal', away, 'p3', '客队前锋'),
+      matchEvent('goal', away, 'p3', '客队前锋'),
+    ]));
+
+    expect(stamp.finalMvp?.name).toBe('主队前锋');
+    // The golden boot still counts every club in the competition.
+    expect(stamp.topScorer?.name).toBe('客队前锋');
+    expect(stamp.topScorer?.detail).toBe('3 球');
+  });
+
+  it('prints nothing rather than inventing a hero when the final recorded no player', () => {
+    const stamp = cupStampOf(withFinalEvents(baseWorld(), []));
+    expect(stamp.finalMvp).toBeNull();
+    expect(stamp.topScorer).toBeNull();
   });
 });

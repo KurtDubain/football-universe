@@ -51,6 +51,23 @@ export interface CeremonyTeam {
   color: string;
 }
 
+/**
+ * One line of an honours list: what was won, who won it, and the fact that
+ * decided it.
+ *
+ * The detail is always something the simulation already recorded — a goal
+ * count, a final position, a scoreline. A ceremony never explains an honour
+ * with a number the engine did not produce.
+ */
+export interface CeremonyHonour {
+  label: string;
+  name: string;
+  /** The deciding fact, already formatted. */
+  detail: string;
+  /** The club the honour belongs to, for its colour plate. */
+  team: CeremonyTeam | null;
+}
+
 export interface SeasonOpeningCeremony {
   kind: 'season_opening';
   seasonNumber: number;
@@ -64,9 +81,13 @@ export interface SeasonClosingCeremony {
   kind: 'season_closing';
   seasonNumber: number;
   champion: CeremonyTeam | null;
-  /** Top of the final table, already ordered. */
-  podium: CeremonyTeam[];
+  /** Top of the final table, already ordered, with the points that placed it. */
+  podium: Array<{ team: CeremonyTeam; points: number }>;
   summary: string;
+  /** The season's individual player awards, in the order they are printed. */
+  playerHonours: CeremonyHonour[];
+  /** 冠军教头 and 最佳教练. */
+  coachHonours: CeremonyHonour[];
 }
 
 export interface CupStampCeremony {
@@ -77,6 +98,10 @@ export interface CupStampCeremony {
   runnerUp: CeremonyTeam | null;
   /** Already formatted, e.g. "2-1" or "1-1 · 点球 4-3". */
   score: string;
+  /** The player who decided the final, or null when the final says nothing. */
+  finalMvp: CeremonyHonour | null;
+  /** The competition's leading scorer across every round. */
+  topScorer: CeremonyHonour | null;
 }
 
 export interface WorldCupOpeningCeremony {
