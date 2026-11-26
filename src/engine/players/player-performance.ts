@@ -95,8 +95,30 @@ export const PLAYER_RANKING_MINUTES = 0;
  * offsets were re-solved on, the top of the table goes from 26.8% substitute-led
  * to 8.9%, from 5.4% never-started to 1.2%, and the lowest minute total any
  * season leader carried rises from 442 to 1,021.
+ *
+ * v9: creation and finishing are each scored ONCE, on the superset counter that
+ * already contains the denied half. v8 split both into a converted term and a
+ * denied term — `goals` beside `bigChances - goals`, `assists` beside
+ * `keyPasses - assists` — on the stated assumption that the simulator denies
+ * two of every five chances. It does not: measured across 600 completed seasons
+ * the deny rate is a near-constant 9.7% (denied:converted = 1:10.2) at every
+ * position, in the transient and the steady state alike. Each denied term was
+ * therefore a fixed fraction of the converted term beside it and carried no
+ * information of its own. For the median midfielder both denied terms sat on
+ * `sparseMetric`'s flat 40 floor, worth exactly 9.60 and 3.20 raw points
+ * whether he was a destroyer, a playmaker or a shadow striker — 0.32 of the
+ * midfielder weight spent on a constant. Scoring the superset keeps the intent
+ * (a player who keeps getting denied is still paid for it, because the
+ * superset contains the denial) without the algebraic duplicate, and without
+ * re-compressing the same events through a second sparse floor.
+ *
+ * The weights are unchanged in substance: the forward keeps its declared 0.70
+ * finishing / 0.30 creation split, and the midfielder keeps 0.52 creation /
+ * 0.28 finishing / 0.20 defending. The anchors, the calibration table and the
+ * value offsets below are all re-derived at the same time, because every one of
+ * them is read off the raw distribution this formula produces.
  */
-export const PLAYER_SCORE_VERSION = 8;
+export const PLAYER_SCORE_VERSION = 9;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -113,6 +135,14 @@ export interface PlayerPerformanceMetrics {
   assistsPer90: number;
   extraBigChancesPer90: number;
   extraKeyPassesPer90: number;
+  /**
+   * v9 — the converted-plus-denied supersets the score is actually read on.
+   * `bigChances >= goals` and `keyPasses >= assists` by construction, so these
+   * two already contain the denied half; scoring the halves separately is what
+   * v8 did and it double-counted a near-constant ratio (see `rawPositionQuality`).
+   */
+  bigChancesPer90: number;
+  keyPassesPer90: number;
   attackContributionPer90: number;
   routineSavesPer90: number;
   keySavesPer90: number;
@@ -170,6 +200,32 @@ interface MetricAnchors {
 // population would put the anchor at zero and make `sparseMetric` jump from its
 // flat 40 baseline straight to the 50-90 band on the first non-zero event; the
 // non-zero basis holds that step to about 3 points.
+//
+// v9 resamples every anchor below from 600 completed seasons on three seeds
+// (702733, 698104882, 20261126), full run rather than an opening window, at the
+// same 900-minute floor. Two separate staleness bugs forced it, and both were
+// silent because each anchor still had the right MEDIAN:
+//
+//   1. The style tags commit widened every defensive distribution by roughly a
+//      factor of two without touching this table. A marker takes 1.55x the
+//      interception share and a sweeper 0.70x; an engine midfielder takes 2.00x
+//      the defensive work and a playmaker 0.50x. Measured on top-flight rows,
+//      the p10-to-p90 span of defender interceptions went 0.63 -> 1.27 and of
+//      midfielder clearances 0.55 -> 1.25, while both p50s moved under 4%. An
+//      anchor that is right at the median and half as wide as the population
+//      does not average out: it saturates. A real p90 defender read 2.07
+//      against an upper bound of 2.07 and scored a flat 100 where the curve
+//      says 85, and the median midfielder read just above a p10 that was set
+//      for a population twice as tight, scoring ~28 where the curve says 50.
+//      That is worth about +6 raw to a top-decile defender and -4 raw to a
+//      median midfielder at the same time, which is the mechanism behind
+//      defenders taking half the Ballon d'Or.
+//
+//   2. The lower-division keeper anchors were fitted on an opening window and
+//      the simulator drifts after it. A second-tier keeper's routine saves go
+//      2.57 -> 3.11 per 90 and his save percentage 0.655 -> 0.736 between the
+//      first twelve seasons and the steady state, so the old anchor read a
+//      median second-tier keeper 10 raw points above where he actually sits.
 type LeagueTier = 1 | 2 | 3;
 
 interface PositionAnchorSet {
@@ -179,97 +235,89 @@ interface PositionAnchorSet {
 const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
   GK: {
     1: {
-      savePercentage: { p10: 0.6571, p50: 0.7682, p90: 0.8495 },
-      keySaves: { p10: 0.0811, p50: 0.1271, p90: 0.2087 },
-      goalsConceded: { p10: 0.7241, p50: 1.1628, p90: 1.8387 },
-      routineSaves: { p10: 3.3113, p50: 3.7568, p90: 4.1667 },
-      cleanSheets: { p10: 0.1667, p50: 0.3514, p90: 0.5338 },
+      savePercentage: { p10: 0.7021, p50: 0.7739, p90: 0.8344 },
+      keySaves: { p10: 0.0263, p50: 0.0763, p90: 0.1736 },
+      goalsConceded: { p10: 0.7632, p50: 1.0789, p90: 1.473 },
+      routineSaves: { p10: 3.2683, p50: 3.6154, p90: 3.9389 },
+      cleanSheets: { p10: 0.2222, p50: 0.3529, p90: 0.4924 },
     },
     2: {
-      savePercentage: { p10: 0.5517, p50: 0.6556, p90: 0.7544 },
-      keySaves: { p10: 0.0455, p50: 0.0899, p90: 0.165 },
-      goalsConceded: { p10: 0.913, p50: 1.3973, p90: 1.92 },
-      routineSaves: { p10: 2.1333, p50: 2.5714, p90: 3 },
-      cleanSheets: { p10: 0.1304, p50: 0.2727, p90: 0.4655 },
+      savePercentage: { p10: 0.6312, p50: 0.7356, p90: 0.8202 },
+      keySaves: { p10: 0.0423, p50: 0.0698, p90: 0.1827 },
+      goalsConceded: { p10: 0.7368, p50: 1.1429, p90: 1.6312 },
+      routineSaves: { p10: 2.5574, p50: 3.1053, p90: 3.5625 },
+      cleanSheets: { p10: 0.1712, p50: 0.3333, p90: 0.5 },
     },
     3: {
-      savePercentage: { p10: 0.4167, p50: 0.5469, p90: 0.6757 },
-      keySaves: { p10: 0.0462, p50: 0.0492, p90: 0.1445 },
-      goalsConceded: { p10: 0.8333, p50: 1.2778, p90: 1.8 },
-      routineSaves: { p10: 1.1333, p50: 1.5, p90: 1.8824 },
-      cleanSheets: { p10: 0.1429, p50: 0.3125, p90: 0.4828 },
+      savePercentage: { p10: 0.4565, p50: 0.6, p90: 0.7647 },
+      keySaves: { p10: 0.0556, p50: 0.0667, p90: 0.1875 },
+      goalsConceded: { p10: 0.6545, p50: 1.25, p90: 1.8667 },
+      routineSaves: { p10: 1.375, p50: 1.8125, p90: 2.2364 },
+      cleanSheets: { p10: 0.1333, p50: 0.3333, p90: 0.5625 },
     },
   },
   DF: {
     1: {
-      interceptions: { p10: 1.0333, p50: 1.3279, p90: 1.6596 },
-      clearances: { p10: 1.5495, p50: 1.9286, p90: 2.3529 },
-      blocks: { p10: 0.0234, p50: 0.0295, p90: 0.0667 },
-      goalsConceded: { p10: 0.7105, p50: 1.1478, p90: 1.8414 },
-      cleanSheets: { p10: 0.1668, p50: 0.3543, p90: 0.5366 },
-      attack: { p10: 0.0435, p50: 0.0749, p90: 0.1302 },
+      interceptions: { p10: 0.8087, p50: 1.3333, p90: 2.0742 },
+      clearances: { p10: 1.1601, p50: 1.8611, p90: 2.9167 },
+      blocks: { p10: 0.0236, p50: 0.0286, p90: 0.0606 },
+      goalsConceded: { p10: 0.7481, p50: 1.0727, p90: 1.4832 },
+      cleanSheets: { p10: 0.2188, p50: 0.3534, p90: 0.5 },
+      attack: { p10: 0.0256, p50: 0.0536, p90: 0.1093 },
     },
     2: {
-      interceptions: { p10: 0.9524, p50: 1.3134, p90: 1.7143 },
-      clearances: { p10: 1.35, p50: 1.7885, p90: 2.2689 },
-      blocks: { p10: 0.0411, p50: 0.05, p90: 0.0789 },
-      goalsConceded: { p10: 0.9, p50: 1.3889, p90: 1.9315 },
-      cleanSheets: { p10: 0.1304, p50: 0.2712, p90: 0.4627 },
-      attack: { p10: 0.04, p50: 0.05, p90: 0.1343 },
+      interceptions: { p10: 0.7636, p50: 1.3065, p90: 2.0956 },
+      clearances: { p10: 1.0667, p50: 1.7861, p90: 2.8525 },
+      blocks: { p10: 0.04, p50: 0.0517, p90: 0.0833 },
+      goalsConceded: { p10: 0.7333, p50: 1.1379, p90: 1.6316 },
+      cleanSheets: { p10: 0.1689, p50: 0.3333, p90: 0.5016 },
+      attack: { p10: 0.0423, p50: 0.0625, p90: 0.1333 },
     },
     3: {
-      interceptions: { p10: 0.8333, p50: 1.1917, p90: 1.6 },
-      clearances: { p10: 1.0714, p50: 1.5, p90: 2 },
-      blocks: { p10: 0.0526, p50: 0.0625, p90: 0.0771 },
-      goalsConceded: { p10: 0.8276, p50: 1.2778, p90: 1.8 },
-      cleanSheets: { p10: 0.1333, p50: 0.3077, p90: 0.4828 },
-      attack: { p10: 0.0545, p50: 0.0667, p90: 0.1333 },
+      interceptions: { p10: 0.6775, p50: 1.2105, p90: 2.0192 },
+      clearances: { p10: 0.9057, p50: 1.5882, p90: 2.5714 },
+      blocks: { p10: 0.0526, p50: 0.0625, p90: 0.0952 },
+      goalsConceded: { p10: 0.6383, p50: 1.2489, p90: 1.8667 },
+      cleanSheets: { p10: 0.1333, p50: 0.3276, p90: 0.5613 },
+      attack: { p10: 0.0545, p50: 0.0667, p90: 0.1452 },
     },
   },
+  // v9 — creation and finishing are each read ONCE, on the superset that
+  // already contains the denied half (`keyPasses >= assists`,
+  // `bigChances >= goals`). See the forward and midfielder branches of
+  // `rawPositionQuality` for why the v8 converted/denied pairs were removed.
   MF: {
     1: {
-      assists: { p10: 0.0321, p50: 0.1262, p90: 0.2419 },
-      extraPasses: { p10: 0.0227, p50: 0.0294, p90: 0.0667 },
-      goals: { p10: 0, p50: 0.0863, p90: 0.2177 },
-      extraChances: { p10: 0.0226, p50: 0.0286, p90: 0.0654 },
-      interceptions: { p10: 0.5206, p50: 0.7192, p90: 0.9519 },
-      clearances: { p10: 0.7986, p50: 1.0513, p90: 1.3445 },
+      keyPasses: { p10: 0.0467, p50: 0.125, p90: 0.2759 },
+      bigChances: { p10: 0.03, p50: 0.0928, p90: 0.225 },
+      interceptions: { p10: 0.2778, p50: 0.5714, p90: 1.1726 },
+      clearances: { p10: 0.4128, p50: 0.8125, p90: 1.6615 },
     },
     2: {
-      assists: { p10: 0, p50: 0.1053, p90: 0.2471 },
-      extraPasses: { p10: 0.0417, p50: 0.0526, p90: 0.0769 },
-      goals: { p10: 0, p50: 0.0645, p90: 0.1935 },
-      extraChances: { p10: 0.0411, p50: 0.0526, p90: 0.0741 },
-      interceptions: { p10: 0.4667, p50: 0.72, p90: 1 },
-      clearances: { p10: 0.6698, p50: 0.9808, p90: 1.3259 },
+      keyPasses: { p10: 0.0484, p50: 0.125, p90: 0.2833 },
+      bigChances: { p10: 0.0466, p50: 0.1, p90: 0.2449 },
+      interceptions: { p10: 0.2501, p50: 0.5854, p90: 1.1887 },
+      clearances: { p10: 0.375, p50: 0.8, p90: 1.6433 },
     },
     3: {
-      assists: { p10: 0, p50: 0.1053, p90: 0.2449 },
-      extraPasses: { p10: 0.0526, p50: 0.0625, p90: 0.0825 },
-      goals: { p10: 0, p50: 0.0667, p90: 0.2 },
-      extraChances: { p10: 0.0526, p50: 0.0625, p90: 0.0769 },
-      interceptions: { p10: 0.4, p50: 0.6667, p90: 0.9444 },
-      clearances: { p10: 0.5333, p50: 0.82, p90: 1.1667 },
+      keyPasses: { p10: 0.0567, p50: 0.1304, p90: 0.3061 },
+      bigChances: { p10: 0.0556, p50: 0.1111, p90: 0.2667 },
+      interceptions: { p10: 0.2222, p50: 0.5714, p90: 1.2 },
+      clearances: { p10: 0.3077, p50: 0.7322, p90: 1.5 },
     },
   },
   FW: {
     1: {
-      goals: { p10: 0.1755, p50: 0.4654, p90: 1.0227 },
-      assists: { p10: 0, p50: 0.043, p90: 0.1237 },
-      extraChances: { p10: 0.0455, p50: 0.0956, p90: 0.2051 },
-      extraPasses: { p10: 0.0236, p50: 0.0342, p90: 0.0701 },
+      bigChances: { p10: 0.1685, p50: 0.4346, p90: 0.8809 },
+      keyPasses: { p10: 0.0277, p50: 0.0723, p90: 0.1832 },
     },
     2: {
-      goals: { p10: 0.1333, p50: 0.3661, p90: 0.7368 },
-      assists: { p10: 0, p50: 0.0476, p90: 0.1364 },
-      extraChances: { p10: 0.0448, p50: 0.0667, p90: 0.1304 },
-      extraPasses: { p10: 0.0426, p50: 0.0555, p90: 0.079 },
+      bigChances: { p10: 0.1111, p50: 0.3582, p90: 0.7544 },
+      keyPasses: { p10: 0.0451, p50: 0.0833, p90: 0.2 },
     },
     3: {
-      goals: { p10: 0.1333, p50: 0.3673, p90: 0.7347 },
-      assists: { p10: 0, p50: 0, p90: 0.1333 },
-      extraChances: { p10: 0.0545, p50: 0.0668, p90: 0.1333 },
-      extraPasses: { p10: 0.0556, p50: 0.0631, p90: 0.0894 },
+      bigChances: { p10: 0.0785, p50: 0.3271, p90: 0.7606 },
+      keyPasses: { p10: 0.0556, p50: 0.093, p90: 0.2222 },
     },
   },
 };
@@ -285,20 +333,25 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
 // and the entire table recomputes from one formula; there is no second knob to
 // chase afterwards.
 //
-// Fitted on 24 seeds x 12 seasons (110,738 rows at 900+ minutes) and verified
-// on a disjoint seed set. Under the previous hand-tuned table the season-score
-// top twenty ran at keeper/defender/midfielder/forward pool multipliers of
-// 1.91/0.97/0.97/0.72; here it reads 1.16/1.01/1.02/0.88.
+// Re-fitted for score version 9 on the same 600 completed seasons the anchors
+// above come from (three seeds, full run, 310,104 rows at 900+ minutes), which
+// is the only basis on which the two tables describe the same population. The
+// previous fit used 24 seeds x 12 seasons — an opening window — and the
+// simulator drifts out of it: the raw median of a second-tier keeper moves 10
+// points between the first twelve seasons and the steady state, which the old
+// table answered by scoring a median second-tier keeper 16 season points above
+// a median top-flight one. On this fit the three keeper tiers land 53.99 /
+// 51.94 / 51.79 and that inversion is gone.
 //
 // These are the raw formula outputs, before the tier rule below.
 const RAW_POSITION_QUALITY_CALIBRATION: Record<
   PlayerPosition,
   Record<LeagueTier, { median: number; scale: number }>
 > = {
-  GK: { 1: { median: 52.07, scale: 1.953 }, 2: { median: 51.21, scale: 2.907 }, 3: { median: 52.48, scale: 2.837 } },
-  DF: { 1: { median: 50.67, scale: 3.22 }, 2: { median: 50.24, scale: 4.471 }, 3: { median: 48.75, scale: 4.586 } },
-  MF: { 1: { median: 48.95, scale: 2.731 }, 2: { median: 47.55, scale: 4.712 }, 3: { median: 47.22, scale: 4.997 } },
-  FW: { 1: { median: 49.57, scale: 2.578 }, 2: { median: 46.58, scale: 3.635 }, 3: { median: 45.01, scale: 3.674 } },
+  GK: { 1: { median: 53.99, scale: 1.848 }, 2: { median: 51.94, scale: 2.572 }, 3: { median: 51.79, scale: 2.999 } },
+  DF: { 1: { median: 50.74, scale: 3.387 }, 2: { median: 49.72, scale: 4.577 }, 3: { median: 48.82, scale: 5.466 } },
+  MF: { 1: { median: 61.27, scale: 3.365 }, 2: { median: 57.83, scale: 3.843 }, 3: { median: 54.84, scale: 3.528 } },
+  FW: { 1: { median: 51.59, scale: 2.214 }, 2: { median: 50.26, scale: 2.683 }, 3: { median: 47.99, scale: 2.652 } },
 };
 
 /**
@@ -380,16 +433,49 @@ const POSITION_QUALITY_CALIBRATION = capTierScales(RAW_POSITION_QUALITY_CALIBRAT
  * diverges once that scale passes 2 — this lands the top twenty at
  * 11.12/22.24/33.34/33.29.
  *
- * They are deliberately small — the widest gap is 12.4 points between defender
+ * Re-solved for score version 9 on a seed set DISJOINT from the one the
+ * calibration and the anchors were fitted on: ten seeds (20260808 + n*104729)
+ * x seasons 81-100, 103,108 season rows, read through the same segmented path
+ * the awards use. That separation is not ceremony. A first pass solved on the
+ * three calibration seeds landed on 1.79/-4.74/-3.06/6.01 and hit the target
+ * exactly there, then read 13.2/29.1/28.6/29.2 on the held-out ten — a forward
+ * share four points under target and a defender seven over. Three worlds is not
+ * enough to solve four numbers against a 1:2:3:3 target; the solve below lands
+ * 11.10/22.32/33.32/33.25 on the set it was solved on.
+ *
+ * Read back on the three calibration seeds — held out from this solve — it gives
+ * 9.0/16.9/37.7/36.4. That five-point gap is seed noise, not a second bug: the
+ * two sets disagree by about as much whichever set the offsets are solved on,
+ * and four numbers cannot remove it. What the solve does buy is the right
+ * centre. Averaged over both readings a defender takes 19.6% of the top twenty
+ * against a 35.7% pool share, where under version 8 it took 42.7% of the top
+ * hundred against the same pool.
+ *
+ * The defender offset goes back down (-6.11 -> -7.00) and the forward up
+ * (6.33 -> 7.80). Under the stale anchors a top-decile defender was scoring a
+ * flat 100 on two terms carrying 0.40 of his weight, and the old table had been
+ * compensating with a narrower gap than the sport actually asks for; with the
+ * anchors resampled the gap has to widen again. The keeper barely moves
+ * (0.61 -> 0.40) now that the lower-division keeper anchors no longer read a
+ * median second-tier keeper ten raw points above a top-flight one.
+ *
+ * The check that matters is that the answer no longer depends on when you ask.
+ * Under version 8 the cross-position P90 spread read 4.48 on an opening window
+ * and 9.80 on seasons 81-200, because the calibration underneath was fitted to
+ * a window the simulator then drifted out of. Under version 9 it reads 4.80 on
+ * the steady state and 8.49 on the opening twenty — the ordering is the same in
+ * both, which is what a solved table is supposed to give you.
+ *
+ * They are deliberately small — the widest gap is 14.8 points between defender
  * and forward — because the anchors, not this table, are what carry a position's
  * character. Raise the target share for a position and its offset recomputes
  * from the same percentile arithmetic.
  */
 export const POSITION_VALUE_OFFSET: Record<PlayerPosition, number> = {
-  GK: 0.61,
-  DF: -6.11,
-  MF: -0.83,
-  FW: 6.33,
+  GK: 0.4,
+  DF: -7,
+  MF: -1.2,
+  FW: 7.8,
 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -462,22 +548,31 @@ function shrunkByMinutes(value: number, minutes: number, prior: number): number 
  * Population median of each zero-heavy counter, over every season row at 900+
  * minutes rather than the non-zero basis its anchor is sampled from.
  *
- * Only the exceptions are listed. In fifteen of the twenty-one position x tier
- * x counter groups more than half of all rows are zero, so the population median
+ * Only the exceptions are listed. In five of the eighteen position x tier x
+ * counter groups more than half of all rows are zero, so the population median
  * really is zero and the default below is the measured value rather than a
- * shortcut. The six entries here are the groups where a majority of players
- * recorded at least one: top-flight and lower-division keepers make key saves
- * in 51% to 92% of seasons, a defender's goal-or-assist rate is non-zero for
- * 47% to 74% of them, and a top-flight forward creates a big chance he does not
- * convert in 70%.
+ * shortcut. The thirteen entries here are the groups where a majority of
+ * players recorded at least one: keepers make key saves in 51% to 92% of
+ * seasons and a defender's goal-or-assist rate is non-zero for 47% to 74% of
+ * them. The rest are new under score version 9, which reads the supersets: a
+ * midfielder creates at least one key pass in 75% to 93% of seasons and at
+ * least one big chance in 67% to 87%, and a forward creates at least one key
+ * pass in 46% to 63%.
  */
 const SPARSE_POPULATION_MEDIAN: Record<string, number> = {
-  'GK|1|keySaves': 0.0811,
-  'GK|2|keySaves': 0.0469,
-  'GK|3|keySaves': 0.0484,
-  'DF|1|attack': 0.0427,
-  'DF|2|attack': 0.0417,
-  'FW|1|extraChances': 0.0496,
+  'GK|1|keySaves': 0.0662,
+  'GK|2|keySaves': 0.0484,
+  'GK|3|keySaves': 0.0556,
+  'DF|1|attack': 0.0323,
+  'DF|2|attack': 0.0375,
+  'FW|1|keyPasses': 0.0355,
+  'FW|2|keyPasses': 0.037,
+  'MF|1|keyPasses': 0.116,
+  'MF|2|keyPasses': 0.0984,
+  'MF|3|keyPasses': 0.0817,
+  'MF|1|bigChances': 0.0804,
+  'MF|2|bigChances': 0.0667,
+  'MF|3|bigChances': 0.0667,
 };
 
 /**
@@ -602,6 +697,14 @@ export function getPlayerPerformanceMetrics(stats?: PlayerSeasonStats): PlayerPe
     assistsPer90: per90(assists, minutes),
     extraBigChancesPer90: per90(Math.max(0, (stats?.bigChances ?? goals) - goals), minutes),
     extraKeyPassesPer90: per90(Math.max(0, (stats?.keyPasses ?? assists) - assists), minutes),
+    // `bigChances >= goals` and `keyPasses >= assists` are documented invariants
+    // of the deny pipeline, so they are enforced on read rather than assumed. The
+    // `?? goals` fallback alone only covers rows where the field is absent; a row
+    // that carries an explicit 0 beside a non-zero goal count — a season-opening
+    // row, or a legacy save written before the split — would otherwise read as a
+    // forward who created nothing at all.
+    bigChancesPer90: per90(Math.max(stats?.bigChances ?? 0, goals), minutes),
+    keyPassesPer90: per90(Math.max(stats?.keyPasses ?? 0, assists), minutes),
     attackContributionPer90: per90(goals + assists, minutes),
     routineSavesPer90: per90(routineSaves, minutes),
     keySavesPer90: per90(keySaves, minutes),
@@ -634,28 +737,37 @@ export function rawPositionQuality(
   const SZ = (value: number, metric: string) => shrunkSparse(value, metrics.minutes, position, tier, metric);
   let quality: number;
   if (position === 'FW') {
-    // Four terms, in two pairs. Finishing is goals plus the big chances that
-    // were denied — shots that were or would have been goals — and creation is
-    // assists plus the key passes that were denied. Both pairs hold the same
-    // 3:2 converted-to-denied ratio, and the position splits 0.70 finishing /
-    // 0.30 creation. The forward never read `keyPasses` before this, so a
-    // forward who created constantly but kept getting denied was paid nothing
-    // for it while the identical miss on a shot paid 0.30.
-    quality = anchoredMetric(S(metrics.goalsPer90, anchors.goals.p50), anchors.goals) * 0.42
-      + sparseMetric(SZ(metrics.extraBigChancesPer90, 'extraChances'), anchors.extraChances) * 0.28
-      + anchoredMetric(S(metrics.assistsPer90, anchors.assists.p50), anchors.assists) * 0.18
-      + sparseMetric(SZ(metrics.extraKeyPassesPer90, 'extraPasses'), anchors.extraPasses) * 0.12;
+    // Two terms, each read once on the superset that already contains the
+    // denied half: `bigChances >= goals` and `keyPasses >= assists` hold by
+    // construction. v8 scored the halves as four separate terms on the stated
+    // assumption that the simulator denies two of every five chances; measured
+    // across 600 completed seasons it denies 9.7%, and that rate is flat across
+    // positions and across the transient and the steady state alike. The two
+    // denied terms were fixed fractions of the converted terms beside them, and
+    // re-scored the same events a second time through `sparseMetric`'s flat 40
+    // floor. The declared 0.70 finishing / 0.30 creation split is unchanged.
+    //
+    // `bigChances` is non-zero in 96.5% to 99.5% of forward seasons, so it is
+    // read on the full population. `keyPasses` is zero in 37% to 54% of them,
+    // so it keeps the sparse curve and the population prior.
+    quality = anchoredMetric(S(metrics.bigChancesPer90, anchors.bigChances.p50), anchors.bigChances) * 0.70
+      + sparseMetric(SZ(metrics.keyPassesPer90, 'keyPasses'), anchors.keyPasses) * 0.30;
   } else if (position === 'MF') {
-    // The attacking mix is unchanged and scaled to 0.80; the remaining 0.20
-    // goes to the two defensive actions a midfielder actually performs, in the
-    // same 55:45 ratio the defender uses. Without them a defensive midfielder
-    // had no way to score at all — the formula only ever read goals, assists
-    // and the two denied variants, so a screen in front of the back four was
-    // indistinguishable from a forward playing in midfield.
-    quality = anchoredMetric(S(metrics.assistsPer90, anchors.assists.p50), anchors.assists) * 0.28
-      + sparseMetric(SZ(metrics.extraKeyPassesPer90, 'extraPasses'), anchors.extraPasses) * 0.24
-      + anchoredMetric(S(metrics.goalsPer90, anchors.goals.p50), anchors.goals) * 0.20
-      + sparseMetric(SZ(metrics.extraBigChancesPer90, 'extraChances'), anchors.extraChances) * 0.08
+    // The same superset collapse as the forward, carrying the weights v8
+    // already had: 0.52 creation / 0.28 finishing / 0.20 defending. Under v8 the
+    // first two were split into four terms and the two denied ones carried 0.32
+    // of the weight while contributing a constant — for the median midfielder
+    // both sat on `sparseMetric`'s flat 40 floor, worth exactly 9.60 and 3.20
+    // raw points whether he was a destroyer, a playmaker or a shadow striker.
+    // Reading `keyPasses` (zero in 7% to 25% of midfielder seasons) and
+    // `bigChances` (13% to 33%) once each removes the duplicate and puts that
+    // weight back on a term that actually moves.
+    //
+    // The two defensive terms are untouched. Interceptions and clearances are
+    // not algebraic copies of anything else in this branch, and 0.20 in the
+    // defender's 55:45 ratio is what v8 already gave them.
+    quality = sparseMetric(SZ(metrics.keyPassesPer90, 'keyPasses'), anchors.keyPasses) * 0.52
+      + sparseMetric(SZ(metrics.bigChancesPer90, 'bigChances'), anchors.bigChances) * 0.28
       + anchoredMetric(S(metrics.interceptionsPer90, anchors.interceptions.p50), anchors.interceptions) * 0.11
       + anchoredMetric(S(metrics.clearancesPer90, anchors.clearances.p50), anchors.clearances) * 0.09;
   } else if (position === 'DF') {

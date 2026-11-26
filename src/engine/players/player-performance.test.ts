@@ -77,26 +77,26 @@ describe('position performance', () => {
     const samples = [
       computePlayerPerformance('FW', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: at(0.4654), assists: at(0.043), bigChances: at(0.4654) + at(0.0956),
-        keyPasses: at(0.043) + at(0.0342),
+        goals: at(0.3), assists: at(0.03),
+        bigChances: at(0.4346), keyPasses: at(0.0723),
       })),
       computePlayerPerformance('MF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: at(0.0863), assists: at(0.1262),
-        keyPasses: at(0.1262) + at(0.0294), bigChances: at(0.0863) + at(0.0286),
-        interceptions: at(0.7192), clearances: at(1.0513),
+        goals: at(0.05), assists: at(0.05),
+        keyPasses: at(0.125), bigChances: at(0.0928),
+        interceptions: at(0.5714), clearances: at(0.8125),
       })),
       computePlayerPerformance('DF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 0.5, assists: at(0.0749) - 0.5, interceptions: at(1.3279), clearances: at(1.9286),
-        keyBlocks: at(0.0295), goalsConcededWhileOnPitch: at(1.1478),
-        cleanSheetMinutes: 0.3543 * minutes,
+        goals: 0.5, assists: at(0.0536) - 0.5, interceptions: at(1.3333), clearances: at(1.8611),
+        keyBlocks: at(0.0286), goalsConcededWhileOnPitch: at(1.0727),
+        cleanSheetMinutes: 0.3534 * minutes,
       })),
       computePlayerPerformance('GK', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        routineSaves: at(3.7568), saves: at(0.1271),
-        shotsOnTargetFaced: (at(3.7568) + at(0.1271)) / 0.7682,
-        goalsConcededWhileOnPitch: at(1.1628), cleanSheetMinutes: 0.3514 * minutes,
+        routineSaves: at(3.6154), saves: at(0.0763),
+        shotsOnTargetFaced: (at(3.6154) + at(0.0763)) / 0.7739,
+        goalsConcededWhileOnPitch: at(1.0789), cleanSheetMinutes: 0.3529 * minutes,
       })),
     ];
     const qualities = samples.map(result => result.positionQuality);
@@ -105,9 +105,9 @@ describe('position performance', () => {
     // sparse anchors are sampled from the NON-ZERO rows, so a fixture sitting on
     // them is above the real median player on exactly those terms, and the
     // shrinkage above only partly closes the gap. The forward shows it most: its
-    // two sparse terms carry 0.40 of its weight and 30% to 85% of forwards
-    // record nothing on them, which is why the tolerance below is 8 points and
-    // not 1. What has to hold is that every position still lands near its own
+    // sparse term carries 0.30 of its weight and 37% to 54% of forwards record
+    // nothing on it, which is why the tolerance below is 8 points and not 1.
+    // What has to hold is that every position still lands near its own
     // calibrated median plus its cross-position value weight, and that the four
     // stay inside one readable band. The four targets are deliberately NOT
     // monotone — POSITION_VALUE_OFFSET is solved against top-twenty pool shares,
@@ -154,9 +154,9 @@ describe('position performance', () => {
     // is the only term that still knows where the season was played.
     const tierMedian = (tier: 1 | 2 | 3) => {
       const anchor = {
-        1: { int: 1.3279, clr: 1.9286, blk: 0.0295, gc: 1.1478, cs: 0.3543, atk: 0.0749 },
-        2: { int: 1.3134, clr: 1.7885, blk: 0.05, gc: 1.3889, cs: 0.2712, atk: 0.05 },
-        3: { int: 1.1917, clr: 1.5, blk: 0.0625, gc: 1.2778, cs: 0.3077, atk: 0.0667 },
+        1: { int: 1.3333, clr: 1.8611, blk: 0.0286, gc: 1.0727, cs: 0.3534, atk: 0.0536 },
+        2: { int: 1.3065, clr: 1.7861, blk: 0.0517, gc: 1.1379, cs: 0.3333, atk: 0.0625 },
+        3: { int: 1.2105, clr: 1.5882, blk: 0.0625, gc: 1.2489, cs: 0.3276, atk: 0.0667 },
       }[tier];
       return stat({
         appearances: 20, minutesPlayed: minutes, teamMatchesAllCompetitions: 20,

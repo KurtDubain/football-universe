@@ -10,8 +10,21 @@ import {
 import type { PlayerPosition, PlayerTeamSeasonStats } from '../src/types/player';
 
 const fast = process.env.PLAYER_PERFORMANCE_AUDIT_FAST === '1';
-const seedCount = fast ? 2 : 30;
-const seasonsPerSeed = fast ? 2 : 20;
+// Ten seeds x 100 seasons, sampling only the last twenty of each.
+//
+// The window matters more than the sample size here. The simulator drifts for
+// its first sixty to eighty seasons — goals per match fall 2.45 -> 2.17, a
+// second-tier keeper's routine saves rise 2.57 -> 3.11 per 90 — and a save is
+// played for far longer than that, so the steady state is what the calibration
+// actually has to hold up in. The old matrix was 30 seeds x 20 seasons, which is
+// entirely inside the opening drift: it read the cross-position P90 spread at
+// 4.48 under score version 8 and at 9.80 for the same version measured on
+// seasons 81-200. A gate that cannot see a 9.80 is not measuring the thing it
+// was written to catch. Same total season budget, one third more wall clock,
+// and the number it reports is now the one a long save will experience.
+const seedCount = fast ? 2 : 10;
+const seasonsPerSeed = fast ? 2 : 100;
+const warmupSeasons = fast ? 0 : 80;
 const positions: PlayerPosition[] = ['GK', 'DF', 'MF', 'FW'];
 
 interface Sample {
@@ -60,6 +73,10 @@ for (let seedIndex = 0; seedIndex < seedCount; seedIndex++) {
         segmentsByPlayer.set(segment.playerId, rows);
       }
       const seasonSamples: Sample[] = [];
+      // Validity is checked in every season, including the warm-up — an invalid
+      // score is wrong wherever it appears. Only the distribution gates wait for
+      // the drift to settle.
+      const collecting = seasons >= warmupSeasons;
       for (const stat of Object.values(world.playerStats)) {
         const player = playerById.get(stat.playerId);
         if (!player) continue;
@@ -79,7 +96,7 @@ for (let seedIndex = 0; seedIndex < seedCount; seedIndex++) {
           injuryAbsences: result.metrics.injuryAbsenceMatches,
         };
         seasonSamples.push(sample);
-        samples.push(sample);
+        if (collecting) samples.push(sample);
         if (
           !Number.isFinite(sample.score)
           || !Number.isFinite(sample.quality)
@@ -94,14 +111,16 @@ for (let seedIndex = 0; seedIndex < seedCount; seedIndex++) {
           || result.metrics.appearances > result.metrics.teamMatchesAllCompetitions
         ) invalidAttendance++;
       }
-      seasonSamples
-        .filter(sample => sample.confidence > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 20)
-        .forEach(sample => {
-          top20ByPosition[sample.position]++;
-          if (sample.confidence < 0.5) lowConfidenceTop20++;
-        });
+      if (collecting) {
+        seasonSamples
+          .filter(sample => sample.confidence > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 20)
+          .forEach(sample => {
+            top20ByPosition[sample.position]++;
+            if (sample.confidence < 0.5) lowConfidenceTop20++;
+          });
+      }
       seasons++;
       completedSeasons++;
     }
@@ -149,13 +168,19 @@ const healthy = trusted.filter(sample => sample.injuryAbsences === 0);
 // medianSpread was capped at 5 back when the four positions were deliberately
 // levelled, and a spread that wide meant an anchor or a scale had drifted. Score
 // version 6 introduced POSITION_VALUE_OFFSET, so the positions are now SUPPOSED
-// to sit apart: under version 8 the widest gap between those offsets is 12.4
-// quality points, which lands near 7 season-score points once the confidence
-// factor and the 0.75 weight are applied. The cap moves to 8 to match p90Spread.
-// A genuine calibration error still shifts a whole position by far more than
-// that — the third-tier keeper pinned to 15 out of 120 under the old top-flight
-// anchors is the kind of failure this is here to catch — while the intended
-// value ordering gets room to breathe instead of tripping the gate on noise.
+// to sit apart, and the cap moved to 8 to give that ordering room. Under version
+// 9 the offsets span 10.75 quality points, which is not a free parameter — it is
+// what filling a 1:2:3:3 top twenty out of pool shares of 8.9/35.7/34.2/21.2
+// costs — and it lands near 6 season-score points once the confidence factor and
+// the 0.75 weight are applied. Measured on the steady window this reads 4.80 at
+// P90 and 5.10 at the median.
+//
+// A genuine calibration error still shifts a whole position by far more than the
+// cap: the third-tier keeper pinned to 15 out of 120 under the old top-flight
+// anchors is the kind of failure this is here to catch. Note that the cap is
+// only meaningful because the window above was fixed at the same time — read on
+// the opening twenty seasons, version 8 scored 4.48 here and version 9 scores
+// 8.49, which says nothing about either version's behaviour in a real save.
 const report = {
   passed: invalidScores === 0
     && invalidAttendance === 0
