@@ -1565,8 +1565,14 @@ function validateResult(
     const participant = snapshot?.players.find(player => (
       player.playerId === contribution.playerId && (player.minutesPlayed ?? 0) > 0
     ));
+    // Interceptions and clearances are distributed across defenders AND
+    // midfielders — see DEFENSIVE_ACTION_SHARE in the simulator, which weights
+    // them 1 and 0.55 — while saves belong to the keeper alone. So an outfield
+    // contributor may carry the two action counts but never a save, and a
+    // keeper may appear only with both action counts at zero.
     const positionMatches = participant
-      && ((participant.position === 'DF' && (contribution.routineSaves ?? 0) === 0)
+      && (((participant.position === 'DF' || participant.position === 'MF')
+        && (contribution.routineSaves ?? 0) === 0)
         || (participant.position === 'GK'
           && contribution.interceptions === 0
           && contribution.clearances === 0));
@@ -1800,14 +1806,18 @@ export function validateWorldData(world: GameWorld): WorldDataValidationResult {
         playerId,
       });
     }
+    // Interceptions and clearances go to defenders and midfielders alike; see
+    // DEFENSIVE_ACTION_SHARE in the simulator. Key blocks above stay DF-only,
+    // because they come from `df_block` events.
     if (
       livePlayer
       && ((stat.interceptions ?? 0) > 0 || (stat.clearances ?? 0) > 0)
       && livePlayer.position !== 'DF'
+      && livePlayer.position !== 'MF'
     ) {
       pushIssue(issues, {
         severity: 'warning', code: 'non_df_defensive_volume',
-        message: `Non-DF player ${playerId} has defender-only volume statistics.`,
+        message: `Player ${playerId} has interception/clearance volume at a position that cannot record it.`,
         teamId: stat.teamId, playerId,
       });
     }

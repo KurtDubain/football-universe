@@ -967,7 +967,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                             {(player.position === 'FW' || player.position === 'MF') && <span>{stats.goals}球/{stats.assists}助</span>}
                             {(player.position === 'GK' || player.position === 'DF') && <span>{stats.cleanSheetMinutes ?? 0}零封分钟</span>}
                             {player.position === 'GK' && <span>{stats.routineSaves ?? 0}扑救/{stats.saves}关键</span>}
-                            {player.position === 'DF' && <span>{stats.interceptions ?? 0}拦截/{stats.clearances ?? 0}解围</span>}
+                            {(player.position === 'DF' || player.position === 'MF') && <span>{stats.interceptions ?? 0}拦截/{stats.clearances ?? 0}解围</span>}
                           </>
                         ) : <span>本季尚未出场</span>}
                       </div>
@@ -1013,7 +1013,7 @@ function SquadRoster({ teamId }: { teamId: string }) {
                               {stats.routineSaves ?? 0}扑救/{stats.saves}关键
                             </span>
                           )}
-                          {player.position === 'DF' && ((stats.interceptions ?? 0) > 0 || (stats.clearances ?? 0) > 0) && (
+                          {(player.position === 'DF' || player.position === 'MF') && ((stats.interceptions ?? 0) > 0 || (stats.clearances ?? 0) > 0) && (
                             <span className="text-blue-400" title="当前赛季全赛事拦截/解围">
                               {stats.interceptions ?? 0}拦截/{stats.clearances ?? 0}解围
                             </span>

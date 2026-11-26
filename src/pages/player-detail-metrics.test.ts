@@ -27,7 +27,7 @@ const stats: PlayerSeasonStats = {
 describe('position-specific player headlines', () => {
   it.each<[PlayerPosition, string[], number[]]>([
     ['FW', ['出场', '进球', '助攻', '额外关键机会'], [12, 7, 5, 4]],
-    ['MF', ['出场', '助攻', '额外创造机会', '进球'], [12, 5, 8, 7]],
+    ['MF', ['出场', '助攻', '额外创造机会', '进球', '拦截', '解围'], [12, 5, 8, 7, 24, 30]],
     ['DF', ['出场', '拦截', '解围', '门线封堵'], [12, 24, 30, 8]],
     ['GK', ['出场', '普通扑救', '关键扑救', '零封分钟'], [12, 22, 14, 420]],
   ])('uses relevant metrics for %s', (position, labels, values) => {

@@ -139,7 +139,9 @@ function playerGrowthResult(
     ? `${player.routineSaves ?? 0}次普通扑救 · ${player.saves}次关键扑救`
     : player?.identity.position === 'DF'
       ? `${player.interceptions ?? 0}次拦截 · ${player.clearances ?? 0}次解围`
-      : `${player?.goals ?? 0}球 · ${player?.assists ?? 0}助攻`;
+      : player?.identity.position === 'MF'
+        ? `${player?.goals ?? 0}球 · ${player?.assists ?? 0}助攻 · ${player.interceptions ?? 0}次拦截 · ${player.clearances ?? 0}次解围`
+        : `${player?.goals ?? 0}球 · ${player?.assists ?? 0}助攻`;
   return {
     label: getObservationThemeLabel('player_growth'),
     verdict,

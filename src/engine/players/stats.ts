@@ -259,7 +259,7 @@ function buildMatchStatDeltas(
     const participant = (matchdayByTeam.get(contribution.teamId) ?? [])
       .find(player => player.uuid === contribution.playerId && player.minutesPlayed > 0);
     if (!participant) continue;
-    if (participant.position === 'DF') {
+    if (participant.position === 'DF' || participant.position === 'MF') {
       incrementDelta(deltas, contribution.playerId, contribution.teamId, {
         interceptions: Math.max(0, Math.trunc(contribution.interceptions)),
         clearances: Math.max(0, Math.trunc(contribution.clearances)),

@@ -9,7 +9,7 @@ import {
 } from '../../types';
 import { TeamBase, TeamState } from '../../types/team';
 import { CoachBase } from '../../types/coach';
-import { Player, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
+import { Player, PlayerPosition, PlayerSeasonStats, PlayerTeamSeasonStats } from '../../types/player';
 import { SeededRNG } from './rng';
 import { isDerby } from '../../config/derbies';
 import { BALANCE } from '../../config/balance';
@@ -96,6 +96,22 @@ function localMatchRng(fixtureId: string, salt: string, state: number): SeededRN
   return new SeededRNG(stableStringHash(`${fixtureId}:${salt}`) ^ state);
 }
 
+/**
+ * Share of a team's interception and clearance total each position takes.
+ *
+ * The per-match total is derived from the OPPONENT's possession, shots and
+ * corners, and it is the TEAM's total — but it used to be handed to defenders
+ * alone, which credited a back four with every interception a midfield screen
+ * made and left a defensive midfielder with no way to score at all. Midfielders
+ * now take a share at a little over half a defender's weight, which is roughly
+ * where real per-ninety interception rates sit between the two positions.
+ *
+ * The team total is unchanged and this stream is a fixture-derived local RNG,
+ * not the match RNG, so scorelines and events are bit-identical either way.
+ * What moves is only how a fixed number of defensive actions is divided.
+ */
+const DEFENSIVE_ACTION_SHARE: Partial<Record<PlayerPosition, number>> = { DF: 1, MF: 0.55 };
+
 function distributeDefensiveTotal(
   total: number,
   teamId: string,
@@ -108,12 +124,17 @@ function distributeDefensiveTotal(
   if (total <= 0) return;
   const byId = new Map((squad ?? []).map(player => [player.uuid, player]));
   const candidates = (snapshot?.players ?? [])
-    .filter(entry => entry.position === 'DF' && (entry.minutesPlayed ?? 0) > 0)
-    .map(entry => ({ player: byId.get(entry.playerId), minutes: entry.minutesPlayed ?? 0 }))
-    .filter((entry): entry is { player: Player; minutes: number } => Boolean(entry.player));
+    .filter(entry => (DEFENSIVE_ACTION_SHARE[entry.position] ?? 0) > 0 && (entry.minutesPlayed ?? 0) > 0)
+    .map(entry => ({
+      player: byId.get(entry.playerId),
+      minutes: entry.minutesPlayed ?? 0,
+      share: DEFENSIVE_ACTION_SHARE[entry.position] ?? 0,
+    }))
+    .filter((entry): entry is { player: Player; minutes: number; share: number } => Boolean(entry.player));
   if (candidates.length === 0) return;
 
-  const weights = candidates.map(({ player, minutes }) => minutes * (0.55 + player.rating / 100));
+  const weights = candidates.map(({ player, minutes, share }) =>
+    minutes * share * (0.55 + player.rating / 100));
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   for (let action = 0; action < total; action++) {
     let roll = rng.next() * weightTotal;

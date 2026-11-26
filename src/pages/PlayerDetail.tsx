@@ -507,6 +507,8 @@ function CurrentSeasonClubSplitSection({ rows }: { rows: PlayerStatRow[] }) {
                     ? `${row.routineSaves ?? 0}扑救/${row.saves}关键`
                     : row.identity.position === 'DF'
                     ? `${row.interceptions ?? 0}拦截/${row.clearances ?? 0}解围`
+                    : row.identity.position === 'MF'
+                    ? `${Math.max(0, row.bigChances - row.goals)}额外机会/${Math.max(0, row.keyPasses - row.assists)}额外创造 · ${row.interceptions ?? 0}拦截/${row.clearances ?? 0}解围`
                     : `${Math.max(0, row.bigChances - row.goals)}额外机会/${Math.max(0, row.keyPasses - row.assists)}额外创造`}
                 </td>
               </tr>
@@ -581,7 +583,7 @@ function PositionPerformanceCard({
   const detail = player.position === 'FW'
     ? `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外关键机会 ${metrics.extraBigChancesPer90.toFixed(2)}/90`
     : player.position === 'MF'
-      ? `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外创造 ${metrics.extraKeyPassesPer90.toFixed(2)}/90`
+      ? `进球 ${metrics.goalsPer90.toFixed(2)}/90 · 助攻 ${metrics.assistsPer90.toFixed(2)}/90 · 额外创造 ${metrics.extraKeyPassesPer90.toFixed(2)}/90 · 拦截 ${metrics.interceptionsPer90.toFixed(2)}/90 · 解围 ${metrics.clearancesPer90.toFixed(2)}/90`
       : player.position === 'GK'
         ? `普通扑救 ${stats?.routineSaves ?? 0} · 关键扑救 ${stats?.saves ?? 0} · 扑救率 ${(metrics.savePercentage * 100).toFixed(1)}% · 失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`
         : `拦截 ${metrics.interceptionsPer90.toFixed(2)}/90 · 解围 ${metrics.clearancesPer90.toFixed(2)}/90 · 门线封堵 ${stats?.keyBlocks ?? 0} · 在场失球 ${metrics.goalsConcededPer90.toFixed(2)}/90`;

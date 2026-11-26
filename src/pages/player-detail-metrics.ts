@@ -26,6 +26,8 @@ export function getPositionHeadlineMetrics(
     { label: '助攻', value: value('assists'), color: 'text-blue-400', tooltip: scope },
     { label: '额外创造机会', value: Math.max(0, value('keyPasses') - value('assists')), color: 'text-emerald-300', tooltip: `除助攻外，为被关键防守拒绝的机会提供的最后一传。${scope}` },
     { label: '进球', value: value('goals'), color: 'text-amber-400', tooltip: scope },
+    { label: '拦截', value: value('interceptions'), color: 'text-emerald-300', tooltip: `由比赛进攻压力和实际出场阵容产生的拦截。${scope}` },
+    { label: '解围', value: value('clearances'), color: 'text-blue-300', tooltip: `由对手射门、角球和控球压力产生的解围。${scope}` },
   ];
   if (position === 'GK') return [
     ...shared,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PlayerSeasonStats } from '../../types/player';
 import {
   PLAYER_SCORE_CEILING,
+  POSITION_VALUE_OFFSET,
   computePlayerPerformance,
   computeSegmentedPlayerPerformance,
   getPlayerPerformanceMetrics,
@@ -77,15 +78,17 @@ describe('position performance', () => {
       computePlayerPerformance('FW', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
         goals: at(0.4654), assists: at(0.043), bigChances: at(0.4654) + at(0.0956),
+        keyPasses: at(0.043) + at(0.0342),
       })),
       computePlayerPerformance('MF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
         goals: at(0.0863), assists: at(0.1262),
         keyPasses: at(0.1262) + at(0.0294), bigChances: at(0.0863) + at(0.0286),
+        interceptions: at(0.7192), clearances: at(1.0513),
       })),
       computePlayerPerformance('DF', stat({
         appearances: 30, starts: 30, minutesPlayed: minutes, teamMatchesAllCompetitions: 30,
-        goals: 0.5, assists: at(0.0749) - 0.5, interceptions: at(2.0998), clearances: at(3.0653),
+        goals: 0.5, assists: at(0.0749) - 0.5, interceptions: at(1.3279), clearances: at(1.9286),
         keyBlocks: at(0.0295), goalsConcededWhileOnPitch: at(1.1478),
         cleanSheetMinutes: 0.3543 * minutes,
       })),
@@ -97,25 +100,26 @@ describe('position performance', () => {
       })),
     ];
     const qualities = samples.map(result => result.positionQuality);
-    // The band is wide on purpose, for two separate reasons. Two of the
-    // midfielder's four terms are sparse: at their non-zero median
-    // `sparseMetric` returns 65, not the 50 `anchoredMetric` returns, so an
-    // all-at-median midfielder sits above the real median midfielder. And
-    // POSITION_VALUE_OFFSET now separates the positions deliberately — a
-    // forward sitting on its own tier median reads several points above a
-    // defender sitting on its own, which is the cross-position value weight
-    // doing its job, not a calibration error. What has to hold is the ORDER:
-    // a forward is worth more than a midfielder, who is worth more than a
-    // keeper, who is worth more than a defender.
-    for (const quality of qualities) {
-      expect(quality).toBeGreaterThanOrEqual(42);
-      expect(quality).toBeLessThanOrEqual(64);
-    }
-    const [forward, midfielder, defender, keeper] = qualities;
-    expect(forward).toBeGreaterThan(midfielder);
-    expect(midfielder).toBeGreaterThan(keeper);
-    expect(keeper).toBeGreaterThan(defender);
-    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(18);
+    // Each fixture sits on its position's top-flight anchor medians, but those
+    // medians are not the same thing as the group's median raw quality. The
+    // sparse anchors are sampled from the NON-ZERO rows, so a fixture sitting on
+    // them is above the real median player on exactly those terms, and the
+    // shrinkage above only partly closes the gap. The forward shows it most: its
+    // two sparse terms carry 0.40 of its weight and 30% to 85% of forwards
+    // record nothing on them, which is why the tolerance below is 8 points and
+    // not 1. What has to hold is that every position still lands near its own
+    // calibrated median plus its cross-position value weight, and that the four
+    // stay inside one readable band. The four targets are deliberately NOT
+    // monotone — POSITION_VALUE_OFFSET is solved against top-twenty pool shares,
+    // so it compensates for each position's score distribution rather than
+    // ranking the positions by worth.
+    const targets = (['FW', 'MF', 'DF', 'GK'] as const).map(position => 50 + POSITION_VALUE_OFFSET[position]);
+    qualities.forEach((quality, index) => {
+      expect(quality).toBeGreaterThanOrEqual(40);
+      expect(quality).toBeLessThanOrEqual(66);
+      expect(Math.abs(quality - targets[index])).toBeLessThanOrEqual(8);
+    });
+    expect(Math.max(...qualities) - Math.min(...qualities)).toBeLessThanOrEqual(22);
     for (const result of samples) {
       expect(result.seasonScore).toBeGreaterThanOrEqual(0);
       expect(result.seasonScore).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
@@ -150,9 +154,9 @@ describe('position performance', () => {
     // is the only term that still knows where the season was played.
     const tierMedian = (tier: 1 | 2 | 3) => {
       const anchor = {
-        1: { int: 2.0998, clr: 3.0653, blk: 0.0295, gc: 1.1478, cs: 0.3543, atk: 0.0566 },
-        2: { int: 2.0225, clr: 2.7541, blk: 0.05, gc: 1.3889, cs: 0.2712, atk: 0.0637 },
-        3: { int: 1.8, clr: 2.2632, blk: 0.0625, gc: 1.2778, cs: 0.3077, atk: 0.0667 },
+        1: { int: 1.3279, clr: 1.9286, blk: 0.0295, gc: 1.1478, cs: 0.3543, atk: 0.0749 },
+        2: { int: 1.3134, clr: 1.7885, blk: 0.05, gc: 1.3889, cs: 0.2712, atk: 0.05 },
+        3: { int: 1.1917, clr: 1.5, blk: 0.0625, gc: 1.2778, cs: 0.3077, atk: 0.0667 },
       }[tier];
       return stat({
         appearances: 20, minutesPlayed: minutes, teamMatchesAllCompetitions: 20,
@@ -167,12 +171,16 @@ describe('position performance', () => {
     const lower = computePlayerPerformance('DF', tierMedian(3), 3);
     // The band sits below 50 because a defender carries the largest negative
     // POSITION_VALUE_OFFSET: the same tier-median season that reads 50 for a
-    // position of neutral value reads in the mid-forties here. What matters is
-    // that all three divisions land on the same number.
+    // position of neutral value reads in the low forties here. What matters is
+    // that all three divisions land within a couple of points of each other,
+    // which is what the tier cap on the calibration scale protects: without it
+    // the lower divisions are stretched to fit their own narrower spread.
     for (const result of [top, mid, lower]) {
-      expect(result.positionQuality).toBeGreaterThanOrEqual(42);
-      expect(result.positionQuality).toBeLessThanOrEqual(52);
+      expect(result.positionQuality).toBeGreaterThanOrEqual(40);
+      expect(result.positionQuality).toBeLessThanOrEqual(48);
     }
+    expect(Math.max(top.positionQuality, mid.positionQuality, lower.positionQuality)
+      - Math.min(top.positionQuality, mid.positionQuality, lower.positionQuality)).toBeLessThanOrEqual(4);
     // Two whole divisions apart, and league strength is still worth ~1 point.
     expect(Math.abs(top.seasonScore - lower.seasonScore)).toBeLessThanOrEqual(2);
 

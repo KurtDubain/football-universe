@@ -189,7 +189,7 @@ function playerPerformanceDetail(
     return `${stats?.interceptions ?? 0}次拦截 · ${stats?.clearances ?? 0}次解围`;
   }
   if (player.position === 'MF') {
-    return `${stats?.goals ?? 0}球 · ${stats?.assists ?? 0}助攻 · ${Math.max(0, (stats?.keyPasses ?? 0) - (stats?.assists ?? 0))}次额外创造`;
+    return `${stats?.goals ?? 0}球 · ${stats?.assists ?? 0}助攻 · ${Math.max(0, (stats?.keyPasses ?? 0) - (stats?.assists ?? 0))}次额外创造 · ${stats?.interceptions ?? 0}次拦截 · ${stats?.clearances ?? 0}次解围`;
   }
   return `${stats?.goals ?? 0}球 · ${stats?.assists ?? 0}助攻 · ${Math.max(0, (stats?.bigChances ?? 0) - (stats?.goals ?? 0))}次额外机会`;
 }
@@ -212,7 +212,13 @@ function playerPerformanceFingerprint(
     : player.position === 'DF'
       ? [Math.floor((stats?.interceptions ?? 0) / 10), Math.floor((stats?.clearances ?? 0) / 10), stats?.keyBlocks ?? 0]
       : player.position === 'MF'
-        ? [stats?.goals ?? 0, stats?.assists ?? 0, Math.floor(Math.max(0, (stats?.keyPasses ?? 0) - (stats?.assists ?? 0)) / 3)]
+        ? [
+            stats?.goals ?? 0,
+            stats?.assists ?? 0,
+            Math.floor(Math.max(0, (stats?.keyPasses ?? 0) - (stats?.assists ?? 0)) / 3),
+            Math.floor((stats?.interceptions ?? 0) / 10),
+            Math.floor((stats?.clearances ?? 0) / 10),
+          ]
         : [stats?.goals ?? 0, stats?.assists ?? 0, Math.floor(Math.max(0, (stats?.bigChances ?? 0) - (stats?.goals ?? 0)) / 3)];
   return [
     Math.floor(performance.seasonScore / 2),
