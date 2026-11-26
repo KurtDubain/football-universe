@@ -121,13 +121,26 @@ export const PLAYER_RANKING_MINUTES = 0;
  * v10: the calibration gains a second segment above P95. Every version up to
  * here fitted ONE slope per position x tier, which can pin a single quantile and
  * no more — and the quantile it pinned was the P95, at 82 before the value
- * offset. Nothing above that was constrained, and what happened there was set by
- * how wide each group's raw tail happened to be, which is not a property anyone
- * chose. Measured on 231,866 rows at 900+ minutes over 600 completed seasons,
- * the top flight's raw span from P95 to P99.9 is 8.97 for a keeper, 7.90 for a
- * defender, 9.38 for a midfielder and 13.20 for a forward, and the resulting
- * season score at P99.9 read 104.1 / 93.7 / 100.6 / 104.1 by position. No
- * goalkeeper in the whole sample ever reached 100; the best one read 96.6.
+ * offset. Nothing above that was constrained. How far a group climbs above its
+ * own P95 is its raw span from P95 to P99.9 times its scale, and the scale is
+ * solved backwards from "land this group on 82 at P95", so it shrinks as the raw
+ * distribution widens — the product differs across groups and nothing ever made
+ * it equal. Measured on 231,866 rows at 900+ minutes over 600 completed seasons,
+ * the top flight reads:
+ *
+ *   keeper      8.97 x 1.848 = 16.6 climb, +0.4 offset ->  99.0
+ *   defender    7.90 x 3.387 = 26.8 climb, -7.0 offset -> 101.8
+ *   midfielder  9.38 x 3.365 = 31.6 climb, -1.2 offset -> 112.4
+ *   forward    13.20 x 2.214 = 29.2 climb, +7.8 offset -> 119.0
+ *
+ * The keeper is last not because his raw tail is narrow — at 8.97 it is wider
+ * than the defender's — but because his scale is the smallest in the table, so
+ * the widest raw distribution buys the least distance. The forward is first
+ * because a 29.2 climb then has the largest offset in the table added at full
+ * strength, and that offset was solved for the middle of the distribution and
+ * never meant to be read at the extreme. The season score at P99.9 read
+ * 92.6 / 93.7 / 100.6 / 104.1 by position, and no goalkeeper in the whole
+ * sample ever reached 100; the best one read 96.6.
  *
  * The second segment is solved so every top-flight group lands on a common
  * absolute 112 at its own P99.9 — the value at which a season score crosses 100
