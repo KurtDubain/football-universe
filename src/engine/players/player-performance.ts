@@ -117,8 +117,35 @@ export const PLAYER_RANKING_MINUTES = 0;
  * 0.28 finishing / 0.20 defending. The anchors, the calibration table and the
  * value offsets below are all re-derived at the same time, because every one of
  * them is read off the raw distribution this formula produces.
+ *
+ * v10: the calibration gains a second segment above P95. Every version up to
+ * here fitted ONE slope per position x tier, which can pin a single quantile and
+ * no more — and the quantile it pinned was the P95, at 82 before the value
+ * offset. Nothing above that was constrained, and what happened there was set by
+ * how wide each group's raw tail happened to be, which is not a property anyone
+ * chose. Measured on 231,866 rows at 900+ minutes over 600 completed seasons,
+ * the top flight's raw span from P95 to P99.9 is 8.97 for a keeper, 7.90 for a
+ * defender, 9.38 for a midfielder and 13.20 for a forward, and the resulting
+ * season score at P99.9 read 104.1 / 93.7 / 100.6 / 104.1 by position. No
+ * goalkeeper in the whole sample ever reached 100; the best one read 96.6.
+ *
+ * The second segment is solved so every top-flight group lands on a common
+ * absolute 112 at its own P99.9 — the value at which a season score crosses 100
+ * at the confidence an elite row actually carries. The first segment is
+ * untouched: the medians, the scales and the offsets are the same numbers, so
+ * every row at or below its group's P95 scores exactly what it scored under
+ * version 9, and the curve is continuous at the knee. The value offset still
+ * decides where each position's P95 sits and fades to nothing by P99.9, which
+ * is the point: an offset that answers "what is this position worth on average"
+ * should not also be the reason the best season anyone had at that position can
+ * never be compared with the best season at another.
+ *
+ * The change is deliberately confined to the top five percent of each group.
+ * Everything below the knee — medians, grade bands, the bulk of the award
+ * distribution — is bit-identical to version 9, so a save that reads the same
+ * season through both versions agrees everywhere except among its elite.
  */
-export const PLAYER_SCORE_VERSION = 9;
+export const PLAYER_SCORE_VERSION = 10;
 
 export type PlayerScoreConfidence = 'none' | 'low' | 'medium' | 'high';
 
@@ -346,13 +373,65 @@ const ANCHORS: Record<PlayerPosition, Record<LeagueTier, PositionAnchorSet>> = {
 // These are the raw formula outputs, before the tier rule below.
 const RAW_POSITION_QUALITY_CALIBRATION: Record<
   PlayerPosition,
-  Record<LeagueTier, { median: number; scale: number }>
+  Record<LeagueTier, { median: number; scale: number; knee: number; tail: number }>
 > = {
-  GK: { 1: { median: 53.99, scale: 1.848 }, 2: { median: 51.94, scale: 2.572 }, 3: { median: 51.79, scale: 2.999 } },
-  DF: { 1: { median: 50.74, scale: 3.387 }, 2: { median: 49.72, scale: 4.577 }, 3: { median: 48.82, scale: 5.466 } },
-  MF: { 1: { median: 61.27, scale: 3.365 }, 2: { median: 57.83, scale: 3.843 }, 3: { median: 54.84, scale: 3.528 } },
-  FW: { 1: { median: 51.59, scale: 2.214 }, 2: { median: 50.26, scale: 2.683 }, 3: { median: 47.99, scale: 2.652 } },
+  GK: {
+    1: { median: 53.99, scale: 1.848, knee: 71.28, tail: 80.25 },
+    2: { median: 51.94, scale: 2.572, knee: 64.49, tail: 74.39 },
+    3: { median: 51.79, scale: 2.999, knee: 63.58, tail: 72.25 },
+  },
+  DF: {
+    1: { median: 50.74, scale: 3.387, knee: 60.13, tail: 68.03 },
+    2: { median: 49.72, scale: 4.577, knee: 56.68, tail: 63.24 },
+    3: { median: 48.82, scale: 5.466, knee: 54.92, tail: 59.63 },
+  },
+  MF: {
+    1: { median: 61.27, scale: 3.365, knee: 70.69, tail: 80.07 },
+    2: { median: 57.83, scale: 3.843, knee: 66.03, tail: 74.32 },
+    3: { median: 54.84, scale: 3.528, knee: 63.82, tail: 74.07 },
+  },
+  FW: {
+    1: { median: 51.59, scale: 2.214, knee: 66.12, tail: 79.32 },
+    2: { median: 50.26, scale: 2.683, knee: 62.23, tail: 76.88 },
+    3: { median: 47.99, scale: 2.652, knee: 60.15, tail: 72.13 },
+  },
 };
+
+/**
+ * Where the second segment lands every top-flight group at its own P99.9.
+ *
+ * 112 is measured, not chosen. A season score is `adjustedQuality * 0.75 +
+ * availability * 0.15 + leagueStrength * 0.10`, and an elite row carries
+ * confidence near 0.80 rather than 1.0, so position quality 112 reads
+ * (50 + 62 * 0.80) * 0.75 + 15 + 10 = 99.7 — the season score crosses 100. The
+ * target is therefore "every top-flight position's 99.9th percentile season
+ * reads 100", which is the comparison a reader actually makes when they ask
+ * whether the best defender in the league had as good a season as the best
+ * forward. Under one slope that read 104.1 for a forward against 92.6 for a
+ * keeper, and no keeper in 231,866 rows ever reached 100 at all.
+ *
+ * It is deliberately a common ABSOLUTE value and not 82 plus each position's
+ * offset. The offset answers "what is this position worth on average", which is
+ * the right question across the bulk of the distribution and for filling a top
+ * twenty; it is the wrong question at the extreme, where the reader is asking
+ * whether the best season anyone had at this position belongs in the same
+ * conversation as the best season at another. So the offset still decides where
+ * each position's P95 sits, and fades to nothing by P99.9.
+ */
+export const TAIL_POSITION_QUALITY_TARGET = 112;
+
+export interface ResolvedCalibration {
+  median: number;
+  scale: number;
+  /** Raw P95 — where the first segment ends and the second begins. */
+  knee: number;
+  /** Raw P99.9 — the point the second segment is solved to land on the target. */
+  tail: number;
+  /** Position quality at `knee`, offset included. The two segments meet here. */
+  kneeQuality: number;
+  /** Slope above `knee`, solved to land this group on the target at its P99.9. */
+  tailScale: number;
+}
 
 /**
  * No tier is stretched further than the top flight of the same position.
@@ -378,22 +457,37 @@ const RAW_POSITION_QUALITY_CALIBRATION: Record<
  * are solved on, this is what moves the share of season leaders under 1,200
  * minutes from 3.0% to 0.6% and their p10 from 1,350 minutes to 1,954.
  */
-function capTierScales(
-  raw: Record<PlayerPosition, Record<LeagueTier, { median: number; scale: number }>>,
-): Record<PlayerPosition, Record<LeagueTier, { median: number; scale: number }>> {
-  const capped = {} as Record<PlayerPosition, Record<LeagueTier, { median: number; scale: number }>>;
+function resolveCalibration(
+  raw: typeof RAW_POSITION_QUALITY_CALIBRATION,
+): Record<PlayerPosition, Record<LeagueTier, ResolvedCalibration>> {
+  const resolved = {} as Record<PlayerPosition, Record<LeagueTier, ResolvedCalibration>>;
   for (const position of Object.keys(raw) as PlayerPosition[]) {
-    const limit = raw[position][1].scale;
-    capped[position] = {
-      1: raw[position][1],
-      2: { median: raw[position][2].median, scale: Math.min(raw[position][2].scale, limit) },
-      3: { median: raw[position][3].median, scale: Math.min(raw[position][3].scale, limit) },
+    const offset = POSITION_VALUE_OFFSET[position];
+    const limitScale = raw[position][1].scale;
+    const at = (tier: LeagueTier): ResolvedCalibration => {
+      const point = raw[position][tier];
+      const scale = Math.min(point.scale, limitScale);
+      const kneeQuality = 50 + (point.knee - point.median) * scale + offset;
+      const span = point.tail - point.knee;
+      const tailScale = span > 0 ? (TAIL_POSITION_QUALITY_TARGET - kneeQuality) / span : scale;
+      return { median: point.median, scale, knee: point.knee, tail: point.tail, kneeQuality, tailScale };
     };
+    const top = at(1);
+    // The same argument as the first segment, applied to the second: a lower
+    // division's raw tail is narrow because less football happens in the data,
+    // not because its best players are closer to its median. Inheriting the top
+    // flight's tail slope keeps a third-tier defender's best season from being
+    // stretched to the same height as a top-flight one's on a handful of events
+    // — uncapped, the third-tier defender tail solves to 10.26 against the top
+    // flight's 4.71.
+    const capped = (tier: 2 | 3): ResolvedCalibration => {
+      const own = at(tier);
+      return { ...own, tailScale: Math.min(own.tailScale, top.tailScale) };
+    };
+    resolved[position] = { 1: top, 2: capped(2), 3: capped(3) };
   }
-  return capped;
+  return resolved;
 }
-
-const POSITION_QUALITY_CALIBRATION = capTierScales(RAW_POSITION_QUALITY_CALIBRATION);
 
 /**
  * Cross-position value weight, in position-quality points.
@@ -477,6 +571,11 @@ export const POSITION_VALUE_OFFSET: Record<PlayerPosition, number> = {
   MF: -1.2,
   FW: 7.8,
 };
+
+// Resolved here rather than beside the raw table because the second segment is
+// solved against POSITION_VALUE_OFFSET: the knee each group inherits depends on
+// where its own offset puts it.
+export const POSITION_QUALITY_CALIBRATION = resolveCalibration(RAW_POSITION_QUALITY_CALIBRATION);
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
@@ -813,7 +912,13 @@ export function rawPositionQuality(
 /**
  * Calibrated position quality: the raw weighted sum mapped so that every
  * position x tier group lands on 50 at its own median and 82 at its own P95,
- * then shifted by the cross-position value weight.
+ * then shifted by the cross-position value weight — and, above that P95, carried
+ * on a second slope to a common absolute value at P99.9.
+ *
+ * The two segments meet exactly at `knee`, so the curve is continuous and every
+ * row at or below its group's P95 scores precisely what it scored under the
+ * single-slope form. Only the top five percent of each group is reshaped, and
+ * only upward for the three positions that were reading lowest there.
  */
 function computePositionQuality(
   position: PlayerPosition,
@@ -821,12 +926,11 @@ function computePositionQuality(
   tier: LeagueTier,
 ): number {
   const calibration = POSITION_QUALITY_CALIBRATION[position][tier];
-  return round1(clamp(
-    50 + (rawPositionQuality(position, metrics, tier) - calibration.median) * calibration.scale
-      + POSITION_VALUE_OFFSET[position],
-    0,
-    PLAYER_SCORE_CEILING,
-  ));
+  const raw = rawPositionQuality(position, metrics, tier);
+  const quality = raw <= calibration.knee
+    ? 50 + (raw - calibration.median) * calibration.scale + POSITION_VALUE_OFFSET[position]
+    : calibration.kneeQuality + (raw - calibration.knee) * calibration.tailScale;
+  return round1(clamp(quality, 0, PLAYER_SCORE_CEILING));
 }
 
 function resultFromQuality(

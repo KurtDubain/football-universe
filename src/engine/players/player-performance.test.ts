@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { PlayerSeasonStats } from '../../types/player';
 import {
   PLAYER_SCORE_CEILING,
+  POSITION_QUALITY_CALIBRATION,
   POSITION_VALUE_OFFSET,
+  TAIL_POSITION_QUALITY_TARGET,
   computePlayerPerformance,
   computeSegmentedPlayerPerformance,
   getPlayerPerformanceMetrics,
@@ -208,3 +210,126 @@ describe('position performance', () => {
     expect(result.score).toBeLessThanOrEqual(PLAYER_SCORE_CEILING);
   });
 });
+
+describe('two-segment calibration above P95', () => {
+  const positions = ['GK', 'DF', 'MF', 'FW'] as const;
+  const tiers = [1, 2, 3] as const;
+
+  it('meets the two segments exactly at the knee', () => {
+    // A discontinuity here would make a player who is one event better read
+    // worse than one who is one event worse, which is the one failure a
+    // piecewise curve can have that a single slope cannot.
+    for (const position of positions) {
+      for (const tier of tiers) {
+        const c = POSITION_QUALITY_CALIBRATION[position][tier];
+        const fromBelow = 50 + (c.knee - c.median) * c.scale + POSITION_VALUE_OFFSET[position];
+        expect(c.kneeQuality).toBeCloseTo(fromBelow, 6);
+      }
+    }
+  });
+
+  it('lands every top-flight group on the tail target at its own P99.9', () => {
+    // This is the whole point of the second segment: the four positions used to
+    // read 104.1 / 93.7 / 100.6 / 104.1 here, and no goalkeeper in 231,866 rows
+    // ever reached a season score of 100. They now read the same number.
+    for (const position of positions) {
+      const c = POSITION_QUALITY_CALIBRATION[position][1];
+      expect(c.kneeQuality + (c.tail - c.knee) * c.tailScale)
+        .toBeCloseTo(TAIL_POSITION_QUALITY_TARGET, 6);
+    }
+  });
+
+  it('still lands every group on 50 plus its offset at its own median', () => {
+    // The second segment must not have moved the first: everything at or below
+    // P95 scores what it scored under score version 9.
+    for (const position of positions) {
+      for (const tier of tiers) {
+        const c = POSITION_QUALITY_CALIBRATION[position][tier];
+        expect(50 + (c.median - c.median) * c.scale + POSITION_VALUE_OFFSET[position])
+          .toBeCloseTo(50 + POSITION_VALUE_OFFSET[position], 6);
+      }
+    }
+  });
+
+  it('never stretches a lower division past its own top flight', () => {
+    for (const position of positions) {
+      const top = POSITION_QUALITY_CALIBRATION[position][1];
+      for (const tier of [2, 3] as const) {
+        const c = POSITION_QUALITY_CALIBRATION[position][tier];
+        expect(c.scale).toBeLessThanOrEqual(top.scale);
+        expect(c.tailScale).toBeLessThanOrEqual(top.tailScale);
+      }
+    }
+  });
+
+  it('keeps both slopes positive and the break points ordered', () => {
+    for (const position of positions) {
+      for (const tier of tiers) {
+        const c = POSITION_QUALITY_CALIBRATION[position][tier];
+        expect(c.scale).toBeGreaterThan(0);
+        expect(c.tailScale).toBeGreaterThan(0);
+        expect(c.knee).toBeGreaterThan(c.median);
+        expect(c.tail).toBeGreaterThan(c.knee);
+      }
+    }
+  });
+
+  const minutes = 2700;
+  const at = (per90: number) => per90 * minutes / 90;
+  const full = {
+    appearances: 38, starts: 38, minutesPlayed: minutes, teamMatchesAllCompetitions: 38,
+  };
+
+  /**
+   * A season strictly better than every step below it, at every metric the
+   * position reads. Deliberately built from "more is better" rather than from
+   * the anchor table, so it cannot drift when the anchors are resampled.
+   */
+  const ladder = (position: typeof positions[number], step: number) => {
+    switch (position) {
+      case 'FW':
+        return stat({
+          ...full, goals: at(0.5 * step), assists: at(0.1 * step),
+          bigChances: at(0.5 * step), keyPasses: at(0.08 * step),
+        });
+      case 'MF':
+        return stat({
+          ...full, goals: at(0.06 * step), assists: at(0.06 * step),
+          keyPasses: at(0.13 * step), bigChances: at(0.09 * step),
+          interceptions: at(0.57 * step), clearances: at(0.81 * step),
+        });
+      case 'DF':
+        return stat({
+          ...full, goals: 0.5, assists: at(0.05 * step),
+          interceptions: at(1.33 * step), clearances: at(1.86 * step),
+          keyBlocks: at(0.029 * step), goalsConcededWhileOnPitch: at(1.07 / step),
+          cleanSheetMinutes: (0.24 + 0.09 * step) * minutes,
+        });
+      case 'GK': {
+        const routine = 3.6 * step;
+        const key = 0.076 * step;
+        const ratio = Math.min(0.56 + 0.055 * step, 0.94);
+        return stat({
+          ...full, routineSaves: at(routine), saves: at(key),
+          shotsOnTargetFaced: (at(routine) + at(key)) / ratio,
+          goalsConcededWhileOnPitch: at(1.08 / step),
+          cleanSheetMinutes: (0.24 + 0.05 * step) * minutes,
+        });
+      }
+    }
+  };
+
+  it('never scores a strictly better season lower, across the knee', () => {
+    // The step range deliberately overshoots every group's P99.9, so the walk
+    // crosses from the first segment into the second and out past its end.
+    for (const position of positions) {
+      let previous = -Infinity;
+      for (let step = 0.5; step <= 8.001; step += 0.25) {
+        const quality = computePlayerPerformance(position, ladder(position, step)).positionQuality;
+        expect(quality).toBeGreaterThanOrEqual(previous);
+        previous = quality;
+      }
+    }
+  });
+});
+
