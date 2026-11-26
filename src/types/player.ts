@@ -135,7 +135,8 @@ export type PlayerTag =
   | 'gentleman'    // card weight × 0.3
   | 'solo'         // goal weight × 1.25, assist weight × 0.45
   | 'leader'       // poach probability × 0.6, market value × 1.10
-  | 'early_peak';  // peakAge 21-24 instead of 24-29
+  | 'early_peak'   // peakAge 21-24 instead of 24-29
+  | 'mercenary';   // picks the paycheck: club prestige and coach fit stop counting, money counts twice
 
 /**
  * v23 — playing-style tag. One per player at most, drawn from the styles

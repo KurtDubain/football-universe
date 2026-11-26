@@ -3,6 +3,7 @@ import type { ClubDoctrine } from '../clubs/doctrine';
 import type { Player, PlayerPosition, PlayerSeasonStats } from '../../types/player';
 import type { TeamBase } from '../../types/team';
 import { computeInitialMarketValue } from '../economy/market-value';
+import { hasTag } from '../players/tags';
 import type { SeededRNG } from '../match/rng';
 
 export const POSITION_TARGETS: Record<PlayerPosition, number> = { GK: 3, DF: 7, MF: 7, FW: 5 };
@@ -188,17 +189,24 @@ export function scoreTransferFit(params: {
   }
 
   const requiresUpgrade = params.requireUpgrade ?? true;
+  // v23 — a mercenary picks the paycheck over the project. Club prestige stops
+  // counting for him entirely and the coach's system barely registers, while
+  // money bites twice: `affordability` already multiplies the whole fit, and
+  // squaring it turns "can only just afford him" from a mild discount into a
+  // reason to look elsewhere. Squad need and upgrade still count — he has to
+  // be wanted, he just does not care who wants him.
+  const mercenary = hasTag(player, 'mercenary');
   const weight = affordability === 0 || (requiresUpgrade && upgrade <= 0)
     ? 0
     : Math.max(0.01,
       positionNeed.needScore * 3.1
       + upgradeScore * 3.4
-      + tacticalScore * 0.8
+      + tacticalScore * (mercenary ? 0.2 : 0.8)
       + ageScore * 0.45
       + potentialScore * 0.45
-      + reputationReach * 0.35
+      + (mercenary ? 0 : reputationReach * 0.35)
       + profileScore * 0.65,
-    ) * affordability;
+    ) * (mercenary ? affordability * affordability : affordability);
 
   const profileReason = profile === 'youth' && profileScore >= 0.75
     ? '青训投资'

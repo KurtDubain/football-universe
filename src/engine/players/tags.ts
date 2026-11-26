@@ -45,8 +45,9 @@ function fnv1a(input: string): number {
  * not how often a player is tagged at all.
  */
 const TAG_WEIGHTS: ReadonlyArray<readonly [PlayerTag, number]> = [
-  ['loyal', 12],
-  ['ambitious', 12],
+  ['loyal', 9],
+  ['ambitious', 9],
+  ['mercenary', 6],
   ['iron', 8],
   ['glass', 8],
   ['clutch', 10],
@@ -71,6 +72,8 @@ const SLOT_HIT_RATES = [0.50, 0.42] as const;
 const TAG_MUTEX: ReadonlyArray<readonly [PlayerTag, PlayerTag]> = [
   ['loyal', 'wanderer'],
   ['loyal', 'ambitious'],
+  ['loyal', 'mercenary'],
+  ['ambitious', 'mercenary'],
   ['iron', 'glass'],
   ['late_bloomer', 'early_peak'],
   ['hothead', 'gentleman'],
@@ -319,6 +322,7 @@ export const TAG_META: Record<PlayerTag, { label: string; icon: string; color: s
   solo:         { label: '独狼',     icon: '🐺', color: 'bg-zinc-700/60 text-zinc-300 border-zinc-600/40' },
   leader:       { label: '领袖',     icon: '🎖️', color: 'bg-yellow-900/40 text-yellow-300 border-yellow-700/40' },
   early_peak:   { label: '少年老成', icon: '⚡', color: 'bg-teal-900/40 text-teal-300 border-teal-700/40' },
+  mercenary:    { label: '雇佣兵',   icon: '💰', color: 'bg-amber-900/40 text-amber-300 border-amber-700/40' },
 };
 
 export const STYLE_TAG_META: Record<StyleTag, { label: string; icon: string; color: string }> = {

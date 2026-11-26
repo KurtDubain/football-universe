@@ -20,7 +20,7 @@ import type { PlayerTag, StyleTag } from '../../types/player';
 
 const ALL_TAGS: PlayerTag[] = [
   'loyal', 'ambitious', 'iron', 'glass', 'clutch', 'late_bloomer', 'wanderer',
-  'hothead', 'gentleman', 'solo', 'leader', 'early_peak',
+  'hothead', 'gentleman', 'solo', 'leader', 'early_peak', 'mercenary',
 ];
 const ALL_STYLES: StyleTag[] = [
   'poacher', 'creator', 'playmaker', 'engine', 'shadow',
@@ -70,7 +70,8 @@ describe('rollTagsForUuid (v23)', () => {
 
   it('never pairs mutually exclusive tags', () => {
     const MUTEX: Array<[PlayerTag, PlayerTag]> = [
-      ['loyal', 'wanderer'], ['loyal', 'ambitious'], ['iron', 'glass'],
+      ['loyal', 'wanderer'], ['loyal', 'ambitious'], ['loyal', 'mercenary'],
+      ['ambitious', 'mercenary'], ['iron', 'glass'],
       ['late_bloomer', 'early_peak'], ['hothead', 'gentleman'],
     ];
     for (let i = 0; i < 20000; i++) {

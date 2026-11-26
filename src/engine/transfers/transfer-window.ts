@@ -709,6 +709,11 @@ export function processTransferWindow(
     if (buyerOptions.length === 0) continue;
 
     const strongestDemand = Math.max(...buyerOptions.map((option) => option.fit.needScore));
+    // `mercenary` deliberately has no boost here. A +0.10 was tried and measured
+    // at 1.06x the transfer rate against a 1.00x baseline — the poach lane is
+    // gated by MAX_POACHES_PER_SELLER / _PER_BUYER long before activityChance
+    // binds, so a personality term cannot move it. The tag's whole effect lives
+    // in `scoreTransferFit`, where money decides WHICH club wins him.
     const personalityBoost = hasTag(incomingPlayer, 'ambitious') ? 0.12 : 0;
     // A leader is the last man out of a dressing room, so the whole lane is
     // damped for him rather than merely losing the ambitious bump.

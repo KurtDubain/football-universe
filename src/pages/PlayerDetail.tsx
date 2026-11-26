@@ -45,6 +45,7 @@ const TAG_HINT: Record<PlayerTag, string> = {
   solo:         '独狼 — 进球倾向 ×1.25，助攻倾向 ×0.45',
   leader:       '领袖 — 被挖角概率 ×0.6，市值 ×1.1',
   early_peak:   '少年老成 — 巅峰年龄 21-24 岁',
+  mercenary:    '雇佣兵 — 选队只看钱，不看俱乐部声誉与教练体系',
 };
 
 const STYLE_HINT: Record<StyleTag, string> = {
