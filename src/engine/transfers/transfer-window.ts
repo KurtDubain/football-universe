@@ -1090,63 +1090,78 @@ export function processTransferWindow(
   // A player nobody wants does not get to leave, which is both how contracts
   // work and what removes the wasted season entirely. Every departure is now a
   // real transfer with a fee, so the seller is paid as well.
+  //
+  // The roster is snapshotted ONCE, before any of them can move. Reading
+  // `squads[tid]` inside the team loop re-discovers a wanderer who has already
+  // been sold to a club further down the iteration order, and he then rolls the
+  // 8% a second time. Measured on seed 702733 season 3: 彭雷 went
+  // 楚门世界 → 大同队 → 西安兵马 inside one window, both legs at the same
+  // €21.6M because his market value had not moved between them.
+  const wandererEntries: Array<{ teamId: string; player: Player }> = [];
   for (const tid of Object.keys(squads)) {
     const sq = squads[tid];
     if (!sq || sq.length < MIN_SQUAD_AFTER_RELEASE + 1) continue;
-    const wanderers = sq.filter(player => hasTag(player, 'wanderer'));
-    for (const w of wanderers) {
-      if (rng.next() >= WANDERER_DEPARTURE_CHANCE) continue;
-      if (squads[tid].length <= MIN_SQUAD_AFTER_RELEASE) break;
-
-      const askingValue = estimateTransferValue({
-        player: w,
-        sellerSquad: squads[tid],
-        sellerCash: world.teamFinances[tid]?.cash ?? 0,
-        stats: playerStats[w.uuid],
-      });
-      const bid = Math.round(askingValue * WANDERER_BID_SHARE * 10) / 10;
-      if (bid <= 0) continue;
-
-      // Poll every other club. Squad need is the primary signal — a club that
-      // has his position covered is not interested at any price — and the
-      // budget check is the same solvency-floor cash the premium lane uses.
-      const buyers = Object.keys(squads)
-        .filter(otherId => otherId !== tid)
-        .map(otherId => ({
-          otherId,
-          need: needsByTeam[otherId]?.[w.position]?.needScore ?? 0,
-          cash: availableCash(otherId),
-        }))
-        .filter(option => option.need >= WANDERER_MIN_NEED && option.cash >= bid)
-        .sort((a, b) => (b.need - a.need) || a.otherId.localeCompare(b.otherId));
-      // No buyer: he stays. This is the branch that used to strand him.
-      if (buyers.length === 0) continue;
-
-      const buyerId = buyers[0].otherId;
-      const applied = applyTransferMove({
-        squads,
-        playerStats,
-        player: w,
-        fromTeamId: tid,
-        toTeamId: buyerId,
-      });
-      if (!applied) continue;
-      squads = applied.squads;
-      playerStats = applied.playerStats;
-      plannedSpending[buyerId] = (plannedSpending[buyerId] ?? 0) + bid;
-      transfers.push(createTransferRecord({
-        season: seasonNumber,
-        windowIndex,
-        player: applied.movedPlayer,
-        fromTeamId: tid,
-        fromTeamName: world.teamBases[tid]?.name ?? tid,
-        toTeamId: buyerId,
-        toTeamName: world.teamBases[buyerId]?.name ?? buyerId,
-        type: 'transfer',
-        fee: bid,
-        reason: '🎒 浪子自请离队，转会加盟',
-      }));
+    for (const player of sq) {
+      if (hasTag(player, 'wanderer')) wandererEntries.push({ teamId: tid, player });
     }
+  }
+
+  for (const { teamId: tid, player: w } of wandererEntries) {
+    if (rng.next() >= WANDERER_DEPARTURE_CHANCE) continue;
+    // Re-read the squad: an earlier departure in this same pass may already have
+    // taken him out of it, or pushed the club down onto its floor.
+    const squad = squads[tid];
+    if (!squad || squad.length <= MIN_SQUAD_AFTER_RELEASE) continue;
+    if (!squad.some(candidate => candidate.uuid === w.uuid)) continue;
+
+    const askingValue = estimateTransferValue({
+      player: w,
+      sellerSquad: squads[tid],
+      sellerCash: world.teamFinances[tid]?.cash ?? 0,
+      stats: playerStats[w.uuid],
+    });
+    const bid = Math.round(askingValue * WANDERER_BID_SHARE * 10) / 10;
+    if (bid <= 0) continue;
+
+    // Poll every other club. Squad need is the primary signal — a club that
+    // has his position covered is not interested at any price — and the
+    // budget check is the same solvency-floor cash the premium lane uses.
+    const buyers = Object.keys(squads)
+      .filter(otherId => otherId !== tid)
+      .map(otherId => ({
+        otherId,
+        need: needsByTeam[otherId]?.[w.position]?.needScore ?? 0,
+        cash: availableCash(otherId),
+      }))
+      .filter(option => option.need >= WANDERER_MIN_NEED && option.cash >= bid)
+      .sort((a, b) => (b.need - a.need) || a.otherId.localeCompare(b.otherId));
+    // No buyer: he stays. This is the branch that used to strand him.
+    if (buyers.length === 0) continue;
+
+    const buyerId = buyers[0].otherId;
+    const applied = applyTransferMove({
+      squads,
+      playerStats,
+      player: w,
+      fromTeamId: tid,
+      toTeamId: buyerId,
+    });
+    if (!applied) continue;
+    squads = applied.squads;
+    playerStats = applied.playerStats;
+    plannedSpending[buyerId] = (plannedSpending[buyerId] ?? 0) + bid;
+    transfers.push(createTransferRecord({
+      season: seasonNumber,
+      windowIndex,
+      player: applied.movedPlayer,
+      fromTeamId: tid,
+      fromTeamName: world.teamBases[tid]?.name ?? tid,
+      toTeamId: buyerId,
+      toTeamName: world.teamBases[buyerId]?.name ?? buyerId,
+      type: 'transfer',
+      fee: bid,
+      reason: '🎒 浪子自请离队，转会加盟',
+    }));
   }
 
   // ── Step 3: Leftover free agents stay in the persistent pool ────

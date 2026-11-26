@@ -664,3 +664,172 @@ describe('processTransferWindow — elite-to-elite swaps file both legs', () => 
     }
   });
 });
+
+// ── Wanderer lane: one roll per player per window ─────────────────
+
+/**
+ * A wanderer who asks out is shopped to the whole league, so he can land at a
+ * club that sits LATER in `Object.keys(squads)` order than the one he left.
+ * The lane used to walk the team map and re-read `squads[tid]` on every pass,
+ * which rediscovered a player already sold to a later club and rolled the 8%
+ * departure chance a second time — two "voluntary departure" records for one
+ * player inside one window, both legs at the same fee because his market value
+ * had not moved between them. Measured on seed 702733 season 3: 彭雷 went
+ * 楚门世界 → 大同队 → 西安兵马 inside a single window.
+ *
+ * The world below makes that path the only way a wanderer can move:
+ * `a_origin` is first in key order and every buyer is after it, so every
+ * departure lands on a later team and the old code re-rolled every one of them.
+ *
+ * Origin is deliberately neither a buyer (overall < ELITE_OVERALL_FLOOR 82) nor
+ * a seller (overall >= NON_ELITE_OVERALL_CEILING 80), which empties the candidate
+ * pool — no poaching lane can move these players, so the wanderer lane is the
+ * only thing under test.
+ */
+function buildWandererWorld(): GameWorld {
+  const WANDERER_COUNT = 20;
+  const BUYER_IDS = ['b_buyer', 'c_buyer', 'd_buyer', 'e_buyer', 'f_buyer'];
+
+  const originSquad: Player[] = [
+    makePlayer('a_origin', 1, 'GK', 70),
+    makePlayer('a_origin', 2, 'GK', 66),
+    makePlayer('a_origin', 3, 'DF', 72),
+    makePlayer('a_origin', 4, 'DF', 70),
+    makePlayer('a_origin', 5, 'DF', 68),
+  ];
+  for (let index = 0; index < WANDERER_COUNT; index += 1) {
+    const player = makePlayer('a_origin', 6 + index, 'MF', 74 - (index % 15));
+    originSquad.push({ ...player, tags: ['wanderer'] });
+  }
+
+  const squads: Record<string, Player[]> = { a_origin: originSquad };
+  const teamBases: Record<string, TeamBase> = { a_origin: makeTeam('a_origin', 81) };
+  const teamFinances: GameWorld['teamFinances'] = {
+    a_origin: { cash: 500, totalIncome: 0, totalExpense: 0, history: [] },
+  };
+
+  for (const buyerId of BUYER_IDS) {
+    const squad: Player[] = [
+      makePlayer(buyerId, 1, 'GK', 84),
+      makePlayer(buyerId, 2, 'GK', 80),
+    ];
+    for (let index = 0; index < 9; index += 1) {
+      squad.push(makePlayer(buyerId, 3 + index, 'DF', 84 - index));
+    }
+    // Two midfielders against POSITION_TARGETS.MF = 7: shortage 5/7 puts the
+    // need score near 0.45, far above WANDERER_MIN_NEED (0.15). Origin runs 20
+    // midfielders, so its own MF need stays under the bar and never buys back.
+    squad.push(makePlayer(buyerId, 20, 'MF', 82));
+    squad.push(makePlayer(buyerId, 21, 'MF', 78));
+    for (let index = 0; index < 7; index += 1) {
+      squad.push(makePlayer(buyerId, 30 + index, 'FW', 86 - index));
+    }
+    squads[buyerId] = squad;
+    teamBases[buyerId] = makeTeam(buyerId, 85);
+    teamFinances[buyerId] = { cash: 500, totalIncome: 0, totalExpense: 0, history: [] };
+  }
+
+  return {
+    seasonState: {
+      seasonNumber: 3,
+      currentWindowIndex: 5,
+      calendar: [],
+      completed: false,
+      isWorldCupYear: false,
+    },
+    teamBases,
+    teamStates: {} as never,
+    coachBases: {},
+    coachStates: {},
+    coachCareers: {},
+    league1Standings: [],
+    league2Standings: [],
+    league3Standings: [],
+    leagueCup: undefined as never,
+    superCup: undefined as never,
+    worldCup: null,
+    honorHistory: [],
+    teamTrophies: {},
+    coachTrophies: {},
+    teamSeasonRecords: {},
+    coachChangesThisSeason: [],
+    squads,
+    playerStats: {},
+    nextPlayerUuidCounter: __uuidCounter,
+    activeEvents: [],
+    achievements: [],
+    newsLog: [],
+    seed: 1,
+    rngState: 1,
+    seasonStartLevels: {},
+    seasonBuffs: [],
+    godHandUsed: false,
+    coins: 0,
+    bets: [],
+    matchHistory: [],
+    seasonBuffsHistory: [],
+    playerAwardsHistory: [],
+    transferHistory: [],
+    memorableMatches: [],
+    continentalCups: { mainland_cup: null, southern_cup: null, eastern_cup: null },
+    totalElapsedWindows: 0,
+    teamFinances,
+    freeAgentPool: [],
+    transferRumors: [],
+    playerStatsHistory: {},
+    transferWindow: null,
+    retirementHistory: [],
+    coachCandidatePool: [],
+    coachRetirementHistory: [],
+    nextCoachIdCounter: 0,
+  };
+}
+
+describe('wanderer lane (one roll per player per window)', () => {
+  const WANDERER_MARK = '浪子自请离队';
+  const SEEDS = 300;
+
+  it('never files two departures for the same player in one window', () => {
+    let totalDepartures = 0;
+    const offenders: string[] = [];
+
+    for (let seed = 0; seed < SEEDS; seed += 1) {
+      const result = processTransferWindow(buildWandererWorld(), new SeededRNG(seed));
+      const departures = result.transfers.filter(t => t.reason.includes(WANDERER_MARK));
+      totalDepartures += departures.length;
+
+      const perPlayer = new Map<string, number>();
+      for (const record of departures) {
+        perPlayer.set(record.playerId, (perPlayer.get(record.playerId) ?? 0) + 1);
+      }
+      for (const [playerId, count] of perPlayer) {
+        if (count > 1) offenders.push(`seed ${seed}: ${playerId} moved ${count} times`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+    // Guard against a vacuous pass: with 20 wanderers at 8% over 300 windows the
+    // lane fires constantly, so "nobody moved twice" has to be earned. If this
+    // ever drops to zero the fixture stopped producing departures and the
+    // assertion above is proving nothing.
+    expect(totalDepartures).toBeGreaterThan(50);
+  });
+
+  it('leaves every departing player at the club his record names', () => {
+    // The same defect seen from the save's side: the first of two records points
+    // at a club the player no longer belongs to, which `validateWorldData`
+    // reports as `transfer_latest_squad_mismatch` and which erases the move
+    // from his career line.
+    const mismatches: string[] = [];
+
+    for (let seed = 0; seed < SEEDS; seed += 1) {
+      const result = processTransferWindow(buildWandererWorld(), new SeededRNG(seed));
+      for (const record of result.transfers.filter(t => t.reason.includes(WANDERER_MARK))) {
+        const landed = result.squads[record.toTeamId]?.some(p => p.uuid === record.playerId);
+        if (!landed) mismatches.push(`seed ${seed}: ${record.playerId} not at ${record.toTeamId}`);
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+  });
+});
