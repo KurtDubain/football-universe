@@ -6,8 +6,26 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     gzipBytes: 66_000,
   },
   initialJs: {
-    bytes: 480_000,
-    gzipBytes: 160_000,
+    // 160,000 → 176,000 gzip and 480,000 → 515,000 raw for v4.81.0. The tag
+    // system is the whole of it: src/engine/players/tags.ts carries fourteen
+    // personality weights, nine style tags with their per-position knob maps
+    // and the mutual-exclusion table, and the match simulator reads it on
+    // every fixture — so it is reachable from game-store and therefore from
+    // the initial graph, and there is no lazy boundary to put it behind. It
+    // lands as the shared chunk player-observation-*.js at 33,358 bytes /
+    // 11,034 gzipped, and award-scoring (985 gzipped) and
+    // player-marginal-impact (1,636 gzipped) are hoisted with it because they
+    // were previously reachable only from lazy route chunks and are now
+    // shared with the tag chunk. Measured against the v4.80.0 baseline built
+    // from 2caa997: initial JS goes 159,604 → 173,476 gzipped and 469,408 →
+    // 509,233 raw. This is one round of structural growth rather than drift —
+    // v4.80.0 had 396 bytes of headroom left — and entry JS did not move at
+    // 61,408 gzipped against 66,000, so the first script the browser parses is
+    // unchanged. Splitting the tag tables out would mean the simulator
+    // awaiting an import mid-match, which buys back 11 KB at the cost of an
+    // engine change and a fetch before the first advance.
+    bytes: 515_000,
+    gzipBytes: 176_000,
   },
   css: {
     // 190 KiB → 191.4 KiB for v4.69.0. The ceremony pages ship their own
@@ -31,7 +49,15 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // the gzip cap by 1.1 KB. The gzip figure is the one to watch: it had 143
     // bytes of headroom left, which is not a margin, so the next round that
     // adds a stylesheet rule should expect to trim rather than to raise again.
-    bytes: 199_500,
+    //
+    // 199,500 → 204,000 for v4.81.0. The season closing grew from one page to
+    // three, and the honour list, the podium points and the folio indicator
+    // each brought rules with them. The sheet still ships with the lazy
+    // overlay chunk and still costs nothing on the first paint, but the check
+    // sums every deployed stylesheet, lazy ones included. Measured total is
+    // 201,970 bytes / 30,994 gzipped, so the raw cap clears it by 2.0 KB and
+    // gzip stays under the 31 KiB cap, which does not move.
+    bytes: 204_000,
     gzipBytes: 31 * KiB,
   },
   images: {
@@ -88,7 +114,14 @@ export const PRODUCTION_PERFORMANCE_BUDGETS = {
     // palette in four different route chunks, which is exactly the drift this
     // round was written to remove. Measured precache bytes are 2,068,231
     // against the 2,150,000 cap, so only the entry count moved.
-    entries: 92,
+    //
+    // 92 → 94 for v4.81.0, the same shared-chunk extraction as every move
+    // above. award-scoring and player-marginal-impact were previously
+    // reachable only from lazy route chunks; the tag chunk now imports both,
+    // and the tag chunk is initial, so both are hoisted into the initial
+    // precache set. Measured precache bytes are 2,088,499 against the
+    // 2,150,000 cap, so only the entry count moved.
+    entries: 94,
     bytes: 2_150_000,
   },
 } as const;
