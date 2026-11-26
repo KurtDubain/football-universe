@@ -1318,7 +1318,18 @@ function validateEventSemantics(
         fixtureId: result.fixtureId,
       });
     }
-    if (!isOnFieldAtMinute(result, event.teamId, event.playerId, event.minute, event.type === 'red_card')) {
+    // The booking that causes a dismissal happens while the player is still
+    // on the pitch: a second yellow and the red it becomes share a minute,
+    // and `exitedMinute` records that minute. Passing only `red_card` here
+    // made the yellow half of a second-yellow dismissal read as "not on
+    // field".
+    const isDismissalMinute = event.type === 'red_card'
+      || (result.events ?? []).some(other =>
+        other.type === 'red_card'
+        && other.teamId === event.teamId
+        && other.playerId === event.playerId
+        && other.minute === event.minute);
+    if (!isOnFieldAtMinute(result, event.teamId, event.playerId, event.minute, isDismissalMinute)) {
       pushIssue(issues, {
         severity: 'error', code: 'event_player_not_on_field',
         message: `Match event player ${event.playerId} was not on the field for ${event.teamId} at ${event.minute}'.`,

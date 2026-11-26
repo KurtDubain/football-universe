@@ -12,7 +12,13 @@ export const OBSERVER_SEED_CANDIDATES = Array.from(
 // Selected by scripts/audit-observer-seeds.ts from the candidates above. The
 // audit balances six-window observation depth, narrative variety, meaningful
 // choices, and restrained match drama across the three guided lenses.
-export const RECOMMENDED_EXPERIENCE_SEED = 20260722;
+//
+// Re-picked at 20260721 after the card-discipline fix reshuffled the event
+// RNG: 20260722's challenger opener lost its goal from the 75th minute on,
+// and only two of the twenty candidates still cleared every opening
+// criterion. 20260721 scored the stronger opening of the two — 4 goals, a
+// 2-goal margin, one late goal.
+export const RECOMMENDED_EXPERIENCE_SEED = 20260721;
 
 export type ObserverLens = 'giant' | 'challenger' | 'underdog' | 'neutral';
 

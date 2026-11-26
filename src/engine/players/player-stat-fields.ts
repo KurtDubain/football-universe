@@ -29,6 +29,9 @@ const OPTIONAL_COUNTER_DEFAULTS = {
    * through `leagueGoalsOf`, which falls back to `goals` for those rows.
    */
   leagueGoals: 0,
+  /** Ban-gate counters; see suspensionYellowsOf. */
+  suspensionYellows: 0,
+  suspensionReds: 0,
   starts: 0,
   substituteAppearances: 0,
   minutesPlayed: 0,
@@ -85,6 +88,31 @@ export function leagueGoalsOf(
   stats: Pick<PlayerSeasonStats, 'goals'> & { leagueGoals?: number },
 ): number {
   return stats.leagueGoals ?? stats.goals;
+}
+
+/**
+ * Ban-gate yellow count, with the pre-split fallback.
+ *
+ * Saves written before the split carry only `yellowCards`, and on those rows
+ * it held the gate counter (the season total was never stored separately).
+ * Falling back to it keeps their ban rhythm exactly as it was, instead of
+ * restarting every player's gate from zero mid-season. Archived seasons are
+ * never recomputed, so the fallback cannot rewrite history.
+ *
+ * Every gate reader must go through this rather than touching
+ * `suspensionYellows` directly.
+ */
+export function suspensionYellowsOf(
+  stats: Pick<PlayerSeasonStats, 'yellowCards'> & { suspensionYellows?: number },
+): number {
+  return stats.suspensionYellows ?? stats.yellowCards;
+}
+
+/** Ban-gate red count; see {@link suspensionYellowsOf}. */
+export function suspensionRedsOf(
+  stats: Pick<PlayerSeasonStats, 'redCards'> & { suspensionReds?: number },
+): number {
+  return stats.suspensionReds ?? stats.redCards;
 }
 
 /** Normalizes optional counters before aggregation or historical capture. */

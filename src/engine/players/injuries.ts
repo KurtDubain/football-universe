@@ -4,6 +4,7 @@ import { SeededRNG } from '../match/rng';
 import type { CoachFormation } from '../../types/coach';
 import { getFormationShape } from '../coaches/tactics';
 import { tagInjuryMultiplier } from './tags';
+import { suspensionRedsOf, suspensionYellowsOf } from './player-stat-fields';
 
 /**
  * Phase G — injury / suspension engine.
@@ -25,7 +26,8 @@ import { tagInjuryMultiplier } from './tags';
  * Suspension rules (unified across league + cups, see comments on
  * {@link computeSuspensionFromCounters} and {@link applyDisciplineFromMatch}):
  *
- *   - cumulative yellow count reaches 5 → 1-match ban, counter resets
+ *   - gate yellow count reaches 5 → 1-match ban, gate counter resets
+ *     (the season total in `yellowCards` is never reset)
  *   - direct red card → 2-match ban
  *   - 2nd yellow same match (red coexists with ≥ 2 yellow events) → 1-match
  *   - cumulative red count reaches 2 (rare double-red) → another 1-match
@@ -110,8 +112,9 @@ export function rollInjury(
  * of yellow_card events in the match for this player; `directRed` is true
  * iff the match has a red_card event for them whose origin is NOT a 2nd
  * yellow. `secondYellowRed` is the inferred "two yellows promoted to red"
- * case — detected by (yellows >= 2) regardless of whether a red event is
- * present.
+ * case — a red_card event alongside 2 or more yellow events in the same match.
+ * Since the card draw can no longer book a player twice, that pairing only
+ * arises from the deliberate second-yellow roll in `engine/match/events.ts`.
  */
 export interface PlayerDisciplineDelta {
   yellows: number;
@@ -185,8 +188,8 @@ export interface SuspensionGate {
  * caller does the addition before invoking this.
  */
 export function computeSuspensionFromCounters(
-  newYellowTotal: number,
-  newRedTotal: number,
+  newGateYellow: number,
+  newGateRed: number,
   delta: PlayerDisciplineDelta,
 ): SuspensionGate {
   let banWindows = 0;
@@ -202,12 +205,12 @@ export function computeSuspensionFromCounters(
     banWindows += 1;
   }
   // 5 yellows accrued → 1 game ban + reset
-  if (newYellowTotal >= 5) {
+  if (newGateYellow >= 5) {
     banWindows += 1;
     resetYellow = true;
   }
   // 2 reds accrued (across the season) → 1 game ban + reset
-  if (newRedTotal >= 2) {
+  if (newGateRed >= 2) {
     banWindows += 1;
     resetRed = true;
   }
@@ -497,12 +500,18 @@ export function processInjuriesAndSuspensions(args: {
       const stat = playerStats[uuid];
       if (!stat) continue;
 
-      // Fold the per-match delta into season counters (these are PRE-reset
-      // values — we'll reset below if a gate trips).
+      // Season totals: cumulative, never reset. These are what the player
+      // page and the discipline table display.
       const newYellow = (stat.yellowCards ?? 0) + delta.yellows;
       const newRed = (stat.redCards ?? 0) + delta.reds;
 
-      const gate = computeSuspensionFromCounters(newYellow, newRed, delta);
+      // The ban gates run on their own counters, which DO reset when a gate
+      // trips. Sharing one field with the totals is what used to cap the
+      // displayed card count at 4 by construction.
+      const newGateYellow = suspensionYellowsOf(stat) + delta.yellows;
+      const newGateRed = suspensionRedsOf(stat) + delta.reds;
+
+      const gate = computeSuspensionFromCounters(newGateYellow, newGateRed, delta);
       if (gate.banWindows > 0) {
         const cur = player.suspendedUntilWindow ?? 0;
         const newUntil = Math.max(cur, globalWindowIdx + 1 + gate.banWindows);
@@ -540,19 +549,25 @@ export function processInjuriesAndSuspensions(args: {
         }
       }
 
-      // Persist the new counters (with gate-driven resets)
+      // Persist: totals as-is, gate counters with their resets applied.
       playerStats[uuid] = {
         ...stat,
-        yellowCards: gate.resetYellow ? 0 : newYellow,
-        redCards: gate.resetRed ? 0 : newRed,
+        yellowCards: newYellow,
+        redCards: newRed,
+        suspensionYellows: gate.resetYellow ? 0 : newGateYellow,
+        suspensionReds: gate.resetRed ? 0 : newGateRed,
       };
       const segmentKey = `${uuid}@@${teamId}`;
       const segment = playerStatSegments?.[segmentKey];
       if (segment && playerStatSegments) {
+        const segGateYellow = suspensionYellowsOf(segment) + delta.yellows;
+        const segGateRed = suspensionRedsOf(segment) + delta.reds;
         playerStatSegments[segmentKey] = {
           ...segment,
-          yellowCards: gate.resetYellow ? 0 : (segment.yellowCards ?? 0) + delta.yellows,
-          redCards: gate.resetRed ? 0 : (segment.redCards ?? 0) + delta.reds,
+          yellowCards: (segment.yellowCards ?? 0) + delta.yellows,
+          redCards: (segment.redCards ?? 0) + delta.reds,
+          suspensionYellows: gate.resetYellow ? 0 : segGateYellow,
+          suspensionReds: gate.resetRed ? 0 : segGateRed,
         };
       }
     }

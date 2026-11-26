@@ -579,9 +579,13 @@ describe('processInjuriesAndSuspensions', () => {
       banWindows: 1,
       reason: 'yellow_cards',
     });
-    // Yellow counter was reset post-gate
-    expect(playerStats['p-0'].yellowCards).toBe(0);
-    expect(playerStatSegments['p-0@@t1'].yellowCards).toBe(0);
+    // Only the gate counter resets. The season total keeps counting, which
+    // is what the player page and the discipline table display — resetting
+    // it here is what used to cap the visible card count at 4.
+    expect(playerStats['p-0'].yellowCards).toBe(5);
+    expect(playerStats['p-0'].suspensionYellows).toBe(0);
+    expect(playerStatSegments['p-0@@t1'].yellowCards).toBe(5);
+    expect(playerStatSegments['p-0@@t1'].suspensionYellows).toBe(0);
     expect(selectMatchday(squad, 11)?.players.some((player) => player.uuid === 'p-0')).toBe(false);
     expect(selectMatchday(squad, 12)?.players.some((player) => player.uuid === 'p-0')).toBe(true);
   });

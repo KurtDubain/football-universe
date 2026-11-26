@@ -505,6 +505,13 @@ export function simulateMatch(
   );
   applyDismissalsToSnapshot(homeParticipation?.snapshot, events, homeTeam.id);
   applyDismissalsToSnapshot(awayParticipation?.snapshot, events, awayTeam.id);
+  // Yellows taken in normal time carry into extra time: a second booking
+  // there is still a dismissal, so the extra-time pass needs to know who is
+  // already carrying one.
+  const regulationBookings = events.flatMap(e =>
+    e.type === 'yellow_card' && e.playerId
+      ? [{ playerId: e.playerId, teamId: e.teamId, minute: e.minute }]
+      : []);
   const isHomeGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === homeTeam.id;
   const isAwayGoal = (e: typeof events[number]) => e.type === 'goal' && e.teamId === awayTeam.id;
   const regHomeGoals = events.filter(e => isHomeGoal(e) && e.minute <= 90).length;
@@ -547,6 +554,7 @@ export function simulateMatch(
       awayRedCardCandidatesAtMinute,
       'extra_time',
       { home: tactics.home.approach, away: tactics.away.approach },
+      regulationBookings,
     );
     const reconciledExtraTimeEvents = applyDenyPipeline(
       extraTimeRawEvents,

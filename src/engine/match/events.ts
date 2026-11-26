@@ -131,6 +131,26 @@ const RED_CARD_DESCRIPTIONS = [
   '阻止明显得分机会被红牌罚下',
 ];
 
+const SECOND_YELLOW_RED_DESCRIPTIONS = [
+  '再领一张黄牌，两黄变一红被罚下场',
+  '第二次被出示黄牌，累积两黄被罚下',
+  '又吃一张黄牌，两黄变红提前离场',
+];
+
+/**
+ * Per-match probability that one already-booked player picks up a second
+ * yellow and is sent off.
+ *
+ * The card draw itself is collision-free (a player cannot be booked twice by
+ * it), so this is the only route from a booking to a dismissal, and its rate
+ * is set directly rather than emerging from who the picker happened to land
+ * on twice.
+ *
+ * Calibrated against the real 0.20-0.30 red cards per match band. The direct
+ * red roll contributes 0.065, so this supplies the remaining 0.185.
+ */
+export const SECOND_YELLOW_RED_CHANCE = 0.185;
+
 const PENALTY_SHOOTOUT_GOAL = [
   '冷静推射命中球门角落',
   '大力抽射命中上角，门将毫无办法',
@@ -413,6 +433,7 @@ export function generateMatchEvents(
   awayRedCardCandidatesAtMinute?: (minute: number) => Player[],
   phase: 'full' | 'regulation' | 'extra_time' | 'shootout' = 'full',
   tacticalApproaches?: { home: MatchApproach; away: MatchApproach },
+  priorBookings?: ReadonlyArray<{ playerId: string; teamId: string; minute: number }>,
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   const maxMinute = phase === 'regulation' ? 90 : extraTime ? 120 : 90;
@@ -455,6 +476,151 @@ export function generateMatchEvents(
         playerName: player.name,
         description: formatDescription(rng.pick(RED_CARD_DESCRIPTIONS), player.number, player.name),
       });
+    }
+  }
+
+  // ── Bookings are rolled before goals ────────────────────────────
+  //
+  // Cards are decided up front and emitted with everything else in minute
+  // order. Rolling them after the goals would let a second-yellow dismissal
+  // land on a player who already scored later in the match — a sent-off
+  // player cannot score, and a goal cannot be retracted once the scoreline
+  // has been reconciled from the events.
+  /** uuid → who was booked, for which side, and in which minute. */
+  const bookedThisMatch = new Map<string, { player: Player; teamId: string; minute: number }>();
+  // Bookings carried in from an earlier phase. A yellow taken in normal time
+  // still counts in extra time, so a second one there is still a dismissal —
+  // without this the extra-time pass started everyone from a clean slate and
+  // let a player finish a cup tie with two yellows and no red. Anyone already
+  // sent off drops out here, because `getSquad` excludes them.
+  for (const prior of priorBookings ?? []) {
+    const player = getSquad(prior.teamId, maxMinute)?.find(candidate => candidate.uuid === prior.playerId);
+    if (player) bookedThisMatch.set(prior.playerId, { player, teamId: prior.teamId, minute: prior.minute });
+  }
+  const pendingCardEvents: MatchEvent[] = [];
+
+  const totalYellows = isShootoutOnly ? 0 : isExtraTimeOnly ? rng.nextInt(0, 2) : rng.nextInt(2, 6);
+  for (let i = 0; i < totalYellows; i++) {
+    const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
+    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
+    const description = rng.pick(YELLOW_CARD_DESCRIPTIONS);
+    // Never book the same player twice from this draw. Two yellows in one
+    // match IS the dismissal, and that case is rolled on its own below —
+    // letting the picker land on a booked player instead handed 38% of
+    // matches a player who finished the game with two yellows and no red,
+    // which no rule set permits.
+    const squad = getSquad(teamId, minute)?.filter(player => !bookedThisMatch.has(player.uuid));
+    if (!squad?.length) continue;
+    const player = pickCardPlayer(squad, rng);
+    bookedThisMatch.set(player.uuid, { player, teamId, minute });
+    pendingCardEvents.push({
+      minute,
+      type: 'yellow_card',
+      teamId,
+      playerId: player.uuid,
+      playerNumber: player.number,
+      playerName: player.name,
+      description: formatDescription(description, player.number, player.name),
+    });
+  }
+
+  // Hothead extra bookings. A hothead does not merely take a bigger SHARE of
+  // a fixed card count — he raises it. The share route was measured and
+  // abandoned: a defender already carries a base card weight of 10 against a
+  // keeper's 1, so a ×2.5 and then a ×3.5 weight multiplier moved a
+  // defender's cards/90 by ×1.01 and ×1.14 while the same multiplier
+  // delivered ×2.16 on a keeper. Upward share shifts saturate; an independent
+  // extra booking does not, and it reads directly in cards/90 at every
+  // position.
+  for (const teamId of [homeTeamId, awayTeamId]) {
+    if (isShootoutOnly) break;
+    const squad = getSquad(teamId, maxMinute);
+    if (!squad?.length) continue;
+    for (const player of squad) {
+      if (!hasTag(player, 'hothead')) continue;
+      if (rng.next() >= HOTHEAD_EXTRA_BOOKING_CHANCE) continue;
+      // Minute first, then confirm he was actually on the pitch for it.
+      // Reading the squad at maxMinute and back-dating the booking put cards
+      // on substitutes before they came on, which the world validator
+      // rejects as `event_player_not_on_field`.
+      const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
+      const onPitch = getSquad(teamId, minute);
+      if (!onPitch?.some(candidate => candidate.uuid === player.uuid)) continue;
+      // Same rule as the base draw: an extra booking on a player who already
+      // has one would have to be a dismissal, which is the pass below.
+      if (bookedThisMatch.has(player.uuid)) continue;
+      bookedThisMatch.set(player.uuid, { player, teamId, minute });
+      pendingCardEvents.push({
+        minute,
+        type: 'yellow_card',
+        teamId,
+        playerId: player.uuid,
+        playerNumber: player.number,
+        playerName: player.name,
+        description: formatDescription(rng.pick(YELLOW_CARD_DESCRIPTIONS), player.number, player.name),
+      });
+    }
+  }
+
+  // Second yellow → red: the one route from a booking to a dismissal. Rolled
+  // per match instead of derived from the card draw, because that draw is
+  // deliberately collision-free now — a repeat booking is a rule event with
+  // its own rate, not an accident of who the picker happened to land on
+  // twice.
+  //
+  // Emits BOTH a yellow_card and a red_card at the same minute. That is how
+  // the real sport records a second yellow, and it is what
+  // `aggregateMatchDiscipline` needs to classify the dismissal as a second
+  // yellow (1-match ban) rather than a direct red (2-match ban).
+  if (!isShootoutOnly && bookedThisMatch.size > 0 && rng.next() < SECOND_YELLOW_RED_CHANCE) {
+    // Minute first, then the candidate filter the direct-red roll already
+    // uses: on the pitch, not already scheduled to come off, and not the
+    // player who just came on. Reusing it is what keeps a dismissal from
+    // invalidating a planned substitution — a player the coach already
+    // planned to withdraw cannot also be sent off, or the substitution
+    // record stops describing the match that was actually played.
+    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
+    const candidatesFor = (teamId: string): Player[] => {
+      const base = teamId === homeTeamId
+        ? homeRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute)
+        : teamId === awayTeamId
+          ? awayRedCardCandidatesAtMinute?.(minute) ?? getSquad(teamId, minute)
+          : undefined;
+      return (base ?? []).filter(player => {
+        // The direct-red roll runs before this block and may already have
+        // dismissed someone. `redCardCandidatesAtMinute` does not know about
+        // that — it only reads the substitution snapshot — so without this a
+        // second yellow could land on a player who is already off, giving one
+        // player two red cards. The exclusion is unconditional rather than
+        // minute-ordered: the direct red's minute is rolled independently and
+        // can fall after this one, and there is no ordering of the two in
+        // which a sent-off player is still on the pitch.
+        if (dismissedAt.has(player.uuid)) return false;
+        const booking = bookedThisMatch.get(player.uuid);
+        return booking !== undefined && booking.minute < minute;
+      });
+    };
+    const pool = [...candidatesFor(homeTeamId), ...candidatesFor(awayTeamId)];
+    const sentOff = pool.length > 0 ? pool[Math.floor(rng.next() * pool.length)] : undefined;
+    const booking = sentOff ? bookedThisMatch.get(sentOff.uuid) : undefined;
+    if (sentOff && booking) {
+      dismissedAt.set(sentOff.uuid, minute);
+      const description = formatDescription(
+        rng.pick(SECOND_YELLOW_RED_DESCRIPTIONS),
+        sentOff.number,
+        sentOff.name,
+      );
+      for (const type of ['yellow_card', 'red_card'] as const) {
+        pendingCardEvents.push({
+          minute,
+          type,
+          teamId: booking.teamId,
+          playerId: sentOff.uuid,
+          playerNumber: sentOff.number,
+          playerName: sentOff.name,
+          description,
+        });
+      }
     }
   }
 
@@ -545,70 +711,10 @@ export function generateMatchEvents(
     generateGoalEvents(etAwayGoals, awayTeamId, true);
   }
 
-  // ── Yellow cards (2-6 per match) ─────────────────────────────────
-
-  const totalYellows = isShootoutOnly ? 0 : isExtraTimeOnly ? rng.nextInt(0, 2) : rng.nextInt(2, 6);
-  for (let i = 0; i < totalYellows; i++) {
-    const teamId = rng.next() < 0.5 ? homeTeamId : awayTeamId;
-    const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
-    const description = rng.pick(YELLOW_CARD_DESCRIPTIONS);
-    const squad = getSquad(teamId, minute);
-
-    let playerId: string | undefined;
-    let playerNumber: number | undefined;
-    let playerName: string | undefined;
-    if (squad?.length) {
-      const player = pickCardPlayer(squad, rng);
-      playerId = player.uuid;
-      playerNumber = player.number;
-      playerName = player.name;
-    }
-
-    events.push({
-      minute,
-      type: 'yellow_card',
-      teamId,
-      playerId,
-      playerNumber,
-      playerName,
-      description: formatDescription(description, playerNumber, playerName),
-    });
-  }
-
-  // ── Hothead extra bookings ───────────────────────────────────────
-  //
-  // A hothead does not merely take a bigger SHARE of a fixed card count — he
-  // raises it. The share route was measured and abandoned: a defender already
-  // carries a base card weight of 10 against a keeper's 1, so a ×2.5 and then a
-  // ×3.5 weight multiplier moved a defender's cards/90 by ×1.01 and ×1.14 while
-  // the same multiplier delivered ×2.16 on a keeper. Upward share shifts
-  // saturate; an independent extra booking does not, and it reads directly in
-  // cards/90 at every position.
-  for (const teamId of [homeTeamId, awayTeamId]) {
-    if (isShootoutOnly) break;
-    const squad = getSquad(teamId, maxMinute);
-    if (!squad?.length) continue;
-    for (const player of squad) {
-      if (!hasTag(player, 'hothead')) continue;
-      if (rng.next() >= HOTHEAD_EXTRA_BOOKING_CHANCE) continue;
-      // Minute first, then confirm he was actually on the pitch for it. Reading
-      // the squad at maxMinute and back-dating the booking put cards on
-      // substitutes before they came on, which the world validator rejects as
-      // `event_player_not_on_field`.
-      const minute = randomMinuteInRange(isExtraTimeOnly ? 91 : 1, maxMinute, rng);
-      const onPitch = getSquad(teamId, minute);
-      if (!onPitch?.some(candidate => candidate.uuid === player.uuid)) continue;
-      events.push({
-        minute,
-        type: 'yellow_card',
-        teamId,
-        playerId: player.uuid,
-        playerNumber: player.number,
-        playerName: player.name,
-        description: formatDescription(rng.pick(YELLOW_CARD_DESCRIPTIONS), player.number, player.name),
-      });
-    }
-  }
+  // Card events were rolled before the goals so that a second-yellow
+  // dismissal takes effect on the rest of the match. They join the stream
+  // here and sort into minute order with everything else.
+  events.push(...pendingCardEvents);
 
   // ── Near misses (1-3) ────────────────────────────────────────────
 

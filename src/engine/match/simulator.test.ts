@@ -15,8 +15,16 @@ function eventPlayerWasOnField(result: ReturnType<typeof simulateMatch>['matchRe
   const entry = snapshot.players.find(player => player.playerId === event.playerId);
   if (!entry || entry.enteredMinute == null || entry.exitedMinute == null) return false;
   const minute = Math.min(event.minute, (snapshot.durationMinutes ?? 90) - 1);
+  // A second yellow and the red it becomes share a minute, and `exitedMinute`
+  // records that minute — the booking itself happened while the player was
+  // still on the pitch.
+  const isDismissalMinute = event.type === 'red_card'
+    || result.events.some(other => other.type === 'red_card'
+      && other.teamId === event.teamId
+      && other.playerId === event.playerId
+      && other.minute === event.minute);
   return entry.enteredMinute <= minute
-    && (entry.exitedMinute > minute || (event.type === 'red_card' && entry.exitedMinute === minute));
+    && (entry.exitedMinute > minute || (isDismissalMinute && entry.exitedMinute === minute));
 }
 
 // ─── Test fixtures ────────────────────────────────────────────────

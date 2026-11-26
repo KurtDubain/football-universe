@@ -208,8 +208,28 @@ export interface PlayerSeasonStats {
    */
   leagueGoals?: number;
   assists: number;
+  /**
+   * Real season totals, never reset. These are what the player page and the
+   * discipline table display.
+   */
   yellowCards: number;
   redCards: number;
+  /**
+   * Suspension-gate counters, split out from the season totals above. These
+   * two drive the ban gates only and reset when a gate trips (5 yellows,
+   * 2 reds), exactly as the gates always did.
+   *
+   * They used to be the same field, which capped the displayed card count at
+   * 4 by construction: the 5-yellow gate zeroed the season total, so a player
+   * booked 32 times in a season showed 3, and the discipline table ranked
+   * everyone inside a 0-4 band.
+   *
+   * Absent on saves written before the split; read them through
+   * suspensionYellowsOf / suspensionRedsOf, which fall back to the season
+   * totals so those saves keep their original gate behaviour.
+   */
+  suspensionYellows?: number;
+  suspensionReds?: number;
   appearances: number;
   starts?: number;
   substituteAppearances?: number;

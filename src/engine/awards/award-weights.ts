@@ -81,12 +81,19 @@ export const LEAGUE_TOP_SCORER_SCHEDULE_EXPONENT = 1;
  * this changes which league the standout comes from, never whether they are
  * genuinely exceptional.
  *
- * On the Golden Boot this coefficient is **not load-bearing**: a 60-season
- * audit produced identical winners with and without it, because the
- * all-competitions schedule gap (34 vs 19 matches per season) dwarfs any sane
- * discount. It is kept for one shared table and because it states the right
- * intent — not because it changes outcomes today. The cross-tier route is the
- * league top scorer.
+ * On the Golden Boot this coefficient is **nearly** inert but not actually
+ * inert. An earlier 60-season audit found identical winners with and without
+ * it and concluded it never mattered; a 600-season run contradicts that — in
+ * 2 seasons (0.33%) a tier-2 player outscored everyone and lost the award to
+ * a tier-1 player with fewer goals, purely on this discount. 60 seasons is
+ * simply too small a sample to see a 0.33% effect (0.2 expected cases).
+ *
+ * Both of those seasons are visible to the player: the higher scorer also
+ * carried the better season score (90.9 vs 69.3, 85.7 vs 64.3) and still
+ * finished without the award. That is the intended reading — a goal in a
+ * stronger league is worth more, which is what the European Golden Shoe does
+ * too — but it is a real outcome, not a rounding error. The cross-tier route
+ * is the league top scorer.
  */
 export const SCORING_TIER_COEFFICIENT: Record<LeagueTier, number> = {
   1: 1.0,
