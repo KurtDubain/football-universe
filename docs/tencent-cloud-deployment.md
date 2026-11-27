@@ -1,5 +1,17 @@
 # 腾讯云部署与维护
 
+2026-11-27 10:30（北京时间）已更新**个人版**，应用版本 **4.82.0**，公开品牌为《下一季见：足球编年史》，继续开启 ICP 页脚。
+本次从干净的 `main/5524d50` 构建（`PERSONAL_SITE_URL=https://football.dyp02.vip`、`ENABLE_ICP_FILING=true`、`VITE_ENABLE_AUDIT=false`、`VERCEL_GIT_COMMIT_SHA` 为完整提交号），只更新 `football.dyp02.vip`；参赛版 `cup.dyp02.vip` 未构建、未上传、未切换，`current` 软链时间戳仍是 2026-09-25 19:25。
+**本轮是快进合并，不是 `--no-ff`**：`main` 原本就是 `feat/tail-calibration` 的祖先，2 个提交（`b20168e` 实现 + `5524d50` 表述修正）零冲突直接快进，历史保持线性，没有产生合并提交。源码先合并并推送到 `origin/main`（`4e5e7d3..5524d50`）再构建发布，发布来源就是 `main` 的 HEAD。特性分支 `feat/tail-calibration` 本轮未推送到远端。
+这一版把赛季评分校准表从单段线性改成两段：P95 以下完全沿用原表（中位、scale、`POSITION_VALUE_OFFSET` 一个数没改，十二个组的位置表现 p50 与 p95 逐位不变，膝点连续），P95 以上接第二段，解到让顶级联赛每组在自己的 P99.9 落到同一个绝对值 112（= 赛季分 100）。低级别尾斜率继承顶级联赛，不截断时三级别后卫尾斜率会解到 10.26 对顶级 4.71。评分版本 9 → 10，`SAVE_SCHEMA_VERSION` 保持 26，未新增或改名任何存档字段。
+**门禁是在主仓 `main` 上重跑的，不是沿用 worktree 的结果**：`typecheck`（`tsc -b`）、`lint`（需加忽略项，见本节末）、`test`（198 文件 / 1,738 测试）、`changelog:check`（v4.82.0，8 条）、`docs:check`（v4.82.0，86,162 行 / 317 文件 / 198 测试文件）、`scripts:check`、`audio:check`（9 轨 / 2.90 MiB）、`audit:player-performance`（10 种子 × 100 季、采样 S81–100，`passed: true`，中位跨度 6.6 / P90 跨度 7.3 对上限 8，异常 0，前二十低置信 0）、`BUILD_TARGET=personal editions:check`（`passed: true`，135 文件 / 318 模块）、`BUILD_TARGET=personal budgets:check`（`passed: true`，`violations: []`）。
+体积预算实测：entryJs 194,273 / 210,000（gzip 61,405 / 66,000）、initialJs 510,082 / 515,000（gzip 173,902 / 176,000，26 个块）、CSS 201,970 / 204,000（gzip 30,994 / 31,744）、PWA 预缓存 93 条 / 2,089,360 字节（上限 94 条 / 2,150,000）。相对 v4.81.0 的 173,669 gzip，首屏涨 233 字节，余量 2,098。
+切换后 `current` 指向 `v4.82.0-5524d50-20261127`，`previous` 保留 `v4.81.0-7ae209e-20261127` 供回滚。
+发布包 4,926,194 字节，SHA-256 `300de101651fa834f3c686a867d6f85eef0becbdc19154cdd45bb2adc5cd3600`，上传前后本地与服务器各复算一次一致；服务器 135 个文件逐个复算与本地清单零差异（比对时两端都须 `LC_ALL=C sort`，否则 macOS 的 BSD sort 与 GNU sort 会给出假的 diff）。
+线上核验：`/healthz` 返回 `football-personal-ok`，`/version.json` 读 4.82.0 且 buildId 为 `5524d504…`，`index.html` last-modified 为 2026-11-27 02:30:58 GMT（= 北京时间 10:30:58，与切换时刻对应）且与本地构建哈希一致（`b5e357c5…`），HTTP→HTTPS 301、`/settings` 200、`sw.js` 200、缺失资产 404、`.vite/manifest.json` 404 均正常，`index.html` 引用的 29 个资产从线上下载复算零不一致且全部 200，`releases` 22 个、`shared/assets` 保留 1171 个旧哈希资产。
+发布脚本切换前 `nginx -t` 通过；Nginx 未重启（worker 启动时间仍是 2026-11-14 03:49:35），磁盘可用 22 GB。发布前资源记录：`/www/backups/football-deploy/20261127-103059-003655-activate-personal`。私有上传目录：`/www/server/football-deploy/incoming/v4.82.0-5524d50-20261127/`。
+本轮没有做浏览器实测：改动是评分口径，没有界面表面，证据是 231,866 行同口径重采样、10 种子审计与六项新单元测试。
+同机其他站未受影响：参赛版 `current` 仍指向 `v4.61.11-09a5984-20260925`（时间戳 2026-09-25 19:25），`/version.json` 仍读 4.61.11、`/healthz` 仍返回 `football-contest-ok`。没有修改 Nginx 配置、DNS、证书、续签任务、博客或 Vercel。
 2026-11-27 00:56（北京时间）已更新**个人版**，应用版本 **4.81.0**，公开品牌为《下一季见：足球编年史》，继续开启 ICP 页脚。
 本次从干净的 `main/7ae209e` 构建（`PERSONAL_SITE_URL=https://football.dyp02.vip`、`ENABLE_ICP_FILING=true`、`VITE_ENABLE_AUDIT=false`、`GITHUB_SHA` 为完整提交号），只更新 `football.dyp02.vip`；参赛版 `cup.dyp02.vip` 未构建、未上传、未切换，`current` 软链时间戳仍是 2026-09-25 19:25。
 这一版把标签体系扩成两层（性格 0-2 + 风格 0-1，5 个新性格标签 + 9 个风格标签接进模拟层五个既有权重，新增雇佣兵标签），浪子改为挂牌找买家并修掉同一转会窗重复转会，评分口径连升两级（v8 前锋加关键传球、中场加拦截解围并修稀疏先验方向；v9 被拒项是常数改为对超集打分、锚点按风格标签撑宽后的真实分布重采样、位置价值权重在留出集重解），修掉黄牌系统两条玩家可见的规则错误（单场第二黄罚下、黄牌计数不再被停赛闸门清零），并把赛季收官仪式从一页扩成三页翻页、杯赛加决赛最佳球员与赛事金靴。`SAVE_SCHEMA_VERSION` 保持 26，评分版本 7 → 9。
